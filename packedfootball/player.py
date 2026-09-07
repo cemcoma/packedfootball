@@ -186,8 +186,8 @@ class player:
         
         final_target_3d = [actual_x, goal_y, actual_z]
 
-        required_power = min(1.0, dist / 7.0)
-        actual_power = required_power * (self.attributes.power / 50.0)
+        required_power = min(1.0, dist / 4.0)
+        actual_power = required_power * (self.attributes.power / 40.0)
         
         return {
             "type": "shoot",
@@ -198,251 +198,234 @@ class player:
 
     #action calculations
     def step(self, state: dict) -> dict:
-        """
-        state = {
-            "has_ball": bool,
-            "ball_pos": (x,y),
-            "my_pos": (x,y),
-            "my_velocity": (vx,vy),
-            "my_heading": (hx,hy),
-            "dist_to_ball": float,
-            "dist_to_goal": float,
-            "vec_to_goal": vec_to_goal,
-            "in_penalty_box": bool
-            "pressure_count": int
-            "teammates": list(x,y)
-            "opponents": list(x,y)
-            "formation_pos": (x,y),
-            "team_possession": -1,0,1; opp, noone, us
-            "past_halfspace": bool
-        }
-        """
+        decision = "stop"
         
-        if state["has_ball"]:
-            if state["past_halfspace"]: # Enemy halfspace 
-                actions = ["pass", "shoot", "dribble", "stop"]
-
-                t_pass = self.attributes.pass_tendency * 0.4
-                t_shoot = self.attributes.shoot_tendency
-                t_dribble = self.attributes.drible_tendency
-                t_stop = 10
-
-                dist_to_goal = state["dist_to_goal"]
-                vec_to_goal = state["vec_to_goal"]
-                unit_vec_to_goal = vec_to_goal / (dist_to_goal if dist_to_goal > 0 else 1.0)
-                facing_goal = np.dot(state["my_heading"], unit_vec_to_goal)
-
-                if state["in_attacking_box"]:
-                    t_shoot *= 2.5 
-                else:
-                    t_shoot -= (dist_to_goal * 2.0) 
-                
-                if facing_goal < 0.0:
-                    t_shoot *= 0.1 
-                elif facing_goal > 0.8:
-                    t_shoot *= 1.5
-
-                goal_lane_open = self._goal_lane_is_open(state, lane_width=2.5, lookahead=10.0)
-
-                if state["pressure_count"] > 1:
-                    t_dribble -= (state["pressure_count"] * 25)
-                    t_pass -= (state["pressure_count"] * 20)
-                    t_stop = 0
-                elif state["pressure_count"] == 0:
-                    t_dribble += (self.attributes.speed * 1.8) + 90.0
-                    t_pass -= 25.0
-                    t_stop += 10
-
-                if goal_lane_open:
-                    t_dribble += 60.0
-                    t_pass -= 20.0
-                    t_stop += 5.0
-                    
-                t_pass = max(5.0, t_pass)
-                t_shoot = max(0.0, t_shoot) 
-                t_dribble = max(1.0, t_dribble)
-                t_stop = max(0.0, t_stop)
-
-                total = t_pass + t_shoot + t_dribble + t_stop
-                probs = [t_pass/total, t_shoot/total, t_dribble/total, t_stop/total]
-                decision = np.random.choice(actions, p=probs)
-
-                if decision == "shoot":
-                    return self._calculate_shot(state)
-                elif decision == "pass":
-                    best_target = self._choose_pass_target(state)                
-                    dist = np.linalg.norm(best_target - state["my_pos"])
-                    required_power = min(1.0, dist / 10.0) 
-                    actual_power = required_power * (self.attributes.power / 60.0)
-                    return {"type": "pass", "target": best_target, "power": actual_power}
-                elif decision == "dribble":
-                    dribble_speed = max(1.0, (self.attributes.dribbiling / 100.0) * 1.25)
-                    return {"type": "move", "target": state["goal_target"], "speed_mod": dribble_speed}
-                else: #stop
-                    return None
-
-
-            else: # Own halfspace
-                actions = ["pass", "dribble", "stop", "clear"]
-
-                t_pass = self.attributes.pass_tendency * 0.45
-                t_dribble = self.attributes.drible_tendency
-                t_stop = 15.0
-                t_clear = self.attributes.clear_tendency
-
-                own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
-                dist_to_own_goal = np.linalg.norm(np.array([35.0, own_goal_y]) - state["my_pos"])
-
-                if dist_to_own_goal < 25.0:
-                    t_clear *= 2.5
-                    t_dribble *= 0.3 
-                    
-                if state.get("pressure_count", 0) > 1:
-                    t_clear += (state["pressure_count"] * 40)
-                    t_pass -= 20
-                    t_dribble = 0
-                    t_stop = 0
-                elif state.get("pressure_count", 0) == 0:
-                    t_clear *= 0.1
-                    t_dribble += (self.attributes.speed * 2.0) + 60.0
-                    t_pass -= 18.0
-                    t_stop += 15
-
-                t_pass = max(5.0, t_pass)
-                t_dribble = max(1.0, t_dribble)
-                t_clear = max(0.0, t_clear)
-                t_stop = max(0.0, t_stop)
-
-                total = t_pass + t_dribble + t_clear + t_stop
-                probs = [t_pass/total, t_dribble/total, t_stop/total, t_clear/total]
-                decision = np.random.choice(actions, p=probs)
-
-                if decision == "clear":
-                    forward_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-                    wide_x = np.random.choice([0.0, 70.0]) 
-                    
-                    target = np.array([wide_x + np.random.uniform(-15, 15), forward_y])
-                    
-                    actual_power = min(1.0, self.attributes.power / 50.0)
-                    
-                    return {"type": "pass", "target": target, "power": actual_power}
-                        
-                elif decision == "pass":
-                    best_target = self._choose_pass_target(state)
-                    dist = np.linalg.norm(best_target - state["my_pos"])
-                    required_power = min(1.0, dist / 10.0) 
-                    actual_power = required_power * (self.attributes.passing / 60.0)
-                    return {"type": "pass", "target": best_target, "power": actual_power}
-                    
-                elif decision == "dribble":
-                    enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-                    dribble_speed = max(1.0, (self.attributes.dribbiling / 100.0) * 1.25)
-                    return {"type": "move", "target": np.array([35.0, enemy_goal_y]), "speed_mod": dribble_speed}
-                    
-                else: # stop
-                    return None
-                    
+        if state.get("has_ball"):
+            if state.get("past_halfspace"):
+                decision = self._decide_on_ball_attack(state)
+            else:
+                decision = self._decide_on_ball_defense(state)
         elif state.get("team_possession") == 1:
-            actions = ["forward_run", "support", "hold"]
+            decision = self._decide_off_ball_attack(state)
+        elif state.get("team_possession") == -1:
+            decision = self._decide_off_ball_defense(state)
+        else: 
+            decision = self._decide_loose_ball(state)
             
-            t_forward = self.attributes.shoot_tendency + (self.attributes.speed * 0.5)
-            t_support = self.attributes.pass_tendency + 20.0
-            t_hold = self.attributes.defending + 30.0
+        return self._build_action(decision, state)
 
+    def _build_action(self, decision: str, state: dict) -> dict | None:
+        """Maps specific string decisions into engine dictionaries."""
+        if decision == "stop":
+            return None
+            
+        # --- On-Ball Actions ---
+        elif decision == "shoot":
+            return self._calculate_shot(state)
+            
+        elif decision == "pass":
+            best_target = self._choose_pass_target(state)
+            dist = np.linalg.norm(best_target - state["my_pos"])
+            required_power = min(1.0, dist / 10.0) 
+            actual_power = required_power * (self.attributes.power / 60.0)
+            return {"type": "pass", "target": best_target, "power": actual_power}
+            
+        elif decision == "clear":
+            forward_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
+            wide_x = np.random.choice([0.0, 70.0]) 
+            target = np.array([wide_x + np.random.uniform(-15, 15), forward_y])
+            return {"type": "pass", "target": target, "power": min(1.0, self.attributes.power / 50.0), "pass_type": "clearance"}
+
+        elif decision == "cross":
+            cross_target = np.array([np.random.uniform(20.0, 50.0), 100.0 if state.get("a_direction", 1) == 1 else 0.0])
+            return {"type": "pass", "target": cross_target, "power": min(1.0, self.attributes.power / 52.0), "pass_type": "cross"}
+            
+        elif decision == "dribble":
+            enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
+            dribble_speed = max(1.0, (self.attributes.dribbiling / 100.0) * 1.25)
+            return {"type": "move", "target": np.array([35.0, enemy_goal_y]), "speed_mod": dribble_speed}
+            
+        # --- Off-Ball Attacking Movement ---
+        elif decision == "forward_run":
+            enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
+            run_target = np.array([state["my_pos"][0], enemy_goal_y])
+            return {"type": "move", "target": run_target, "speed_mod": (self.attributes.speed * 0.9) / 100.0}
+            
+        elif decision == "support":
+            vec_to_ball = state["ball_pos"] - state["my_pos"]
+            support_target = state["my_pos"] + (vec_to_ball * 0.5)
+            return {"type": "move", "target": support_target, "speed_mod": (self.attributes.speed * 0.7) / 100.0}
+            
+        elif decision == "hold_attack":
             forward_shift = 15.0 if state.get("a_direction", 1) == 1 else -15.0
             tactical_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + forward_shift])
-
-            dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
-            dist_to_goal = state["dist_to_goal"]
-            ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
+            return {"type": "move", "target": tactical_pos, "speed_mod": (self.attributes.speed * 0.5) / 100.0}
             
-            own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
-            dist_to_own_goal = abs(state["formation_pos"][1] - own_goal_y)
-
-            if dist_to_ball > 12.0:
-                t_support *= 0.4
-                t_hold *= 2.5
-            if ball_pressure_count >= 2:
-                t_forward *= 0.2
-                t_support *= 0.15
-                t_hold *= 4.0
-                
-            if dist_to_ball < 20.0:
-                t_support *= 2.0 
-                
-            if dist_to_goal < 35.0:
-                t_forward *= 1.5 
-                
-            if dist_to_own_goal < 30.0:
-                t_hold *= 5.0 
-                t_forward *= 0.1
-
-            t_forward = max(0.0, t_forward)
-            t_support = max(0.0, t_support)
-            t_hold = max(1.0, t_hold)
-
-            total = t_forward + t_support + t_hold
-            probs = [t_forward/total, t_support/total, t_hold/total]
-            decision = np.random.choice(actions, p=probs)
-
-            if decision == "forward_run":
-                enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-                run_target = np.array([state["my_pos"][0], enemy_goal_y])
-                return {"type": "move", "target": run_target, "speed_mod": (self.attributes.speed * 0.9) / 100.0}
-                
-            elif decision == "support":
-                vec_to_ball = state["ball_pos"] - state["my_pos"]
-                support_target = state["my_pos"] + (vec_to_ball * 0.5)
-                return {"type": "move", "target": support_target, "speed_mod": (self.attributes.speed * 0.7) / 100.0}
-                
-            else:
-                return {"type": "move", "target": tactical_pos, "speed_mod": (self.attributes.speed * 0.5) / 100.0}
-                
-        elif state.get("team_possession") == -1: 
-            dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
-            ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
-            
-            if dist_to_ball < 1.5:
-                actions = ["tackle", "contain"]
-                
-                t_tackle = self.attributes.aggression * 1.5
-                t_contain = getattr(self.attributes, "defending", 50) + (100 - self.attributes.aggression)
-                
-                t_tackle = max(1.0, t_tackle)
-                t_contain = max(1.0, t_contain)
-                
-                total = t_tackle + t_contain
-                probs = [t_tackle/total, t_contain/total]
-                decision = np.random.choice(actions, p=probs)
-                
-                if decision == "tackle":
-                    return {"type": "tackle", "stat": self.attributes.defending}
-                else:
-                    return {"type": "move", "target": state["ball_pos"], "speed_mod": (self.attributes.speed * 0.5) / 100.0}
-
+        # --- Defensive & Loose Ball Movement ---
+        elif decision == "hold_defense":
             backward_shift = -10.0 if state.get("a_direction", 1) == 1 else 10.0
             defensive_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + backward_shift])
-
-            if ball_pressure_count >= 2:
-                return {"type": "move", "target": defensive_pos, "speed_mod": (self.attributes.speed * 0.5) / 100.0}
-
-            press_chance = getattr(self.attributes, "aggression", 40)
-            if dist_to_ball < 15.0 and np.random.randint(0, 100) < press_chance:
-                return {"type": "move", "target": state["ball_pos"], "speed_mod": (self.attributes.speed * 0.9) / 100.0}
-            else:
-                return {"type": "move", "target": defensive_pos, "speed_mod": (self.attributes.speed * 0.6) / 100.0}
+            return {"type": "move", "target": defensive_pos, "speed_mod": (self.attributes.speed * 0.6) / 100.0}
             
-        elif state.get("team_possession") == 0:
-            dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
-            teammate_closer_count = int(np.sum(np.linalg.norm(state["teammates"] - state["my_pos"], axis=1) < 4.0))
-            if teammate_closer_count >= 2:
-                return {"type": "move", "target": state["formation_pos"], "speed_mod": (self.attributes.speed * 0.5) / 100.0}
-            if dist_to_ball < 1:
-                return {"type":"capture", "stat":self.attributes.dribbiling}
-            elif dist_to_ball < 20.0:
-                return {"type": "move", "target": state["ball_pos"], "speed_mod": (self.attributes.speed) / 100.0}
-            else:
-                 return {"type": "move", "target": state["formation_pos"], "speed_mod": (self.attributes.speed * 0.2) / 100.0}
+        elif decision == "press":
+            return {"type": "move", "target": state["ball_pos"], "speed_mod": (self.attributes.speed * 0.9) / 100.0}
+            
+        elif decision == "contain":
+            return {"type": "move", "target": state["ball_pos"], "speed_mod": (self.attributes.speed * 0.5) / 100.0}
+            
+        elif decision == "recover":
+            return {"type": "move", "target": state["formation_pos"], "speed_mod": (self.attributes.speed * 0.5) / 100.0}
+            
+        elif decision == "recover_slow":
+            return {"type": "move", "target": state["formation_pos"], "speed_mod": (self.attributes.speed * 0.2) / 100.0}
+            
+        # --- Dispossession ---
+        elif decision == "tackle":
+            return {"type": "tackle", "stat": self.attributes.defending}
+            
+        elif decision == "capture":
+            return {"type": "capture", "stat": self.attributes.dribbiling}
+            
+        return None
+
+    def _decide_on_ball_attack(self, state: dict) -> str:
+        actions = ["pass", "shoot", "dribble", "stop"]
+        t_pass = self.attributes.pass_tendency * 0.4
+        t_shoot = self.attributes.shoot_tendency
+        t_dribble = self.attributes.drible_tendency
+        t_stop = 10.0
+
+        dist_to_goal = state["dist_to_goal"]
+        unit_vec_to_goal = state["vec_to_goal"] / (dist_to_goal if dist_to_goal > 0 else 1.0)
+        facing_goal = np.dot(state["my_heading"], unit_vec_to_goal)
+
+        if state.get("in_attacking_box"):
+            t_shoot *= 2.5 
+        else:
+            t_shoot -= (dist_to_goal * 2.0) 
+        
+        if facing_goal < 0.0: t_shoot *= 0.1 
+        elif facing_goal > 0.8: t_shoot *= 1.5
+
+        if state.get("pressure_count", 0) > 1:
+            t_dribble -= (state["pressure_count"] * 25)
+            t_pass -= (state["pressure_count"] * 20)
+            t_stop = 0
+        elif state.get("pressure_count", 0) == 0:
+            t_dribble += (self.attributes.speed * 1.8) + 90.0
+            t_pass -= 25.0
+            t_stop += 10
+
+        if self._goal_lane_is_open(state, lane_width=2.5, lookahead=10.0):
+            t_dribble += 60.0
+            t_pass -= 20.0
+            t_stop += 5.0
+            
+        t_pass = max(5.0, t_pass)
+        t_shoot = max(0.0, t_shoot) 
+        t_dribble = max(1.0, t_dribble)
+        t_stop = max(0.0, t_stop)
+
+        total = t_pass + t_shoot + t_dribble + t_stop
+        probs = [t_pass/total, t_shoot/total, t_dribble/total, t_stop/total]
+        return np.random.choice(actions, p=probs)
+
+    def _decide_on_ball_defense(self, state: dict) -> str:
+        actions = ["pass", "dribble", "stop", "clear"]
+        t_pass = self.attributes.pass_tendency * 0.45
+        t_dribble = self.attributes.drible_tendency
+        t_stop = 15.0
+        t_clear = self.attributes.clear_tendency
+
+        own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
+        dist_to_own_goal = np.linalg.norm(np.array([35.0, own_goal_y]) - state["my_pos"])
+
+        if dist_to_own_goal < 25.0:
+            t_clear *= 2.5
+            t_dribble *= 0.3 
+            
+        if state.get("pressure_count", 0) > 1:
+            t_clear += (state["pressure_count"] * 40)
+            t_pass -= 20
+            t_dribble = 0
+            t_stop = 0
+        elif state.get("pressure_count", 0) == 0:
+            t_clear *= 0.1
+            t_dribble += (self.attributes.speed * 2.0) + 60.0
+            t_pass -= 18.0
+            t_stop += 15
+
+        t_pass = max(5.0, t_pass)
+        t_dribble = max(1.0, t_dribble)
+        t_clear = max(0.0, t_clear)
+        t_stop = max(0.0, t_stop)
+
+        total = t_pass + t_dribble + t_clear + t_stop
+        probs = [t_pass/total, t_dribble/total, t_stop/total, t_clear/total]
+        return np.random.choice(actions, p=probs)
+
+    def _decide_off_ball_attack(self, state: dict) -> str:
+        actions = ["forward_run", "support", "hold_attack"]
+        t_forward = self.attributes.shoot_tendency + (self.attributes.speed * 0.5)
+        t_support = self.attributes.pass_tendency + 20.0
+        t_hold = self.attributes.defending + 30.0
+
+        dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
+        ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
+        own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
+        dist_to_own_goal = abs(state["formation_pos"][1] - own_goal_y)
+
+        if dist_to_ball > 12.0:
+            t_support *= 0.4
+            t_hold *= 2.5
+        if ball_pressure_count >= 2:
+            t_forward *= 0.2
+            t_support *= 0.15
+            t_hold *= 4.0
+            
+        if dist_to_ball < 20.0: t_support *= 2.0 
+        if state["dist_to_goal"] < 35.0: t_forward *= 1.5 
+            
+        if dist_to_own_goal < 30.0:
+            t_hold *= 5.0 
+            t_forward *= 0.1
+
+        t_forward = max(0.0, t_forward)
+        t_support = max(0.0, t_support)
+        t_hold = max(1.0, t_hold)
+
+        total = t_forward + t_support + t_hold
+        probs = [t_forward/total, t_support/total, t_hold/total]
+        return np.random.choice(actions, p=probs)
+
+    def _decide_off_ball_defense(self, state: dict) -> str:
+        dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
+        ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
+        
+        if dist_to_ball < 1.5:
+            actions = ["tackle", "contain"]
+            t_tackle = max(1.0, self.attributes.aggression * 1.5)
+            t_contain = max(1.0, getattr(self.attributes, "defending", 50) + (100 - self.attributes.aggression))
+            probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
+            return np.random.choice(actions, p=probs)
+
+        if ball_pressure_count >= 2:
+            return "hold_defense"
+
+        if dist_to_ball < 15.0 and np.random.randint(0, 100) < getattr(self.attributes, "aggression", 40):
+            return "press"
+        else:
+            return "hold_defense"
+        
+    def _decide_loose_ball(self, state: dict) -> str:
+        dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
+        teammate_closer_count = int(np.sum(np.linalg.norm(state["teammates"] - state["my_pos"], axis=1) < 4.0))
+        
+        if teammate_closer_count >= 2: return "recover"
+        if dist_to_ball < 1.0: return "capture"
+        if dist_to_ball < 20.0: return "press"
+        
+        return "recover_slow"
 
 
 

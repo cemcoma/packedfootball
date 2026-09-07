@@ -8,9 +8,8 @@ PITCH_WIDTH: Final[float] = 70.0
 PITCH_HEIGHT: Final[float] = 100.0
 GOAL_WIDTH: Final = 7.5
 GOAL_HEIGHT: Final = 2.5
-base_kick_pow:Final = 40
+base_kick_pow:Final = 20
 base_speed:Final = 10.0
-ball_capture_cooldown:Final = 10.0
 
 formation = { ##442 için fix sadece 
         0:[35.0, 5.0],   # GK
@@ -64,16 +63,26 @@ class game:
         self.last_goal_team = None
        
         self.ball_controller = -1  # -1 indicates a loose ball. 0-21 corresponds to the player index currently in possession.
+        self.ball_event = "neutral"
         
         self.possession_radius = 1
-        self.player_radius = 1.25
+        self.player_radius = 1
         self.step_count = 0
-        self.debug_decisions = []
+        self.match_clock_frames = 0
         self.ball_release_cooldown = 0
         self.ball_release_player = -1
         self.ball_capture_cooldown = 0
         self.ball_capture_player = -1
         self.player_stun_cooldown = np.zeros(22, dtype=int)
+        self.last_touch_team = None
+        self.goal_popup = {"text": "", "timer": 0, "team": None}
+        self.kickoff_timer = 0
+        self.kickoff_team = 0
+        self.out_of_play = False
+        self.restart_type = None
+        self.restart_team = None
+        self.restart_player = None
+        self.restart_timer = 0
 
         #### ILLEGAL SHIT JUST POC 442 formation for both, future will have customizable formations (strategy dp) TODO
 
@@ -132,6 +141,77 @@ class game:
             self.ball[0:2] = self.positions[self.ball_controller]
             self.ball[2:4] = self.velocity[self.ball_controller]
             self.ball[4] = 0.0
+
+    def _maybe_kickoff(self):
+        if self.kickoff_timer > 0:
+            self.kickoff_timer -= 1
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+
+            self.ball_controller = -1
+            if self.kickoff_timer == 0:
+                self.out_of_play = False
+                self.ball_release_player = -1
+                self.ball_release_cooldown = 0
+
+    def _trigger_goal_popup(self, team_label: str):
+        self.goal_popup = {"text": f"GOAL {team_label}", "timer": 90, "team": team_label}
+
+    def reset_positions(self, restart_type: str | None = None, team: int | None = None):
+        for i in range(22):
+            self.positions[i] = np.array(formation[i], dtype=float)
+        self.velocity[:] = 0.0
+        self.heading[0:11] = [0.0, 1.0]
+        self.heading[11:22] = [0.0, -1.0]
+
+        if restart_type == "kickoff":
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+            self.ball_controller = -1
+            return
+
+        if restart_type == "throw_in":
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+            self.ball_controller = -1
+            return
+
+        if restart_type == "corner":
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+            self.ball_controller = -1
+            return
+
+        if restart_type == "goal_kick":
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+            self.ball_controller = -1
+            return
+
+    def _begin_restart(self, restart_type: str, team: int | None = None):
+        self.out_of_play = True
+        self.restart_type = restart_type
+        self.restart_team = team if team is not None else (0 if self.last_touch_team is None else 1 - self.last_touch_team)
+        self.restart_timer = 30
+        self.ball_controller = -1
+        self.ball_release_player = -1
+        self.ball_release_cooldown = 0
+        self.reset_positions(restart_type=restart_type, team=self.restart_team)
+
+        if restart_type == "kickoff":
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+            self.kickoff_timer = 30
+            self.kickoff_team = self.restart_team
+        elif restart_type == "corner":
+            corner_player = 8 if self.restart_team == 0 else 19 #TODO: pickable corner taker
+            self.restart_player = corner_player
+            self.ball[:] = [self.positions[corner_player][0], self.positions[corner_player][1], 0.0, 0.0, 0.0]
+            self.ball_controller = corner_player
+        elif restart_type == "goal_kick":
+            keeper = 0 if self.restart_team == 0 else 11
+            self.restart_player = keeper
+            self.ball[:] = [self.positions[keeper][0], self.positions[keeper][1], 0.0, 0.0, 0.0]
+            self.ball_controller = keeper
+        elif restart_type == "throw_in":
+            throw_player = 5 if self.restart_team == 0 else 16
+            self.restart_player = throw_player
+            self.ball[:] = [self.positions[throw_player][0], self.positions[throw_player][1], 0.0, 0.0, 0.0]
+            self.ball_controller = throw_player
 
     def render(self, screen, window_size=(700, 1000)):
         try:
@@ -204,6 +284,31 @@ class game:
         pygame.draw.circle(screen, (255, 255, 255), (bx, by), 4 + z_bonus)
         pygame.draw.circle(screen, (0, 0, 0), (bx, by), 4 + z_bonus, 1)
 
+        # HUD: top-left scoreboard and clock
+        hud_font = pygame.font.SysFont(None, 36)
+        hud_small = pygame.font.SysFont(None, 22)
+        clock_total_seconds = int(self.match_clock_frames / 2.0) #120 frames is 1 minute, total game is 1080 frames
+        minutes = clock_total_seconds // 60
+        seconds = clock_total_seconds % 60
+        score_bg = pygame.Surface((150, 70))
+        score_bg.set_alpha(128)
+        score_bg.fill((0, 0, 0))
+        screen.blit(score_bg, (10, 10))
+        score_text = hud_font.render(f"{self.teamA.name} {self.scores[0]} - {self.scores[1]} {self.teamB.name}", True, (255, 255, 255))
+        clock_text = hud_small.render(f"{minutes:02d}:{seconds:02d}", True, (255, 255, 255))
+        screen.blit(score_text, (18, 18))
+        screen.blit(clock_text, (18, 52))
+
+        # Goal Popup
+        if self.goal_popup["timer"] > 0:
+            popup_font = pygame.font.SysFont(None, 52)
+            popup = popup_font.render(self.goal_popup["text"], True, (255, 255, 255))
+            popup_rect = popup.get_rect(center=(width / 2, 120))
+            alpha = max(0, min(255, int((self.goal_popup["timer"] / 90.0) * 255)))
+            popup.set_alpha(alpha)
+            screen.blit(popup, popup_rect)
+        
+
     def run_match(self, max_steps: int = 3000, fps: int = 60, render: bool = False, window_size=(700, 1000), title: str = "Packed Football"):
         dt = 1.0 / fps
 
@@ -247,6 +352,20 @@ class game:
         return self
 
     def tick(self, dt:float = 1/60):
+        self.match_clock_frames += 1
+        if self.goal_popup["timer"] > 0:
+            self.goal_popup["timer"] -= 1
+
+        if self.restart_type is not None:
+            self.restart_timer = max(0, self.restart_timer - 1)
+            if self.restart_timer == 0:
+                self.restart_type = None
+                self.restart_team = None
+                self.restart_player = None
+                self.out_of_play = False
+            return
+
+        self._maybe_kickoff()
         self.positions += self.velocity * dt
         self._resolve_player_collisions()
 
@@ -266,11 +385,26 @@ class game:
             self.ball[2:4] = self.velocity[self.ball_controller]
             self.ball[4] = 0.0 
 
+        if self.ball[0] < 0.0 or self.ball[0] > PITCH_WIDTH or self.ball[1] < 0.0 or self.ball[1] > PITCH_HEIGHT:
+            if self.ball[1] < 0.0 or self.ball[1] > PITCH_HEIGHT:
+                if self.ball[0] < 35.0 - GOAL_WIDTH / 2.0:
+                    restart_type = "goal_kick"
+                    restart_team = 1 if self.last_touch_team == 0 else 0
+                elif self.ball[0] > 35.0 + GOAL_WIDTH / 2.0:
+                    restart_type = "corner"
+                    restart_team = self.last_touch_team if self.last_touch_team is not None else 0
+                else:
+                    restart_type = "kickoff"
+                    restart_team = 1 - (self.last_touch_team if self.last_touch_team is not None else 0)
+            else:
+                restart_type = "throw_in"
+                restart_team = 1 - (self.last_touch_team if self.last_touch_team is not None else 0)
+
+            self._begin_restart(restart_type, restart_team)
+            return
+
         self.ball[0] = np.clip(self.ball[0], 0.0, PITCH_WIDTH)
-        if self.ball[1] < -1.0 or self.ball[1] > PITCH_HEIGHT + 1.0:
-            self.ball[1] = np.clip(self.ball[1], 0.0, PITCH_HEIGHT)
-        else:
-            self.ball[1] = np.clip(self.ball[1], 0.0, PITCH_HEIGHT)
+        self.ball[1] = np.clip(self.ball[1], 0.0, PITCH_HEIGHT)
 
         self._check_goal()
 
@@ -280,16 +414,26 @@ class game:
         base = 0.90
         speed_penalty = min(0.75, ball_speed / 12.0)
         height_penalty = min(0.70, max(0.0, ball_height) / 3.0)
+        pass_bonus = 0.0
+        if self.ball_event in {"pass", "cross", "clearance", "throw_in"} and 2.5 <= ball_speed <= 12.0 and ball_height < 0.8:
+            pass_bonus += 0.22
+        if self.ball_event == "shot" and ball_speed > 15.0:
+            pass_bonus -= 0.15
+        if self.ball_event == "tackle" and ball_speed < 3.0:
+            pass_bonus += 0.08
         agility_bonus = (player_attr.agility / 100.0) * 0.35
         control_bonus = (player_attr.ballcontrol / 100.0) * 0.25
         defending_bonus = (player_attr.defending / 100.0) * 0.20
 
-        probability = base - speed_penalty - height_penalty + agility_bonus + control_bonus + defending_bonus
+        probability = base - speed_penalty - height_penalty + agility_bonus + control_bonus + defending_bonus + pass_bonus
         return float(np.clip(probability, 0.05, 0.95))
 
     def _attempt_capture(self, index: int) -> bool:
         if self.ball_controller == index:
             return True
+
+        if self.ball_capture_player == index and self.ball_capture_cooldown > 0:
+            return False
 
         if self.ball_release_player >= 0 and self.ball_release_cooldown > 0:
             release_team = 0 if self.ball_release_player < 11 else 1
@@ -298,17 +442,93 @@ class game:
                 return False
 
         dist_to_ball = np.linalg.norm(self.ball[0:2] - self.positions[index])
-        if dist_to_ball > self.possession_radius + 1.5:
+        if dist_to_ball > self.possession_radius + 1.4:
             return False
 
         ball_speed = float(np.linalg.norm(self.ball[2:4]))
         ball_height = max(0.0, float(self.ball[4]))
+        current_team = 0 if index < 11 else 1
+        pass_like_event = self.ball_event in {"pass", "cross", "clearance", "throw_in"}
+
+        player_to_ball = self.ball[0:2] - self.positions[index]
+        ball_motion = np.array(self.ball[2:4], dtype=float)
+        if np.linalg.norm(ball_motion) > 0.0 and np.dot(player_to_ball, ball_motion) < -0.3:
+            self.ball_capture_player = index
+            self.ball_capture_cooldown = 8
+            return False
+
+        if pass_like_event and self.last_touch_team == current_team:
+            control_chance = (
+                0.72
+                + (self.all_players[index].attributes.composure / 100.0) * 0.10
+                + (self.all_players[index].attributes.ballcontrol / 100.0) * 0.20
+                + max(0.0, 1.0 - ball_speed / 18.0) * 0.15
+            )
+            if np.random.random() < float(np.clip(control_chance, 0.55, 0.98)):
+                self.ball_controller = index
+                self.ball_capture_player = index
+                self.ball_event = "neutral"
+                self.last_touch_team = current_team
+                self.ball_capture_cooldown = 8
+                self.ball[0:2] = self.positions[index]
+                self.ball[2:4] = self.velocity[index]
+                self.ball[4] = 0.0
+                return True
+            return False
+
+        block_threshold = 5.0
+        if (ball_speed >= block_threshold) or (ball_height >= 0.75):
+            deflection_bias = self._capture_success_probability(index, ball_speed, ball_height)
+            pass_bias = 0.12 if self.ball_event in {"pass", "cross", "clearance", "throw_in"} else 0.04
+            block_chance = np.clip(0.22 + (ball_speed * 0.10) + (ball_height * 0.28) + (self.all_players[index].attributes.agility / 100.0) * 0.30 - deflection_bias * 0.20 + pass_bias, 0.15, 0.98)
+            if np.random.random() < block_chance:
+                current_heading = self.heading[index]
+                if np.linalg.norm(current_heading) < 1e-8:
+                    current_heading = np.array([1.0, 0.0], dtype=float)
+                ball_dir = np.array(self.ball[2:4], dtype=float)
+                if np.linalg.norm(ball_dir) < 1e-8:
+                    ball_dir = np.array([1.0, 0.0], dtype=float)
+                ball_dir = ball_dir / np.linalg.norm(ball_dir)
+
+                normal = np.array([-ball_dir[1], ball_dir[0]], dtype=float)
+                if np.dot(normal, current_heading) < 0.0:
+                    normal *= -1.0
+
+                side_bias = np.random.uniform(-1.0, 1.0)
+                deflection = normal * side_bias + ball_dir * np.random.uniform(0.35, 0.8)
+                deflection = deflection / np.linalg.norm(deflection)
+
+                self.ball_controller = -1
+                self.ball_capture_player = index
+                self.ball_capture_cooldown = 12
+                self.ball_release_player = index
+                self.ball_release_cooldown = 8
+                self.ball[0:2] = self.positions[index]
+                self.ball[2:4] = deflection * max(3.0, ball_speed * np.random.uniform(0.5, 0.9))
+                self.ball[4] = max(0.0, ball_height * 0.5)
+                self.velocity[index] *= 0.4
+
+                if np.linalg.norm(self.ball[2:4]) <= max(2.0, self.all_players[index].attributes.speed * 0.12):
+                    self.ball_controller = index
+                    self.ball_capture_player = index
+                    self.ball_event = "neutral"
+                    self.last_touch_team = 0 if index < 11 else 1
+                    self.ball_capture_cooldown = 8
+                    self.ball[0:2] = self.positions[index]
+                    self.ball[2:4] = self.velocity[index]
+                    self.ball[4] = 0.0
+                    return True
+                return False
+
         success_chance = self._capture_success_probability(index, ball_speed, ball_height)
+        success_chance = float(np.clip(success_chance + 0.15, 0.2, 0.98))
 
         if np.random.random() < success_chance:
             self.ball_controller = index
             self.ball_capture_player = index
-            self.ball_capture_cooldown = int(10 + max(0.0, ball_height * 6.0))
+            self.ball_event = "neutral"
+            self.last_touch_team = 0 if index < 11 else 1
+            self.ball_capture_cooldown = int(8 + max(0.0, ball_height * 4.0))
             self.ball[0:2] = self.positions[index]
             self.ball[2:4] = self.velocity[index]
             self.ball[4] = 0.0
@@ -317,7 +537,7 @@ class game:
             return True
 
         self.ball_capture_player = index
-        self.ball_capture_cooldown = int(18 + max(0.0, ball_height * 12.0))
+        self.ball_capture_cooldown = int(12 + max(0.0, ball_height * 8.0))
         if ball_height > 0.5:
             self.velocity[index] *= 0.5
             self.velocity[index] -= self.heading[index] * 0.6
@@ -342,12 +562,18 @@ class game:
                 self.last_goal_team = 1
                 self.ball_controller = -1
                 self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+                self._trigger_goal_popup("B")
+                self.kickoff_timer = 60
+                self.kickoff_team = 0
                 return True
             if ball_y >= goal_bottom_y - 0.8:
                 self.scores[0] += 1
                 self.last_goal_team = 0
                 self.ball_controller = -1
                 self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+                self._trigger_goal_popup("A")
+                self.kickoff_timer = 60
+                self.kickoff_team = 1
                 return True
         return False
 
@@ -386,7 +612,7 @@ class game:
         ], dtype=float)
         return rotated / np.linalg.norm(rotated)
 
-    def _release_ball(self, owner_index: int, direction: np.ndarray, launch_speed: float, aerial: bool = False):
+    def _release_ball(self, owner_index: int, direction: np.ndarray, launch_speed: float, aerial: bool = False, event_type: str = "neutral"):
         direction = np.asarray(direction, dtype=float)
         direction_norm = np.linalg.norm(direction)
         if direction_norm < 1e-8:
@@ -394,8 +620,10 @@ class game:
             direction_norm = 1.0
         direction = direction / direction_norm
 
+        self.ball_event = event_type
         self.ball_controller = -1
         self.ball_release_player = owner_index
+        self.last_touch_team = 0 if owner_index < 11 else 1
 
         if aerial:
             self.ball_release_cooldown = 40 + int(min(25.0, launch_speed * 1.2))
@@ -444,7 +672,20 @@ class game:
                     return
 
                 unit_vec = vec / dist
-                self._release_ball(index, unit_vec, base_kick_pow * action["power"], aerial=False)
+                pass_type = action.get("pass_type", "normal")
+                power = base_kick_pow * action["power"]
+                aerial = False
+                if pass_type == "clearance":
+                    aerial = True
+                    power *= 1.2
+                elif pass_type == "cross":
+                    aerial = True
+                    power *= 1.15
+                elif pass_type == "throw_in":
+                    aerial = False
+                    power *= 0.8
+
+                self._release_ball(index, unit_vec, power, aerial=aerial, event_type="pass")
 
         elif action_type == "shoot":
             if self.ball_controller == index:
@@ -458,7 +699,7 @@ class game:
                 unit_vec_3d = vec_3d / dist_3d
                 shot_speed = base_kick_pow * action["power"]
                 aerial = bool(np.abs(unit_vec_3d[2]) > 0.1 or target_3d[2] > 0.2)
-                self._release_ball(index, unit_vec_3d[:2], shot_speed, aerial=aerial)
+                self._release_ball(index, unit_vec_3d[:2], shot_speed, aerial=aerial, event_type="shot")
                 self.ball[2] = unit_vec_3d[0] * shot_speed
                 self.ball[3] = unit_vec_3d[1] * shot_speed
                 self.ball[4] = abs(unit_vec_3d[2]) * shot_speed
@@ -484,7 +725,7 @@ class game:
                     unit_vec = tackle_vector / tackle_vector_norm
                     launch_power = base_kick_pow * (0.25 + (action["stat"] / 100.0) * 0.75)
 
-                    self._release_ball(holder_idx, unit_vec, launch_power, aerial=(launch_power > 15.0 or abs(unit_vec[1]) > 0.7))
+                    self._release_ball(holder_idx, unit_vec, launch_power, aerial=(launch_power > 15.0 or abs(unit_vec[1]) > 0.7), event_type="tackle")
                     self.velocity[index] = np.zeros(2, dtype=float)
                     self.velocity[holder_idx] = np.zeros(2, dtype=float)
                     self.player_stun_cooldown[index] = 20
@@ -512,6 +753,10 @@ class game:
 
         if self.ball_release_player >= 0 and self.ball_release_cooldown > 0 and self.ball_controller == self.ball_release_player:
             self.ball_controller = -1
+
+        if self.kickoff_timer > 0:
+            self._maybe_kickoff()
+            return
 
         ball_pos = self.ball[0:2]
 
@@ -599,40 +844,8 @@ class game:
             intended_action = self.all_players[i].step(state)
             actions.append(intended_action)
 
-        controller_action = None
-        if 0 <= self.ball_controller < len(actions):
-            controller_action = actions[self.ball_controller]
-            self.debug_decisions.append({
-                "step": self.step_count,
-                "ball_controller": self.ball_controller,
-                "decision": controller_action,
-            })
-            print(f"[STEP {self.step_count}] ball_controller={self.ball_controller} -> {controller_action}")
-        else:
-            self.debug_decisions.append({
-                "step": self.step_count,
-                "ball_controller": self.ball_controller,
-                "decision": None,
-            })
-            print(f"[STEP {self.step_count}] ball_controller={self.ball_controller} -> no controller action")
-
         for i, action in enumerate(actions):
             self._resolve_action(i, action)
-
-        if self.ball_controller == -1:
-            candidate_distances = np.linalg.norm(self.ball[0:2] - self.positions, axis=1)
-            if self.ball_release_player >= 0 and self.ball_release_cooldown > 0:
-                candidate_distances[self.ball_release_player] = np.inf
-                release_zone = np.linalg.norm(self.positions - self.positions[self.ball_release_player], axis=1) < 5.0
-                candidate_distances[release_zone] = np.inf
-
-            closest_idx = int(np.argmin(candidate_distances))
-            if candidate_distances[closest_idx] < self.possession_radius + 1.5:
-                self._attempt_capture(closest_idx)
-        elif self.ball_controller >= 0:
-            self.ball[0:2] = self.positions[self.ball_controller]
-            self.ball[2:4] = self.velocity[self.ball_controller]
-            self.ball[4] = 0.0
 
 
 def run_match(teamA, teamB, max_steps: int = 3000, fps: int = 60, render: bool = False, window_size=(1000, 700), title: str = "Packed Football"):

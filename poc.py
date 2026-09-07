@@ -5,13 +5,14 @@ fnames = ["cem","arda","kanat","mustafa","tarık","ismail"]
 lnames = ["çamdalı","terzi","tivsiz","demir","taş","kartal"]
 
 class Team:
-    def __init__(self, prefix):
+    def __init__(self, name,prefix):
+        self.name = name
         self.players = [player.player(prefix, str(i), "CM") for i in range(11)]
 
 
 def sim_match(teamA,teamB):
-    teamA = Team("A")
-    teamB = Team("B")
+    teamA = Team("Svsk","A")
+    teamB = Team("Bot","B")
 
     match = run_match(teamA, teamB, max_steps=20000, fps=60, render=True)
 
