@@ -1,4 +1,4 @@
-import player
+import packedfootball.player as player
 import random
 fnames = ["cem","arda","kanat","mustafa","tarık","ismail"]
 lnames = ["çamdalı","terzi","tivsiz","demir","taş","kartal"]
