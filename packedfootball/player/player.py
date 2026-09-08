@@ -1,13 +1,15 @@
 from dataclasses import dataclass, asdict
+from typing import Final
 import numpy as np
 
 position = ["GK","CD","LB","RB","CDM","CM","CAM","LM","RM","CF","LW","RW"]
+base_speed:Final = 10.0
 
 @dataclass
 class Attributes: #out of 100, can be over
 
     #Physical attributes
-    stamina: int = 60 ##kullanmıcam poc için
+    stamina: int = 60 ##kullanmıcam poc için 
     speed: int = 60
     agility: int = 50
     passing: int = 50
@@ -165,6 +167,46 @@ class player:
             if forward <= lookahead and lateral <= lane_width:
                 return False
         return True
+
+    def _is_progressive_ball_move(self, state: dict) -> bool:
+        ball_vel = np.asarray(state.get("ball_velocity", np.zeros(2, dtype=float)), dtype=float)
+        ball_speed = float(np.linalg.norm(ball_vel))
+        if ball_speed <= 1e-6:
+            return False
+
+        team_direction = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        forward_component = team_direction * ball_vel[1]
+        if forward_component <= 0.0:
+            return False
+
+        return True
+
+    def _predict_ball_landing_target(self, state: dict) -> np.ndarray:
+        ball_pos = np.asarray(state["ball_pos"], dtype=float)
+        ball_vel = np.asarray(state.get("ball_velocity", np.zeros(2, dtype=float)), dtype=float)
+        ball_height = float(state.get("ball_height", 0.0))
+        ball_speed = float(np.linalg.norm(ball_vel))
+
+        if not self._is_progressive_ball_move(state):
+            return ball_pos.copy()
+
+        # The player can only read a pass when the ball is moving in the attacking direction.
+        # Backward passes are treated as direct-ball chases because the defender should cut off the ball,
+        # not run to a future intercept that is moving away from goal.
+        player_speed_factor = max(0.4, min(1.5, self.attributes.speed / 100.0))
+        slow_ball_cutoff = max(1.5, base_speed * 0.2 * player_speed_factor)
+        flight_cutoff = max(0.25, 0.25 * player_speed_factor)
+
+        if ball_speed <= slow_ball_cutoff:
+            return ball_pos.copy()
+        if ball_height <= flight_cutoff and ball_speed < base_speed * 0.6:
+            return ball_pos.copy()
+
+        lookahead_scale = base_speed * (0.8 + player_speed_factor * 0.8)
+        predict_steps = max(1.0, min(6.0, ball_speed / max(1.0, base_speed * 0.8)))
+        future = ball_pos + (ball_vel / max(1.0, ball_speed)) * (predict_steps * lookahead_scale)
+        future = np.clip(future, [0.0, 0.0], [70.0, 100.0])
+        return future
 
     #statistic updaters
     def scored(self):
@@ -357,8 +399,10 @@ class player:
             return {"type": "move", "target": run_target, "speed_mod": (self.attributes.speed * 0.9) / 100.0}
             
         elif decision == "support":
-            vec_to_ball = state["ball_pos"] - state["my_pos"]
-            support_target = state["my_pos"] + (vec_to_ball * 0.5)
+            target = self._predict_ball_landing_target(state)
+            vec_to_target = target - state["my_pos"]
+            intercept_weight = 0.55 + (self.attributes.speed / 100.0) * 0.35
+            support_target = state["my_pos"] + (vec_to_target * intercept_weight)
             return {"type": "move", "target": support_target, "speed_mod": (self.attributes.speed * 0.7) / 100.0}
             
         elif decision == "hold_attack":
@@ -373,10 +417,18 @@ class player:
             return {"type": "move", "target": defensive_pos, "speed_mod": (self.attributes.speed * 0.6) / 100.0}
             
         elif decision == "press":
-            return {"type": "move", "target": state["ball_pos"], "speed_mod": (self.attributes.speed * 0.9) / 100.0}
-            
+            target = self._predict_ball_landing_target(state)
+            vec_to_target = target - state["my_pos"]
+            press_weight = 0.7 + (self.attributes.speed / 100.0) * 0.25
+            press_target = state["my_pos"] + (vec_to_target * press_weight)
+            return {"type": "move", "target": press_target, "speed_mod": (self.attributes.speed * 0.9) / 100.0}
+
         elif decision == "contain":
-            return {"type": "move", "target": state["ball_pos"], "speed_mod": (self.attributes.speed * 0.5) / 100.0}
+            target = self._predict_ball_landing_target(state)
+            vec_to_target = target - state["my_pos"]
+            contain_weight = 0.5 + (self.attributes.speed / 100.0) * 0.2
+            contain_target = state["my_pos"] + (vec_to_target * contain_weight)
+            return {"type": "move", "target": contain_target, "speed_mod": (self.attributes.speed * 0.5) / 100.0}
             
         elif decision == "recover":
             return {"type": "move", "target": state["formation_pos"], "speed_mod": (self.attributes.speed * 0.5) / 100.0}
@@ -389,11 +441,14 @@ class player:
             return {"type": "tackle", "stat": self.attributes.defending}
             
         elif decision == "capture":
-            return {"type": "capture", "stat": self.attributes.dribbiling}
+            return {"type": "capture", "stat": self.attributes.ballcontrol}
             
         return None
 
     def _decide_on_ball_attack(self, state: dict) -> str:
+        if state.get("must_pass_next", False):
+            return "pass"
+
         actions = ["pass", "shoot", "dribble", "stop"]
         progressive_pass = self._best_progressive_pass_target(state) is not None
         pressure = state.get("pressure_count", 0)
@@ -475,7 +530,7 @@ class player:
             t_clear += (pressure * 40)
             t_pass += (pressure * 12)
             if not self._goal_lane_is_open(state, lane_width=3.0, lookahead=12.0):
-                t_dribble = 0
+                t_dribble *=0.1
                 t_stop = 0
         elif pressure == 0:
             t_clear *= 0.1
@@ -532,20 +587,25 @@ class player:
         dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
         ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
         
-        if dist_to_ball < 1.5:
+        # Immediate proximity: Tackle or block
+        if dist_to_ball < 2.0:
             actions = ["tackle", "contain"]
             t_tackle = max(1.0, self.attributes.aggression * 1.5)
             t_contain = max(1.0, getattr(self.attributes, "defending", 50) + (100 - self.attributes.aggression))
             probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
             return np.random.choice(actions, p=probs)
 
-        if ball_pressure_count >= 2:
-            return "hold_defense"
-
-        if dist_to_ball < 15.0 and np.random.randint(0, 100) < getattr(self.attributes, "aggression", 40):
-            return "press"
-        else:
-            return "hold_defense"
+        # Mid-range: Get in front of the ball instead of retreating
+        if dist_to_ball < 15.0:
+            if ball_pressure_count >= 2:
+                return "contain" 
+            if np.random.randint(0, 100) < getattr(self.attributes, "aggression", 40):
+                return "press"
+            else:
+                return "contain"
+        
+        # Far away: Fall back to formation shape
+        return "hold_defense"
         
     def _decide_loose_ball(self, state: dict) -> str:
         dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])

@@ -21,9 +21,9 @@ class WingerActionProfile(ActionProfile):
     }
     action_biases = {
         "cross": 1.8,
-        "dribble": 1.5,
+        "dribble": 5.0,
         "forward_run": 1.4,
-        "shoot": 0.9,
+        "shoot": 0.6,
         "pass": 1.1,
         "support": 1.2,
         "hold_attack": 0.9,

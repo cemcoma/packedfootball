@@ -24,8 +24,8 @@ formation = { ##442 için fix sadece
         7:[43.0, 35.0],  # RCM
         8:[58.0, 40.0],  # RM
 
-        9:[27.0, 52.0],  # LS
-        10:[43.0, 52.0], # RS
+        9:[27.0, 47.0],  # LS
+        10:[43.0, 47.0], # RS
 
         11:[35.0, 95.0], # GK
 
@@ -39,8 +39,8 @@ formation = { ##442 için fix sadece
         18:[27.0, 65.0], # RCM
         19:[12.0, 60.0], # RM
 
-        20:[43.0, 48.0], # LS
-        21:[27.0, 48.0] # RS
+        20:[43.0, 53.0], # LS
+        21:[27.0, 53.0] # RS
 }
 
 class game:
@@ -79,6 +79,10 @@ class game:
         self.goal_pause_timer = 0 
         self.kickoff_timer = 0
         self.kickoff_team = 0
+        self.kickoff_pass_required = False
+        self.kickoff_pass_player = -1
+        self.must_pass_next = False
+        self.must_pass_player = -1
         self.out_of_play = False
         self.restart_type = None
         self.restart_team = None
@@ -143,12 +147,32 @@ class game:
             self.ball[2:4] = self.velocity[self.ball_controller]
             self.ball[4] = 0.0
 
+    def _kickoff_player_for_team(self, team: int | None = None) -> int:
+        team_id = self.kickoff_team if team is None else team
+        if team_id == 0:
+            return 9
+        return 20
+
+    def _set_must_pass_for_player(self, player_idx: int):
+        self.must_pass_next = True
+        self.must_pass_player = player_idx
+        self.kickoff_pass_required = True
+        self.kickoff_pass_player = player_idx
+
+    def _clear_must_pass(self):
+        self.must_pass_next = False
+        self.must_pass_player = -1
+        self.kickoff_pass_required = False
+        self.kickoff_pass_player = -1
+
     def _maybe_kickoff(self):
         if self.kickoff_timer > 0:
             self.kickoff_timer -= 1
+            kickoff_player = self._kickoff_player_for_team()
+            self.positions[kickoff_player] = np.array([35.0, 50.0], dtype=float)
             self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
-
-            self.ball_controller = -1
+            self.ball_controller = kickoff_player
+            self._set_must_pass_for_player(kickoff_player)
             if self.kickoff_timer == 0:
                 self.out_of_play = False
                 self.ball_release_player = -1
@@ -165,8 +189,11 @@ class game:
         self.heading[11:22] = [0.0, -1.0]
 
         if restart_type == "kickoff":
+            kickoff_player = self._kickoff_player_for_team(team)
+            self.positions[kickoff_player] = np.array([35.0, 50.0], dtype=float)
             self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
-            self.ball_controller = -1
+            self.ball_controller = kickoff_player
+            self._set_must_pass_for_player(kickoff_player)
             return
 
         if restart_type == "throw_in":
@@ -195,9 +222,13 @@ class game:
         self.reset_positions(restart_type=restart_type, team=self.restart_team)
 
         if restart_type == "kickoff":
-            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
-            self.kickoff_timer = 30
             self.kickoff_team = self.restart_team
+            kickoff_player = self._kickoff_player_for_team(self.kickoff_team)
+            self.positions[kickoff_player] = np.array([35.0, 50.0], dtype=float)
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+            self.ball_controller = kickoff_player
+            self._set_must_pass_for_player(kickoff_player)
+            self.kickoff_timer = 30
         elif restart_type == "corner":
             corner_player = 8 if self.restart_team == 0 else 19 # RM takes it
             self.restart_player = corner_player
@@ -209,17 +240,20 @@ class game:
             self.positions[corner_player] = [corner_x, corner_y]
             self.ball[:] = [corner_x, corner_y, 0.0, 0.0, 0.0]
             self.ball_controller = corner_player
+            self._set_must_pass_for_player(corner_player)
             
         elif restart_type == "goal_kick":
             keeper = 0 if self.restart_team == 0 else 11
             self.restart_player = keeper
             self.ball[:] = [self.positions[keeper][0], self.positions[keeper][1], 0.0, 0.0, 0.0]
             self.ball_controller = keeper
+            self._set_must_pass_for_player(keeper)
         elif restart_type == "throw_in":
             throw_player = 5 if self.restart_team == 0 else 16
             self.restart_player = throw_player
             self.ball[:] = [self.positions[throw_player][0], self.positions[throw_player][1], 0.0, 0.0, 0.0]
             self.ball_controller = throw_player
+            self._set_must_pass_for_player(throw_player)
 
     def render(self, screen, window_size=(1280, 800)):
         try:
@@ -365,7 +399,8 @@ class game:
                         running = False
                         break
 
-            self.step()
+            if self.match_clock_frames % 2 == 0:
+                self.step()
             self.tick(dt)
 
             if render:
@@ -551,6 +586,7 @@ class game:
                 deflection = deflection / np.linalg.norm(deflection)
 
                 self.ball_controller = -1
+                self.last_touch_team = 0 if index < 11 else 1
                 self.ball_capture_player = index
                 self.ball_capture_cooldown = 12
                 self.ball_release_player = index
@@ -558,7 +594,7 @@ class game:
                 self.ball[0:2] = self.positions[index]
                 self.ball[2:4] = deflection * max(3.0, ball_speed * np.random.uniform(0.5, 0.9))
                 self.ball[4] = max(0.0, ball_height * 0.5)
-                self.velocity[index] *= 0.4
+                self.velocity[index] *= 0.4         
 
                 if np.linalg.norm(self.ball[2:4]) <= max(2.0, self.all_players[index].attributes.speed * 0.12):
                     self.ball_controller = index
@@ -715,6 +751,11 @@ class game:
 
         elif action_type == "pass":
             if self.ball_controller == index:
+                if self.must_pass_next and self.must_pass_player == index:
+                    self._clear_must_pass()
+                elif self.kickoff_pass_required and self.kickoff_pass_player == index:
+                    self._clear_must_pass()
+
                 target = np.array(action["target"], dtype=float)
                 vec = target - self.positions[index]
                 dist = np.linalg.norm(vec)
@@ -760,9 +801,16 @@ class game:
 
             holder_idx = self.ball_controller
             dist = np.linalg.norm(self.positions[index] - self.positions[holder_idx])
+            
             if dist <= 2.0:
-                steal_chance = min(1.0, max(0.0, action["stat"] / 100.0))
+                defender_stat = action["stat"]
+                attacker_stat = self.all_players[holder_idx].attributes.ballcontrol
+                
+                stat_diff = defender_stat - attacker_stat
+                steal_chance = float(np.clip(0.40 + (stat_diff / 100.0), 0.10, 0.90))
+
                 if np.random.random() < steal_chance:
+                    # Successful Tackle
                     tackle_vector = self.positions[index] - self.positions[holder_idx]
                     tackle_vector_norm = np.linalg.norm(tackle_vector)
                     if tackle_vector_norm < 1e-8:
@@ -773,13 +821,17 @@ class game:
                         tackle_vector_norm = 1.0
 
                     unit_vec = tackle_vector / tackle_vector_norm
-                    launch_power = base_kick_pow * (0.25 + (action["stat"] / 100.0) * 0.75)
+                    launch_power = base_kick_pow * (0.25 + (defender_stat / 100.0) * 0.75)
 
                     self._release_ball(holder_idx, unit_vec, launch_power, aerial=(launch_power > 15.0 or abs(unit_vec[1]) > 0.7), event_type="tackle")
                     self.velocity[index] = np.zeros(2, dtype=float)
                     self.velocity[holder_idx] = np.zeros(2, dtype=float)
                     self.player_stun_cooldown[index] = 20
                     self.player_stun_cooldown[holder_idx] = 20
+                else:
+                    # Failed Tackle: Defender gets ankle-broken
+                    self.velocity[index] = np.zeros(2, dtype=float)
+                    self.player_stun_cooldown[index] = 60  # Stun the defender so the attacker can pass them
 
         elif action_type == "capture":
             if self.ball_release_player == index and self.ball_release_cooldown > 0:
@@ -803,6 +855,11 @@ class game:
 
         if self.ball_release_player >= 0 and self.ball_release_cooldown > 0 and self.ball_controller == self.ball_release_player:
             self.ball_controller = -1
+
+        if self.must_pass_next and self.ball_controller != self.must_pass_player:
+            self._clear_must_pass()
+        elif self.kickoff_pass_required and self.ball_controller != self.kickoff_pass_player:
+            self._clear_must_pass()
 
         if self.kickoff_timer > 0:
             self._maybe_kickoff()
@@ -872,6 +929,8 @@ class game:
             state = {
                 "has_ball": (self.ball_controller == i),
                 "ball_pos": ball_pos,
+                "ball_velocity": np.array(self.ball[2:4], dtype=float),
+                "ball_height": float(self.ball[4]),
                 "my_pos": self.positions[i],
                 "my_velocity": self.velocity[i],
                 "my_heading": self.heading[i],
@@ -890,6 +949,7 @@ class game:
                 "team_possession": possesion * j,
                 "past_halfspace": past_halfspace,
                 "own_goal": np.array([35.0, 0.0]) if i < 11 else np.array([35.0, 100.0]),
+                "must_pass_next": self.must_pass_next and self.must_pass_player == i and self.ball_controller == i,
             }
             intended_action = self.all_players[i].step(state)
             actions.append(intended_action)
