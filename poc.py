@@ -5,14 +5,13 @@ import multiprocessing
 from packedfootball.gameEngine import run_match
 from packedfootball.player.player import Attributes
 from packedfootball.player.classes.goalkeeper import Goalkeeper
-from packedfootball.player.classes.defender import Defender
+from packedfootball.player.classes.defender import Defender, CenterBack, Fullback
 from packedfootball.player.classes.midfielder import Midfielder
-from packedfootball.player.classes.winger import Winger
-from packedfootball.player.classes.striker import Striker
+from packedfootball.player.classes.forward import Forward
 
 TIER_RANGES = {
-    "bronze": (40, 50),
-    "silver": (50, 60),
+    "bronze": (50, 55),
+    "silver": (55, 60),
     "gold": (60, 70),
     "platinum": (70, 80),
     "diamond": (80, 85),
@@ -54,14 +53,13 @@ def generate_tier_attributes(position: str, tier: str) -> dict:
 
 PLAYER_CLASS_MAP = {
     "GK": Goalkeeper,
-    "CB": Defender,
-    "LB": Defender,
-    "RB": Defender,
+    "CB": CenterBack,
+    "LB": Fullback,
+    "RB": Fullback,
     "CM": Midfielder,
-    "AM": Midfielder,
-    "LW": Winger,
-    "RW": Winger,
-    "ST": Striker,
+    "LW": Forward,
+    "RW": Forward,
+    "ST": Forward,
 }
 
 def build_player(first, last, position, tier):
@@ -93,7 +91,7 @@ def sim_match(team_a, team_b, render=True, max_steps=10800):
 
 def get_tier_roster(tier: str):
     """Generates a full 11-man roster for a given tier."""
-    positions = ["GK", "CB", "CB", "LB", "RB", "CM", "CM", "AM", "LW", "RW", "ST"]
+    positions = ["GK", "LB", "CB", "CB", "RB", "LW", "CM", "CM", "RW", "ST", "ST"]
     
     # Passing the Tier + Position as the `lname` argument so it renders in the UI
     return [("Player", f"{tier.capitalize()} {pos}", pos, tier) for pos in positions]
@@ -108,17 +106,21 @@ TEAM_SPECIAL = get_tier_roster("special")
 # --- Setup and Run POC ---
 
 # Swap these out to test different matchups!
-team_a = Team("Team Silver", "SIV", TEAM_SILVER)
-team_b = Team("Team Bronze", "BRZ", TEAM_BRONZE)
+team_a = Team("Team_A", "a", TEAM_SPECIAL)
+team_b = Team("Team_B", "b", TEAM_DIAMOND)
 
 start_time = time.perf_counter()
-game = sim_match(team_a, team_b, render=True)
+game = sim_match(team_a, team_b, render=False)
 end_time = time.perf_counter()
 execution_time = end_time - start_time
 print("--- FULL TIME ---")
 print(f"{game.teamA.name}: {game.scores[0]}")
 print(f"{game.teamB.name}: {game.scores[1]}")
 print(f"Simulation computed in: {execution_time:.4f} seconds")
+
+all_players = team_a.players + team_b.players
+for i in range(22):
+    print(all_players[i])
 
 
 
