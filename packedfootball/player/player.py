@@ -29,6 +29,59 @@ class Attributes: #out of 100, can be over
     clear_tendency:int = 10
 
 
+DEFAULT_ACTIONS = {
+    "stop",
+    "shoot",
+    "pass",
+    "clear",
+    "cross",
+    "dribble",
+    "forward_run",
+    "support",
+    "hold_attack",
+    "hold_defense",
+    "press",
+    "contain",
+    "recover",
+    "recover_slow",
+    "tackle",
+    "capture",
+}
+
+
+class ActionProfile:
+    """Role template for tweening action sets and decision weights per position."""
+
+    role_name = "generic"
+    allowed_actions = set(DEFAULT_ACTIONS)
+    action_biases = {
+        "pass": 1.0,
+        "shoot": 1.0,
+        "dribble": 1.0,
+        "cross": 0.5,
+        "clear": 0.5,
+        "forward_run": 1.0,
+        "support": 1.0,
+        "hold_attack": 1.0,
+        "hold_defense": 1.0,
+        "press": 0.8,
+        "contain": 0.8,
+        "recover": 0.9,
+        "recover_slow": 0.5,
+        "tackle": 0.8,
+        "capture": 0.8,
+    }
+
+    def get_allowed_actions(self, phase: str | None = None):
+        actions = set(self.allowed_actions)
+        if phase is not None:
+            return {action for action in actions if action not in {"stop"}}
+        return actions
+
+    def get_action_biases(self):
+        return dict(self.action_biases)
+
+
 class player:
     def __init__(self, fname, lname, position, attributes:Attributes = None):
 
@@ -39,14 +92,35 @@ class player:
 
         #functional
         self.position = position
+        self.role_name = getattr(self, "role_name", "generic")
+        self.action_profile = getattr(self, "action_profile", ActionProfile())
+        self.allowed_actions = set(self.action_profile.get_allowed_actions())
+        self.action_biases = dict(self.action_profile.get_action_biases())
         if attributes is None:
             self.attributes = Attributes()
         else:
             self.attributes = attributes
 
-
     def getAttributes(self):
         return self.attributes
+
+    def get_allowed_actions(self, phase: str | None = None):
+        return set(self.action_profile.get_allowed_actions(phase=phase))
+
+    def register_action(self, name: str, bias: float = 1.0):
+        self.allowed_actions.add(name)
+        self.action_biases[name] = bias
+
+    def get_action_bias(self, action_name: str, default: float = 1.0) -> float:
+        return float(self.action_biases.get(action_name, default))
+
+    def _apply_action_limits(self, weights: dict) -> dict:
+        filtered = {}
+        allowed = self.get_allowed_actions()
+        for action_name, value in weights.items():
+            if action_name in allowed:
+                filtered[action_name] = value * self.get_action_bias(action_name)
+        return filtered
 
     def _is_pass_safe(self, start: np.ndarray, end: np.ndarray, opponents: np.ndarray | None = None, line_width: float = 1.0) -> bool:
         start = np.asarray(start, dtype=float)
@@ -100,6 +174,37 @@ class player:
     def matchPlayed(self):
          self.statistics["matches_played"]+=1
 
+
+    def _best_progressive_pass_target(self, state: dict) -> np.ndarray | None:
+        teammates = np.asarray(state["teammates"], dtype=float)
+        opponents = np.asarray(state["opponents"], dtype=float)
+        my_pos = np.asarray(state["my_pos"], dtype=float)
+        goal_dir = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+
+        best_target = None
+        best_score = -1e9
+
+        for tm in teammates:
+            if np.array_equal(tm, my_pos):
+                continue
+
+            vec_to_tm = tm - my_pos
+            forward_progress = (tm[1] - my_pos[1]) * goal_dir
+            if forward_progress <= 0.0:
+                continue
+            if not self._is_pass_safe(my_pos, tm, opponents, line_width=1.2):
+                continue
+
+            nearby_opp_distance = np.min(np.linalg.norm(opponents - tm, axis=1)) if opponents.size else 999.0
+            if nearby_opp_distance < 1.5:
+                continue
+
+            score = forward_progress * 30.0 - np.linalg.norm(vec_to_tm) * 0.7 + nearby_opp_distance * 12.0
+            if score > best_score:
+                best_score = score
+                best_target = tm
+
+        return best_target
 
     def _choose_pass_target(self, state: dict) -> np.ndarray:
         teammates = state["teammates"]
@@ -290,10 +395,18 @@ class player:
 
     def _decide_on_ball_attack(self, state: dict) -> str:
         actions = ["pass", "shoot", "dribble", "stop"]
+        progressive_pass = self._best_progressive_pass_target(state) is not None
+        pressure = state.get("pressure_count", 0)
+
         t_pass = self.attributes.pass_tendency * 0.4
         t_shoot = self.attributes.shoot_tendency
         t_dribble = self.attributes.drible_tendency
         t_stop = 10.0
+
+        if not progressive_pass:
+            t_pass *= 0.08
+        elif pressure > 0:
+            t_pass *= 1.35
 
         dist_to_goal = state["dist_to_goal"]
         unit_vec_to_goal = state["vec_to_goal"] / (dist_to_goal if dist_to_goal > 0 else 1.0)
@@ -303,64 +416,81 @@ class player:
             t_shoot *= 2.5 
         else:
             t_shoot -= (dist_to_goal * 2.0) 
-        
+
         if facing_goal < 0.0: t_shoot *= 0.1 
         elif facing_goal > 0.8: t_shoot *= 1.5
 
-        if state.get("pressure_count", 0) > 1:
-            t_dribble -= (state["pressure_count"] * 25)
-            t_pass -= (state["pressure_count"] * 20)
+        if pressure > 1:
+            t_dribble -= (pressure * 25)
+            t_pass += (pressure * 18)
             t_stop = 0
-        elif state.get("pressure_count", 0) == 0:
+        elif pressure == 0:
             t_dribble += (self.attributes.speed * 1.8) + 90.0
             t_pass -= 25.0
             t_stop += 10
 
         if self._goal_lane_is_open(state, lane_width=2.5, lookahead=10.0):
             t_dribble += 60.0
-            t_pass -= 20.0
+            t_pass -= 18.0
             t_stop += 5.0
-            
-        t_pass = max(5.0, t_pass)
-        t_shoot = max(0.0, t_shoot) 
+
+        if pressure > 0 and not self._goal_lane_is_open(state, lane_width=3.0, lookahead=12.0):
+            t_pass += 40.0
+            t_dribble *= 0.55
+
+        t_pass = max(0.0, t_pass)
+        t_shoot = max(0.0, t_shoot)
         t_dribble = max(1.0, t_dribble)
         t_stop = max(0.0, t_stop)
 
         total = t_pass + t_shoot + t_dribble + t_stop
+        if total <= 0:
+            return "dribble"
         probs = [t_pass/total, t_shoot/total, t_dribble/total, t_stop/total]
         return np.random.choice(actions, p=probs)
 
     def _decide_on_ball_defense(self, state: dict) -> str:
         actions = ["pass", "dribble", "stop", "clear"]
+        progressive_pass = self._best_progressive_pass_target(state) is not None
+        pressure = state.get("pressure_count", 0)
+
         t_pass = self.attributes.pass_tendency * 0.45
         t_dribble = self.attributes.drible_tendency
         t_stop = 15.0
         t_clear = self.attributes.clear_tendency
+
+        if not progressive_pass:
+            t_pass *= 0.1
+        elif pressure > 0:
+            t_pass *= 1.3
 
         own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
         dist_to_own_goal = np.linalg.norm(np.array([35.0, own_goal_y]) - state["my_pos"])
 
         if dist_to_own_goal < 25.0:
             t_clear *= 2.5
-            t_dribble *= 0.3 
-            
-        if state.get("pressure_count", 0) > 1:
-            t_clear += (state["pressure_count"] * 40)
-            t_pass -= 20
-            t_dribble = 0
-            t_stop = 0
-        elif state.get("pressure_count", 0) == 0:
+            t_dribble *= 0.3
+
+        if pressure > 1:
+            t_clear += (pressure * 40)
+            t_pass += (pressure * 12)
+            if not self._goal_lane_is_open(state, lane_width=3.0, lookahead=12.0):
+                t_dribble = 0
+                t_stop = 0
+        elif pressure == 0:
             t_clear *= 0.1
             t_dribble += (self.attributes.speed * 2.0) + 60.0
             t_pass -= 18.0
             t_stop += 15
 
-        t_pass = max(5.0, t_pass)
+        t_pass = max(0.0, t_pass)
         t_dribble = max(1.0, t_dribble)
         t_clear = max(0.0, t_clear)
         t_stop = max(0.0, t_stop)
 
         total = t_pass + t_dribble + t_clear + t_stop
+        if total <= 0:
+            return "dribble"
         probs = [t_pass/total, t_dribble/total, t_stop/total, t_clear/total]
         return np.random.choice(actions, p=probs)
 
@@ -447,7 +577,3 @@ class player:
 
     def __repr__(self):
         return f"Player({self.fname} {self.lname}, {self.position})"
-
-
-class goalkeeper(player):
-    pass

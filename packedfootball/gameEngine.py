@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Final
 
-import packedfootball.player as player
+import packedfootball.player.player as player
 
 
 PITCH_WIDTH: Final[float] = 70.0
@@ -76,6 +76,7 @@ class game:
         self.player_stun_cooldown = np.zeros(22, dtype=int)
         self.last_touch_team = None
         self.goal_popup = {"text": "", "timer": 0, "team": None}
+        self.goal_pause_timer = 0 
         self.kickoff_timer = 0
         self.kickoff_team = 0
         self.out_of_play = False
@@ -183,7 +184,7 @@ class game:
             self.ball_controller = -1
             return
 
-    def _begin_restart(self, restart_type: str, team: int | None = None):
+    def _begin_restart(self, restart_type: str, team: int | None = None, out_x: float = 35.0):
         self.out_of_play = True
         self.restart_type = restart_type
         self.restart_team = team if team is not None else (0 if self.last_touch_team is None else 1 - self.last_touch_team)
@@ -198,10 +199,17 @@ class game:
             self.kickoff_timer = 30
             self.kickoff_team = self.restart_team
         elif restart_type == "corner":
-            corner_player = 8 if self.restart_team == 0 else 19 #TODO: pickable corner taker
+            corner_player = 8 if self.restart_team == 0 else 19 # RM takes it
             self.restart_player = corner_player
-            self.ball[:] = [self.positions[corner_player][0], self.positions[corner_player][1], 0.0, 0.0, 0.0]
+            
+            # Snap player to the left or right corner flag depending on out_x
+            corner_x = 0.0 if out_x < 35.0 else PITCH_WIDTH
+            corner_y = PITCH_HEIGHT if self.restart_team == 0 else 0.0
+            
+            self.positions[corner_player] = [corner_x, corner_y]
+            self.ball[:] = [corner_x, corner_y, 0.0, 0.0, 0.0]
             self.ball_controller = corner_player
+            
         elif restart_type == "goal_kick":
             keeper = 0 if self.restart_team == 0 else 11
             self.restart_player = keeper
@@ -213,97 +221,119 @@ class game:
             self.ball[:] = [self.positions[throw_player][0], self.positions[throw_player][1], 0.0, 0.0, 0.0]
             self.ball_controller = throw_player
 
-    def render(self, screen, window_size=(700, 1000)):
+    def render(self, screen, window_size=(1280, 800)):
         try:
             import pygame
         except ImportError as exc: 
             raise RuntimeError("pygame is required for rendering. Install it with: pip install pygame") from exc
 
         width, height = window_size
-        scale_x = width / PITCH_WIDTH
-        scale_y = height / PITCH_HEIGHT
+        
+        # Camera zoom factor: Show 40 pitch units wide instead of the full 70
+        visible_pitch_width = 40.0
+        visible_pitch_height = visible_pitch_width * (height / width)
+        scale = width / visible_pitch_width
+
+        # Center camera on the ball and clamp it to the pitch boundaries
+        camera_x = self.ball[0] - visible_pitch_width / 2.0
+        camera_y = self.ball[1] - visible_pitch_height / 2.0
+        camera_x = max(0, min(camera_x, PITCH_WIDTH - visible_pitch_width))
+        camera_y = max(0, min(camera_y, PITCH_HEIGHT - visible_pitch_height))
+
+        def to_screen(px, py):
+            return int((px - camera_x) * scale), int((py - camera_y) * scale)
+
+        def draw_pitch_rect(color, px, py, pw, ph, thickness=2):
+            sx, sy = to_screen(px, py)
+            pygame.draw.rect(screen, color, (sx, sy, int(pw * scale), int(ph * scale)), thickness)
 
         # Grass Background
         pygame.draw.rect(screen, (22, 120, 55), (0, 0, width, height))
 
         # Pitch Outlines
-        pygame.draw.rect(screen, (255, 255, 255), (0, 0, width, height), 2)
+        draw_pitch_rect((255, 255, 255), 0, 0, PITCH_WIDTH, PITCH_HEIGHT, 2)
         
         # Halfway Line
-        pygame.draw.line(screen, (255, 255, 255), (0, height / 2), (width, height / 2), 2)
+        sx1, sy1 = to_screen(0, PITCH_HEIGHT / 2)
+        sx2, sy2 = to_screen(PITCH_WIDTH, PITCH_HEIGHT / 2)
+        pygame.draw.line(screen, (255, 255, 255), (sx1, sy1), (sx2, sy2), 2)
         
-        # Center Circle and Center Spot
-        pygame.draw.circle(screen, (255, 255, 255), (int(width / 2), int(height / 2)), int(9.15 * scale_x), 2)
-        pygame.draw.circle(screen, (255, 255, 255), (int(width / 2), int(height / 2)), 3)
+        # Center Circle and Spot
+        cx, cy = to_screen(PITCH_WIDTH / 2, PITCH_HEIGHT / 2)
+        pygame.draw.circle(screen, (255, 255, 255), (cx, cy), int(9.15 * scale), 2)
+        pygame.draw.circle(screen, (255, 255, 255), (cx, cy), 3)
 
-        # Top Penalty Box (Engine expects X: 14 to 56, Y: 0 to 18)
-        pygame.draw.rect(screen, (255, 255, 255), (14 * scale_x, 0, 42 * scale_x, 18 * scale_y), 2)
-        # Top 6-Yard Box
-        pygame.draw.rect(screen, (255, 255, 255), (26 * scale_x, 0, 18 * scale_x, 5.5 * scale_y), 2)
-        # Top Goal (X: 31.25 to 38.75)
-        pygame.draw.rect(screen, (200, 200, 200), (31.25 * scale_x, 0, 7.5 * scale_x, 2 * scale_y))
+        # Top Penalty Box, 6-Yard Box, Goal
+        draw_pitch_rect((255, 255, 255), 14, 0, 42, 18, 2)
+        draw_pitch_rect((255, 255, 255), 26, 0, 18, 5.5, 2)
+        draw_pitch_rect((200, 200, 200), 31.25, -2, 7.5, 2, 0)
 
-        # Bottom Penalty Box (Engine expects X: 14 to 56, Y: 82 to 100)
-        pygame.draw.rect(screen, (255, 255, 255), (14 * scale_x, 82 * scale_y, 42 * scale_x, 18 * scale_y), 2)
-        # Bottom 6-Yard Box
-        pygame.draw.rect(screen, (255, 255, 255), (26 * scale_x, 94.5 * scale_y, 18 * scale_x, 5.5 * scale_y), 2)
-        # Bottom Goal
-        pygame.draw.rect(screen, (200, 200, 200), (31.25 * scale_x, height - (2 * scale_y), 7.5 * scale_x, 2 * scale_y))
+        # Bottom Penalty Box, 6-Yard Box, Goal
+        draw_pitch_rect((255, 255, 255), 14, 82, 42, 18, 2)
+        draw_pitch_rect((255, 255, 255), 26, 94.5, 18, 5.5, 2)
+        draw_pitch_rect((200, 200, 200), 31.25, 100, 7.5, 2, 0)
 
         # Players
         for idx, pos in enumerate(self.positions):
-            x = int(pos[0] * scale_x)
-            y = int(pos[1] * scale_y)
+            sx, sy = to_screen(pos[0], pos[1])
             color = (50, 130, 255) if idx < 11 else (255, 90, 90)
             
-            radius = 6
+            radius = 12
             if self.ball_controller == idx:
-                radius = 8
-                pygame.draw.circle(screen, (255, 255, 255), (x, y), radius + 2, 2)
-            pygame.draw.circle(screen, color, (x, y), radius)
+                pygame.draw.circle(screen, (255, 255, 255), (sx, sy), radius + 4, 3)
+            pygame.draw.circle(screen, color, (sx, sy), radius)
 
             # Heading Indicator
             heading = self.heading[idx]
             if np.linalg.norm(heading) > 0:
                 heading = heading / np.linalg.norm(heading)
-                end_x = int((pos[0] + heading[0] * 1.5) * scale_x)
-                end_y = int((pos[1] + heading[1] * 1.5) * scale_y)
-                pygame.draw.line(screen, (255, 255, 255), (x, y), (end_x, end_y), 2)
+                end_x, end_y = to_screen(pos[0] + heading[0] * 1.5, pos[1] + heading[1] * 1.5)
+                pygame.draw.line(screen, (255, 255, 255), (sx, sy), (end_x, end_y), 2)
 
             # Player Numbers
-            font = pygame.font.SysFont(None, 14)
+            font = pygame.font.SysFont(None, 18)
             label = font.render(str(idx), True, (0, 0, 0))
-            screen.blit(label, (x - 5, y - 4))
+            screen.blit(label, (sx - 6, sy - 6))
 
-        # Ball (White with black outline for visibility)
-        bx = int(self.ball[0] * scale_x)
-        by = int(self.ball[1] * scale_y)
-        
-        # Simulate height (Z-axis) by expanding the ball slightly when in the air
-        z_bonus = max(0, int(self.ball[4] * 0.5))
-        pygame.draw.circle(screen, (255, 255, 255), (bx, by), 4 + z_bonus)
-        pygame.draw.circle(screen, (0, 0, 0), (bx, by), 4 + z_bonus, 1)
+            # Ball Carrier Nameplate
+            if self.ball_controller == idx:
+                name_font = pygame.font.SysFont(None, 26)
+                name_surf = name_font.render(str(self.all_players[idx].lname), True, (255, 255, 255))
+                name_rect = name_surf.get_rect(midbottom=(sx, sy - radius - 8))
+                
+                # Dark background for text contrast
+                bg_rect = name_rect.inflate(8, 4)
+                pygame.draw.rect(screen, (0, 0, 0), bg_rect)
+                screen.blit(name_surf, name_rect)
 
-        # HUD: top-left scoreboard and clock
+        # Ball
+        bx, by = to_screen(self.ball[0], self.ball[1])
+        z_bonus = max(0, int(self.ball[4] * 2))
+        pygame.draw.circle(screen, (255, 255, 255), (bx, by), 7 + z_bonus)
+        pygame.draw.circle(screen, (0, 0, 0), (bx, by), 7 + z_bonus, 1)
+
+        # HUD: Scoreboard and Clock
         hud_font = pygame.font.SysFont(None, 36)
         hud_small = pygame.font.SysFont(None, 22)
-        clock_total_seconds = int(self.match_clock_frames / 2.0) #120 frames is 1 minute, total game is 1080 frames
+        clock_total_seconds = int(self.match_clock_frames / 2.0)
         minutes = clock_total_seconds // 60
         seconds = clock_total_seconds % 60
-        score_bg = pygame.Surface((150, 70))
-        score_bg.set_alpha(128)
+        
+        score_bg = pygame.Surface((180, 70))
+        score_bg.set_alpha(150)
         score_bg.fill((0, 0, 0))
         screen.blit(score_bg, (10, 10))
+        
         score_text = hud_font.render(f"{self.teamA.name} {self.scores[0]} - {self.scores[1]} {self.teamB.name}", True, (255, 255, 255))
         clock_text = hud_small.render(f"{minutes:02d}:{seconds:02d}", True, (255, 255, 255))
-        screen.blit(score_text, (18, 18))
-        screen.blit(clock_text, (18, 52))
+        screen.blit(score_text, (20, 18))
+        screen.blit(clock_text, (20, 52))
 
         # Goal Popup
         if self.goal_popup["timer"] > 0:
-            popup_font = pygame.font.SysFont(None, 52)
+            popup_font = pygame.font.SysFont(None, 72)
             popup = popup_font.render(self.goal_popup["text"], True, (255, 255, 255))
-            popup_rect = popup.get_rect(center=(width / 2, 120))
+            popup_rect = popup.get_rect(center=(width / 2, height / 4))
             alpha = max(0, min(255, int((self.goal_popup["timer"] / 90.0) * 255)))
             popup.set_alpha(alpha)
             screen.blit(popup, popup_rect)
@@ -356,6 +386,13 @@ class game:
         if self.goal_popup["timer"] > 0:
             self.goal_popup["timer"] -= 1
 
+        if self.goal_pause_timer > 0:
+            self.goal_pause_timer -= 1
+            if self.goal_pause_timer == 0:
+                self.reset_positions(restart_type="kickoff") 
+                self.kickoff_timer = 60
+            return
+
         if self.restart_type is not None:
             self.restart_timer = max(0, self.restart_timer - 1)
             if self.restart_timer == 0:
@@ -386,21 +423,36 @@ class game:
             self.ball[4] = 0.0 
 
         if self.ball[0] < 0.0 or self.ball[0] > PITCH_WIDTH or self.ball[1] < 0.0 or self.ball[1] > PITCH_HEIGHT:
+            out_x = self.ball[0]  # Store out-of-bounds X coordinate to determine which corner flag to use
+            
             if self.ball[1] < 0.0 or self.ball[1] > PITCH_HEIGHT:
-                if self.ball[0] < 35.0 - GOAL_WIDTH / 2.0:
-                    restart_type = "goal_kick"
-                    restart_team = 1 if self.last_touch_team == 0 else 0
-                elif self.ball[0] > 35.0 + GOAL_WIDTH / 2.0:
-                    restart_type = "corner"
-                    restart_team = self.last_touch_team if self.last_touch_team is not None else 0
-                else:
+                # Goal bounds check
+                if 35.0 - GOAL_WIDTH / 2.0 <= self.ball[0] <= 35.0 + GOAL_WIDTH / 2.0:
                     restart_type = "kickoff"
                     restart_team = 1 - (self.last_touch_team if self.last_touch_team is not None else 0)
+                else:
+                    # Endline bounds check (Corner vs Goal Kick based on last touch)
+                    if self.ball[1] < 0.0:  # Team A's endline (Y = 0)
+                        if self.last_touch_team == 0:
+                            restart_type = "corner"
+                            restart_team = 1  # Team B attacks
+                        else:
+                            restart_type = "goal_kick"
+                            restart_team = 0  # Team A restarts
+                    else:  # Team B's endline (Y = PITCH_HEIGHT)
+                        if self.last_touch_team == 1:
+                            restart_type = "corner"
+                            restart_team = 0  # Team A attacks
+                        else:
+                            restart_type = "goal_kick"
+                            restart_team = 1  # Team B restarts
             else:
+                # Sideline out of bounds
                 restart_type = "throw_in"
                 restart_team = 1 - (self.last_touch_team if self.last_touch_team is not None else 0)
 
-            self._begin_restart(restart_type, restart_team)
+            # Pass out_x to the restart method
+            self._begin_restart(restart_type, restart_team, out_x)
             return
 
         self.ball[0] = np.clip(self.ball[0], 0.0, PITCH_WIDTH)
@@ -561,18 +613,16 @@ class game:
                 self.scores[1] += 1
                 self.last_goal_team = 1
                 self.ball_controller = -1
-                self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
                 self._trigger_goal_popup("B")
-                self.kickoff_timer = 60
+                self.goal_pause_timer = 90  # 1.5 second pause at 60fps
                 self.kickoff_team = 0
                 return True
             if ball_y >= goal_bottom_y - 0.8:
                 self.scores[0] += 1
                 self.last_goal_team = 0
                 self.ball_controller = -1
-                self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
                 self._trigger_goal_popup("A")
-                self.kickoff_timer = 60
+                self.goal_pause_timer = 90  # 1.5 second pause at 60fps
                 self.kickoff_team = 1
                 return True
         return False
@@ -848,7 +898,7 @@ class game:
             self._resolve_action(i, action)
 
 
-def run_match(teamA, teamB, max_steps: int = 3000, fps: int = 60, render: bool = False, window_size=(1000, 700), title: str = "Packed Football"):
+def run_match(teamA, teamB, max_steps: int = 3000, fps: int = 60, render: bool = False, window_size=(1280, 800), title: str = "Packed Football"):
     match = game(teamA, teamB)
     return match.run_match(max_steps=max_steps, fps=fps, render=render, window_size=window_size, title=title)
 
