@@ -40,7 +40,8 @@ TIER_COLORS = {
     "gold": (255, 215, 0),
     "platinum": (200, 240, 255),
     "diamond": (154, 197, 240),
-    "special": (187, 68, 240)
+    "special": (187, 68, 240),
+    "icon": (240,240,240),
 }
 
 class UserTeam:

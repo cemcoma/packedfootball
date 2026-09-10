@@ -15,6 +15,9 @@ class GoalkeeperActionProfile(ActionProfile):
     }
 
 class Goalkeeper(player):
+    primary_stats = ("passing", "agility", "ballcontrol")
+    primary_weight: float = 1.0
+
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
         super().__init__(fname, lname, tier, position, attributes, country, hometown)
         self.action_profile = GoalkeeperActionProfile()

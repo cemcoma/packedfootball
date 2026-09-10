@@ -35,9 +35,12 @@ class ForwardActionProfile(ActionProfile):
 
 
 class Forward(player):
+    primary_stats = ("shooting", "dribbiling", "speed", "power")
+
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
         self.action_profile = ForwardActionProfile()
         super().__init__(fname, lname, tier, position, attributes, country, hometown)
+        self.attributes.power +=5
 
     def _build_action(self, decision: str, state: dict) -> dict | None:
         if decision == "stop":

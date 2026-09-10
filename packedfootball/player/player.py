@@ -31,6 +31,11 @@ class Attributes: #out of 100, can be over
     composure: int = 70
     clear_tendency:int = 10
 
+TENDENCY_FIELDS = {
+    "pass_tendency", "shoot_tendency", "drible_tendency",
+    "aggression", "composure", "clear_tendency"
+}
+
 DEFAULT_ACTIONS = {
     "stop", "shoot", "pass", "clear", "cross", "dribble",
     "forward_run", "support", "hold_attack", "hold_defense",
@@ -59,6 +64,12 @@ class ActionProfile:
         return dict(self.action_biases)
 
 class player(ABC):
+    # How much of the overall rating comes from primary_stats vs. every other
+    # non-tendency attribute. A good player isn't ONLY their primary stats
+    # (e.g. a fast defender should rate higher than a slow one), so the rest
+    # leaks in at a reduced weight. Override per-class to retune the split.
+    primary_weight: float = 0.8
+
     def __init__(self, fname, lname, tier, position, attributes:Attributes = None, country: str = None, hometown: str = None):
         #cosmetic
         self.fname = fname
@@ -70,6 +81,8 @@ class player(ABC):
 
         #functional
         self.position = position
+        if not self.primary_stats:
+            raise ValueError(f"{type(self).__name__}.primary_stats must be a non-empty tuple of Attributes field names")
         self.role_name = getattr(self, "role_name", "generic")
         self.action_profile = getattr(self, "action_profile", ActionProfile())
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
@@ -85,6 +98,16 @@ class player(ABC):
 
     def getStatistics(self):
         return self.statistics
+
+    @property
+    @abstractmethod
+    def primary_stats(self) -> tuple[str, ...]:
+        """Attributes field names this position's overall rating is averaged from.
+
+        Concrete subclasses satisfy this by declaring a plain class attribute,
+        e.g. `primary_stats = ("defending", "tackling")`
+        """
+        raise NotImplementedError
 
     def get_allowed_actions(self, phase: str | None = None):
         return set(self.action_profile.get_allowed_actions(phase=phase))
@@ -104,16 +127,19 @@ class player(ABC):
                 filtered[action_name] = value * self.get_action_bias(action_name)
         return filtered
 
-    # --- Helper Functions ---    
-    def _calculate_overall(self): #TODO: make it more robust it might need more stuff when we add like heading
+    # --- Helper Functions ---
+    def _calculate_overall(self):
         attrs = asdict(self.attributes)
-        exclusions = {
-            "pass_tendency", "shoot_tendency", "drible_tendency", 
-            "aggression", "composure", "clear_tendency"
-        }
-    
-        core_stats = [val for key, val in attrs.items() if key not in exclusions]   
-        return sum(core_stats) // len(core_stats)
+        primary = set(self.primary_stats)
+
+        primary_values = [attrs[stat] for stat in primary]
+        secondary_values = [val for key, val in attrs.items() if key not in primary and key not in TENDENCY_FIELDS]
+
+        primary_avg = sum(primary_values) / len(primary_values)
+        secondary_avg = sum(secondary_values) / len(secondary_values) if secondary_values else primary_avg
+
+        weight = self.primary_weight
+        return round(primary_avg * weight + secondary_avg * (1.0 - weight))
 
     def _is_pass_safe(self, start: np.ndarray, end: np.ndarray, opponents: np.ndarray | None = None, line_width: float = 1.0) -> bool:
         start = np.asarray(start, dtype=float)

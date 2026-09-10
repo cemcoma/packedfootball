@@ -331,6 +331,8 @@ class Defender(player):
 
 
 class CenterBack(Defender):
+    primary_stats = ("defending", "tackling")
+
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
         super().__init__(fname, lname, tier, position, attributes, country, hometown)
         self.action_profile = CenterBackActionProfile()
@@ -342,6 +344,8 @@ class CenterBack(Defender):
         self.attributes.defending += 10
 
 class Fullback(Defender):
+    primary_stats = ("defending", "tackling", "speed","passing")
+
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
         super().__init__(fname, lname, tier, position, attributes, country, hometown)
         self.action_profile = FullbackActionProfile()

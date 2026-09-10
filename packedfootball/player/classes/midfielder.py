@@ -18,6 +18,8 @@ class MidfielderActionProfile(ActionProfile):
 
 
 class Midfielder(player):
+    primary_stats = ("passing", "ballcontrol", "vision")
+
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
         self.action_profile = MidfielderActionProfile()
         super().__init__(fname, lname, tier, position, attributes, country, hometown)

@@ -48,7 +48,8 @@ TIER_RANGES = {
     "gold": (62, 70),
     "platinum": (72, 80),
     "diamond": (82, 87),
-    "special": (90, 99)
+    "special": (90, 99),
+    "icon": (100,110)
 }
 
 
@@ -57,19 +58,29 @@ PACK_DATABASE = {
         "name": "Standard Player Pack",
         "price": 100,
         "cards_per_pack": 3,
-        "rates": {"bronze": 0.60, "silver": 0.30, "gold": 0.10, "platinum": 0.0, "diamond": 0.0, "special": 0.0}
+        "rates": {"bronze": 0.60, "silver": 0.30, "gold": 0.10, "platinum": 0.0, "diamond": 0.0, "special": 0.0},
+        "pos_rates": {"goalkeeper":0.25,"defeder":0.25,"midfielder":0.25,"attacker":0.25}
     },
     2: {
         "name": "Jumbo Player Pack",
         "price": 500,
         "cards_per_pack": 10,
-        "rates": {"bronze": 0.40, "silver": 0.40, "gold": 0.15, "platinum": 0.05, "diamond": 0.0, "special": 0.0}
+        "rates": {"bronze": 0.40, "silver": 0.40, "gold": 0.15, "platinum": 0.05, "diamond": 0.0, "special": 0.0},
+        "pos_rates": {"goalkeeper":0.25,"defeder":0.25,"midfielder":0.25,"attacker":0.25}
     },
     3: {
         "name": "UCL Promo Pack",
         "price": 1000,
         "cards_per_pack": 5,
-        "rates": {"bronze": 0.0, "silver": 0.10, "gold": 0.40, "platinum": 0.30, "diamond": 0.15, "special": 0.05}
+        "rates": {"bronze": 0.0, "silver": 0.10, "gold": 0.40, "platinum": 0.30, "diamond": 0.15, "special": 0.05},
+        "pos_rates": {"goalkeeper":0.25,"defeder":0.25,"midfielder":0.25,"attacker":0.25}
+    },
+    4: {
+        "name": "Icon Pack",
+        "price": 50000,
+        "cards_per_pack": 1,
+        "rates": {"icon":1.0},
+        "pos_rates": {"attacker":1}
     }
 }
 
@@ -98,11 +109,22 @@ class PackManager:
         new_cards = []
         tiers = list(config["rates"].keys())
         weights = list(config["rates"].values())
+        pos_choice = list(config["pos_rates"].keys())
+        pos_weights = list(config["pos_rates"].values())
 
         for _ in range(config["cards_per_pack"]):
             rolled_tier = random.choices(tiers, weights=weights, k=1)[0]
-            
-            position = random.choice(["GK", "CB", "LB", "RB", "CM", "LW", "RW", "ST"]) # TODO: add weights to positions based on packs (ie forward pack) also add more positions for other formations
+
+            position_grand_choice = random.choices(pos_choice,weights=pos_weights,k=1)[0]
+            position = "ST"
+            if position_grand_choice == "goalkeeper":
+                position = "GK"
+            elif position_grand_choice == "defender":
+                position = random.choice([ "CB", "LB", "RB"])
+            elif position_grand_choice == "midfielder":
+                position = random.choice([ "CM", "LW", "RW"])
+            elif position_grand_choice == "attacker":
+                position = random.choice([ "ST"])
 
             attrs = self._generate_tier_attributes(rolled_tier, position)
 
@@ -146,8 +168,10 @@ class PackManager:
 
         if position == "GK":
             profile.update(defending="nerfed", tackling="nerfed", shooting="nerfed", dribbiling="nerfed", passing="primary", agility="primary", composure="primary", ballcontrol="primary")
-        elif position in ["CB", "LB", "RB"]:
+        elif position in ["CB"]:
             profile.update(defending="primary", tackling="primary", shooting="nerfed", dribbiling="nerfed")
+        elif position in ["LB","RB"]:
+            profile.update(defending="primary" ,tackling="primary", shooting="nerfed")
         elif position in ["CM", "AM"]:
             profile.update(passing="primary", ballcontrol="primary", vision="primary")
             if position == "AM":
