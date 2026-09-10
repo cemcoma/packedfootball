@@ -1,4 +1,4 @@
-from packedfootball.gameEngine import PITCH_HEIGHT, PITCH_WIDTH
+from gameEngine import PITCH_HEIGHT, PITCH_WIDTH
 from dataclasses import dataclass, asdict
 from typing import Final
 from abc import ABC, abstractmethod
@@ -24,8 +24,8 @@ class Attributes: #out of 100, can be over
     vision:int = 60
 
     #Tendencies
-    pass_tendency: int = 1
-    shoot_tendency: int = 90
+    pass_tendency: int = 50
+    shoot_tendency: int = 50
     drible_tendency: int = 60
     aggression: int = 40
     composure: int = 70
@@ -59,11 +59,12 @@ class ActionProfile:
         return dict(self.action_biases)
 
 class player(ABC):
-    def __init__(self, fname, lname, position, attributes:Attributes = None):
+    def __init__(self, fname, lname, tier, position, attributes:Attributes = None):
         #cosmetic
         self.fname = fname
         self.lname = lname
         self.statistics = {"goals": 0,"assists":0,"matches_played": 0}
+        self.tier = tier
 
         #functional
         self.position = position
@@ -75,9 +76,13 @@ class player(ABC):
             self.attributes = Attributes()
         else:
             self.attributes = attributes
+        self.overall = self._calculate_overall()
 
     def getAttributes(self):
         return self.attributes
+
+    def getStatistics(self):
+        return self.statistics
 
     def get_allowed_actions(self, phase: str | None = None):
         return set(self.action_profile.get_allowed_actions(phase=phase))
@@ -97,7 +102,17 @@ class player(ABC):
                 filtered[action_name] = value * self.get_action_bias(action_name)
         return filtered
 
-    # --- Helper Functions ---
+    # --- Helper Functions ---    
+    def _calculate_overall(self): #TODO: make it more robust it might need more stuff when we add like heading
+        attrs = asdict(self.attributes)
+        exclusions = {
+            "pass_tendency", "shoot_tendency", "drible_tendency", 
+            "aggression", "composure", "clear_tendency"
+        }
+    
+        core_stats = [val for key, val in attrs.items() if key not in exclusions]   
+        return sum(core_stats) // len(core_stats)
+
     def _is_pass_safe(self, start: np.ndarray, end: np.ndarray, opponents: np.ndarray | None = None, line_width: float = 1.0) -> bool:
         start = np.asarray(start, dtype=float)
         end = np.asarray(end, dtype=float)
@@ -316,7 +331,7 @@ class player(ABC):
     #statistic updaters
     def scored(self): self.statistics["goals"] += 1
     def assisted(self): self.statistics["assists"] += 1
-    def matchPlayed(self): self.statistics["matches_played"] += 1
+    def match_played(self): self.statistics["matches_played"] += 1
 
     # --- Engine Step & Abstract Actions ---
     def step(self, state: dict) -> dict:
@@ -359,6 +374,9 @@ class player(ABC):
     def __str__(self):
         attributes_str = "".join([f"{k}: {v}\n" for k, v in asdict(self.attributes).items()])
         return f"""*** {self.fname} {self.lname} *** 
+        Overall = {self.overall}
+        Tier = {self.tier}
+        Position = {self.position}
         Matches Played = {self.statistics.get("matches_played")}
         Goals = {self.statistics.get("goals")}
         Assists = {self.statistics.get("assists")}

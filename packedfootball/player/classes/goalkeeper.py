@@ -1,33 +1,5 @@
-from packedfootball.gameEngine import PITCH_WIDTH, GOAL_WIDTH, PITCH_HEIGHT, possession_radius
-from packedfootball.player.player import player, ActionProfile
-import numpy as np
-
-class GoalkeeperActionProfile(ActionProfile):
-    role_name = "goalkeeper"
-    allowed_actions = {
-        "stop", "pass", "clear", "hold_defense",
-        "recover", "recover_slow", "contain", "capture", "dive"
-    }
-    action_biases = {
-        "pass": 0.2, "clear": 3.0, "hold_defense": 2.0,
-        "recover": 3.0, "contain": 1.2, "capture": 10, "dive": 10.0
-    }
-
-class Goalkeeper(player):
-    def __init__(self, fname, lname, position, attributes=None):
-        super().__init__(fname, lname, position, attributes)
-        self.action_profile = GoalkeeperActionProfile()
-        self.allowed_actions = set(self.action_profile.get_allowed_actions())
-        self.action_biases = dict(self.action_profile.get_action_biases())
-        
-        self.attributes.ballcontrol = min(100, self.attributes.ballcontrol + 20)
-        self.attributes.agility = min(100, self.attributes.agility + 15)
-
-    def _get_keeper_line(self, state: dict) -> float:
-        return 2.5 if state.get("a_direction", 1) == 1 else PITCH_HEIGHT-2.5
-
-    from packedfootball.gameEngine import PITCH_WIDTH, GOAL_WIDTH
-from packedfootball.player.player import player, ActionProfile
+from gameEngine import PITCH_WIDTH, GOAL_WIDTH, PITCH_HEIGHT, possession_radius
+from player.player import player, ActionProfile
 import numpy as np
 
 
@@ -43,8 +15,8 @@ class GoalkeeperActionProfile(ActionProfile):
     }
 
 class Goalkeeper(player):
-    def __init__(self, fname, lname, position, attributes=None):
-        super().__init__(fname, lname, position, attributes)
+    def __init__(self, fname, lname,tier ,position, attributes=None):
+        super().__init__(fname, lname,tier, position, attributes)
         self.action_profile = GoalkeeperActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
@@ -67,8 +39,8 @@ class Goalkeeper(player):
             return {"type": "pass", "target": best_target, "power": actual_power}
             
         elif decision == "clear":
-            forward_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-            wide_x = np.random.choice([0.0, 70.0])
+            forward_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
+            wide_x = np.random.choice([0.0, PITCH_WIDTH])
             target = np.array([wide_x + np.random.uniform(-15, 15), forward_y])
             return {"type": "pass", "target": target, "power": min(1.0, self.attributes.power / 40.0), "pass_type": "clearance"}
 
@@ -138,7 +110,7 @@ class Goalkeeper(player):
         return np.random.choice(actions, p=probs)
 
     def _decide_off_ball_attack(self, state: dict) -> str:
-        # Keepers always stay in their box mirroring the play, even on the attack
+        # GK always stay in their box mirroring the play, even on the attack
         return "hold_defense"
 
     def _decide_off_ball_defense(self, state: dict) -> str:

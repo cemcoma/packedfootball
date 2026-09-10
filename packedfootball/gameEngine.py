@@ -488,7 +488,7 @@ class game:
             pygame.quit()
 
         for i in range(22):
-            self.all_players[i].matchPlayed()
+            self.all_players[i].match_played()
         return self
 
     def tick(self, dt:float = 1/60):

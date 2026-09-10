@@ -1,5 +1,5 @@
-from packedfootball.player.player import player, ActionProfile
-from packedfootball.gameEngine import PITCH_HEIGHT,PITCH_WIDTH
+from player.player import player, ActionProfile
+from gameEngine import PITCH_HEIGHT,PITCH_WIDTH
 import numpy as np
 
 class CenterBackActionProfile(ActionProfile):
@@ -331,8 +331,8 @@ class Defender(player):
 
 
 class CenterBack(Defender):
-    def __init__(self, fname, lname, position, attributes=None):
-        super().__init__(fname, lname, position, attributes)
+    def __init__(self, fname, lname, tier, position, attributes=None):
+        super().__init__(fname, lname, tier, position, attributes)
         self.action_profile = CenterBackActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
@@ -342,8 +342,8 @@ class CenterBack(Defender):
         self.attributes.defending += 10
 
 class Fullback(Defender):
-    def __init__(self, fname, lname, position, attributes=None):
-        super().__init__(fname, lname, position, attributes)
+    def __init__(self, fname, lname, tier, position, attributes=None):
+        super().__init__(fname, lname, tier, position, attributes)
         self.action_profile = FullbackActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())

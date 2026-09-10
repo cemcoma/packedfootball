@@ -1,5 +1,5 @@
-from packedfootball.player.player import player, ActionProfile
-from packedfootball.gameEngine import PITCH_HEIGHT,PITCH_WIDTH
+from player.player import player, ActionProfile
+from gameEngine import PITCH_HEIGHT,PITCH_WIDTH
 import numpy as np
 
 class MidfielderActionProfile(ActionProfile):
@@ -18,9 +18,9 @@ class MidfielderActionProfile(ActionProfile):
 
 
 class Midfielder(player):
-    def __init__(self, fname, lname, position, attributes=None):
+    def __init__(self, fname, lname, tier, position, attributes=None):
         self.action_profile = MidfielderActionProfile()
-        super().__init__(fname, lname, position, attributes)
+        super().__init__(fname, lname, tier, position, attributes)
 
     def _build_action(self, decision: str, state: dict) -> dict | None:
         if decision == "stop":
