@@ -281,7 +281,7 @@ class player(ABC):
             effective_vision = max(1.0, self.attributes.vision - pressure_penalty)
             error_variance = 220.0 / effective_vision
 
-            perceived_score = raw_score + np.random.normal(loc=0.0, scale=error_variance)
+            perceived_score = raw_score + state["rng"].normal(loc=0.0, scale=error_variance)
             pass_options.append((perceived_score, tm))
 
         if not pass_options: return my_pos
@@ -292,8 +292,9 @@ class player(ABC):
         goal_center_x = 35.0
         goal_y = 100.0 if state["a_direction"] == 1 else 0.0 
         
-        target_x = 31.5 if np.random.choice([True, False]) else 38.5
-        intended_target = np.array([target_x, goal_y, np.random.uniform(0.5, 2.0)])
+        rng = state["rng"]
+        target_x = 31.5 if rng.choice([True, False]) else 38.5
+        intended_target = np.array([target_x, goal_y, rng.uniform(0.5, 2.0)])
         
         pressure_penalty = state["pressure_count"] * ((100.0 - self.attributes.composure) / 20.0)
         dist = np.linalg.norm(np.array([goal_center_x, goal_y]) - state["my_pos"])
@@ -303,8 +304,8 @@ class player(ABC):
         total_variance = ((100.0 - self.attributes.shooting) / 15.0) + pressure_penalty + heading_penalty
         total_variance = max(total_variance,5.0)
         
-        actual_x = intended_target[0] + np.random.normal(0, total_variance)
-        actual_z = max(0.0, intended_target[2] + np.random.normal(0, total_variance * 0.5))
+        actual_x = intended_target[0] + rng.normal(0, total_variance)
+        actual_z = max(0.0, intended_target[2] + rng.normal(0, total_variance * 0.5))
         
         return {
             "type": "shoot",
@@ -351,8 +352,9 @@ class player(ABC):
         cross_stat = (self.attributes.passing * 0.6) + (self.attributes.vision * 0.4)
         error_scale = max(1.0, (100.0 - cross_stat + pressure_penalty) / 15.0)
         
-        fuzz_x = np.random.normal(0, error_scale)
-        fuzz_y = np.random.normal(0, error_scale)
+        rng = state["rng"]
+        fuzz_x = rng.normal(0, error_scale)
+        fuzz_y = rng.normal(0, error_scale)
         
         final_target = base_target + np.array([fuzz_x, fuzz_y])
         return np.clip(final_target, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])

@@ -43,8 +43,8 @@ class Goalkeeper(player):
             
         elif decision == "clear":
             forward_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
-            wide_x = np.random.choice([0.0, PITCH_WIDTH])
-            target = np.array([wide_x + np.random.uniform(-15, 15), forward_y])
+            wide_x = state["rng"].choice([0.0, PITCH_WIDTH])
+            target = np.array([wide_x + state["rng"].uniform(-15, 15), forward_y])
             return {"type": "pass", "target": target, "power": min(1.0, self.attributes.power / 40.0), "pass_type": "clearance"}
 
         elif decision == "dive":
@@ -60,7 +60,7 @@ class Goalkeeper(player):
                 intercept_x = ball_pos[0]
                 
             # Fuzziness: Lower vision creates larger positional misjudgments
-            fuzz = np.random.normal(0, max(0.0, (100 - self.attributes.vision) / 40.0))
+            fuzz = state["rng"].normal(0, max(0.0, (100 - self.attributes.vision) / 40.0))
             intercept_x += fuzz
             
             # Clamp strictly to the goal posts (35.0 +/- ~3.75) with slight padding
@@ -110,7 +110,7 @@ class Goalkeeper(player):
             return "clear"
             
         probs = [t_pass / total, t_clear / total, t_stop / total]
-        return np.random.choice(actions, p=probs)
+        return state["rng"].choice(actions, p=probs)
 
     def _decide_off_ball_attack(self, state: dict) -> str:
         # GK always stay in their box mirroring the play, even on the attack

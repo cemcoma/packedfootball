@@ -1,6 +1,5 @@
 import os
 import random
-import time
 from player.player import Attributes, player
 
 from player.classes.goalkeeper import Goalkeeper
@@ -85,9 +84,9 @@ PACK_DATABASE = {
 }
 
 class PackManager:
-    def __init__(self, db: dict):
+    def __init__(self, db: dict, seed=None):
         self.db = db
-        random.seed(time.time())
+        self.rng = random.Random(seed)
 
     def get_all_packs(self) -> list:
         # like an api call, will be one TODO
@@ -113,27 +112,27 @@ class PackManager:
         pos_weights = list(config["pos_rates"].values())
 
         for _ in range(config["cards_per_pack"]):
-            rolled_tier = random.choices(tiers, weights=weights, k=1)[0]
+            rolled_tier = self.rng.choices(tiers, weights=weights, k=1)[0]
 
-            position_grand_choice = random.choices(pos_choice,weights=pos_weights,k=1)[0]
+            position_grand_choice = self.rng.choices(pos_choice,weights=pos_weights,k=1)[0]
             position = "ST"
             if position_grand_choice == "goalkeeper":
                 position = "GK"
             elif position_grand_choice == "defender":
-                position = random.choice([ "CB", "LB", "RB"])
+                position = self.rng.choice([ "CB", "LB", "RB"])
             elif position_grand_choice == "midfielder":
-                position = random.choice([ "CM", "LW", "RW"])
+                position = self.rng.choice([ "CM", "LW", "RW"])
             elif position_grand_choice == "attacker":
-                position = random.choice([ "ST"])
+                position = self.rng.choice([ "ST"])
 
             attrs = self._generate_tier_attributes(rolled_tier, position)
 
             player_class = PLAYER_CLASS_MAP.get(position, Midfielder)
 
-            country = random.choice(COUNTRIES)
-            fname = random.choice(FIRST_NAMES[country])
-            lname = random.choice(LAST_NAMES[country])
-            hometown = random.choice(CITIES[country])
+            country = self.rng.choice(COUNTRIES)
+            fname = self.rng.choice(FIRST_NAMES[country])
+            lname = self.rng.choice(LAST_NAMES[country])
+            hometown = self.rng.choice(CITIES[country])
 
             new_player = player_class(
                 fname=fname,
@@ -153,11 +152,11 @@ class PackManager:
 
         def roll_stat(stat_type):
             if stat_type == "primary":
-                return random.randint(min_s + (max_s - min_s) // 2, max_s)
+                return self.rng.randint(min_s + (max_s - min_s) // 2, max_s)
             elif stat_type == "secondary":
-                return random.randint(min_s, max_s)
+                return self.rng.randint(min_s, max_s)
             elif stat_type == "nerfed":
-                return random.randint(int(25 + min_s * 0.1), int(40 + max_s * 0.1))
+                return self.rng.randint(int(25 + min_s * 0.1), int(40 + max_s * 0.1))
 
         profile = {
             "speed": "secondary", "agility": "secondary", "passing": "secondary", 

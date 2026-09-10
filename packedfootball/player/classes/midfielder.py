@@ -41,8 +41,8 @@ class Midfielder(player):
             
         elif decision == "clear":
             forward_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-            wide_x = np.random.choice([0.0, 70.0]) 
-            target = np.array([wide_x + np.random.uniform(-15, 15), forward_y])
+            wide_x = state["rng"].choice([0.0, 70.0])
+            target = np.array([wide_x + state["rng"].uniform(-15, 15), forward_y])
             return {"type": "pass", "target": target, "power": min(1.0, self.attributes.power / 50.0), "pass_type": "clearance"}
 
         elif decision == "cross":
@@ -201,7 +201,7 @@ class Midfielder(player):
         if total <= 0:
             return "dribble"
         probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total]
-        return np.random.choice(actions, p=probs)
+        return state["rng"].choice(actions, p=probs)
 
     def _decide_on_ball_defense(self, state: dict) -> str:
         actions = ["pass", "dribble", "stop", "clear"]
@@ -246,7 +246,7 @@ class Midfielder(player):
         if total <= 0:
             return "dribble"
         probs = [t_pass / total, t_dribble / total, t_stop / total, t_clear / total]
-        return np.random.choice(actions, p=probs)
+        return state["rng"].choice(actions, p=probs)
 
     def _decide_off_ball_attack(self, state: dict) -> str:
         if state.get("is_loose", False):
@@ -294,7 +294,7 @@ class Midfielder(player):
 
         total = t_forward + t_support + t_hold
         probs = [t_forward / total, t_support / total, t_hold / total]
-        return np.random.choice(actions, p=probs)
+        return state["rng"].choice(actions, p=probs)
 
     def _decide_off_ball_defense(self, state: dict) -> str:
         if state.get("is_loose", False):
@@ -317,12 +317,12 @@ class Midfielder(player):
             t_tackle = max(1.0, self.attributes.aggression * 1.5)
             t_contain = max(1.0, getattr(self.attributes, "defending", 50) + (100 - self.attributes.aggression))
             probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
-            return np.random.choice(actions, p=probs)
+            return state["rng"].choice(actions, p=probs)
 
         if dist_to_ball < 15.0:
             if ball_pressure_count >= 2:
                 return "contain"
-            if np.random.randint(0, 100) < getattr(self.attributes, "aggression", 40):
+            if state["rng"].integers(0, 100) < getattr(self.attributes, "aggression", 40):
                 return "press"
             else:
                 return "contain"

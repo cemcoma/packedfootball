@@ -43,10 +43,12 @@ formation = { ##442 için fix sadece
 }
 
 class game:
-    def __init__(self, teamA, teamB):
+    def __init__(self, teamA, teamB, seed=None):
 
         self.teamA = teamA # name, short_name, players
         self.teamB = teamB
+        self.seed = seed
+        self.rng = np.random.default_rng(seed)
 
         self.all_players = self.teamA.players + self.teamB.players
 
@@ -204,10 +206,10 @@ class game:
             d_box = [12, 13, 14, 15, 16, 17, 18, 19] if team == 0 else [1, 2, 3, 4, 5, 6, 7, 8]
 
             for p in a_box:
-                self.positions[p] = [35.0 + np.random.uniform(-10, 10), attacking_y + np.random.uniform(-4, 4)]
-                
+                self.positions[p] = [35.0 + self.rng.uniform(-10, 10), attacking_y + self.rng.uniform(-4, 4)]
+
             for p in d_box:
-                self.positions[p] = [35.0 + np.random.uniform(-12, 12), defending_y + np.random.uniform(-3, 3)]
+                self.positions[p] = [35.0 + self.rng.uniform(-12, 12), defending_y + self.rng.uniform(-3, 3)]
 
             self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
             self.ball_controller = -1
@@ -630,7 +632,7 @@ class game:
                 + (self.all_players[index].attributes.ballcontrol / 100.0) * 0.20
                 + max(0.0, 1.0 - ball_speed / 18.0) * 0.15
             )
-            if np.random.random() < float(np.clip(control_chance, 0.60, 0.99)):
+            if self.rng.random() < float(np.clip(control_chance, 0.60, 0.99)):
                 self.ball_controller = index
                 self.ball_capture_player = index
                 self.ball_event = "neutral"
@@ -650,7 +652,7 @@ class game:
             deflection_bias = self._capture_success_probability(index, ball_speed, ball_height)
             pass_bias = 0.12 if self.ball_event in {"pass", "cross", "clearance", "throw_in"} else 0.04
             block_chance = np.clip(0.22 + (ball_speed * 0.10) + (ball_height * 0.28) + (self.all_players[index].attributes.agility / 100.0) * 0.30 - deflection_bias * 0.20 + pass_bias, 0.15, 0.98)
-            if np.random.random() < block_chance:
+            if self.rng.random() < block_chance:
                 current_heading = self.heading[index]
                 if np.linalg.norm(current_heading) < 1e-8:
                     current_heading = np.array([1.0, 0.0], dtype=float)
@@ -663,8 +665,8 @@ class game:
                 if np.dot(normal, current_heading) < 0.0:
                     normal *= -1.0
 
-                side_bias = np.random.uniform(-1.0, 1.0)
-                deflection = normal * side_bias + ball_dir * np.random.uniform(0.35, 0.8)
+                side_bias = self.rng.uniform(-1.0, 1.0)
+                deflection = normal * side_bias + ball_dir * self.rng.uniform(0.35, 0.8)
                 deflection = deflection / np.linalg.norm(deflection)
 
                 self.ball_controller = -1
@@ -674,7 +676,7 @@ class game:
                 self.ball_release_player = index
                 self.ball_release_cooldown = 8
                 self.ball[0:2] = self.positions[index]
-                self.ball[2:4] = deflection * max(3.0, ball_speed * np.random.uniform(0.5, 0.9))
+                self.ball[2:4] = deflection * max(3.0, ball_speed * self.rng.uniform(0.5, 0.9))
                 self.ball[4] = max(0.0, ball_height * 0.5)
                 self.velocity[index] *= 0.4         
 
@@ -693,7 +695,7 @@ class game:
         success_chance = self._capture_success_probability(index, ball_speed, ball_height)
         success_chance = float(np.clip(success_chance + 0.15, 0.2, 0.98))
 
-        if np.random.random() < success_chance:
+        if self.rng.random() < success_chance:
             self.ball_controller = index
             self.ball_capture_player = index
             self.ball_event = "neutral"
@@ -921,7 +923,7 @@ class game:
                 stat_diff = defender_stat - attacker_stat
                 steal_chance = float(np.clip(0.40 + (stat_diff / 100.0), 0.10, 0.90))
 
-                if np.random.random() < steal_chance:
+                if self.rng.random() < steal_chance:
                     self.visual_action[index] = "tackle"
                     self.visual_action_timer[index] = 15
                     # Successful Tackle
@@ -967,14 +969,14 @@ class game:
                 save_stat = (gk_attrs.agility * 0.6) + (gk_attrs.vision * 0.4)
                 save_chance = float(np.clip(0.20 + (save_stat / 100.0) * 0.60, 0.10, 0.95))
                 
-                if np.random.random() < save_chance:
+                if self.rng.random() < save_chance:
                     self.visual_action[index] = "save"
                     self.visual_action_timer[index] = 20
                     
                     handling_stat = (gk_attrs.composure * 0.6) + (gk_attrs.ballcontrol * 0.4)
                     gather_chance = float(np.clip((handling_stat / 100.0) * 0.85 - (ball_speed / 40.0), 0.05, 0.85))
                     
-                    if np.random.random() < gather_chance:
+                    if self.rng.random() < gather_chance:
                         # --- SUCCESSFUL GATHER (CATCH) ---
                         self.ball_controller = index
                         self.ball_capture_player = index
@@ -990,12 +992,12 @@ class game:
                         self.player_stun_cooldown[index] = 6 # Faster recovery for catching safely
                     else:
                         # --- DEFLECTION (PARRY) ---
-                        if np.random.random() < 0.7: #sideways
+                        if self.rng.random() < 0.7: #sideways
                             side_dir = -2.0 if self.positions[index][0] < 35.0 else 2.0
-                            deflect_x = side_dir * np.random.uniform(0.8, 1.2)
-                            deflect_y = -0.5 if self.positions[index][1] < 50.0 else 0.5 
+                            deflect_x = side_dir * self.rng.uniform(0.8, 1.2)
+                            deflect_y = -0.5 if self.positions[index][1] < 50.0 else 0.5
                         else: # punch out
-                            deflect_x = np.random.uniform(-1.0, 1.0)
+                            deflect_x = self.rng.uniform(-1.0, 1.0)
                             deflect_y = 1.0 if self.positions[index][1] < 50.0 else -1.0 
                             
                         deflect_dir = np.array([deflect_x, deflect_y])
@@ -1010,7 +1012,7 @@ class game:
                         
                         self.ball[0:2] = self.positions[index]
                         self.ball[2:4] = deflect_dir * max(6.0, ball_speed * 0.7)
-                        self.ball[4] = np.random.uniform(1.0, 4.0) 
+                        self.ball[4] = self.rng.uniform(1.0, 4.0)
                         
                         self.velocity[index] = np.zeros(2, dtype=float)
                         self.player_stun_cooldown[index] = 30 # Longer recovery for diving
@@ -1142,6 +1144,7 @@ class game:
                 "own_goal": np.array([35.0, 0.0]) if i < 11 else np.array([35.0, 100.0]),
                 "must_pass_next": self.must_pass_next and self.must_pass_player == i and self.ball_controller == i,
                 "is_loose": (self.ball_controller == -1),
+                "rng": self.rng,
             }
             intended_action = self.all_players[i].step(state)
             actions.append(intended_action)
