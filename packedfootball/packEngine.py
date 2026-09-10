@@ -58,21 +58,21 @@ PACK_DATABASE = {
         "price": 100,
         "cards_per_pack": 3,
         "rates": {"bronze": 0.60, "silver": 0.30, "gold": 0.10, "platinum": 0.0, "diamond": 0.0, "special": 0.0},
-        "pos_rates": {"goalkeeper":0.25,"defeder":0.25,"midfielder":0.25,"attacker":0.25}
+        "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25}
     },
     2: {
         "name": "Jumbo Player Pack",
         "price": 500,
         "cards_per_pack": 10,
         "rates": {"bronze": 0.40, "silver": 0.40, "gold": 0.15, "platinum": 0.05, "diamond": 0.0, "special": 0.0},
-        "pos_rates": {"goalkeeper":0.25,"defeder":0.25,"midfielder":0.25,"attacker":0.25}
+        "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25}
     },
     3: {
         "name": "UCL Promo Pack",
         "price": 1000,
         "cards_per_pack": 5,
         "rates": {"bronze": 0.0, "silver": 0.10, "gold": 0.40, "platinum": 0.30, "diamond": 0.15, "special": 0.05},
-        "pos_rates": {"goalkeeper":0.25,"defeder":0.25,"midfielder":0.25,"attacker":0.25}
+        "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25}
     },
     4: {
         "name": "Icon Pack",

@@ -1,6 +1,8 @@
 import numpy as np
 from typing import Final
 
+from replay import ActionType, ReplayRecorder
+
 PITCH_WIDTH: Final[float] = 70.0
 PITCH_HEIGHT: Final[float] = 100.0
 GOAL_WIDTH: Final = 7.5
@@ -43,12 +45,13 @@ formation = { ##442 için fix sadece
 }
 
 class game:
-    def __init__(self, teamA, teamB, seed=None):
+    def __init__(self, teamA, teamB, seed=None, record_replay=False):
 
         self.teamA = teamA # name, short_name, players
         self.teamB = teamB
         self.seed = seed
         self.rng = np.random.default_rng(seed)
+        self.replay = ReplayRecorder() if record_replay else None
 
         self.all_players = self.teamA.players + self.teamB.players
 
@@ -101,6 +104,8 @@ class game:
         self.kickoff_team = 0
         self.kickoff_timer = 60
         self.reset_positions(restart_type="kickoff", team=0)
+        if self.replay:
+            self.replay.event(0, ActionType.KICKOFF, team=0)
 
 
     def _resolve_player_collisions(self):
@@ -263,6 +268,16 @@ class game:
             self.ball_controller = throw_player
             self._set_must_pass_for_player(throw_player)
 
+        if self.replay:
+            restart_event = {
+                "kickoff": ActionType.KICKOFF,
+                "corner": ActionType.CORNER,
+                "goal_kick": ActionType.GOAL_KICK,
+                "throw_in": ActionType.THROW_IN,
+            }.get(restart_type)
+            if restart_event is not None:
+                self.replay.event(self.match_clock_frames, restart_event, team=self.restart_team)
+
     def render(self, screen, window_size=(1280, 800)):
         try:
             import pygame
@@ -418,7 +433,7 @@ class game:
             screen.blit(popup, popup_rect)
         
 
-    def run_match(self, max_steps: int = 3000, fps: int = 60, render: bool = False, window_size=(700, 1000), title: str = "Packed Football"):
+    def run_match(self, max_steps: int = 10800, fps: int = 60, render: bool = False, window_size=(700, 1000), title: str = "Packed Football"):
         dt = 1.0 / fps
 
         if render:
@@ -443,6 +458,9 @@ class game:
                 self.goal_popup = {"text": "HALF TIME", "timer": 180, "team": None}
                 self.halftime_pause_timer = 180
                 self.reset_positions(restart_type="kickoff", team=1)
+                if self.replay:
+                    self.replay.event(self.match_clock_frames, ActionType.HALFTIME)
+                    self.replay.event(self.match_clock_frames, ActionType.KICKOFF, team=1)
                 # self.camera_flipped = True TODO
 
             if render:
@@ -468,6 +486,9 @@ class game:
                 clock.tick(fps)
 
             steps += 1
+
+        if self.replay:
+            self.replay.event(self.match_clock_frames, ActionType.FULLTIME)
 
         # --- Final Whistle Render Loop ---
         if render:
@@ -576,6 +597,9 @@ class game:
 
         self._check_goal()
 
+        if self.replay and self.match_clock_frames % self.replay.sample_interval_ticks == 0:
+            self.replay.snapshot(self.match_clock_frames, self.positions, self.velocity, self.ball, self.ball_controller)
+
     def _capture_success_probability(self, rep_idx: int, ball_speed: float, ball_height: float) -> float:
         player_attr = self.all_players[rep_idx].attributes
 
@@ -643,6 +667,8 @@ class game:
                 self.ball[4] = 0.0
                 self.visual_action[index] = "recieved_pass"
                 self.visual_action_timer[index] = 15
+                if self.replay:
+                    self.replay.event(self.match_clock_frames, ActionType.RECEIVED_PASS, player_idx=index, team=0 if index < 11 else 1)
                 return True
             return False
         
@@ -760,9 +786,11 @@ class game:
             
             self.goal_pause_timer = 90
             self.kickoff_team = 1 - scoring_team
+            if self.replay:
+                self.replay.event(self.match_clock_frames, ActionType.GOAL, player_idx=self.last_touch_player, team=scoring_team)
             self.last_touch_player = -1
             self.assist_candidate = -1
-            
+
             return True
             
         return False
@@ -887,7 +915,12 @@ class game:
                     power *= 0.8
 
                 self.visual_action[index] = pass_type
-                self.visual_action_timer[index] = 15 
+                self.visual_action_timer[index] = 15
+                if self.replay:
+                    pass_event = {"normal": ActionType.PASS, "clearance": ActionType.CLEARANCE, "cross": ActionType.CROSS}.get(
+                        pass_type, ActionType.PASS
+                    )
+                    self.replay.event(self.match_clock_frames, pass_event, player_idx=index, team=0 if index < 11 else 1)
                 self._release_ball(index, unit_vec, power, aerial=aerial, event_type="pass")
 
         elif action_type == "shoot":
@@ -904,6 +937,8 @@ class game:
                 aerial = bool(np.abs(unit_vec_3d[2]) > 0.1 or target_3d[2] > 0.2)
                 self.visual_action[index] = "shoot"
                 self.visual_action_timer[index] = 15
+                if self.replay:
+                    self.replay.event(self.match_clock_frames, ActionType.SHOOT, player_idx=index, team=0 if index < 11 else 1)
                 self._release_ball(index, unit_vec_3d[:2], shot_speed, aerial=aerial, event_type="shot")
                 self.ball[2] = unit_vec_3d[0] * shot_speed
                 self.ball[3] = unit_vec_3d[1] * shot_speed
@@ -926,6 +961,8 @@ class game:
                 if self.rng.random() < steal_chance:
                     self.visual_action[index] = "tackle"
                     self.visual_action_timer[index] = 15
+                    if self.replay:
+                        self.replay.event(self.match_clock_frames, ActionType.TACKLE, player_idx=index, team=0 if index < 11 else 1)
                     # Successful Tackle
                     tackle_vector = self.positions[index] - self.positions[holder_idx]
                     tackle_vector_norm = np.linalg.norm(tackle_vector)
@@ -948,6 +985,8 @@ class game:
                     # Failed Tackle: Defender gets ankle-broken
                     self.visual_action[index] = "anklebreaker"
                     self.visual_action_timer[index] = 60
+                    if self.replay:
+                        self.replay.event(self.match_clock_frames, ActionType.ANKLEBREAKER, player_idx=index, team=0 if index < 11 else 1)
                     self.velocity[index] = np.zeros(2, dtype=float)
                     self.player_stun_cooldown[index] = 60  # Stun the defender so the attacker can pass them
 
@@ -972,7 +1011,10 @@ class game:
                 if self.rng.random() < save_chance:
                     self.visual_action[index] = "save"
                     self.visual_action_timer[index] = 20
-                    
+                    if self.replay:
+                        self.replay.event(self.match_clock_frames, ActionType.SAVE, player_idx=index, team=0 if index < 11 else 1)
+
+
                     handling_stat = (gk_attrs.composure * 0.6) + (gk_attrs.ballcontrol * 0.4)
                     gather_chance = float(np.clip((handling_stat / 100.0) * 0.85 - (ball_speed / 40.0), 0.05, 0.85))
                     
@@ -1155,7 +1197,7 @@ class game:
             self._resolve_action(int(i), actions[int(i)])
 
 
-def run_match(teamA, teamB, max_steps: int = 3000, fps: int = 60, render: bool = False, window_size=(1280, 800), title: str = "Packed Football"):
+def run_match(teamA, teamB, max_steps: int = 10800, fps: int = 60, render: bool = False, window_size=(1280, 800), title: str = "Packed Football"):
     match = game(teamA, teamB)
     return match.run_match(max_steps=max_steps, fps=fps, render=render, window_size=window_size, title=title)
 

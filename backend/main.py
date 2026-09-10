@@ -12,6 +12,7 @@ the user's own ID token.
 
 from __future__ import annotations
 
+import base64
 import os
 import secrets
 import sys
@@ -231,9 +232,11 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
         _Team(caller_profile["display_name"], caller_profile["roster"]),
         _Team(opponent_profile["display_name"], opponent_profile["roster"]),
         seed=seed,
+        record_replay=True,
     )
-    match.run_match(max_steps=3000, render=False)
+    match.run_match(max_steps=10800, render=False)  # 90 real-minute match, matching packedfootball/main.py's own loop
     my_score, opp_score = match.scores
+    replay_b64 = base64.b64encode(match.replay.encode()).decode()
 
     await games_client.set_document(
         f"games/{game_id}",
@@ -264,4 +267,5 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
         "losses": losses,
         "draws": draws,
         "game_id": game_id,
+        "replay": replay_b64,
     }
