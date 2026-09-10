@@ -11,14 +11,24 @@ writes behind a Cloud Run service that enforces what these rules currently
 just trust is the planned next step.
 
 Schema:
-    users/{uid}                -> {display_name, credits, roster: [card, ...]}
-    users/{uid}/inventory/{id} -> one document per benched (non-starting) card
+    users/{uid}                -> {display_name, credits, roster_player_ids: [id, ...]}
+    users/{uid}/inventory/{id} -> {player_id} pointer, one per benched card
+    players/{player_id}        -> the actual card fields (owner_uid, attributes,
+                                   statistics, ...) -- the single copy roster
+                                   and inventory both point into, so a
+                                   cross-user leaderboard can query this
+                                   collection directly instead of joining
+                                   through every user's roster/inventory.
     lobby/{uid}                -> public squad snapshot used for PvP discovery
+                                   (still fully denormalized -- see
+                                   publish_lobby_entry)
 """
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict
+from datetime import datetime, timezone
 from typing import Any
 
 from player.player import Attributes
@@ -72,6 +82,39 @@ class GameState:
     def _to_players(self, field_list: list[dict]) -> list:
         return [self._to_player(f) for f in field_list]
 
+    # -- players collection (the shared copy roster/inventory point into) -----
+
+    async def _ensure_player_doc(self, p) -> str:
+        """Creates or updates this player's players/{id} doc, tagging p.player_id.
+
+        Mirrors the .doc_id tagging pattern add_inventory_card uses for bench
+        documents, but for the players collection itself: repeated calls (e.g.
+        calling save_roster again) update the same doc instead of creating a
+        duplicate one every time.
+        """
+        fields = player_to_fields(p)
+        fields["owner_uid"] = self.client.uid
+        player_id = getattr(p, "player_id", None)
+        if player_id:
+            await self.client.set_document(f"players/{player_id}", fields, merge=True)
+            return player_id
+        fields["created_at"] = datetime.now(timezone.utc).isoformat()
+        player_id = await self.client.add_document("players", fields)
+        p.player_id = player_id
+        return player_id
+
+    async def _load_player(self, player_id: str):
+        fields = await self.client.get_document(f"players/{player_id}")
+        if fields is None:
+            return None
+        p = self._to_player(fields)
+        p.player_id = player_id
+        return p
+
+    async def _load_players(self, player_ids: list[str]) -> list:
+        players = await asyncio.gather(*(self._load_player(pid) for pid in player_ids))
+        return [p for p in players if p is not None]
+
     # -- profile + roster -----------------------------------------------------
 
     async def load_or_create_profile(self, default_roster: list, default_display_name: str) -> dict[str, Any]:
@@ -85,6 +128,7 @@ class GameState:
         uid = self.client.uid
         doc = await self.client.get_document(f"users/{uid}")
         if doc is None:
+            roster_player_ids = await asyncio.gather(*(self._ensure_player_doc(p) for p in default_roster))
             doc = {
                 "credits": DEFAULT_STARTING_CREDITS,
                 "display_name": default_display_name,
@@ -93,7 +137,7 @@ class GameState:
                 "draws": 0,
                 "elo": DEFAULT_STARTING_ELO,
                 "campaign_level": 0,
-                "roster": [player_to_fields(p) for p in default_roster],
+                "roster_player_ids": list(roster_player_ids),
             }
             await self.client.set_document(f"users/{uid}", doc, merge=False)
             return {
@@ -114,7 +158,7 @@ class GameState:
             "draws": doc.get("draws", 0),
             "elo": doc.get("elo", DEFAULT_STARTING_ELO),
             "campaign_level": doc.get("campaign_level", 0),
-            "roster": self._to_players(doc.get("roster", [])),
+            "roster": await self._load_players(doc.get("roster_player_ids", [])),
         }
 
     async def update_profile_fields(self, fields: dict) -> None:
@@ -123,7 +167,8 @@ class GameState:
         await self.client.set_document(f"users/{uid}", fields, merge=True)
 
     async def save_roster(self, roster: list) -> None:
-        await self.update_profile_fields({"roster": [player_to_fields(p) for p in roster]})
+        roster_player_ids = await asyncio.gather(*(self._ensure_player_doc(p) for p in roster))
+        await self.update_profile_fields({"roster_player_ids": list(roster_player_ids)})
 
     async def set_credits(self, credits: int) -> None:
         await self.update_profile_fields({"credits": credits})
@@ -146,17 +191,20 @@ class GameState:
         """Returns benched cards, each tagged with a .doc_id for later updates."""
         uid = self.client.uid
         docs = await self.client.list_collection(f"users/{uid}/inventory")
-        cards = []
-        for doc in docs:
-            card = self._to_player(doc)
+        cards = await asyncio.gather(*(self._load_player(doc["player_id"]) for doc in docs))
+        result = []
+        for doc, card in zip(docs, cards):
+            if card is None:
+                continue  # dangling pointer (players/{id} doc missing) -- skip
             card.doc_id = doc["id"]
-            cards.append(card)
-        return cards
+            result.append(card)
+        return result
 
     async def add_inventory_card(self, card) -> None:
         """Persists a card as a new bench document and tags it with the new id."""
         uid = self.client.uid
-        doc_id = await self.client.add_document(f"users/{uid}/inventory", player_to_fields(card))
+        player_id = await self._ensure_player_doc(card)
+        doc_id = await self.client.add_document(f"users/{uid}/inventory", {"player_id": player_id})
         card.doc_id = doc_id
 
     async def remove_inventory_card(self, card) -> None:

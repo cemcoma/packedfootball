@@ -1,0 +1,5 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["build", "-f", "backend/Dockerfile", "-t", "gcr.io/$PROJECT_ID/packedfootball-backend", "."]
+images:
+  - "gcr.io/$PROJECT_ID/packedfootball-backend"
