@@ -2,15 +2,16 @@
 # One line per country. Add/remove countries and names freely.
 # Parse with: line.split(":", 1) -> [country, "name1, name2, ..."]
 
-England: James, Harry, Jack, George, Oliver, Jordan, Marcus, Callum, Declan, Bukayo
-Spain: Pablo, Alejandro, Sergio, Alvaro, Pedro, Gabriel, Rodrigo, Nacho, Marco, Ferran
-France: Kylian, Antoine, Paul, Ousmane, Aurelien, Theo, Adrien, Raphael, William, Eduardo
-Germany: Leon, Joshua, Ilkay, Thomas, Manuel, Timo, Kai, Jonas, Niklas, Serge
-Italy: Marco, Lorenzo, Federico, Nicolo, Ciro, Giovanni, Alessandro, Leonardo, Matteo, Francesco
-Portugal: Joao, Bruno, Bernardo, Diogo, Rafael, Goncalo, Pedro, Ruben, Vitor, Nuno
-Brazil: Gabriel, Lucas, Matheus, Rodrigo, Vinicius, Neymar, Thiago, Fabinho, Marquinhos, Raphinha
-Argentina: Lionel, Angel, Rodrigo, Emiliano, Nicolas, Lautaro, Julian, Enzo, Alexis, Leandro
-Netherlands: Virgil, Memphis, Frenkie, Matthijs, Denzel, Cody, Georginio, Nathan, Steven, Donyell
-Nigeria: Victor, Wilfred, Ademola, Alex, Kelechi, Samuel, Moses, Joe, Taiwo, Chidozie
-Japan: Takefusa, Kaoru, Ritsu, Wataru, Daichi, Junya, Ao, Hidemasa, Yuki, Takehiro
-USA: Christian, Weston, Tyler, Gio, Sergino, Ricardo, Timothy, Brenden, Folarin, Yunus
+England: James, Harry, Jack, George, Oliver, Jordan, Marcus, Callum, Declan, Bukayo, Jude, Phil, Trent, Raheem, Mason, Charlie, Thomas, William, Arthur, Henry
+Spain: Pablo, Alejandro, Sergio, Alvaro, Pedro, Gabriel, Rodrigo, Nacho, Marco, Ferran, Gavi, Pedri, Lamine, Pau, Dani, David, Javier, Carlos, Jose, Antonio
+France: Kylian, Antoine, Paul, Ousmane, Aurelien, Theo, Adrien, Raphael, William, Eduardo, N'Golo, Olivier, Hugo, Jules, Bradley, Jean, Pierre, Louis, Lucas, Michel
+Germany: Leon, Joshua, Ilkay, Thomas, Manuel, Timo, Kai, Jonas, Niklas, Serge, Jamal, Florian, Toni, Antonio, Leroy, Lukas, Felix, Maximilian, Paul, Stefan
+Italy: Marco, Lorenzo, Federico, Nicolo, Ciro, Giovanni, Alessandro, Leonardo, Matteo, Francesco, Gianluigi, Sandro, Giorgio, Domenico, Davide, Giuseppe, Antonio, Luca, Andrea, Roberto
+Portugal: Joao, Bruno, Bernardo, Diogo, Rafael, Goncalo, Pedro, Ruben, Vitor, Nuno, Cristiano, Pepe, Rui, Francisco, Antonio, Manuel, Jose, Luis, Carlos, Miguel
+Brazil: Gabriel, Lucas, Matheus, Rodrigo, Vinicius, Neymar, Thiago, Fabinho, Marquinhos, Raphinha, Alisson, Ederson, Casemiro, Antony, Richarlison, Joao, Pedro, Marcelo, Luiz, Carlos
+Argentina: Lionel, Angel, Rodrigo, Emiliano, Nicolas, Lautaro, Julian, Enzo, Alexis, Leandro, Paulo, Alejandro, Lisandro, Cristian, Nahuel, Juan, Carlos, Diego, Martin, Fernando
+Netherlands: Virgil, Memphis, Frenkie, Matthijs, Denzel, Cody, Georginio, Nathan, Steven, Donyell, Xavi, Teun, Jeremie, Tijjani, Bart, Johannes, Willem, Hendrik, Pieter, Cornelis
+Nigeria: Victor, Wilfred, Ademola, Alex, Kelechi, Samuel, Moses, Joe, Taiwo, Chidozie, Stanley, Frank, Calvin, Bright, Terem, Emmanuel, John, David, Michael, Peter
+Japan: Takefusa, Kaoru, Ritsu, Wataru, Daichi, Junya, Ao, Hidemasa, Yuki, Takehiro, Zion, Ko, Takumi, Hiroki, Koki, Kenji, Takashi, Makoto, Satoshi, Ryota
+USA: Christian, Weston, Tyler, Gio, Sergino, Ricardo, Timothy, Brenden, Folarin, Yunus, Matt, Antonee, Chris, Josh, Miles, John, Michael, David, James, Robert
+Turkey: Cem, Can, Bora, Ege, Rodi, Erfan, Özmer, Tunay, Taylan, Kerem, Eray, Onur, Arda, Hakan, Kenan, Barış, Ferdi, İsmail, Çağlar, Mert

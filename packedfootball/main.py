@@ -360,7 +360,7 @@ async def main():
                 # Header
                 name_text = font_large.render(f"{active_player.fname} {active_player.lname} - {active_player.position}", True, (255, 255, 255))
                 screen.blit(name_text, (380, 70))
-                name_text = font_btn.render(f"OVR {active_player.overall} - {(active_player.tier).title}", True, (255, 255, 180))
+                name_text = font_btn.render(f"OVR {active_player.overall} - {(active_player.tier).title()}", True, (255, 255, 180))
                 screen.blit(name_text, (380, 120))
                 origin_text = font_small.render(f"{active_player.country} - {active_player.hometown}", True, (200, 200, 200))
                 screen.blit(origin_text, (380, 150))
