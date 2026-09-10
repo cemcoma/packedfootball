@@ -99,7 +99,7 @@ async def main():
     anim_timer = 0
 
     
-    campaign_tiers = ["bronze", "silver", "gold", "platinum", "diamond"]
+    campaign_tiers = ["bronze", "silver", "gold", "platinum", "diamond", "special"]
     campaign_level = 0
 
     while True:
@@ -360,12 +360,14 @@ async def main():
                 # Header
                 name_text = font_large.render(f"{active_player.fname} {active_player.lname} - {active_player.position}", True, (255, 255, 255))
                 screen.blit(name_text, (380, 70))
-                name_text = font_btn.render(f"OVR {active_player.overall}", True, (255, 255, 180))
+                name_text = font_btn.render(f"OVR {active_player.overall} - {(active_player.tier).title}", True, (255, 255, 180))
                 screen.blit(name_text, (380, 120))
+                origin_text = font_small.render(f"{active_player.country} - {active_player.hometown}", True, (200, 200, 200))
+                screen.blit(origin_text, (380, 150))
 
                 # Stats Grid
                 stats = active_player.getStatistics()
-                sy_offset = 150
+                sy_offset = 180
                 sx_offset = 380
                 statistics = [
                     f"Matches Played: {stats['matches_played']}",
@@ -390,8 +392,8 @@ async def main():
                     stat_surf = font_small.render(stat, True, (200, 200, 255))
                     screen.blit(stat_surf, (sx_offset, sy_offset))
                     sy_offset += 30
-                    if sy_offset > 200:
-                        sy_offset = 150
+                    if sy_offset > 230:
+                        sy_offset = 180
                         sx_offset += 250
                 
                 attr_text = font_btn.render("Attributes", True, (240, 240, 240))

@@ -1,3 +1,4 @@
+import os
 import random
 from player.player import Attributes, player
 
@@ -5,6 +6,28 @@ from player.classes.goalkeeper import Goalkeeper
 from player.classes.defender import CenterBack, Fullback
 from player.classes.midfielder import Midfielder
 from player.classes.forward import Forward
+
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+
+
+def _load_name_data(filename: str) -> dict:
+    """Parses 'Country: item1, item2, ...' lines into {country: [items]}."""
+    path = os.path.join(DATA_DIR, filename)
+    data = {}
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            country, values = line.split(":", 1)
+            data[country.strip()] = [v.strip() for v in values.split(",")]
+    return data
+
+
+FIRST_NAMES = _load_name_data("first_names.txt")
+LAST_NAMES = _load_name_data("last_names.txt")
+CITIES = _load_name_data("cities.txt")
+COUNTRIES = list(FIRST_NAMES.keys())
 
 PLAYER_CLASS_MAP = {
     "GK": Goalkeeper,
@@ -78,17 +101,24 @@ class PackManager:
             rolled_tier = random.choices(tiers, weights=weights, k=1)[0]
             
             position = random.choice(["GK", "CB", "LB", "RB", "CM", "LW", "RW", "ST"]) # TODO: add weights to positions based on packs (ie forward pack) also add more positions for other formations
-            
+
             attrs = self._generate_tier_attributes(rolled_tier, position)
-            
+
             player_class = PLAYER_CLASS_MAP.get(position, Midfielder)
-            
+
+            country = random.choice(COUNTRIES)
+            fname = random.choice(FIRST_NAMES[country])
+            lname = random.choice(LAST_NAMES[country])
+            hometown = random.choice(CITIES[country])
+
             new_player = player_class(
-                fname="Pulled", 
-                lname=f"{rolled_tier.capitalize()} {position}", 
-                tier=rolled_tier, 
-                position=position, 
-                attributes=attrs
+                fname=fname,
+                lname=lname,
+                tier=rolled_tier,
+                position=position,
+                attributes=attrs,
+                country=country,
+                hometown=hometown
             )
             
             new_cards.append(new_player)

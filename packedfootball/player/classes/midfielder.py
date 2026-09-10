@@ -18,9 +18,9 @@ class MidfielderActionProfile(ActionProfile):
 
 
 class Midfielder(player):
-    def __init__(self, fname, lname, tier, position, attributes=None):
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
         self.action_profile = MidfielderActionProfile()
-        super().__init__(fname, lname, tier, position, attributes)
+        super().__init__(fname, lname, tier, position, attributes, country, hometown)
 
     def _build_action(self, decision: str, state: dict) -> dict | None:
         if decision == "stop":

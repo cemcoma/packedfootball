@@ -1,0 +1,16 @@
+# Format: Country: name1, name2, name3, ...
+# One line per country. Add/remove countries and names freely.
+# Parse with: line.split(":", 1) -> [country, "name1, name2, ..."]
+
+England: James, Harry, Jack, George, Oliver, Jordan, Marcus, Callum, Declan, Bukayo
+Spain: Pablo, Alejandro, Sergio, Alvaro, Pedro, Gabriel, Rodrigo, Nacho, Marco, Ferran
+France: Kylian, Antoine, Paul, Ousmane, Aurelien, Theo, Adrien, Raphael, William, Eduardo
+Germany: Leon, Joshua, Ilkay, Thomas, Manuel, Timo, Kai, Jonas, Niklas, Serge
+Italy: Marco, Lorenzo, Federico, Nicolo, Ciro, Giovanni, Alessandro, Leonardo, Matteo, Francesco
+Portugal: Joao, Bruno, Bernardo, Diogo, Rafael, Goncalo, Pedro, Ruben, Vitor, Nuno
+Brazil: Gabriel, Lucas, Matheus, Rodrigo, Vinicius, Neymar, Thiago, Fabinho, Marquinhos, Raphinha
+Argentina: Lionel, Angel, Rodrigo, Emiliano, Nicolas, Lautaro, Julian, Enzo, Alexis, Leandro
+Netherlands: Virgil, Memphis, Frenkie, Matthijs, Denzel, Cody, Georginio, Nathan, Steven, Donyell
+Nigeria: Victor, Wilfred, Ademola, Alex, Kelechi, Samuel, Moses, Joe, Taiwo, Chidozie
+Japan: Takefusa, Kaoru, Ritsu, Wataru, Daichi, Junya, Ao, Hidemasa, Yuki, Takehiro
+USA: Christian, Weston, Tyler, Gio, Sergino, Ricardo, Timothy, Brenden, Folarin, Yunus

@@ -1,0 +1,16 @@
+# Format: Country: city1, city2, city3, ...
+# One line per country. Add/remove countries and cities freely.
+# Parse with: line.split(":", 1) -> [country, "city1, city2, ..."]
+
+England: London, Manchester, Liverpool, Birmingham, Leeds, Newcastle, Sheffield, Bristol
+Spain: Madrid, Barcelona, Valencia, Sevilla, Bilbao, Malaga, Zaragoza, Vigo
+France: Paris, Marseille, Lyon, Toulouse, Nice, Nantes, Lille, Bordeaux
+Germany: Berlin, Munich, Hamburg, Cologne, Frankfurt, Stuttgart, Dortmund, Leipzig
+Italy: Rome, Milan, Naples, Turin, Florence, Bologna, Genoa, Verona
+Portugal: Lisbon, Porto, Braga, Coimbra, Faro, Setubal, Aveiro
+Brazil: Rio de Janeiro, Sao Paulo, Salvador, Brasilia, Fortaleza, Recife, Curitiba
+Argentina: Buenos Aires, Cordoba, Rosario, Mendoza, La Plata, Mar del Plata
+Netherlands: Amsterdam, Rotterdam, The Hague, Utrecht, Eindhoven, Groningen
+Nigeria: Lagos, Abuja, Kano, Ibadan, Port Harcourt, Benin City
+Japan: Tokyo, Osaka, Yokohama, Nagoya, Sapporo, Fukuoka
+USA: New York, Los Angeles, Chicago, Miami, Dallas, Seattle

@@ -15,8 +15,8 @@ class GoalkeeperActionProfile(ActionProfile):
     }
 
 class Goalkeeper(player):
-    def __init__(self, fname, lname,tier ,position, attributes=None):
-        super().__init__(fname, lname,tier, position, attributes)
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
+        super().__init__(fname, lname, tier, position, attributes, country, hometown)
         self.action_profile = GoalkeeperActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())

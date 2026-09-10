@@ -59,10 +59,12 @@ class ActionProfile:
         return dict(self.action_biases)
 
 class player(ABC):
-    def __init__(self, fname, lname, tier, position, attributes:Attributes = None):
+    def __init__(self, fname, lname, tier, position, attributes:Attributes = None, country: str = None, hometown: str = None):
         #cosmetic
         self.fname = fname
         self.lname = lname
+        self.country = country or "Unknown"
+        self.hometown = hometown or "Unknown"
         self.statistics = {"goals": 0,"assists":0,"matches_played": 0}
         self.tier = tier
 
@@ -373,10 +375,12 @@ class player(ABC):
 
     def __str__(self):
         attributes_str = "".join([f"{k}: {v}\n" for k, v in asdict(self.attributes).items()])
-        return f"""*** {self.fname} {self.lname} *** 
+        return f"""*** {self.fname} {self.lname} ***
         Overall = {self.overall}
         Tier = {self.tier}
         Position = {self.position}
+        Country = {self.country}
+        Hometown = {self.hometown}
         Matches Played = {self.statistics.get("matches_played")}
         Goals = {self.statistics.get("goals")}
         Assists = {self.statistics.get("assists")}

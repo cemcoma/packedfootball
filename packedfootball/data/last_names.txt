@@ -1,0 +1,16 @@
+# Format: Country: name1, name2, name3, ...
+# One line per country. Add/remove countries and names freely.
+# Parse with: line.split(":", 1) -> [country, "name1, name2, ..."]
+
+England: Smith, Johnson, Williams, Kane, Rice, Foden, Sterling, Walker, Maguire, Saka
+Spain: Garcia, Fernandez, Rodriguez, Martinez, Lopez, Gonzalez, Torres, Ramos, Alba, Silva
+France: Martin, Bernard, Dubois, Thomas, Robert, Petit, Moreau, Simon, Mbappe, Tchouameni
+Germany: Muller, Schmidt, Schneider, Fischer, Weber, Meyer, Wagner, Becker, Hoffmann, Neuer
+Italy: Rossi, Russo, Ferrari, Esposito, Bianchi, Romano, Colombo, Ricci, Marchisio, Chiellini
+Portugal: Silva, Santos, Ferreira, Pereira, Oliveira, Costa, Rodrigues, Martins, Carvalho, Fernandes
+Brazil: Silva, Santos, Oliveira, Souza, Pereira, Costa, Almeida, Carvalho, Rodrigues, Gomes
+Argentina: Gonzalez, Rodriguez, Fernandez, Lopez, Martinez, Diaz, Perez, Sanchez, Romero, Alvarez
+Netherlands: de Jong, Jansen, de Vries, van den Berg, van Dijk, Bakker, Visser, Smit, Bos, Peters
+Nigeria: Osimhen, Ndidi, Lookman, Iwobi, Chukwueze, Aina, Awoniyi, Onyeka, Bassey, Ekong
+Japan: Kubo, Mitoma, Doan, Endo, Tanaka, Ito, Morita, Yamada, Suzuki, Tomiyasu
+USA: Pulisic, McKennie, Adams, Reyna, Dest, Pepi, Weah, Musah, Balogun, Aaronson

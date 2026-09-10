@@ -45,7 +45,7 @@ formation = { ##442 için fix sadece
 class game:
     def __init__(self, teamA, teamB):
 
-        self.teamA = teamA # name, players
+        self.teamA = teamA # name, short_name, players
         self.teamB = teamB
 
         self.all_players = self.teamA.players + self.teamB.players
