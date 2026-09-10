@@ -2,3 +2,4 @@ packedfootball/build/
 __pycache__/
 *.pyc
 .DS_Store
+packedfootball/firebase_config.py
