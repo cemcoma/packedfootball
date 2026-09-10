@@ -27,5 +27,15 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == uid;
     }
+
+    // Player cards: users/*.roster_player_ids and users/*/inventory/* hold
+    // only ids into this collection (see game_state.py). Always accessed by
+    // a specific known id (never listed/queried), so this only needs to
+    // scope get/create/update/delete by ownership, not grant collection-wide
+    // read access -- that would leak every other manager's card data.
+    match /players/{playerId} {
+      allow read, update, delete: if request.auth != null && resource.data.owner_uid == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.owner_uid == request.auth.uid;
+    }
   }
 }

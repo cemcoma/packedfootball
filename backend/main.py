@@ -20,6 +20,7 @@ from typing import Optional
 
 import firebase_admin
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from firebase_admin import auth as firebase_auth
 from firebase_admin import firestore
 from pydantic import BaseModel
@@ -47,6 +48,20 @@ firebase_admin.initialize_app(options={"projectId": FIREBASE_PROJECT_ID})
 ELO_K = 32  # matches packedfootball/main.py's client-side formula
 
 app = FastAPI(title="Packed Football backend")
+
+# The pygbag web build runs in-browser from GitHub Pages, a different origin
+# than this service's own *.run.app domain, so browser fetches need CORS
+# explicitly enabled -- desktop builds use `requests` instead, which isn't
+# subject to CORS at all. Add any other deployed frontend origins here
+# (a custom domain, a future Godot web export, etc).
+ALLOWED_ORIGINS = ["https://cemcoma.github.io"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class _Team:
@@ -110,6 +125,38 @@ async def open_pack(req: OpenPackRequest, uid: str = Depends(verify_id_token)):
         "seed": seed,
         "credits_remaining": remaining_credits,
         "cards": [player_to_fields(c) for c in cards],
+    }
+
+
+PLAYER_LEADERBOARD_STATS = {
+    "goals": "statistics.goals",
+    "assists": "statistics.assists",
+    "matches_played": "statistics.matches_played",
+}
+
+
+@app.get("/leaderboard/players")
+async def leaderboard_players(stat: str = "goals", limit: int = 20, uid: str = Depends(verify_id_token)):
+    field_path = PLAYER_LEADERBOARD_STATS.get(stat)
+    if field_path is None:
+        raise HTTPException(400, f"stat must be one of {list(PLAYER_LEADERBOARD_STATS)}")
+    limit = max(1, min(limit, 100))
+
+    docs = await AdminFirestoreClient(uid).query_top("players", field_path, limit)
+    return {
+        "stat": stat,
+        "entries": [
+            {
+                "player_id": d["id"],
+                "fname": d.get("fname"),
+                "lname": d.get("lname"),
+                "position": d.get("position"),
+                "tier": d.get("tier"),
+                "owner_uid": d.get("owner_uid"),
+                "value": d.get("statistics", {}).get(stat, 0),
+            }
+            for d in docs
+        ],
     }
 
 

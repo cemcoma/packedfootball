@@ -17,7 +17,7 @@ from player.classes.midfielder import Midfielder
 from player.classes.forward import Forward
 
 from firebase_client import FirebaseClient
-from firebase_config import FIREBASE_API_KEY, FIREBASE_PROJECT_ID
+from firebase_config import BACKEND_URL, FIREBASE_API_KEY, FIREBASE_PROJECT_ID
 from game_state import GameState
 from auth_scene import AuthScene, TextInput
 import native_form
@@ -202,9 +202,6 @@ def setup_demo_match(user_players, bot_tier):
 
 async def _load_account_state(firebase, default_roster, default_display_name):
     """Loads (or creates) the signed-in user's Firestore-backed state.
-
-    No offline fallback: if Firestore can't be reached, this raises
-    FirebaseError and the game crashes
     """
     game_state = GameState(firebase, PLAYER_CLASS_MAP, Midfielder)
     profile = await game_state.load_or_create_profile(default_roster, default_display_name)
@@ -282,6 +279,7 @@ async def main():
     active_opponent_label = ""
     active_opponent_elo = None  # opponent's elo at challenge time; None for campaign (no elo change)
     team_dirty = False  # True when TEAM-scene swaps haven't been saved yet
+    team_swap_page = 0  # current page through the "Available Replacements" list
 
     # --- Animation State ---
     shop_state = "IDLE"
@@ -293,9 +291,16 @@ async def main():
     pvp_opponents = []
     pvp_loaded = False
     pvp_view = "CHALLENGE"  # or "LEADERBOARD" -- both live inside the PVP scene
-    leaderboard_segment = "wins"  # "wins" | "elo" | "campaign"
+    leaderboard_segment = "wins"  # "wins" | "elo" | "campaign" | "player"
     leaderboard_entries = []
     leaderboard_loaded = False
+
+    # "Player" leaderboard sub-view: goals/assists/matches_played, fetched
+    # from the backend (the players collection isn't directly readable by
+    # the client -- see backend/main.py's /leaderboard/players).
+    player_leaderboard_stat = "goals"  # "goals" | "assists" | "matches_played"
+    player_leaderboard_entries = []
+    player_leaderboard_loaded = False
 
     # --- Profile page state ---
     profile_name_input = TextInput((440, 260, 340, 44), placeholder="display name")
@@ -534,10 +539,12 @@ async def main():
                     pvp_loaded = False
 
             else:  # pvp_view == "LEADERBOARD"
-                # Three segments, as asked: campaign progress, elo, total wins.
-                # A POC leaderboard just needs a top list per segment -- no
-                # pagination, no "your rank" if you're outside the top 10.
-                segments = [("campaign", "Campaign"), ("elo", "Elo"), ("wins", "Wins")]
+                # Four segments: three manager standings (campaign progress,
+                # elo, total wins), plus "Player" for the per-card stat
+                # leaderboards (goals/assists/matches played) served by the
+                # backend -- the players collection isn't directly readable
+                # by the client, so that one's a separate fetch below.
+                segments = [("campaign", "Campaign"), ("elo", "Elo"), ("wins", "Wins"), ("player", "Player")]
                 seg_x = 390
                 for seg_key, seg_label in segments:
                     label = f"[{seg_label}]" if leaderboard_segment == seg_key else seg_label
@@ -545,36 +552,69 @@ async def main():
                         leaderboard_segment = seg_key
                     seg_x += 170
 
-                if not leaderboard_loaded:
-                    leaderboard_entries = await game_state.list_leaderboard()
-                    leaderboard_loaded = True
+                if leaderboard_segment == "player":
+                    # Sub-tabs for which per-card stat to rank by.
+                    stat_options = [("goals", "Goals", 130), ("assists", "Assists", 130), ("matches_played", "Matches Played", 190)]
+                    stat_x = 390
+                    for stat_key, stat_label, stat_w in stat_options:
+                        label = f"[{stat_label}]" if player_leaderboard_stat == stat_key else stat_label
+                        if draw_button(screen, label, stat_x, 225, stat_w, 40, mouse_pos, mouse_clicked, font_small):
+                            if player_leaderboard_stat != stat_key:
+                                player_leaderboard_stat = stat_key
+                                player_leaderboard_loaded = False
+                        stat_x += stat_w + 15
 
-                sort_field = {"campaign": "campaign_level", "elo": "elo", "wins": "wins"}[leaderboard_segment]
-                ranked = sorted(leaderboard_entries, key=lambda e: e.get(sort_field, 0), reverse=True)[:10]
+                    if not player_leaderboard_loaded:
+                        result = await firebase.call_backend(
+                            "GET", f"{BACKEND_URL}/leaderboard/players?stat={player_leaderboard_stat}&limit=5"
+                        )
+                        player_leaderboard_entries = result["entries"]
+                        player_leaderboard_loaded = True
 
-                if not ranked:
-                    msg = font_btn.render("No leaderboard data yet.", True, (150, 150, 150))
-                    screen.blit(msg, msg.get_rect(center=(WINDOW_SIZE[0] / 2, 320)))
+                    if not player_leaderboard_entries:
+                        msg = font_btn.render("No player data yet.", True, (150, 150, 150))
+                        screen.blit(msg, msg.get_rect(center=(WINDOW_SIZE[0] / 2, 340)))
+                    else:
+                        row_y = 290
+                        for rank, entry in enumerate(player_leaderboard_entries, start=1):
+                            row_text = f"{rank}. {entry['fname']} {entry['lname']} ({entry['position']}) - {entry['value']}"
+                            row_surf = font_btn.render(row_text, True, (200, 200, 255))
+                            screen.blit(row_surf, (390, row_y))
+                            row_y += 42
                 else:
-                    row_y = 240
-                    for rank, entry in enumerate(ranked, start=1):
-                        if leaderboard_segment == "campaign":
-                            idx = entry.get("campaign_level", 0)
-                            value_label = campaign_tiers[idx].capitalize() if 0 <= idx < len(campaign_tiers) else str(idx)
-                        elif leaderboard_segment == "elo":
-                            value_label = str(entry.get("elo", 1200))
-                        else:
-                            value_label = str(entry.get("wins", 0))
+                    # A POC leaderboard just needs a top list per segment --
+                    # no pagination, no "your rank" if outside the top 10.
+                    if not leaderboard_loaded:
+                        leaderboard_entries = await game_state.list_leaderboard()
+                        leaderboard_loaded = True
 
-                        is_you = firebase.uid is not None and entry["uid"] == firebase.uid
-                        row_color = (255, 215, 0) if is_you else (200, 200, 255)
-                        row_text = f"{rank}. {entry['display_name']}{' (you)' if is_you else ''} - {value_label}"
-                        row_surf = font_btn.render(row_text, True, row_color)
-                        screen.blit(row_surf, (390, row_y))
-                        row_y += 42
+                    sort_field = {"campaign": "campaign_level", "elo": "elo", "wins": "wins"}[leaderboard_segment]
+                    ranked = sorted(leaderboard_entries, key=lambda e: e.get(sort_field, 0), reverse=True)[:10]
+
+                    if not ranked:
+                        msg = font_btn.render("No leaderboard data yet.", True, (150, 150, 150))
+                        screen.blit(msg, msg.get_rect(center=(WINDOW_SIZE[0] / 2, 320)))
+                    else:
+                        row_y = 240
+                        for rank, entry in enumerate(ranked, start=1):
+                            if leaderboard_segment == "campaign":
+                                idx = entry.get("campaign_level", 0)
+                                value_label = campaign_tiers[idx].capitalize() if 0 <= idx < len(campaign_tiers) else str(idx)
+                            elif leaderboard_segment == "elo":
+                                value_label = str(entry.get("elo", 1200))
+                            else:
+                                value_label = str(entry.get("wins", 0))
+
+                            is_you = firebase.uid is not None and entry["uid"] == firebase.uid
+                            row_color = (255, 215, 0) if is_you else (200, 200, 255)
+                            row_text = f"{rank}. {entry['display_name']}{' (you)' if is_you else ''} - {value_label}"
+                            row_surf = font_btn.render(row_text, True, row_color)
+                            screen.blit(row_surf, (390, row_y))
+                            row_y += 42
 
                 if draw_button(screen, "Refresh", 390, 650, 240, 50, mouse_pos, mouse_clicked, font_btn):
                     leaderboard_loaded = False
+                    player_leaderboard_loaded = False
 
             if draw_button(screen, "Back to Menu", 650, 650, 240, 50, mouse_pos, mouse_clicked, font_btn):
                 current_scene = "MENU"
@@ -646,21 +686,22 @@ async def main():
                         actual_score = 1.0 if my_score > opp_score else (0.5 if my_score == opp_score else 0.0)
                         expected_score = 1.0 / (1.0 + 10 ** ((active_opponent_elo - manager_elo) / 400.0))
                         manager_elo = round(manager_elo + ELO_K * (actual_score - expected_score))
-                        if is_campaign_match:
-                            if my_score > opp_score:
-                                manager_wins += 1
-                            elif my_score == opp_score:
-                                manager_draws += 1
-                            else:
-                                manager_losses += 1
+                    
+                        if my_score > opp_score:
+                            manager_wins += 1
+                        elif my_score == opp_score:
+                            manager_draws += 1
+                        else:
+                            manager_losses += 1
 
                     await game_state.set_credits(user_credits)
                     await game_state.save_roster(user_starting_xi)
-                    await game_state.record_match_result(manager_wins, manager_losses, manager_draws)
+                    
                     if is_campaign_match:
                         await game_state.set_campaign_level(campaign_level)
                     else:
                         await game_state.set_elo(manager_elo)
+                        await game_state.record_match_result(manager_wins, manager_losses, manager_draws)
                     await _publish_lobby()
 
                     current_scene = "MENU"
@@ -688,6 +729,7 @@ async def main():
                 # Check for clicks
                 if mouse_clicked and circle_rect.collidepoint(mouse_pos):
                     selected_pitch_idx = i
+                    team_swap_page = 0
 
             # --- Draw Player Detail Panel (Right Side) ---
             panel_rect = pygame.Rect(350, 50, WINDOW_SIZE[0] - 370, 600)
@@ -749,37 +791,54 @@ async def main():
                 
 
 
-                # --- Inventory Swap List ---
+                # --- Inventory Swap List (sorted best-first, paginated) ---
                 inv_title = font_btn.render("Available Replacements:", True, (255, 215, 0))
-                screen.blit(inv_title, (880, 110)) 
+                screen.blit(inv_title, (880, 110))
+
+                SWAP_PAGE_SIZE = 8
+                matches = sorted(
+                    (p for p in user_inventory if p.position == active_player.position),
+                    key=lambda p: p.overall,
+                    reverse=True,
+                )
+                total_pages = max(1, (len(matches) + SWAP_PAGE_SIZE - 1) // SWAP_PAGE_SIZE)
+                team_swap_page = max(0, min(team_swap_page, total_pages - 1))
+                page_start = team_swap_page * SWAP_PAGE_SIZE
+                page_matches = matches[page_start:page_start + SWAP_PAGE_SIZE]
 
                 inv_y = 150
-                replacements_found = False
-                
-                for inv_idx, inv_player in enumerate(user_inventory):
-                    if inv_player.position == active_player.position:
-                        replacements_found = True
-                        btn_text = f"Swap {inv_player.fname} {inv_player.lname} (OVR ~{inv_player.overall})"
+                for inv_player in page_matches:
+                    btn_text = f"Swap {inv_player.fname} {inv_player.lname} (OVR ~{inv_player.overall})"
 
-                        # Draw buttons safely in the right-hand column
-                        if draw_button(screen, btn_text, 880, inv_y, 280, 40, mouse_pos, mouse_clicked, font_small):
-                            # Swap the benched player onto the pitch and put the
-                            # active player in inventory. Local-only: nothing
-                            # touches Firestore here, so swapping stays instant
-                            # no matter how many times you click around. Hit
-                            # "Save Team" below to persist once you're done.
-                            user_inventory[inv_idx] = active_player
-                            user_starting_xi[selected_pitch_idx] = inv_player
-                            user_inventory.sort(key=lambda p: p.overall, reverse=True)
-                            team_dirty = True
-                            selected_pitch_idx = -1
-                            break
+                    # Draw buttons safely in the right-hand column
+                    if draw_button(screen, btn_text, 880, inv_y, 280, 40, mouse_pos, mouse_clicked, font_small):
+                        # Swap the benched player onto the pitch and put the
+                        # active player in inventory. Local-only: nothing
+                        # touches Firestore here, so swapping stays instant
+                        # no matter how many times you click around. Hit
+                        # "Save Team" below to persist once you're done.
+                        user_inventory[user_inventory.index(inv_player)] = active_player
+                        user_starting_xi[selected_pitch_idx] = inv_player
+                        team_dirty = True
+                        selected_pitch_idx = -1
+                        break
 
-                        inv_y += 50
-                        
-                if not replacements_found:
+                    inv_y += 50
+
+                controls_y = 150 + len(page_matches) * 50 + 10
+                if not matches:
                     empty_text = font_small.render(f"No benched players for {active_player.position}.", True, (150, 150, 150))
                     screen.blit(empty_text, (880, 150))
+                elif total_pages > 1:
+                    page_label = font_small.render(f"Page {team_swap_page + 1}/{total_pages}", True, (200, 200, 200))
+                    screen.blit(page_label, (880, controls_y))
+
+                    if team_swap_page > 0:
+                        if draw_button(screen, "Prev", 880, controls_y + 30, 130, 36, mouse_pos, mouse_clicked, font_small):
+                            team_swap_page -= 1
+                    if team_swap_page < total_pages - 1:
+                        if draw_button(screen, "Next", 1030, controls_y + 30, 130, 36, mouse_pos, mouse_clicked, font_small):
+                            team_swap_page += 1
                 
             else:
                 prompt = font_btn.render("Select a player on the pitch to view stats.", True, (150, 150, 150))

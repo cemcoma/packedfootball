@@ -50,3 +50,14 @@ class AdminFirestoreClient:
 
     async def delete_document(self, path: str) -> None:
         await asyncio.to_thread(self._ref(path).delete)
+
+    async def query_top(self, collection: str, order_by: str, limit: int, descending: bool = True) -> list[dict]:
+        """Top `limit` docs in `collection` ordered by `order_by` (dotted paths
+        into nested map fields, e.g. "statistics.goals", work directly).
+        Firestore auto-indexes every field for a single order_by with no
+        `where` clause, so this needs no manually-defined composite index.
+        """
+        direction = firestore.Query.DESCENDING if descending else firestore.Query.ASCENDING
+        query = self._db.collection(collection).order_by(order_by, direction=direction).limit(limit)
+        docs = await asyncio.to_thread(lambda: list(query.stream()))
+        return [{"id": d.id, **(d.to_dict() or {})} for d in docs]

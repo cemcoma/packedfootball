@@ -446,6 +446,18 @@ class FirebaseClient:
         if status not in (200, 404):
             raise FirebaseError(status, text)
 
+    # -- Backend (Cloud Run) ---------------------------------------------------
+
+    async def call_backend(self, method: str, url: str, json_body: dict | None = None) -> dict:
+        """Calls an external HTTPS JSON endpoint (e.g. the Cloud Run backend)
+        with this user's current ID token as a bearer credential -- reuses
+        the same dual desktop/browser transport and auth header the
+        Firestore calls above use, just pointed at a different host.
+        """
+        body = json.dumps(json_body) if json_body is not None else None
+        status, text = await self._http.request(method, url, headers=self._auth_headers(), body=body)
+        return self._parse_or_raise(status, text)
+
     # -- helpers --------------------------------------------------------------
 
     @staticmethod
