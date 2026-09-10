@@ -1,5 +1,6 @@
 import os
 import random
+import time
 from player.player import Attributes, player
 
 from player.classes.goalkeeper import Goalkeeper
@@ -75,6 +76,7 @@ PACK_DATABASE = {
 class PackManager:
     def __init__(self, db: dict):
         self.db = db
+        random.seed(time.time())
 
     def get_all_packs(self) -> list:
         # like an api call, will be one TODO

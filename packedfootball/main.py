@@ -88,7 +88,7 @@ async def main():
 
     # --- Master State Machine ---
     current_scene = "MENU"
-    user_credits = 1000
+    user_credits = 100000
     match_engine = None
     selected_pitch_idx = -1
 
