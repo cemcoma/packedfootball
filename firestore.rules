@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// CLIENT-TRUSTED PHASE
+// The game client writes directly to Firestore with each user's own ID token.
+// These rules stop user A from touching user B's data. They do NOT stop a
+// user from lying about their own data (e.g. editing their own credits) --
+// there is no backend yet to validate that. Moving credit- and
+// inventory-affecting writes behind a Cloud Run service (which enforces the
+// checks these rules currently just trust) is the planned next step.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Private per-user data: profile (credits, display name), owned cards,
+    // and roster. Only the signed-in owner may read or write their own tree.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /{subcollection=**} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // Public PvP directory: a squad snapshot each user publishes so others
+    // can browse and challenge them. Any signed-in user may read the whole
+    // lobby (to see opponents); only the owner may write their own entry.
+    match /lobby/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

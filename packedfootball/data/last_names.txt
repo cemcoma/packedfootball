@@ -7,11 +7,11 @@ Spain: Garcia, Fernandez, Rodriguez, Martinez, Lopez, Gonzalez, Torres, Ramos, A
 France: Martin, Bernard, Dubois, Thomas, Robert, Petit, Moreau, Simon, Mbappe, Tchouameni, Kante, Griezmann, Giroud, Saliba, Lloris, Laurent, Michel, Garcia, David, Richard
 Germany: Muller, Schmidt, Schneider, Fischer, Weber, Meyer, Wagner, Becker, Hoffmann, Neuer, Musiala, Wirtz, Kroos, Rudiger, Sane, Schulz, Koch, Richter, Klein, Wolf
 Italy: Rossi, Russo, Ferrari, Esposito, Bianchi, Romano, Colombo, Ricci, Marchisio, Chiellini, Donnarumma, Tonali, Barella, Bastoni, Chiesa, Marino, Greco, Bruno, Gallo, Conti
-Portugal: Silva, Santos, Ferreira, Pereira, Oliveira, Costa, Rodrigues, Martins, Carvalho, Fernandes, Ronaldo, Neves, Jota, Cancelo, Dias, Sousa, Pinto, Marques, Gomes, Lopes
+Portugal: Quaresma, Silva, Santos, Ferreira, Pereira, Oliveira, Costa, Rodrigues, Martins, Carvalho, Fernandes, Ronaldo, Neves, Jota, Cancelo, Dias, Sousa, Pinto, Marques, Gomes, Lopes
 Brazil: Silva, Santos, Oliveira, Souza, Pereira, Costa, Almeida, Carvalho, Rodrigues, Gomes, Junior, Alves, Ribeiro, Lima, Pinto, Faria, Rocha, Moura, Cavalcanti, Dias
 Argentina: Gonzalez, Rodriguez, Fernandez, Lopez, Martinez, Diaz, Perez, Sanchez, Romero, Alvarez, Messi, Di Maria, Mac Allister, De Paul, Otamendi, Gomez, Ruiz, Alonso, Torres, Dominguez
 Netherlands: de Jong, Jansen, de Vries, van den Berg, van Dijk, Bakker, Visser, Smit, Bos, Peters, Simons, Koopmeiners, Frimpong, Reijnders, Verbruggen, Meijer, Mulder, Dekker, Brouwer, de Boer
 Nigeria: Osimhen, Ndidi, Lookman, Iwobi, Chukwueze, Aina, Awoniyi, Onyeka, Bassey, Ekong, Nwabali, Onyedika, Basiru, Moffi, Uzoho, Ibrahim, Musa, Abdullahi, Abubakar, Umar
 Japan: Kubo, Mitoma, Doan, Endo, Tanaka, Ito, Morita, Yamada, Suzuki, Tomiyasu, Itakura, Minamino, Machida, Ogawa, Sato, Takahashi, Watanabe, Kobayashi, Nakamura
 USA: Pulisic, McKennie, Adams, Reyna, Dest, Pepi, Weah, Musah, Balogun, Aaronson, Turner, Robinson, Richards, Sargent, Zimmerman, Smith, Johnson, Williams, Brown, Jones
-Turkey: Tekcan, Kütükoğlu, Akoğuz, Ertem, Aydoğdu, Isci, Yılmaz, Kaya, Demir, Çelik, Şahin, Yıldız, Yıldırım, Öztürk, Aydın, Özdemir, Arslan, Doğan, Kılıç, Aslan
+Turkey: Tekcan, Kütükoğlu, Akoğuz, Ertem, Aydoğdu, Isci, Yılmaz, Kaya, Demir, Çelik, Şahin, Yıldız, Yıldırım, Öztürk, Aydın, Özdemir, Arslan, Doğan, Kılıç, Aslan, Sargın

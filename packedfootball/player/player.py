@@ -301,6 +301,7 @@ class player(ABC):
         
         heading_penalty = max(0.0, (0.8 - np.dot(state["my_heading"], unit_to_goal)) * 5.0) 
         total_variance = ((100.0 - self.attributes.shooting) / 15.0) + pressure_penalty + heading_penalty
+        total_variance = max(total_variance,5.0)
         
         actual_x = intended_target[0] + np.random.normal(0, total_variance)
         actual_z = max(0.0, intended_target[2] + np.random.normal(0, total_variance * 0.5))
