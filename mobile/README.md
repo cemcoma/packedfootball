@@ -16,8 +16,9 @@ for the fuller picture.
    Writes to `mobile/test_data/sample_match.bin` (+ a `.json` roster sidecar)
    by default (`--seed`, `--roster-seed`, `--out` all overridable -- see the
    script's `--help`).
-2. Copy `scripts/FirebaseConfig.example.gd` to `scripts/FirebaseConfig.gd`
-   (gitignored) and fill in your Firebase project's real values -- same idea
+2. Copy `scripts/config/FirebaseConfig.example.gd` to
+   `scripts/config/FirebaseConfig.gd` (gitignored) and fill in your Firebase
+   project's real values -- same idea
    as `packedfootball/firebase_config.example.py`.
 3. Open this `mobile/` folder as a project in Godot 4.3+.
 4. Run the project. It opens on Auth (sign in, register, or continue as
@@ -118,25 +119,33 @@ CLIENT-TRUSTED-PHASE model as `packedfootball/firebase_client.py` /
 `game_state.py` -- see those files' docstrings), through two new scripts:
 `Firestore.gd` (a GDScript port of `firebase_client.py`'s Firestore REST
 calls) and `GameProfile.gd` (the roster/inventory/profile cache + save
-logic, mirroring `game_state.py`'s `GameState`). It adds one new field to
-the `users/{uid}` schema, `formation` (a plain string), which the Python
-side doesn't read or write yet -- worth wiring into whatever builds a
-match's `teamA`/`teamB` when you update the backend.
+logic, mirroring `game_state.py`'s `GameState`). It adds one field to the
+`users/{uid}` schema, `formation` (a plain string) -- `game_state.py`'s
+`load_or_create_profile()` now reads/writes it too, and
+`backend/main.py`'s `/match/simulate` passes each side's real formation
+into the sim instead of assuming everyone plays 4-4-2 (that was a real bug:
+the picker had no effect on actual simulated matches until this).
 
 **Heads-up**: `packedfootball/formations.py`'s `4-2-3-1` still uses
 `LCB`/`RCB`/`LDM`/`RDM` role labels while the other three formations were
-already simplified to `CB`/`CDM`. Cards are only ever generated with the
-simplified labels, so this port normalizes `4-2-3-1` to match them --
-otherwise its CB/CDM slots could never have an eligible card. Worth
-applying the same simplification server-side so client and server agree.
+already simplified to `CB`/`CDM`/`CM` (4-4-2's wide mids are now plain
+`CM` too, not `LM`/`RM` -- there's no dedicated wide-midfielder class
+distinct from `CM`, so the label was redundant). Cards are only ever
+generated with the simplified labels, so this port normalizes `4-2-3-1` to
+match -- otherwise its CB/CDM slots could never have an eligible card.
+Worth applying the same simplification server-side so client and server
+fully agree.
 
-**Also**: a brand new account created straight through this Godot client's
-Auth scene has no starting roster or cards at all yet -- `main.py`'s
-`load_or_create_profile()` (which seeds a default squad on first login)
-is Python-only and isn't called from here. Team scene will just show an
-empty pitch and bench until either that seeding gets ported, a backend
-"create profile" endpoint exists, or the same account has signed in through
-the Python client at least once.
+**A brand new account now gets a real starter squad.** `Auth.gd`'s sign-in
+flow calls `GameProfile.load_all()`, which now calls the backend's new
+`POST /account/bootstrap` first (via the new `Backend.gd` autoload) --
+idempotent, so it's a no-op for a returning account, but for a genuinely
+new one it generates a full 11-card bronze roster server-side
+(`packEngine.py`'s new `generate_starter_roster()`, one card per slot of a
+4-4-2) and writes it as that account's profile before the rest of
+`load_all()` even reads Firestore. This closes the gap flagged here
+before: a brand new Godot-only account used to have no cards and no
+roster at all until it also signed into the Python client once.
 
 ## Layout
 
@@ -152,44 +161,85 @@ mode, so it won't stretch oddly on a real device's exact resolution.
 
 ## What's here
 
-- `scripts/ReplayReader.gd` -- binary reader for the format
-  `packedfootball/replay.py` writes (`ReplayRecorder.encode()`). Keep the two
-  in sync if the wire format ever changes.
-- `scripts/MatchPlayback.gd` -- loads a replay and renders it every frame:
-  Hermite interpolation between the sparse recorded samples using the
-  recorded velocity as the tangent (not a naive straight-line lerp, and not
-  an estimated Catmull-Rom tangent -- the real velocity is already there),
-  the ball glued to whoever's dribbling it rather than interpolated on its
-  own, a brief color flash on events (tackle, shot, goal, etc.), and the
-  zoom/full camera + speed controls described above.
-- `scripts/Menu.gd` / `scenes/Menu.tscn` -- navigation hub.
-- `scripts/Auth.gd` / `scenes/Auth.tscn` -- sign-in/register/guest entry
-  scene (the one scene using real Control nodes -- `LineEdit`/`Button` --
-  instead of the hand-drawn style everywhere else, since native text input
-  is exactly what benefits from it).
-- `scripts/FirebaseAuth.gd` -- autoload; GDScript port of
-  `packedfootball/firebase_client.py`'s auth flow.
-- `scripts/Firestore.gd` -- autoload; GDScript port of
-  `firebase_client.py`'s Firestore REST calls (get/list/set/add/delete
-  document + the field-value wire encoding).
-- `scripts/GameProfile.gd` -- autoload; the live squad model (profile
-  fields, formation, slot assignment, every owned card, dirty-checking) on
-  top of `Firestore.gd`, mirroring `packedfootball/game_state.py`'s
-  `GameState` plus the caching this scene needed on top of it.
-- `scripts/Formations.gd` -- the same 4 named formations as
+`scripts/` is split into subfolders by role, not left flat, so "where would
+the code that does X live" has one obvious answer:
+
+```
+scripts/
+  screens/     -- one script per navigable scene (1:1 with scenes/*.tscn)
+  components/  -- reusable visual building blocks, instanced from screens
+  autoload/    -- singletons registered in project.godot's [autoload]
+  data/        -- pure data models / format readers -- no I/O, no UI
+  config/      -- FirebaseConfig.gd (gitignored) + .example.gd
+scenes/
+  *.tscn       -- the 7 top-level screens
+  components/  -- PlayerCardView.tscn / PitchView.tscn (mirrors scripts/components/)
+```
+
+A script's *class_name* (used everywhere scripts reference each other, e.g.
+`Formations.get_formation(...)`) resolves globally regardless of which
+folder it's in, so moving files around in here never requires touching
+those call sites -- only literal path strings (`.tscn` `ext_resource`
+lines, `project.godot`'s autoload paths, and the one `preload()` in
+`Team.gd`) care where a file actually lives.
+
+### `screens/` -- one script per scene
+
+- `Menu.gd` / `scenes/Menu.tscn` -- navigation hub.
+- `Auth.gd` / `scenes/Auth.tscn` -- sign-in/register/guest entry scene (the
+  one scene using real Control nodes -- `LineEdit`/`Button` -- instead of
+  the hand-drawn style MatchPlayback/Menu use, since native text input is
+  exactly what benefits from it).
+- `MatchPlayback.gd` / `scenes/Match.tscn` -- loads a replay and renders it
+  every frame: Hermite interpolation between the sparse recorded samples
+  using the recorded velocity as the tangent (not a naive straight-line
+  lerp, and not an estimated Catmull-Rom tangent -- the real velocity is
+  already there), the ball glued to whoever's dribbling it rather than
+  interpolated on its own, a brief color flash on events (tackle, shot,
+  goal, etc.), and the zoom/full camera + speed controls described above.
+- `Team.gd` / `scenes/Team.tscn` -- squad management (see above).
+- `Profile.gd` / `scenes/Profile.tscn` -- manager profile: rename, squad
+  overall/wins/losses/draws, log out. A 1:1 port of
+  `packedfootball/main.py`'s `PROFILE` scene -- see its docstring for the
+  one deliberate deviation (a real `LineEdit` everywhere instead of
+  `main.py`'s browser-vs-desktop branch, since Godot has no pygbag-style
+  mobile-text-entry problem to work around).
+- `StubScene.gd` -- shared placeholder script for `scenes/Shop.tscn` /
+  `scenes/Pvp.tscn` (each just sets a different `title`), proving scene
+  navigation works before the real functionality behind each gets built.
+
+### `components/` -- reusable visuals, not screens themselves
+
+- `PlayerCardView.gd` / `scenes/components/PlayerCardView.tscn` -- the
+  reusable card visual (see above).
+- `PitchView.gd` / `scenes/components/PitchView.tscn` -- the pitch:
+  custom-drawn grass/lines + real `Button` slot markers (see above).
+
+### `autoload/` -- singletons (registered in `project.godot`)
+
+- `FirebaseAuth.gd` -- GDScript port of `packedfootball/firebase_client.py`'s
+  auth flow.
+- `Firestore.gd` -- GDScript port of `firebase_client.py`'s Firestore REST
+  calls (get/list/set/add/delete document + the field-value wire encoding).
+- `Backend.gd` -- calls the Cloud Run backend (`backend/main.py`) with the
+  signed-in user's ID token, the same idea as `firebase_client.py`'s
+  `call_backend()` split into its own file.
+- `GameProfile.gd` -- the live squad model (profile fields, formation, slot
+  assignment, every owned card, dirty-checking) on top of `Firestore.gd`,
+  mirroring `packedfootball/game_state.py`'s `GameState` plus the caching
+  this scene needed on top of it.
+
+### `data/` -- pure data models / format readers
+
+- `Formations.gd` -- the same 4 named formations as
   `packedfootball/formations.py` (see the Team screen section above for the
   one known discrepancy).
-- `scripts/PlayerCard.gd` -- client-side card data model (fields +
-  `overall()` + `tier_color()`), no gameplay logic -- the backend simulates
-  matches, this scene only ever displays/persists cards.
-- `scripts/PlayerCardView.gd` -- the reusable card visual (see above).
-- `scripts/PitchView.gd` -- the pitch: custom-drawn grass/lines +
-  real `Button` slot markers (see above).
-- `scripts/Team.gd` / `scenes/Team.tscn` -- squad management (see above).
-- `scripts/StubScene.gd` -- shared placeholder script for
-  `Shop.tscn`/`Pvp.tscn`/`Profile.tscn` (each just sets a different
-  `title`), proving scene navigation works before the real functionality
-  behind each gets built.
+- `PlayerCard.gd` -- client-side card data model (fields + `overall()` +
+  `tier_color()`), no gameplay logic -- the backend simulates matches, this
+  scene only ever displays/persists cards.
+- `ReplayReader.gd` -- binary reader for the format `packedfootball/replay.py`
+  writes (`ReplayRecorder.encode()`). Keep the two in sync if the wire
+  format ever changes.
 
 All buttons across every scene are hand-drawn/hit-tested (`_draw()` +
 `_unhandled_input()` with `Rect2.has_point()`) rather than scene-tree

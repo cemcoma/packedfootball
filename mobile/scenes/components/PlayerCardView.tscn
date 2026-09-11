@@ -1,0 +1,73 @@
+[gd_scene format=3 uid="uid://ulrndvhqpktd"]
+
+[ext_resource type="Script" uid="uid://df7qtspk6wifh" path="res://scripts/components/PlayerCardView.gd" id="1"]
+
+[node name="PlayerCardView" type="Control" unique_id=29396887]
+custom_minimum_size = Vector2(110, 150)
+layout_mode = 3
+anchors_preset = 0
+offset_right = 110.0
+offset_bottom = 150.0
+script = ExtResource("1")
+
+[node name="Background" type="ColorRect" parent="." unique_id=1304692196]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.5, 0.5, 0.5, 1)
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=1267746134]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_constants/margin_left = 6
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 6
+
+[node name="Content" type="VBoxContainer" parent="Margin" unique_id=1581687999]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="OverallLabel" type="Label" parent="Margin/Content" unique_id=483869556]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "0"
+horizontal_alignment = 1
+
+[node name="PositionLabel" type="Label" parent="Margin/Content" unique_id=1749609897]
+unique_name_in_owner = true
+layout_mode = 2
+text = "--"
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="Margin/Content" unique_id=167150496]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="NameLabel" type="Label" parent="Margin/Content" unique_id=397943673]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Player"
+horizontal_alignment = 1
+
+[node name="TierLabel" type="Label" parent="Margin/Content" unique_id=1997875743]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Bronze"
+horizontal_alignment = 1
+
+[node name="TapButton" type="Button" parent="." unique_id=325220514]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+flat = true

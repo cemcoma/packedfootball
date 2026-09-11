@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://couux5m12in61"]
 
-[ext_resource type="Script" uid="uid://cok4v0mh86bd4" path="res://scripts/Auth.gd" id="1"]
+[ext_resource type="Script" uid="uid://cok4v0mh86bd4" path="res://scripts/screens/Auth.gd" id="1"]
 
 [node name="Auth" type="Control" unique_id=2070115553]
 layout_mode = 3

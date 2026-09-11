@@ -191,5 +191,44 @@ class PackManager:
             profile.update(shooting="primary", power="primary", accuracy="primary", defending="nerfed", tackling="nerfed")
 
         generated_stats = {stat: roll_stat(s_type) for stat, s_type in profile.items()}
-        
+
         return Attributes(**generated_stats)
+
+
+def generate_starter_roster(formation_name: str = "4-4-2", tier: str = "bronze", seed=None) -> list:
+    """Generates a full 11-card roster, one player per slot of the given
+    formation, all at one tier -- used to bootstrap a brand new account with
+    an actually-playable squad (see backend/main.py's /account/bootstrap).
+
+    Reuses the same tier-attribute generation open_pack() uses (via a
+    PackManager whose pack database is never actually consulted -- only
+    _generate_tier_attributes() is), but unlike a pack, this has to fill
+    every one of the formation's specific roles, not roll positions
+    independently and risk missing one.
+    """
+    from formations import get_formation
+
+    manager = PackManager({}, seed=seed)
+    roster = []
+    for i in range(11):
+        position = get_formation(formation_name)[i]["role"]
+        player_cls = PLAYER_CLASS_MAP.get(position, Midfielder)
+        attrs = manager._generate_tier_attributes(tier, position)
+
+        country = manager.rng.choice(COUNTRIES)
+        fname = manager.rng.choice(FIRST_NAMES[country])
+        lname = manager.rng.choice(LAST_NAMES[country])
+        hometown = manager.rng.choice(CITIES[country])
+
+        roster.append(
+            player_cls(
+                fname=fname,
+                lname=lname,
+                tier=tier,
+                position=position,
+                attributes=attrs,
+                country=country,
+                hometown=hometown,
+            )
+        )
+    return roster

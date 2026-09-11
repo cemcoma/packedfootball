@@ -35,6 +35,7 @@ from player.player import Attributes
 
 DEFAULT_STARTING_CREDITS = 1000
 DEFAULT_STARTING_ELO = 1200
+DEFAULT_FORMATION = "4-4-2"
 
 
 def player_to_fields(p) -> dict:
@@ -117,13 +118,23 @@ class GameState:
 
     # -- profile + roster -----------------------------------------------------
 
-    async def load_or_create_profile(self, default_roster: list, default_display_name: str) -> dict[str, Any]:
+    async def load_or_create_profile(
+        self, default_roster: list, default_display_name: str, default_formation: str = DEFAULT_FORMATION
+    ) -> dict[str, Any]:
         """Returns {"credits", "display_name", "wins", "losses", "draws",
-        "elo", "campaign_level", "roster"}.
+        "elo", "campaign_level", "roster", "formation"}.
 
         If this uid has no profile document yet (brand new account), creates
-        one seeded with default_roster, default_display_name, zeroed manager
-        stats, and the starting credit grant, and returns that same shape back.
+        one seeded with default_roster, default_display_name, default_formation,
+        zeroed manager stats, and the starting credit grant, and returns that
+        same shape back.
+
+        "formation" mirrors mobile/scripts/GameProfile.gd's own field of the
+        same name -- the Godot client is what actually writes/reads it
+        day-to-day (see Team.gd), but it lives on this shared users/{uid}
+        schema so the backend can read it too (see backend/main.py's
+        /match/simulate, which needs to know each side's real formation
+        instead of assuming everyone plays 4-4-2).
         """
         uid = self.client.uid
         doc = await self.client.get_document(f"users/{uid}")
@@ -138,6 +149,7 @@ class GameState:
                 "elo": DEFAULT_STARTING_ELO,
                 "campaign_level": 0,
                 "roster_player_ids": list(roster_player_ids),
+                "formation": default_formation,
             }
             await self.client.set_document(f"users/{uid}", doc, merge=False)
             return {
@@ -149,6 +161,7 @@ class GameState:
                 "elo": DEFAULT_STARTING_ELO,
                 "campaign_level": 0,
                 "roster": list(default_roster),
+                "formation": default_formation,
             }
         return {
             "credits": doc.get("credits", DEFAULT_STARTING_CREDITS),
@@ -159,6 +172,7 @@ class GameState:
             "elo": doc.get("elo", DEFAULT_STARTING_ELO),
             "campaign_level": doc.get("campaign_level", 0),
             "roster": await self._load_players(doc.get("roster_player_ids", [])),
+            "formation": doc.get("formation", DEFAULT_FORMATION),
         }
 
     async def update_profile_fields(self, fields: dict) -> None:

@@ -24,6 +24,7 @@ window/stretch/aspect="keep"
 
 [autoload]
 
-FirebaseAuth="*res://scripts/FirebaseAuth.gd"
-Firestore="*res://scripts/Firestore.gd"
-GameProfile="*res://scripts/GameProfile.gd"
+FirebaseAuth="*res://scripts/autoload/FirebaseAuth.gd"
+Firestore="*res://scripts/autoload/Firestore.gd"
+Backend="*res://scripts/autoload/Backend.gd"
+GameProfile="*res://scripts/autoload/GameProfile.gd"

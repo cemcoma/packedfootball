@@ -1,9 +1,9 @@
 extends Node2D
 
 ## Placeholder scene proving scene navigation works before the real
-## functionality (shop inventory, team management, PVP matchmaking, profile)
-## gets built. Shop/Team/Pvp/Profile.tscn all share this one script, each
-## just setting a different `title` in its own scene file.
+## functionality (shop inventory, PVP matchmaking) gets built. Shop/Pvp.tscn
+## share this one script, each just setting a different `title` in its own
+## scene file.
 
 @export var title: String = "Stub"
 

@@ -76,6 +76,22 @@ static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
 	return card
 
 
+## Mirrors packedfootball/game_state.py's player_to_fields() -- the reverse
+## of from_fields(), used when publishing a lobby entry (see
+## GameProfile.publish_lobby_entry()).
+func to_fields() -> Dictionary:
+	return {
+		"fname": fname,
+		"lname": lname,
+		"tier": tier,
+		"position": position,
+		"country": country,
+		"hometown": hometown,
+		"attributes": attributes,
+		"statistics": statistics,
+	}
+
+
 func display_name() -> String:
 	return lname if lname != "" else fname
 

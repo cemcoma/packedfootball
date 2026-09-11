@@ -1,7 +1,97 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://eqr3hrinig1o"]
 
-[ext_resource type="Script" path="res://scripts/StubScene.gd" id="1"]
+[ext_resource type="Script" uid="uid://c25i11i7ihsqp" path="res://scripts/screens/Profile.gd" id="1"]
 
-[node name="Profile" type="Node2D"]
+[node name="Profile" type="Control" unique_id=217146569]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1")
-title = "Profile"
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=1002944776]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 20
+
+[node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1297048170]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TitleLabel" type="Label" parent="Margin/RootVBox" unique_id=416444401]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "MANAGER PROFILE"
+horizontal_alignment = 1
+
+[node name="NameRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=933588978]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/separation = 10
+
+[node name="NameField" type="LineEdit" parent="Margin/RootVBox/NameRow" unique_id=1179111330]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 0)
+layout_mode = 2
+placeholder_text = "Manager name"
+
+[node name="SaveNameButton" type="Button" parent="Margin/RootVBox/NameRow" unique_id=273584337]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save Name"
+
+[node name="StatsBlock" type="VBoxContainer" parent="Margin/RootVBox" unique_id=1615003330]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/separation = 8
+
+[node name="OverallLabel" type="Label" parent="Margin/RootVBox/StatsBlock" unique_id=585119211]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Squad Overall: 0"
+horizontal_alignment = 1
+
+[node name="WinsLabel" type="Label" parent="Margin/RootVBox/StatsBlock" unique_id=564909316]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Wins: 0"
+horizontal_alignment = 1
+
+[node name="DrawsLabel" type="Label" parent="Margin/RootVBox/StatsBlock" unique_id=1325320606]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Draws: 0"
+horizontal_alignment = 1
+
+[node name="LossesLabel" type="Label" parent="Margin/RootVBox/StatsBlock" unique_id=955840479]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Losses: 0"
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="Margin/RootVBox" unique_id=1280564617]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="BackButton" type="Button" parent="Margin/RootVBox" unique_id=2118171889]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Back to Menu"
+
+[node name="LogoutButton" type="Button" parent="Margin/RootVBox" unique_id=1111504108]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Log Out / Switch Account"

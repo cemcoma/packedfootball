@@ -21,7 +21,7 @@ extends Control
 ## slot is focused, whether we're picking a replacement, and the
 ## save-status message.
 
-const PLAYER_CARD_SCENE := preload("res://scenes/PlayerCardView.tscn")
+const PLAYER_CARD_SCENE := preload("res://scenes/components/PlayerCardView.tscn")
 
 const ATTR_ROWS := [
 	["Stamina", "stamina"], ["Speed", "speed"], ["Agility", "agility"], ["Passing", "passing"],
@@ -183,8 +183,8 @@ func _populate_stats_panel() -> void:
 	var goals: int = card.statistics.get("goals", 0)
 	var assists: int = card.statistics.get("assists", 0)
 	var matches: int = card.statistics.get("matches_played", 0)
-	_stats_extra_label.text = "Goals: %d   Assists: %d   Matches: %d\n%s  -  %s" % [
-		goals, assists, matches, card.country, card.hometown
+	_stats_extra_label.text = "%s - %s\nGoals: %d   Assists: %d   Matches: %d " % [
+		card.country, card.hometown,goals, assists, matches, 
 	]
 
 

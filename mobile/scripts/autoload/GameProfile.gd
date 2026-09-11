@@ -57,7 +57,17 @@ func _user_doc_path() -> String:
 ## Fetches everything needed to populate the cache above in one go. Called
 ## once right after sign-in (see Auth.gd) so every later scene reads
 ## instantly from memory instead of re-hitting Firestore every time it opens.
+##
+## Calls the backend's /account/bootstrap first, which creates a profile +
+## a full bronze starter roster if (and only if) this uid has never signed
+## in before -- a no-op otherwise, safe to call on every login. Without
+## this, a brand new account created straight through this Godot client had
+## no cards and no roster at all (packedfootball/main.py's own client
+## builds its own local starter squad instead of needing this, which is why
+## this gap only ever existed on the Godot side).
 func load_all() -> void:
+	await Backend.call_endpoint(HTTPClient.METHOD_POST, "/account/bootstrap")
+
 	var doc = await Firestore.get_document(_user_doc_path())
 	var ids: Array = []
 	if doc != null:
@@ -208,3 +218,79 @@ func save_team() -> bool:
 	saved_formation = formation
 	saved_slot_assignment = slot_assignment.duplicate()
 	return true
+
+
+func _roster_cards() -> Array:
+	var cards: Array = []
+	for player_id in slot_assignment:
+		if player_id != "":
+			cards.append(all_cards[player_id])
+	return cards
+
+
+## Average overall of the currently-assigned starting XI (mirrors
+## packedfootball/main.py's Profile screen: avg_overall = round(sum(p.overall
+## for p in user_starting_xi) / len(user_starting_xi))). 0 if no slot is
+## filled yet -- the Python original never had this case since it always had
+## exactly 11 real players, but Godot's roster can be partially assigned.
+func average_overall() -> int:
+	var cards := _roster_cards()
+	if cards.is_empty():
+		return 0
+	var total := 0
+	for card in cards:
+		var typed_card: PlayerCard = card
+		total += typed_card.overall()
+	return int(round(float(total) / float(cards.size())))
+
+
+## Renames the profile and updates the local cache immediately so the UI
+## reflects it without a reload. Mirrors game_state.py's set_display_name.
+func set_display_name(new_name: String) -> bool:
+	var ok := await Firestore.set_document(_user_doc_path(), {"display_name": new_name}, true)
+	if ok:
+		display_name = new_name
+	return ok
+
+
+## Publishes the public PvP/leaderboard snapshot (mirrors game_state.py's
+## publish_lobby_entry) -- called after anything that changes a
+## leaderboard-visible stat (today: renaming, from the Profile screen).
+func publish_lobby_entry() -> bool:
+	var roster_fields: Array = []
+	for card in _roster_cards():
+		var typed_card: PlayerCard = card
+		roster_fields.append(typed_card.to_fields())
+
+	return await Firestore.set_document(
+		"lobby/%s" % FirebaseAuth.uid,
+		{
+			"display_name": display_name,
+			"overall": average_overall(),
+			"wins": wins,
+			"elo": elo,
+			"campaign_level": campaign_level,
+			"roster": roster_fields,
+		},
+		false
+	)
+
+
+## Clears the cached profile/squad state -- called on sign-out (mirrors
+## main.py setting its own game_state = None) so a second account signing
+## in on the same running app never briefly sees the previous account's
+## data before the next load_all() completes.
+func reset() -> void:
+	is_loaded = false
+	display_name = ""
+	credits = 0
+	wins = 0
+	losses = 0
+	draws = 0
+	elo = 0
+	campaign_level = 0
+	formation = DEFAULT_FORMATION
+	slot_assignment = []
+	all_cards = {}
+	saved_formation = DEFAULT_FORMATION
+	saved_slot_assignment = []
