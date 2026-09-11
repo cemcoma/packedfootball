@@ -33,6 +33,23 @@ class FullbackActionProfile(ActionProfile):
     }
 
 
+class WingbackActionProfile(ActionProfile):
+    role_name = "wingback"
+    allowed_actions = {
+        "stop", "pass", "clear", "dribble", "forward_run", "cross",
+        "support", "hold_attack", "hold_defense", "press",
+        "contain", "recover", "recover_slow", "tackle", "capture",
+        "man_mark", "overlap"
+    }
+    action_biases = {
+        "pass": 1.8, "clear": 0.15, "dribble": 1.0, "cross": 2.0,
+        "forward_run": 1.8, "support": 1.3, "hold_attack": 1.4,
+        "hold_defense": 0.9, "press": 1.1, "contain": 1.0,
+        "recover": 1.2, "tackle": 1.0, "capture": 0.9, "man_mark": 0.8,
+        "overlap": 1.6,
+    }
+
+
 class Defender(player):
     def _build_action(self, decision: str, state: dict) -> dict | None:
         if decision == "stop":
@@ -70,7 +87,18 @@ class Defender(player):
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
             run_target = np.array([state["my_pos"][0], enemy_goal_y])
             return {"type": "move", "target": run_target, "speed_mod": (self.attributes.speed * 0.9) / 100.0}
-            
+
+        elif decision == "overlap":
+            # Hugs whichever touchline this wingback's own formation slot sits
+            # on, and pushes ahead of the ball rather than straight at goal --
+            # the classic overlapping run, distinct from forward_run's
+            # straight dash and support's ball-landing intercept.
+            touchline_x = 2.0 if state["formation_pos"][0] < PITCH_WIDTH / 2.0 else PITCH_WIDTH - 2.0
+            lead = 10.0 if state.get("a_direction", 1) == 1 else -10.0
+            ahead_y = np.clip(state["ball_pos"][1] + lead, 0.0, PITCH_HEIGHT)
+            overlap_target = np.array([touchline_x, ahead_y])
+            return {"type": "move", "target": overlap_target, "speed_mod": (self.attributes.speed * 1.0) / 100.0}
+
         elif decision == "support":
             target = self._predict_ball_landing_target(state)
             vec_to_target = target - state["my_pos"]
@@ -250,22 +278,25 @@ class Defender(player):
             if closer_teammates == 0:
                 return "chase"
         
-        actions = ["forward_run", "support", "hold_attack"]
+        actions = ["forward_run", "support", "hold_attack", "overlap"]
         t_forward = (self.attributes.shoot_tendency + (self.attributes.speed * 0.5)) * self.get_action_bias("forward_run")
         t_support = (self.attributes.pass_tendency + 20.0) * self.get_action_bias("support")
         t_hold = (self.attributes.defending + 30.0) * self.get_action_bias("hold_attack")
+        t_overlap = (self.attributes.speed + 20.0) * self.get_action_bias("overlap", 0.0)
 
         dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
         if dist_to_ball > 12.0:
             t_support *= 0.4
             t_hold *= 2.5
+            t_overlap *= 0.5
 
         t_forward = max(0.0, t_forward)
         t_support = max(0.0, t_support)
         t_hold = max(1.0, t_hold)
+        t_overlap = max(0.0, t_overlap)
 
-        total = t_forward + t_support + t_hold
-        probs = [t_forward/total, t_support/total, t_hold/total]
+        total = t_forward + t_support + t_hold + t_overlap
+        probs = [t_forward/total, t_support/total, t_hold/total, t_overlap/total]
         return state["rng"].choice(actions, p=probs)
 
     def _decide_off_ball_defense(self, state: dict) -> str:
@@ -354,3 +385,19 @@ class Fullback(Defender):
         
         self.attributes.speed = min(100, self.attributes.speed + 15)
         self.attributes.stamina = min(100, self.attributes.stamina + 10)
+
+
+class Wingback(Defender):
+    """3-5-2's flank role: more attacking than a Fullback, still a recognized
+    defender for tackling/positioning purposes. Signature move is "overlap"
+    """
+    primary_stats = ("speed", "passing", "defending")
+
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
+        super().__init__(fname, lname, tier, position, attributes, country, hometown)
+        self.action_profile = WingbackActionProfile()
+        self.allowed_actions = set(self.action_profile.get_allowed_actions())
+        self.action_biases = dict(self.action_profile.get_action_biases())
+
+        self.attributes.speed = min(100, self.attributes.speed + 20)
+        self.attributes.stamina = min(100, self.attributes.stamina + 15)

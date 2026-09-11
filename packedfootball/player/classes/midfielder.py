@@ -17,6 +17,40 @@ class MidfielderActionProfile(ActionProfile):
     }
 
 
+class DefensiveMidActionProfile(ActionProfile):
+    role_name = "defensive_mid"
+    allowed_actions = {
+        "stop", "shoot", "pass", "clear", "cross", "dribble",
+        "forward_run", "support", "hold_attack", "hold_defense",
+        "press", "contain", "recover", "recover_slow", "tackle", "capture",
+        "screen",
+    }
+    action_biases = {
+        "pass": 1.6, "shoot": 0.3, "cross": 0.3, "dribble": 0.6,
+        "forward_run": 0.5, "support": 1.3, "hold_attack": 0.6,
+        "hold_defense": 1.8, "press": 1.3, "contain": 1.4,
+        "recover": 1.4, "tackle": 1.6, "capture": 1.3,
+        "screen": 1.7,
+    }
+
+
+class AttackingMidActionProfile(ActionProfile):
+    role_name = "attacking_mid"
+    allowed_actions = {
+        "stop", "shoot", "pass", "clear", "cross", "dribble",
+        "forward_run", "support", "hold_attack", "hold_defense",
+        "press", "contain", "recover", "recover_slow", "tackle", "capture",
+        "through_ball",
+    }
+    action_biases = {
+        "pass": 1.3, "shoot": 1.5, "cross": 1.0, "dribble": 1.3,
+        "forward_run": 1.4, "support": 1.2, "hold_attack": 0.6,
+        "hold_defense": 0.5, "press": 0.7, "contain": 0.7,
+        "recover": 0.6, "tackle": 0.5, "capture": 0.9,
+        "through_ball": 1.6,
+    }
+
+
 class Midfielder(player):
     primary_stats = ("passing", "ballcontrol", "vision")
 
@@ -24,21 +58,58 @@ class Midfielder(player):
         self.action_profile = MidfielderActionProfile()
         super().__init__(fname, lname, tier, position, attributes, country, hometown)
 
+    def _choose_through_ball_target(self, state: dict):
+        teammates = np.asarray(state.get("teammates", []), dtype=float)
+        opponents = np.asarray(state.get("opponents", []), dtype=float)
+        my_pos = np.asarray(state["my_pos"], dtype=float)
+        goal_dir = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+
+        best_runner = None
+        best_progress = 2.0  # minimum forward progress to even consider a runner
+        for tm in teammates:
+            if np.array_equal(tm, my_pos):
+                continue
+            forward_progress = (tm[1] - my_pos[1]) * goal_dir
+            if forward_progress > best_progress:
+                best_progress = forward_progress
+                best_runner = tm
+
+        if best_runner is None:
+            return None
+
+        lead_distance = 4.0 + (self.attributes.vision / 100.0) * 8.0
+        led_target = best_runner.copy()
+        led_target[1] += lead_distance * goal_dir
+        led_target = np.clip(led_target, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])
+
+        if not self._is_pass_safe(my_pos, led_target, opponents, line_width=1.3):
+            return None
+        return led_target
+
     def _build_action(self, decision: str, state: dict) -> dict | None:
         if decision == "stop":
             return None
-            
+
         # --- On-Ball Actions ---
         elif decision == "shoot":
             return self._calculate_shot(state)
-            
+
         elif decision == "pass":
             best_target = self._choose_pass_target(state)
             dist = np.linalg.norm(best_target - state["my_pos"])
-            required_power = min(1.0, dist / 10.0) 
+            required_power = min(1.0, dist / 10.0)
             actual_power = required_power * (self.attributes.power / 60.0)
             return {"type": "pass", "target": best_target, "power": actual_power}
-            
+
+        elif decision == "through_ball":
+            through_target = self._choose_through_ball_target(state)
+            if through_target is None:
+                through_target = self._choose_pass_target(state)
+            dist = np.linalg.norm(through_target - state["my_pos"])
+            required_power = min(1.0, dist / 9.0)
+            actual_power = required_power * (self.attributes.power / 55.0)
+            return {"type": "pass", "target": through_target, "power": actual_power, "pass_type": "through_ball"}
+
         elif decision == "clear":
             forward_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
             wide_x = state["rng"].choice([0.0, 70.0])
@@ -80,7 +151,20 @@ class Midfielder(player):
             backward_shift = -10.0 if state.get("a_direction", 1) == 1 else 10.0
             defensive_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + backward_shift])
             return {"type": "move", "target": defensive_pos, "speed_mod": (self.attributes.speed * 0.6) / 100.0}
-            
+
+        elif decision == "screen":
+            # CDM signature move: sits on the line between the ball and its
+            # own goal to cut the passing lane into the back line, unlike
+            # hold_defense's fixed formation offset or contain's ball-chase.
+            own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
+            own_goal = np.array([35.0, own_goal_y])
+            ball_pos = np.asarray(state["ball_pos"], dtype=float)
+            vec_to_goal = own_goal - ball_pos
+            dist = np.linalg.norm(vec_to_goal)
+            shield_distance = min(14.0, dist * 0.4)
+            screen_target = ball_pos + (vec_to_goal / (dist + 1e-5)) * shield_distance
+            return {"type": "move", "target": screen_target, "speed_mod": (self.attributes.speed * 0.7) / 100.0}
+
         elif decision == "press":
             target = self._predict_ball_landing_target(state)
             vec_to_target = target - state["my_pos"]
@@ -146,7 +230,7 @@ class Midfielder(player):
                 return "cross"
             return "pass"
 
-        actions = ["pass", "shoot", "dribble", "stop"]
+        actions = ["pass", "shoot", "dribble", "stop", "through_ball"]
         progressive_pass = self._best_progressive_pass_target(state) is not None
         pressure = state.get("pressure_count", 0)
 
@@ -154,6 +238,8 @@ class Midfielder(player):
         t_shoot = self.attributes.shoot_tendency
         t_dribble = self.attributes.drible_tendency
         t_stop = 10.0
+        through_ball_target = self._choose_through_ball_target(state)
+        t_through = (self.attributes.vision + self.attributes.passing) * 0.5 * self.get_action_bias("through_ball", 0.0) if through_ball_target is not None else 0.0
 
         if not progressive_pass:
             t_pass *= 0.08
@@ -178,6 +264,7 @@ class Midfielder(player):
             t_dribble -= (pressure * 25)
             t_pass += (pressure * 18)
             t_stop = 0
+            t_through *= 1.2
         elif pressure == 0:
             t_dribble += (self.attributes.speed * 1.8) + 90.0
             t_pass -= 25.0
@@ -196,11 +283,12 @@ class Midfielder(player):
         t_shoot = max(0.0, t_shoot)
         t_dribble = max(1.0, t_dribble)
         t_stop = max(0.0, t_stop)
+        t_through = max(0.0, t_through)
 
-        total = t_pass + t_shoot + t_dribble + t_stop
+        total = t_pass + t_shoot + t_dribble + t_stop + t_through
         if total <= 0:
             return "dribble"
-        probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total]
+        probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total, t_through / total]
         return state["rng"].choice(actions, p=probs)
 
     def _decide_on_ball_defense(self, state: dict) -> str:
@@ -327,6 +415,13 @@ class Midfielder(player):
             else:
                 return "contain"
 
+        t_screen = self.get_action_bias("screen", 0.0)
+        if t_screen > 0.0:
+            actions = ["hold_defense", "screen"]
+            t_hold = 1.0
+            probs = [t_hold / (t_hold + t_screen), t_screen / (t_hold + t_screen)]
+            return state["rng"].choice(actions, p=probs)
+
         return "hold_defense"
 
     def _decide_loose_ball(self, state: dict) -> str:
@@ -356,3 +451,34 @@ class Midfielder(player):
 
             # 3. Everyone else actively runs away from the ball back to their tactical zone
             return "recover"
+
+
+class DefensiveMid(Midfielder):
+    """CDM: shields the back line. Signature move is "screen" 
+    """
+    primary_stats = ("defending", "tackling", "passing")
+
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
+        super().__init__(fname, lname, tier, position, attributes, country, hometown)
+        self.action_profile = DefensiveMidActionProfile()
+        self.allowed_actions = set(self.action_profile.get_allowed_actions())
+        self.action_biases = dict(self.action_profile.get_action_biases())
+
+        self.attributes.defending = min(100, self.attributes.defending + 12)
+        self.attributes.tackling = min(100, self.attributes.tackling + 8)
+
+
+class AttackingMid(Midfielder):
+    """CAM: the creative outlet in the pocket behind the striker. Signature
+    move is "through_ball" 
+    """
+    primary_stats = ("passing", "vision", "shooting")
+
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
+        super().__init__(fname, lname, tier, position, attributes, country, hometown)
+        self.action_profile = AttackingMidActionProfile()
+        self.allowed_actions = set(self.action_profile.get_allowed_actions())
+        self.action_biases = dict(self.action_profile.get_action_biases())
+
+        self.attributes.vision = min(100, self.attributes.vision + 12)
+        self.attributes.shoot_tendency = min(100, self.attributes.shoot_tendency + 10)

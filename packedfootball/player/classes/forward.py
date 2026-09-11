@@ -34,6 +34,39 @@ class ForwardActionProfile(ActionProfile):
     }
 
 
+class WingerActionProfile(ActionProfile):
+    role_name = "winger"
+    allowed_actions = {
+        "stop",
+        "shoot",
+        "pass",
+        "cross",
+        "dribble",
+        "cut_inside",
+        "forward_run",
+        "support",
+        "hold_attack",
+        "hold_defense",
+        "press",
+        "recover",
+        "recover_slow",
+        "capture",
+    }
+    action_biases = {
+        "shoot": 1.0,
+        "pass": 1.1,
+        "cross": 1.7,
+        "dribble": 1.4,
+        "cut_inside": 1.7,
+        "forward_run": 1.6,
+        "support": 1.0,
+        "hold_attack": 0.6,
+        "press": 1.0,
+        "recover": 0.6,
+        "capture": 1.0,
+    }
+
+
 class Forward(player):
     primary_stats = ("shooting", "dribbiling", "speed", "power")
 
@@ -68,7 +101,19 @@ class Forward(player):
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
             dribble_speed = max(1.0, (self.attributes.dribbiling / 100.0) * 1.25)
             return {"type": "move", "target": np.array([35.0, enemy_goal_y]), "speed_mod": dribble_speed}
-            
+
+        elif decision == "cut_inside":
+            # Winger signature move: angles diagonally toward the center of
+            # the goal mouth from the touchline, rather than dribble's
+            # straight dash down the dead-center line -- the classic
+            # cut-inside-onto-the-strong-foot drive.
+            my_x = state["my_pos"][0]
+            inside_x = my_x + (35.0 - my_x) * 0.6
+            lead_y = state["my_pos"][1] + (18.0 if state.get("a_direction", 1) == 1 else -18.0)
+            diagonal_target = np.array([inside_x, np.clip(lead_y, 0.0, PITCH_HEIGHT)])
+            dribble_speed = max(1.0, (self.attributes.dribbiling / 100.0) * 1.3)
+            return {"type": "move", "target": diagonal_target, "speed_mod": dribble_speed}
+
         # --- Off-Ball Attacking Movement ---
         elif decision == "forward_run":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
@@ -158,7 +203,7 @@ class Forward(player):
                 return "cross"
             return "pass"
 
-        actions = ["pass", "shoot", "dribble", "stop"]
+        actions = ["pass", "shoot", "dribble", "stop", "cut_inside"]
         progressive_pass = self._best_progressive_pass_target(state) is not None
         pressure = state.get("pressure_count", 0)
 
@@ -166,6 +211,14 @@ class Forward(player):
         t_shoot = self.attributes.shoot_tendency
         t_dribble = self.attributes.drible_tendency
         t_stop = 10.0
+        my_x = state["my_pos"][0]
+        is_wide = my_x < 15.0 or my_x > 55.0
+        t_cut_inside = (self.attributes.dribbiling + self.attributes.agility) * 0.5 * self.get_action_bias("cut_inside", 0.0) if is_wide else 0.0
+        if t_cut_inside > 0.0:
+            # Cutting inside is a wide-specific alternative to a straight
+            # dribble, not an addition to it -- carve its weight out of
+            # t_dribble rather than inflating the total ball-carrying share.
+            t_dribble *= 0.5
 
         if not progressive_pass:
             t_pass *= 0.08
@@ -209,11 +262,12 @@ class Forward(player):
         t_shoot = max(0.0, t_shoot)
         t_dribble = max(1.0, t_dribble)
         t_stop = max(0.0, t_stop)
+        t_cut_inside = max(0.0, t_cut_inside)
 
-        total = t_pass + t_shoot + t_dribble + t_stop
+        total = t_pass + t_shoot + t_dribble + t_stop + t_cut_inside
         if total <= 0:
             return "dribble"
-        probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total]
+        probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total, t_cut_inside / total]
         return state["rng"].choice(actions, p=probs)
 
     def _decide_on_ball_defense(self, state: dict) -> str:
@@ -364,3 +418,23 @@ class Forward(player):
 
         # 3. Everyone else actively runs away from the ball back to their tactical zone
         return "recover"
+
+
+class Winger(Forward):
+    """LW/RW: rates on dribbling/pace/creativity over raw shooting/power.
+    Signature move is "cut_inside" (see Forward._build_action/
+    _decide_on_ball_attack above)."""
+    primary_stats = ("dribbiling", "speed", "passing")
+
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
+        # Forward.__init__ (called via super() below) unconditionally sets
+        # its own action_profile before deferring further up the chain, so
+        # ours must be applied after super() returns, not before -- the same
+        # order CenterBack/Fullback/Wingback already use for this reason.
+        super().__init__(fname, lname, tier, position, attributes, country, hometown)
+        self.action_profile = WingerActionProfile()
+        self.allowed_actions = set(self.action_profile.get_allowed_actions())
+        self.action_biases = dict(self.action_profile.get_action_biases())
+
+        self.attributes.dribbiling = min(100, self.attributes.dribbiling + 10)
+        self.attributes.agility = min(100, self.attributes.agility + 10)

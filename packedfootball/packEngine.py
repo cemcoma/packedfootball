@@ -3,9 +3,9 @@ import random
 from player.player import Attributes, player
 
 from player.classes.goalkeeper import Goalkeeper
-from player.classes.defender import CenterBack, Fullback
-from player.classes.midfielder import Midfielder
-from player.classes.forward import Forward
+from player.classes.defender import CenterBack, Fullback, Wingback
+from player.classes.midfielder import Midfielder, DefensiveMid, AttackingMid
+from player.classes.forward import Forward, Winger
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
@@ -34,10 +34,14 @@ PLAYER_CLASS_MAP = {
     "CB": CenterBack,
     "LB": Fullback,
     "RB": Fullback,
+    "WB": Wingback,
+    "CDM": DefensiveMid,
     "CM": Midfielder,
-    #"AM": Midfielder,
-    "LW": Forward,
-    "RW": Forward,
+    "CAM": AttackingMid,
+    "LM": Midfielder,
+    "RM": Midfielder,
+    "LW": Winger,
+    "RW": Winger,
     "ST": Forward,
 }
 
@@ -75,7 +79,7 @@ PACK_DATABASE = {
         "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25}
     },
     4: {
-        "name": "Icon Pack",
+        "name": "Icon Forward Pack",
         "price": 50000,
         "cards_per_pack": 1,
         "rates": {"icon":1.0},
@@ -119,11 +123,11 @@ class PackManager:
             if position_grand_choice == "goalkeeper":
                 position = "GK"
             elif position_grand_choice == "defender":
-                position = self.rng.choice([ "CB", "LB", "RB"])
+                position = self.rng.choices(["CB", "LB", "RB", "WB"], weights=[0.40, 0.20, 0.20, 0.20], k=1)[0]
             elif position_grand_choice == "midfielder":
-                position = self.rng.choice([ "CM", "LW", "RW"])
+                position = self.rng.choices(["CDM", "CM", "CAM", "LM", "RM"], weights=[0.20, 0.30, 0.20, 0.15, 0.15], k=1)[0]
             elif position_grand_choice == "attacker":
-                position = self.rng.choice([ "ST"])
+                position = self.rng.choices(["ST", "LW", "RW"], weights=[0.50, 0.25, 0.25], k=1)[0]
 
             attrs = self._generate_tier_attributes(rolled_tier, position)
 
@@ -171,10 +175,16 @@ class PackManager:
             profile.update(defending="primary", tackling="primary", shooting="nerfed", dribbiling="nerfed")
         elif position in ["LB","RB"]:
             profile.update(defending="primary" ,tackling="primary", shooting="nerfed")
-        elif position in ["CM", "AM"]:
+        elif position == "WB":
+            profile.update(speed="primary", passing="primary", defending="secondary", tackling="secondary", shooting="nerfed")
+        elif position == "CDM":
+            profile.update(defending="primary", tackling="primary", passing="primary", shooting="nerfed")
+        elif position in ["CM", "AM", "CAM"]:
             profile.update(passing="primary", ballcontrol="primary", vision="primary")
-            if position == "AM":
-                profile.update(defending="nerfed", tackling="nerfed")
+            if position in ["AM", "CAM"]:
+                profile.update(shooting="primary", defending="nerfed", tackling="nerfed")
+        elif position in ["LM", "RM"]:
+            profile.update(passing="primary", ballcontrol="primary", speed="primary")
         elif position in ["LW", "RW"]:
             profile.update(speed="primary", agility="primary", dribbiling="primary", defending="nerfed", tackling="nerfed")
         elif position == "ST":

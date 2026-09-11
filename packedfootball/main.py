@@ -12,9 +12,9 @@ from gameEngine import game
 
 from player.player import Attributes
 from player.classes.goalkeeper import Goalkeeper
-from player.classes.defender import Defender, CenterBack, Fullback
-from player.classes.midfielder import Midfielder
-from player.classes.forward import Forward
+from player.classes.defender import Defender, CenterBack, Fullback, Wingback
+from player.classes.midfielder import Midfielder, DefensiveMid, AttackingMid
+from player.classes.forward import Forward, Winger
 
 from firebase_client import FirebaseClient
 from firebase_config import BACKEND_URL, FIREBASE_API_KEY, FIREBASE_PROJECT_ID
@@ -99,9 +99,14 @@ PLAYER_CLASS_MAP = {
     "CB": CenterBack,
     "LB": Fullback,
     "RB": Fullback,
+    "WB": Wingback,
+    "CDM": DefensiveMid,
     "CM": Midfielder,
-    "LW": Forward,
-    "RW": Forward,
+    "CAM": AttackingMid,
+    "LM": Midfielder,
+    "RM": Midfielder,
+    "LW": Winger,
+    "RW": Winger,
     "ST": Forward,
 }
 
@@ -149,10 +154,16 @@ def generate_tier_attributes(position: str, tier: str) -> dict:
         profile.update(defending="nerfed", tackling="nerfed", shooting="nerfed", dribbiling="nerfed", passing="primary", agility="primary", composure="primary", ballcontrol="primary")
     elif position in ["CB", "LB", "RB"]:
         profile.update(defending="primary", tackling="primary", shooting="nerfed", dribbiling="nerfed")
-    elif position in ["CM", "AM"]:
+    elif position == "WB":
+        profile.update(speed="primary", passing="primary", defending="secondary", tackling="secondary", shooting="nerfed")
+    elif position == "CDM":
+        profile.update(defending="primary", tackling="primary", passing="primary", shooting="nerfed")
+    elif position in ["CM", "AM", "CAM"]:
         profile.update(passing="primary", ballcontrol="primary", vision="primary")
-        if position == "AM":
-            profile.update(defending="nerfed", tackling="nerfed")
+        if position in ["AM", "CAM"]:
+            profile.update(shooting="primary", defending="nerfed", tackling="nerfed")
+    elif position in ["LM", "RM"]:
+        profile.update(passing="primary", ballcontrol="primary", speed="primary")
     elif position in ["LW", "RW"]:
         profile.update(speed="primary", agility="primary", dribbiling="primary", defending="nerfed", tackling="nerfed")
     elif position == "ST":

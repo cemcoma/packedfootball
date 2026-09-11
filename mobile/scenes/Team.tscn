@@ -1,7 +1,166 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://c6a10jgxyvv0f"]
 
-[ext_resource type="Script" path="res://scripts/StubScene.gd" id="1"]
+[ext_resource type="Script" uid="uid://m1yjybhij5mp" path="res://scripts/Team.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/PitchView.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/PlayerCardView.tscn" id="3"]
 
-[node name="Team" type="Node2D"]
+[sub_resource type="ButtonGroup" id="ButtonGroup_formations"]
+
+[node name="Team" type="Control" unique_id=882744781]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 script = ExtResource("1")
-title = "Team"
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=1976298437]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1268554773]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="FormationRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=630417954]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="FormationButton442" type="Button" parent="Margin/RootVBox/FormationRow" unique_id=1949725644]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+button_group = SubResource("ButtonGroup_formations")
+text = "4-4-2"
+
+[node name="FormationButton433" type="Button" parent="Margin/RootVBox/FormationRow" unique_id=1560091446]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+button_group = SubResource("ButtonGroup_formations")
+text = "4-3-3"
+
+[node name="FormationButton352" type="Button" parent="Margin/RootVBox/FormationRow" unique_id=1344053873]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+button_group = SubResource("ButtonGroup_formations")
+text = "3-5-2"
+
+[node name="FormationButton4231" type="Button" parent="Margin/RootVBox/FormationRow" unique_id=1836401694]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+button_group = SubResource("ButtonGroup_formations")
+text = "4-2-3-1"
+
+[node name="MainRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1850911673]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 16
+
+[node name="Pitch" parent="Margin/RootVBox/MainRow" unique_id=537866553 instance=ExtResource("2")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="RightPanel" type="VBoxContainer" parent="Margin/RootVBox/MainRow" unique_id=807496634]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="PanelHeader" type="Label" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=637674774]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Bench"
+
+[node name="BenchScroll" type="ScrollContainer" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=478244495]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="BenchGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/BenchScroll" unique_id=921892683]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 10
+columns = 4
+
+[node name="CancelButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=703277417]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cancel"
+
+[node name="StatsPanel" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=1161663797]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 6
+
+[node name="StatsTopRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel" unique_id=1910487448]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="StatsCard" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow" unique_id=1961256794 instance=ExtResource("3")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="StatsInfoCol" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow" unique_id=592961532]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StatsAttrGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=803471580]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 20
+columns = 2
+
+[node name="StatsExtraLabel" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=1965594442]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="StatsButtonRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel" unique_id=999269672]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ReplaceButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsButtonRow" unique_id=642978750]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Replace"
+
+[node name="ClearButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsButtonRow" unique_id=464571451]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Clear Slot"
+
+[node name="CloseButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsButtonRow" unique_id=2088812848]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Close"
+
+[node name="BottomRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=839000662]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="StatusLabel" type="Label" parent="Margin/RootVBox/BottomRow" unique_id=1627214472]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SaveButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1496998827]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save Team"
+
+[node name="BackButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=55272562]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Back to Menu"

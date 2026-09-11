@@ -1,46 +1,66 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://couux5m12in61"]
 
-[ext_resource type="Script" path="res://scripts/Auth.gd" id="1"]
+[ext_resource type="Script" uid="uid://cok4v0mh86bd4" path="res://scripts/Auth.gd" id="1"]
 
-[node name="Auth" type="Control"]
+[node name="Auth" type="Control" unique_id=2070115553]
+layout_mode = 3
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+size_flags_horizontal = 0
 script = ExtResource("1")
 
-[node name="CenterContainer" type="CenterContainer" parent="."]
+[node name="CenterContainer" type="CenterContainer" parent="." unique_id=782941786]
+layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 
-[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer" unique_id=204596922]
+custom_minimum_size = Vector2(500, 0)
+layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="TitleLabel" type="Label" parent="CenterContainer/VBoxContainer"]
+[node name="TitleLabel" type="Label" parent="CenterContainer/VBoxContainer" unique_id=1547092947]
+layout_mode = 2
 text = "Packed Football"
 horizontal_alignment = 1
 
-[node name="EmailField" type="LineEdit" parent="CenterContainer/VBoxContainer"]
+[node name="EmailField" type="LineEdit" parent="CenterContainer/VBoxContainer" unique_id=100260585]
 custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+size_flags_horizontal = 4
 placeholder_text = "Email"
 
-[node name="PasswordField" type="LineEdit" parent="CenterContainer/VBoxContainer"]
+[node name="PasswordField" type="LineEdit" parent="CenterContainer/VBoxContainer" unique_id=846281834]
 custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+size_flags_horizontal = 4
 placeholder_text = "Password"
 secret = true
 
-[node name="ButtonRow" type="HBoxContainer" parent="CenterContainer/VBoxContainer"]
-alignment = 1
+[node name="ButtonRow" type="HBoxContainer" parent="CenterContainer/VBoxContainer" unique_id=1518986283]
+layout_mode = 2
+size_flags_horizontal = 4
 theme_override_constants/separation = 12
+alignment = 1
 
-[node name="SignInButton" type="Button" parent="CenterContainer/VBoxContainer/ButtonRow"]
+[node name="SignInButton" type="Button" parent="CenterContainer/VBoxContainer/ButtonRow" unique_id=476192660]
+layout_mode = 2
 text = "Sign In"
 
-[node name="RegisterButton" type="Button" parent="CenterContainer/VBoxContainer/ButtonRow"]
+[node name="RegisterButton" type="Button" parent="CenterContainer/VBoxContainer/ButtonRow" unique_id=1898908775]
+layout_mode = 2
 text = "Register"
 
-[node name="GuestButton" type="Button" parent="CenterContainer/VBoxContainer"]
+[node name="GuestButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=12820013]
+layout_mode = 2
+size_flags_horizontal = 4
 text = "Continue as Guest"
 
-[node name="StatusLabel" type="Label" parent="CenterContainer/VBoxContainer"]
-text = ""
+[node name="StatusLabel" type="Label" parent="CenterContainer/VBoxContainer" unique_id=66202361]
+layout_mode = 2
 horizontal_alignment = 1
 autowrap_mode = 2

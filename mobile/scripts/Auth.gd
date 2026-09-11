@@ -39,6 +39,12 @@ func _set_form_enabled(enabled: bool) -> void:
 
 
 func _go_to_menu() -> void:
+	# Fetches the signed-in user's roster/inventory/profile once, right here
+	# at login, and caches it in the GameProfile autoload -- every scene that
+	# needs it afterward (Team, etc.) just reads it instantly instead of
+	# re-fetching from Firestore on every visit.
+	status_label.text = "Loading your squad..."
+	await GameProfile.load_all()
 	get_tree().change_scene_to_file("res://scenes/Menu.tscn")
 
 

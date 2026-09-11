@@ -12,46 +12,38 @@ base_speed:Final = 10.0
 possession_radius: Final = 2.0
 final_whistle_delay: Final = 600
 
-formation = { ##442 için fix sadece 
-        0:[35.0, 5.0],   # GK
+# formations.py imports PITCH_WIDTH/PITCH_HEIGHT from this module, so this
+# import must come after they're defined above to avoid a circular-import
+# failure (formations.py is mid-import of a still-partial gameEngine module).
+from formations import get_formation
 
-        1:[12.0, 20.0],  # LB
-        2:[27.0, 15.0],  # LCB
-        3:[43.0, 15.0],  # RCB
-        4:[58.0, 20.0],  # RB
 
-        5:[12.0, 40.0],  # LM
-        6:[27.0, 35.0],  # LCM
-        7:[43.0, 35.0],  # RCM
-        8:[58.0, 40.0],  # RM
+def _combine_formations(formation_home: str, formation_away: str) -> dict:
+    """Builds the 22-slot {index: {"pos": [x, y], "role": str}} layout used by
+    the sim, taking team A's 11 slots from formation_home and team B's 11
+    slots from formation_away. Both named formations already mirror their own
+    base shape across both axes for indices 11-21 (see formations.py), so
+    each half can be sourced independently without re-deriving the mirror.
+    """
+    home = get_formation(formation_home)
+    away = get_formation(formation_away)
+    combined = {i: home[i] for i in range(11)}
+    combined.update({i: away[i] for i in range(11, 22)})
+    return combined
 
-        9:[27.0, 47.0],  # LS
-        10:[43.0, 47.0], # RS
-
-        11:[35.0, 95.0], # GK
-
-        12:[58.0, 80.0], # LB 
-        13:[43.0, 85.0], # LCB
-        14:[27.0, 85.0], # RCB
-        15:[12.0, 80.0], # RB
-
-        16:[58.0, 60.0], # LM
-        17:[43.0, 65.0], # LCM
-        18:[27.0, 65.0], # RCM
-        19:[12.0, 60.0], # RM
-
-        20:[43.0, 53.0], # LS
-        21:[27.0, 53.0] # RS
-}
 
 class game:
-    def __init__(self, teamA, teamB, seed=None, record_replay=False):
+    def __init__(self, teamA, teamB, seed=None, record_replay=False, formation_home="4-4-2", formation_away="4-4-2"):
 
         self.teamA = teamA # name, short_name, players
         self.teamB = teamB
         self.seed = seed
         self.rng = np.random.default_rng(seed)
         self.replay = ReplayRecorder() if record_replay else None
+
+        self.formation_home = formation_home
+        self.formation_away = formation_away
+        self.formation = _combine_formations(formation_home, formation_away)
 
         self.all_players = self.teamA.players + self.teamB.players
 
@@ -133,11 +125,23 @@ class game:
             self.ball[2:4] = self.velocity[self.ball_controller]
             self.ball[4] = 0.0
 
+    def _pick_role_slot(self, team: int, preferred_roles: tuple, fallback_local_index: int) -> int:
+        """Finds the first slot on `team` whose formation role matches, in
+        preference order. Falls back to a fixed local index (0-10) so this
+        degrades to the old hardcoded-index behavior if a formation is ever
+        missing every preferred role. 4-4-2's own roles line up with the old
+        hardcoded indices exactly, so this is a no-op for the default formation.
+        """
+        base = 0 if team == 0 else 11
+        for role in preferred_roles:
+            for local_i in range(11):
+                if self.formation[base + local_i]["role"] == role:
+                    return base + local_i
+        return base + fallback_local_index
+
     def _kickoff_player_for_team(self, team: int | None = None) -> int:
         team_id = self.kickoff_team if team is None else team
-        if team_id == 0:
-            return 9
-        return 20
+        return self._pick_role_slot(team_id, ("ST", "CF"), 9)
 
     def _set_must_pass_for_player(self, player_idx: int):
         self.must_pass_next = True
@@ -185,7 +189,7 @@ class game:
 
     def reset_positions(self, restart_type: str | None = None, team: int | None = None):
         for i in range(22):
-            self.positions[i] = np.array(formation[i], dtype=float)
+            self.positions[i] = np.array(self.formation[i]["pos"], dtype=float)
         self.velocity[:] = 0.0
         self.heading[0:11] = [0.0, 1.0]
         self.heading[11:22] = [0.0, -1.0]
@@ -243,7 +247,7 @@ class game:
             self._set_must_pass_for_player(kickoff_player)
             self.kickoff_timer = 30
         elif restart_type == "corner":
-            corner_player = 8 if self.restart_team == 0 else 19 # RM takes it
+            corner_player = self._pick_role_slot(self.restart_team, ("RW", "LW", "RM", "LM", "WB"), 8)
             self.restart_player = corner_player
             
             # Snap player to the left or right corner flag depending on out_x
@@ -262,7 +266,7 @@ class game:
             self.ball_controller = keeper
             self._set_must_pass_for_player(keeper)
         elif restart_type == "throw_in":
-            throw_player = 5 if self.restart_team == 0 else 16
+            throw_player = self._pick_role_slot(self.restart_team, ("LM", "RM", "LW", "RW", "WB", "CDM"), 5)
             self.restart_player = throw_player
             self.ball[:] = [self.positions[throw_player][0], self.positions[throw_player][1], 0.0, 0.0, 0.0]
             self.ball_controller = throw_player
@@ -1180,7 +1184,7 @@ class game:
                 "pressure_count": pressure_count,
                 "teammates": self.positions[0:11] if i < 11 else self.positions[11:22],
                 "opponents": opponents,
-                "formation_pos": formation[i],
+                "formation_pos": self.formation[i]["pos"],
                 "team_possession": possesion * j,
                 "past_halfspace": past_halfspace,
                 "own_goal": np.array([35.0, 0.0]) if i < 11 else np.array([35.0, 100.0]),
@@ -1197,8 +1201,8 @@ class game:
             self._resolve_action(int(i), actions[int(i)])
 
 
-def run_match(teamA, teamB, max_steps: int = 10800, fps: int = 60, render: bool = False, window_size=(1280, 800), title: str = "Packed Football"):
-    match = game(teamA, teamB)
+def run_match(teamA, teamB, max_steps: int = 10800, fps: int = 60, render: bool = False, window_size=(1280, 800), title: str = "Packed Football", formation_home="4-4-2", formation_away="4-4-2"):
+    match = game(teamA, teamB, formation_home=formation_home, formation_away=formation_away)
     return match.run_match(max_steps=max_steps, fps=fps, render=render, window_size=window_size, title=title)
 
 
