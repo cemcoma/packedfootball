@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .DS_Store
 packedfootball/firebase_config.py
+mobile/scripts/FirebaseConfig.gd
 google-cloud-sdk/
 mobile/.godot
 mobile/test_data

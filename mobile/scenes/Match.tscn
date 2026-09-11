@@ -3,5 +3,4 @@
 [ext_resource type="Script" uid="uid://b38lnsyksyii6" path="res://scripts/MatchPlayback.gd" id="1"]
 
 [node name="Match" type="Node2D" unique_id=681069530]
-position = Vector2(400, 0)
 script = ExtResource("1")
