@@ -78,6 +78,13 @@ var country: String = ""
 var hometown: String = ""
 var attributes: Dictionary = {}
 var statistics: Dictionary = {"goals": 0, "assists": 0, "matches_played": 0}
+## Layered placeholder-portrait indices (skin_tone/hair_style/hair_color/
+## face/shoe_color -> 0..4) -- see PlayerAppearance.gd. {} means "not set"
+## (a card whose players/{id} doc predates this field and hasn't been
+## backfilled by backend/scripts/sync_player_appearance.py yet);
+## PlayerModelView.gd falls back to a mock look derived from player_id in
+## that case rather than rendering nothing.
+var appearance: Dictionary = {}
 
 
 static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
@@ -91,6 +98,7 @@ static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
 	card.hometown = _str(fields, "hometown", "Unknown")
 	card.attributes = _dict(fields, "attributes", {})
 	card.statistics = _dict(fields, "statistics", {"goals": 0, "assists": 0, "matches_played": 0})
+	card.appearance = _dict(fields, "appearance", {})
 	return card
 
 
@@ -107,6 +115,7 @@ func to_fields() -> Dictionary:
 		"hometown": hometown,
 		"attributes": attributes,
 		"statistics": statistics,
+		"appearance": appearance,
 	}
 
 

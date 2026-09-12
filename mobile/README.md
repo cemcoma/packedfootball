@@ -94,14 +94,37 @@ to the engine, and much less error-prone to write blind than a complex
 
 ### PlayerCardView.gd -- the reusable "card"
 
-A `Control` subclass instanced with `PlayerCardView.new()` (no companion
-`.tscn`) anywhere a card needs to be shown -- currently the bench grid and
-the stats panel's header, later Shop/PVP too. `set_card(a_player_card)`
-populates it; today that's just a flat background tinted by
-`PlayerCard.tier_color()` plus overall/position/name/tier labels. When a
+A real `.tscn`-authored `Control` (`scenes/components/PlayerCardView.tscn`,
+instanced via `PLAYER_CARD_SCENE.instantiate()`) used anywhere a card needs
+to be shown -- currently the bench grid and the stats panel's header, later
+Shop/PVP too. `set_card(a_player_card)` populates it: a flat background
+tinted by `PlayerCard.tier_color()`, overall/position/name/tier labels, and
+a `PlayerModelView` child (see below) for the character portrait. When a
 real card template/art exists (per-tier background art, a "galaxy" effect
 for special/icon tiers), only this one file needs to change -- every
 screen that shows a card already goes through it.
+
+**PlayerModelView.gd -- the layered character portrait.** Sits in the
+`Model` slot where an empty `Spacer` used to be. Purely `_draw()`-based
+(same idiom as `PitchView`'s grass/lines -- a drawn graphic, not something
+Control nodes model well), it renders a blocky placeholder character from
+5 independent layers: skin tone, hair style (shape) + color (tint), face
+(mouth shape), shoe color -- 5 options each, defined in the new
+`PlayerAppearance.gd` (`scripts/data/`). That's 5^5 = 3125 distinct looks
+from just 25 stored choices, the same "small typed options, extendable"
+shape as `PackData.TYPE_COLORS`.
+
+Appearance is real now: `packEngine.PackManager._generate_appearance()`
+rolls one per card (pack open, or the bronze starter roster) the same way
+it rolls tier/attributes, and it's persisted on `players/{id}` --
+`PlayerCard.gd` reads it back like every other field, and
+`PlayerModelView.set_card()` prefers it. `PlayerAppearance.mock_from_id()`
+(derives all 5 indices deterministically from `player_id` alone, no
+storage) is now only a fallback, for a card whose doc predates real
+generation and hasn't been backfilled -- see
+`backend/scripts/sync_player_appearance.py`'s own docstring (mirrors
+`sync_pack_definitions.py`'s shape: `--dry-run`, safely re-runnable, only
+touches docs actually missing the field).
 
 **Roster/inventory load once, at login, not on every visit.** All of it --
 profile fields, the live formation, the slot assignment, every owned card --
@@ -250,7 +273,8 @@ scripts/
   config/      -- FirebaseConfig.gd (gitignored) + .example.gd
 scenes/
   *.tscn       -- the 7 top-level screens
-  components/  -- PlayerCardView.tscn / PitchView.tscn / PackView.tscn (mirrors scripts/components/)
+  components/  -- PlayerCardView.tscn / PlayerModelView.tscn / PitchView.tscn /
+				  PackView.tscn / PackInfoPopup.tscn (mirrors scripts/components/)
 ```
 
 A script's *class_name* (used everywhere scripts reference each other, e.g.
@@ -290,6 +314,9 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
 
 - `PlayerCardView.gd` / `scenes/components/PlayerCardView.tscn` -- the
   reusable card visual (see above).
+- `PlayerModelView.gd` / `scenes/components/PlayerModelView.tscn` -- the
+  layered placeholder character portrait embedded in `PlayerCardView`
+  (see above).
 - `PitchView.gd` / `scenes/components/PitchView.tscn` -- the pitch:
   custom-drawn grass/lines + real `Button` slot markers (see above).
 - `PackView.gd` / `scenes/components/PackView.tscn` -- the pack "box"
@@ -317,9 +344,15 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
 - `Formations.gd` -- the same 4 named formations as
   `packedfootball/formations.py` (see the Team screen section above for the
   one known discrepancy).
-- `PlayerCard.gd` -- client-side card data model (fields + `overall()` +
-  `tier_color()`), no gameplay logic -- the backend simulates matches, this
-  scene only ever displays/persists cards.
+- `PlayerCard.gd` -- client-side card data model (fields including the
+  real `appearance` dict + `overall()` + `tier_color()`), no gameplay logic
+  -- the backend simulates matches, this scene only ever displays/persists
+  cards.
+- `PlayerAppearance.gd` -- the 5-slot/5-option layered character
+  appearance (skin tone, hair style/color, face, shoe color)
+  `PlayerModelView` renders, plus the `mock_from_id()` fallback generator
+  for a card whose doc predates real generation (see the PlayerCardView
+  section above).
 - `PackData.gd` -- client-side pack listing data (fields including
   `rates`/`pos_rates` odds + `type_color()`, `is_limited()`/
   `limited_label()`, `tag_text()`), same "display-only" boundary as

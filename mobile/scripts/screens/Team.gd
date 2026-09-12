@@ -47,8 +47,8 @@ var _formation_buttons: Dictionary = {}  # name -> Button
 @onready var _cancel_button: Button = %CancelButton
 @onready var _stats_panel: VBoxContainer = %StatsPanel
 @onready var _stats_card_view: PlayerCardView = %StatsCard
-@onready var _stats_extra_label: Label = %StatsExtraLabel
-@onready var _stat_line_seperator: ColorRect = %StatAttributeSeperator
+@onready var _stats_extra_country: Label = %StatsExtraCountry
+@onready var _stats_extra_gam: Label = %StatsExtraGam #goals assists matches
 @onready var _stats_attr_grid: GridContainer = %StatsAttrGrid
 @onready var _replace_button: Button = %ReplaceButton
 @onready var _clear_button: Button = %ClearButton
@@ -184,8 +184,11 @@ func _populate_stats_panel() -> void:
 	var goals: int = card.statistics.get("goals", 0)
 	var assists: int = card.statistics.get("assists", 0)
 	var matches: int = card.statistics.get("matches_played", 0)
-	_stats_extra_label.text = "%s - %s\nGoals: %d   Assists: %d   Matches: %d " % [
-		card.country, card.hometown,goals, assists, matches, 
+	_stats_extra_country.text = "%s\n%s" % [
+		card.hometown, card.country 
+	]
+	_stats_extra_gam.text = "\nGoals: %d\nAssists: %d\nMatches: %d" % [
+		goals, assists, matches 
 	]
 
 

@@ -1,6 +1,6 @@
 import os
 import random
-from player.player import Attributes, player
+from player.player import Attributes, APPEARANCE_SLOTS, APPEARANCE_OPTION_COUNT, player
 
 from player.classes.goalkeeper import Goalkeeper
 from player.classes.defender import CenterBack, Fullback, Wingback
@@ -94,13 +94,7 @@ PACK_DATABASE = {
         "pos_rates": {"attacker":1}
     }
 }
-# "type" is purely a display/categorization label (standard/special/timed,
-# freely extendable to more values -- nothing in code branches on a fixed
-# set of them). "description" is shown under a pack's name in the shop.
-# Both are definitional (this IS what the pack is), so both get synced to
-# Firestore by sync_pack_definitions.py like name/price/rates always have.
-#
-# Availability, by contrast, is a separate, orthogonal concern that
+# Availability is a separate, orthogonal concern that
 # deliberately does NOT live here at all -- these only ever live on the
 # Firestore packs/{id} doc itself, the same operational-not-definitional
 # treatment "active"/"times_opened" already get (see
@@ -177,11 +171,12 @@ class PackManager:
                 position=position,
                 attributes=attrs,
                 country=country,
-                hometown=hometown
+                hometown=hometown,
+                appearance=self._generate_appearance(),
             )
-            
+
             new_cards.append(new_player)
-        return new_cards 
+        return new_cards
 
     def _generate_tier_attributes(self, tier: str, position: str) -> Attributes:
         min_s, max_s = TIER_RANGES.get(tier, (40, 50))
@@ -226,6 +221,15 @@ class PackManager:
 
         return Attributes(**generated_stats)
 
+    def _generate_appearance(self) -> dict:
+        """Rolls a random index (0..APPEARANCE_OPTION_COUNT-1) per slot for
+        the placeholder layered character portrait -- see player.py's
+        APPEARANCE_SLOTS comment for the mirrored Godot-side constants.
+        Uses self.rng like every other roll in this class, so a pack open
+        stays fully reproducible from its seed, appearance included.
+        """
+        return {slot: self.rng.randint(0, APPEARANCE_OPTION_COUNT - 1) for slot in APPEARANCE_SLOTS}
+
 
 def generate_starter_roster(formation_name: str = "4-4-2", tier: str = "bronze", seed=None) -> list:
     """Generates a full 11-card roster, one player per slot of the given
@@ -261,6 +265,7 @@ def generate_starter_roster(formation_name: str = "4-4-2", tier: str = "bronze",
                 attributes=attrs,
                 country=country,
                 hometown=hometown,
+                appearance=manager._generate_appearance(),
             )
         )
     return roster

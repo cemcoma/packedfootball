@@ -49,6 +49,7 @@ def player_to_fields(p) -> dict:
         "hometown": p.hometown,
         "attributes": asdict(p.attributes),
         "statistics": dict(p.statistics),
+        "appearance": dict(p.appearance),
     }
 
 
@@ -64,6 +65,7 @@ def fields_to_player(fields: dict, player_class_map: dict, default_class):
         attrs,
         country=fields.get("country"),
         hometown=fields.get("hometown"),
+        appearance=fields.get("appearance"),
     )
     p.statistics = dict(fields.get("statistics", p.statistics))
     return p

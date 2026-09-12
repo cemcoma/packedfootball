@@ -54,9 +54,9 @@ class AttackingMidActionProfile(ActionProfile):
 class Midfielder(player):
     primary_stats = ("passing", "ballcontrol", "vision")
 
-    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         self.action_profile = MidfielderActionProfile()
-        super().__init__(fname, lname, tier, position, attributes, country, hometown)
+        super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
 
     def _choose_through_ball_target(self, state: dict):
         teammates = np.asarray(state.get("teammates", []), dtype=float)
@@ -458,8 +458,8 @@ class DefensiveMid(Midfielder):
     """
     primary_stats = ("defending", "tackling", "passing")
 
-    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
-        super().__init__(fname, lname, tier, position, attributes, country, hometown)
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
+        super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = DefensiveMidActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
@@ -474,8 +474,8 @@ class AttackingMid(Midfielder):
     """
     primary_stats = ("passing", "vision", "shooting")
 
-    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
-        super().__init__(fname, lname, tier, position, attributes, country, hometown)
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
+        super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = AttackingMidActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())

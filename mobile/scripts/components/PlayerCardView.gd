@@ -15,6 +15,10 @@ extends Control
 ## scene's "Background" ColorRect) -- see that function's own doc comment
 ## for the natural upgrade path (a per-tier Resource carrying a texture/
 ## shader instead of a plain Color) once real art exists.
+##
+## The "Model" child (see PlayerModelView.gd) is the placeholder layered
+## character portrait -- currently a mock look derived from player_id
+## alone, not yet stored anywhere (see PlayerAppearance.gd's docstring).
 
 signal pressed
 
@@ -24,6 +28,7 @@ signal pressed
 @onready var _name_label: Label = %NameLabel
 @onready var _tier_label: Label = %TierLabel
 @onready var _tap_button: Button = %TapButton
+@onready var _model_view: PlayerModelView = %Model
 
 var _card: PlayerCard = null
 
@@ -43,6 +48,7 @@ func set_card(card: PlayerCard) -> void:
 	_position_label.text = card.position
 	_name_label.text = card.display_name()
 	_tier_label.text = card.tier.capitalize()
+	_model_view.set_card(card)
 
 
 func set_highlighted(is_highlighted: bool) -> void:

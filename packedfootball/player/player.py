@@ -36,6 +36,18 @@ TENDENCY_FIELDS = {
     "aggression", "composure", "clear_tendency"
 }
 
+# Layered placeholder character portrait: 5 independent slots, each an index
+# into a fixed-size (5) option list. Mirrors mobile/scripts/data/
+# PlayerAppearance.gd's own APPEARANCE_SLOTS/OPTION_COUNT exactly -- keep the
+# two in lockstep if either changes (same convention as PLAYER_CLASS_MAP /
+# PlayerCard.gd's PRIMARY_STATS_BY_POSITION). Real players always get one
+# randomly rolled by packEngine.PackManager; DEFAULT_APPEARANCE only backstops
+# a player object built without going through that (e.g. reconstructing a
+# player doc saved before this field existed).
+APPEARANCE_SLOTS = ("skin_tone", "hair_style", "hair_color", "face", "shoe_color")
+APPEARANCE_OPTION_COUNT = 5
+DEFAULT_APPEARANCE = {slot: 0 for slot in APPEARANCE_SLOTS}
+
 DEFAULT_ACTIONS = {
     "stop", "shoot", "pass", "clear", "cross", "dribble",
     "forward_run", "support", "hold_attack", "hold_defense",
@@ -70,12 +82,13 @@ class player(ABC):
     # leaks in at a reduced weight. Override per-class to retune the split.
     primary_weight: float = 0.8
 
-    def __init__(self, fname, lname, tier, position, attributes:Attributes = None, country: str = None, hometown: str = None):
+    def __init__(self, fname, lname, tier, position, attributes:Attributes = None, country: str = None, hometown: str = None, appearance: dict = None):
         #cosmetic
         self.fname = fname
         self.lname = lname
         self.country = country or "Unknown"
         self.hometown = hometown or "Unknown"
+        self.appearance = appearance if appearance is not None else dict(DEFAULT_APPEARANCE)
         self.statistics = {"goals": 0,"assists":0,"matches_played": 0}
         self.tier = tier
 

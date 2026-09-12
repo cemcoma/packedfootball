@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://ulrndvhqpktd"]
 
 [ext_resource type="Script" uid="uid://df7qtspk6wifh" path="res://scripts/components/PlayerCardView.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/PlayerModelView.tscn" id="2"]
 
 [node name="PlayerCardView" type="Control" unique_id=29396887]
 custom_minimum_size = Vector2(110, 150)
@@ -52,8 +53,10 @@ size_flags_horizontal = 8
 text = "--"
 horizontal_alignment = 2
 
-[node name="Spacer" type="Control" parent="Margin/Content" unique_id=167150496]
+[node name="Model" parent="Margin/Content" instance=ExtResource("2")]
+unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 3
 
 [node name="NameLabel" type="Label" parent="Margin/Content" unique_id=397943673]

@@ -364,8 +364,8 @@ class Defender(player):
 class CenterBack(Defender):
     primary_stats = ("defending", "tackling")
 
-    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
-        super().__init__(fname, lname, tier, position, attributes, country, hometown)
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
+        super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = CenterBackActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
@@ -377,8 +377,8 @@ class CenterBack(Defender):
 class Fullback(Defender):
     primary_stats = ("defending", "tackling", "speed","passing")
 
-    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
-        super().__init__(fname, lname, tier, position, attributes, country, hometown)
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
+        super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = FullbackActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
@@ -393,8 +393,8 @@ class Wingback(Defender):
     """
     primary_stats = ("speed", "passing", "defending")
 
-    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
-        super().__init__(fname, lname, tier, position, attributes, country, hometown)
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
+        super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = WingbackActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())

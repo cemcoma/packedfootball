@@ -70,9 +70,9 @@ class WingerActionProfile(ActionProfile):
 class Forward(player):
     primary_stats = ("shooting", "dribbiling", "speed", "power")
 
-    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         self.action_profile = ForwardActionProfile()
-        super().__init__(fname, lname, tier, position, attributes, country, hometown)
+        super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.attributes.power +=5
 
     def _build_action(self, decision: str, state: dict) -> dict | None:
@@ -426,12 +426,12 @@ class Winger(Forward):
     _decide_on_ball_attack above)."""
     primary_stats = ("dribbiling", "speed", "passing")
 
-    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None):
+    def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         # Forward.__init__ (called via super() below) unconditionally sets
         # its own action_profile before deferring further up the chain, so
         # ours must be applied after super() returns, not before -- the same
         # order CenterBack/Fullback/Wingback already use for this reason.
-        super().__init__(fname, lname, tier, position, attributes, country, hometown)
+        super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = WingerActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())

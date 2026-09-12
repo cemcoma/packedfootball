@@ -1,8 +1,11 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://1kne6225r4pk"]
 
-[ext_resource type="Script" path="res://scripts/components/PitchView.gd" id="1"]
+[ext_resource type="Script" uid="uid://dwwt4ty1ir42y" path="res://scripts/components/PitchView.gd" id="1"]
 
-[node name="PitchView" type="Control"]
+[node name="PitchView" type="Control" unique_id=1300278465]
 custom_minimum_size = Vector2(280, 400)
-size = Vector2(280, 400)
+layout_mode = 3
+anchors_preset = 0
+offset_right = 280.0
+offset_bottom = 400.0
 script = ExtResource("1")

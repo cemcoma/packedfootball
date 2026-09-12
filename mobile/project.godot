@@ -14,17 +14,16 @@ config/name="Packed Football Mobile"
 run/main_scene="res://scenes/Auth.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 
-[display]
-
-window/size/viewport_width=960
-window/size/viewport_height=540
-window/handheld/orientation="landscape"
-window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
-
 [autoload]
 
 FirebaseAuth="*res://scripts/autoload/FirebaseAuth.gd"
 Firestore="*res://scripts/autoload/Firestore.gd"
 Backend="*res://scripts/autoload/Backend.gd"
 GameProfile="*res://scripts/autoload/GameProfile.gd"
+
+[display]
+
+window/size/viewport_width=960
+window/size/viewport_height=540
+window/stretch/mode="canvas_items"
+window/handheld/orientation="landscape"

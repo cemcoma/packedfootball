@@ -46,6 +46,24 @@ gcloud projects add-iam-policy-binding <project-id> \
 On Cloud Run, the service's attached service account provides Application
 Default Credentials automatically -- no key file needed.
 
+## Scripts
+
+Standalone admin tools, run locally against production Firestore (not part
+of the deployed service) via the `firebase_admin` Python SDK + your own
+Application Default Credentials -- both support `--dry-run` and are safe to
+re-run any time:
+
+- `scripts/sync_pack_definitions.py` -- pushes `packEngine.PACK_DATABASE`'s
+  definitional fields (name/type/description/price/cards_per_pack/rates/
+  pos_rates) onto existing `packs/{id}` docs, without touching operational
+  fields (`active`, `times_opened`, `max_opens`, `expires_at`, `visible`,
+  `available_at`) that only ever live in Firestore.
+- `scripts/sync_player_appearance.py` -- backfills a placeholder
+  `appearance` field onto `players/{id}` docs that predate it (anything
+  newly generated already gets one from `PackManager._generate_appearance()`),
+  using a fixed per-tier look so at least tiers read as visually distinct
+  while testing.
+
 ## Still to do
 
 - Tighten `firestore.rules` to deny direct client writes to
