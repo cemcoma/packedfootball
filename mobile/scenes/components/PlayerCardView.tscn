@@ -34,18 +34,23 @@ theme_override_constants/margin_bottom = 6
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="OverallLabel" type="Label" parent="Margin/Content" unique_id=483869556]
+[node name="BoxContainer" type="BoxContainer" parent="Margin/Content" unique_id=1950910467]
+layout_mode = 2
+
+[node name="OverallLabel" type="Label" parent="Margin/Content/BoxContainer" unique_id=483869556]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 2
 theme_override_font_sizes/font_size = 24
 text = "0"
 horizontal_alignment = 1
 
-[node name="PositionLabel" type="Label" parent="Margin/Content" unique_id=1749609897]
+[node name="PositionLabel" type="Label" parent="Margin/Content/BoxContainer" unique_id=1749609897]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 8
 text = "--"
-horizontal_alignment = 1
+horizontal_alignment = 2
 
 [node name="Spacer" type="Control" parent="Margin/Content" unique_id=167150496]
 layout_mode = 2
@@ -56,6 +61,7 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Player"
 horizontal_alignment = 1
+clip_text = true
 
 [node name="TierLabel" type="Label" parent="Margin/Content" unique_id=1997875743]
 unique_name_in_owner = true
@@ -70,4 +76,6 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 flat = true

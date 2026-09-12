@@ -1,8 +1,11 @@
-"""Pushes PACK_DATABASE's definitional fields (name, price, cards_per_pack,
-rates, pos_rates) from packedfootball/packEngine.py into existing Firestore
-packs/{pack_id} docs -- WITHOUT touching active/times_opened, which are
+"""Pushes PACK_DATABASE's definitional fields (name, type, description,
+price, cards_per_pack, rates, pos_rates) from packedfootball/packEngine.py
+into existing Firestore packs/{pack_id} docs -- WITHOUT touching
+active/times_opened/max_opens/expires_at/visible/available_at, which are
 operational state that only lives in Firestore (a pack you've suspended
-stays suspended; real open counts aren't reset).
+stays suspended; real open counts aren't reset; an availability cap or
+preview flag you set in Firestore isn't clobbered back to its default just
+because PACK_DATABASE doesn't carry it).
 
 This is the tool for any future case where a pack's definition changes in
 code and needs to reach Firestore -- including ones the Firestore console
@@ -32,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "packedfo
 from packEngine import PACK_DATABASE # fallback packs
 
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "packedfootball")
-DEFINITION_FIELDS = ("name", "price", "cards_per_pack", "rates", "pos_rates")
+DEFINITION_FIELDS = ("name", "type", "description", "price", "cards_per_pack", "rates", "pos_rates")
 
 
 def main():

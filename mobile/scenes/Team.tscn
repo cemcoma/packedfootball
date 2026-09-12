@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://m1yjybhij5mp" path="res://scripts/screens/Team.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/PitchView.tscn" id="2"]
-[ext_resource type="PackedScene" path="res://scenes/components/PlayerCardView.tscn" id="3"]
+[ext_resource type="PackedScene" uid="uid://ulrndvhqpktd" path="res://scenes/components/PlayerCardView.tscn" id="3"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_formations"]
 
@@ -11,6 +11,8 @@ layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1")
 
 [node name="Margin" type="MarginContainer" parent="." unique_id=1976298437]
@@ -18,6 +20,8 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 16
@@ -121,9 +125,9 @@ size_flags_horizontal = 3
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="Line2D" type="Line2D" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=1306754285]
-position = Vector2(-438, -300)
-default_color = Color(0.18179765, 0.18179768, 0.18179768, 1)
+[node name="StatAttributeSeperator" type="ColorRect" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=617223459]
+layout_mode = 2
+color = Color(0, 0, 0, 1)
 
 [node name="StatsAttrGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=803471580]
 unique_name_in_owner = true

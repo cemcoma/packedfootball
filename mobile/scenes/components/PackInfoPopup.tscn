@@ -1,0 +1,157 @@
+[gd_scene format=3 uid="uid://cl2jiom47jugr"]
+
+[ext_resource type="Script" uid="uid://crg7umm6677ly" path="res://scripts/components/PackInfoPopup.gd" id="1"]
+
+[node name="PackInfoPopup" type="Control" unique_id=1909066049]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1")
+
+[node name="Scrim" type="ColorRect" parent="." unique_id=1526598152]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.6)
+
+[node name="Center" type="CenterContainer" parent="." unique_id=1662648341]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Panel" type="PanelContainer" parent="Center" unique_id=1276536163]
+custom_minimum_size = Vector2(300, 360)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Center/Panel" unique_id=844216816]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 14
+
+[node name="VBox" type="VBoxContainer" parent="Center/Panel/Margin" unique_id=1153495491]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="HeaderRow" type="HBoxContainer" parent="Center/Panel/Margin/VBox" unique_id=514750270]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TitleBox" type="VBoxContainer" parent="Center/Panel/Margin/VBox/HeaderRow" unique_id=341974087]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 0
+
+[node name="PanelTitle" type="Label" parent="Center/Panel/Margin/VBox/HeaderRow/TitleBox" unique_id=1692664504]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Pack Name"
+autowrap_mode = 2
+
+[node name="TypeLabel" type="Label" parent="Center/Panel/Margin/VBox/HeaderRow/TitleBox" unique_id=814656656]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.75, 0.75, 1)
+theme_override_font_sizes/font_size = 12
+text = "Standard"
+
+[node name="CloseButton" type="Button" parent="Center/Panel/Margin/VBox/HeaderRow" unique_id=432458663]
+unique_name_in_owner = true
+layout_mode = 2
+text = "X"
+
+[node name="Pages" type="TabContainer" parent="Center/Panel/Margin/VBox" unique_id=1107914992]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 220)
+layout_mode = 2
+size_flags_vertical = 3
+current_tab = 0
+tabs_visible = false
+
+[node name="DescriptionPage" type="VBoxContainer" parent="Center/Panel/Margin/VBox/Pages" unique_id=421573402]
+layout_mode = 2
+theme_override_constants/separation = 8
+metadata/_tab_index = 0
+
+[node name="DescriptionLabel" type="Label" parent="Center/Panel/Margin/VBox/Pages/DescriptionPage" unique_id=1243119517]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 10)
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+autowrap_mode = 2
+
+[node name="RatesPage" type="VBoxContainer" parent="Center/Panel/Margin/VBox/Pages" unique_id=778742499]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+metadata/_tab_index = 1
+
+[node name="RatesTitleLabel" type="Label" parent="Center/Panel/Margin/VBox/Pages/RatesPage" unique_id=1139778433]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.75, 0.75, 1)
+theme_override_font_sizes/font_size = 13
+text = "Card Tier Odds"
+
+[node name="RatesGrid" type="GridContainer" parent="Center/Panel/Margin/VBox/Pages/RatesPage" unique_id=1120875675]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 4
+columns = 2
+
+[node name="RatesEmptyLabel" type="Label" parent="Center/Panel/Margin/VBox/Pages/RatesPage" unique_id=219570034]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "No tier data available."
+
+[node name="PositionRatesPage" type="VBoxContainer" parent="Center/Panel/Margin/VBox/Pages" unique_id=1770594481]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+metadata/_tab_index = 2
+
+[node name="PositionRatesTitleLabel" type="Label" parent="Center/Panel/Margin/VBox/Pages/PositionRatesPage" unique_id=1579127976]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.75, 0.75, 1)
+theme_override_font_sizes/font_size = 13
+text = "Position Odds"
+
+[node name="PositionRatesGrid" type="GridContainer" parent="Center/Panel/Margin/VBox/Pages/PositionRatesPage" unique_id=1269637504]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 4
+columns = 2
+
+[node name="PositionRatesEmptyLabel" type="Label" parent="Center/Panel/Margin/VBox/Pages/PositionRatesPage" unique_id=1786369197]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "No position data available."
+
+[node name="FooterRow" type="HBoxContainer" parent="Center/Panel/Margin/VBox" unique_id=643196714]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PrevButton" type="Button" parent="Center/Panel/Margin/VBox/FooterRow" unique_id=1095649952]
+unique_name_in_owner = true
+layout_mode = 2
+text = "< Prev"
+
+[node name="PageLabel" type="Label" parent="Center/Panel/Margin/VBox/FooterRow" unique_id=1345572570]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "1 / 3"
+horizontal_alignment = 1
+
+[node name="NextButton" type="Button" parent="Center/Panel/Margin/VBox/FooterRow" unique_id=1865510358]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Next >"

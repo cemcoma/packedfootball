@@ -54,6 +54,29 @@ func _user_doc_path() -> String:
 	return "users/%s" % FirebaseAuth.uid
 
 
+## Dictionary.get(key, default) only falls back to `default` when the key
+## is entirely absent -- a present key holding JSON null comes back as null
+## regardless, and assigning null into a statically-typed String/int/Array
+## var is a hard runtime error (see PackData.gd's version of this, hit in
+## practice first). Nothing currently writes null into any of these
+## users/{uid} fields, but load_all() runs on every single login, so it's
+## worth the same defensiveness PackData/PlayerCard already have rather
+## than a malformed doc taking down sign-in entirely.
+static func _str(doc: Dictionary, key: String, default: String = "") -> String:
+	var value = doc.get(key)
+	return value if value is String else default
+
+
+static func _int(doc: Dictionary, key: String, default: int = 0) -> int:
+	var value = doc.get(key)
+	return value if typeof(value) in [TYPE_INT, TYPE_FLOAT] else default
+
+
+static func _array(doc: Dictionary, key: String, default: Array) -> Array:
+	var value = doc.get(key)
+	return value if value is Array else default
+
+
 ## Fetches everything needed to populate the cache above in one go. Called
 ## once right after sign-in (see Auth.gd) so every later scene reads
 ## instantly from memory instead of re-hitting Firestore every time it opens.
@@ -71,15 +94,15 @@ func load_all() -> void:
 	var doc = await Firestore.get_document(_user_doc_path())
 	var ids: Array = []
 	if doc != null:
-		display_name = doc.get("display_name", "")
-		credits = doc.get("credits", 0)
-		wins = doc.get("wins", 0)
-		losses = doc.get("losses", 0)
-		draws = doc.get("draws", 0)
-		elo = doc.get("elo", 0)
-		campaign_level = doc.get("campaign_level", 0)
-		formation = doc.get("formation", DEFAULT_FORMATION)
-		ids = doc.get("roster_player_ids", [])
+		display_name = _str(doc, "display_name")
+		credits = _int(doc, "credits")
+		wins = _int(doc, "wins")
+		losses = _int(doc, "losses")
+		draws = _int(doc, "draws")
+		elo = _int(doc, "elo")
+		campaign_level = _int(doc, "campaign_level")
+		formation = _str(doc, "formation", DEFAULT_FORMATION)
+		ids = _array(doc, "roster_player_ids", [])
 
 	var slots: Array = Formations.get_formation(formation)
 	slot_assignment.resize(slots.size())
@@ -107,7 +130,7 @@ func load_inventory() -> Array:
 	var pointers: Array = await Firestore.list_collection("users/%s/inventory" % FirebaseAuth.uid)
 	var cards: Array = []
 	for pointer in pointers:
-		var player_id: String = pointer.get("player_id", "")
+		var player_id: String = _str(pointer, "player_id")
 		if player_id == "":
 			continue
 		var fields = await Firestore.get_document("players/%s" % player_id)
@@ -294,3 +317,16 @@ func reset() -> void:
 	all_cards = {}
 	saved_formation = DEFAULT_FORMATION
 	saved_slot_assignment = []
+
+
+## Folds newly-bought cards (and the post-purchase credit balance) into the
+## live cache after a successful POST /pack/open -- called from Shop.gd.
+## The cards are already real Firestore documents server-side by the time
+## this runs (added to players/{id} + users/{uid}/inventory/{id}); this
+## just makes them show up as bench cards immediately (e.g. back on the
+## Team screen) without a full reload.
+func add_purchased_cards(cards: Array, credits_remaining: int) -> void:
+	for card in cards:
+		var typed_card: PlayerCard = card
+		all_cards[typed_card.player_id] = typed_card
+	credits = credits_remaining

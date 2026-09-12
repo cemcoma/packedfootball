@@ -50,6 +50,24 @@ static func tier_color(tier: String) -> Color:
 	return TIER_COLORS.get(tier, Color(0.5, 0.5, 0.5))
 
 
+## Dictionary.get(key, default) only falls back to `default` when the key
+## is entirely absent -- a present key holding JSON null comes back as null
+## regardless, and assigning null into a statically-typed String var is a
+## hard runtime error (see PackData.gd's own version of this helper, hit in
+## practice there first). None of these fields are optional in today's
+## schema, but every one of them still goes through this rather than a bare
+## fields.get(key, default), so a malformed/partial doc degrades to an
+## empty string instead of crashing the whole card.
+static func _str(fields: Dictionary, key: String, default: String = "") -> String:
+	var value = fields.get(key)
+	return value if value is String else default
+
+
+static func _dict(fields: Dictionary, key: String, default: Dictionary) -> Dictionary:
+	var value = fields.get(key)
+	return value if value is Dictionary else default
+
+
 var player_id: String = ""
 var doc_id: String = ""  # non-empty only for benched cards (inventory pointer doc id)
 var fname: String = ""
@@ -65,14 +83,14 @@ var statistics: Dictionary = {"goals": 0, "assists": 0, "matches_played": 0}
 static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
 	var card := PlayerCard.new()
 	card.player_id = id
-	card.fname = fields.get("fname", "")
-	card.lname = fields.get("lname", "")
-	card.tier = fields.get("tier", "")
-	card.position = fields.get("position", "")
-	card.country = fields.get("country", "Unknown")
-	card.hometown = fields.get("hometown", "Unknown")
-	card.attributes = fields.get("attributes", {})
-	card.statistics = fields.get("statistics", {"goals": 0, "assists": 0, "matches_played": 0})
+	card.fname = _str(fields, "fname")
+	card.lname = _str(fields, "lname")
+	card.tier = _str(fields, "tier")
+	card.position = _str(fields, "position")
+	card.country = _str(fields, "country", "Unknown")
+	card.hometown = _str(fields, "hometown", "Unknown")
+	card.attributes = _dict(fields, "attributes", {})
+	card.statistics = _dict(fields, "statistics", {"goals": 0, "assists": 0, "matches_played": 0})
 	return card
 
 

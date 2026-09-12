@@ -59,6 +59,8 @@ TIER_RANGES = {
 PACK_DATABASE = {
     1: {
         "name": "Standard Player Pack",
+        "type": "standard",
+        "description": "A reliable pack of everyday talent. Mostly bronze and silver, with a shot at gold.",
         "price": 100,
         "cards_per_pack": 3,
         "rates": {"bronze": 0.60, "silver": 0.30, "gold": 0.10, "platinum": 0.0, "diamond": 0.0, "special": 0.0},
@@ -66,6 +68,8 @@ PACK_DATABASE = {
     },
     2: {
         "name": "Jumbo Player Pack",
+        "type": "standard",
+        "description": "Ten cards in one pull. Same odds as a Standard Pack, just a lot more of them.",
         "price": 500,
         "cards_per_pack": 10,
         "rates": {"bronze": 0.40, "silver": 0.40, "gold": 0.15, "platinum": 0.05, "diamond": 0.0, "special": 0.0},
@@ -73,6 +77,8 @@ PACK_DATABASE = {
     },
     3: {
         "name": "UCL Promo Pack",
+        "type": "timed",
+        "description": "Champions League season odds -- guaranteed gold or better, with a real shot at diamond.",
         "price": 1000,
         "cards_per_pack": 5,
         "rates": {"bronze": 0.0, "silver": 0.10, "gold": 0.40, "platinum": 0.30, "diamond": 0.15, "special": 0.05},
@@ -80,12 +86,38 @@ PACK_DATABASE = {
     },
     4: {
         "name": "Icon Forward Pack",
+        "type": "special",
+        "description": "One guaranteed icon-tier forward. Extremely limited -- once they're gone, they're gone.",
         "price": 50000,
         "cards_per_pack": 1,
         "rates": {"icon":1.0},
         "pos_rates": {"attacker":1}
     }
 }
+# "type" is purely a display/categorization label (standard/special/timed,
+# freely extendable to more values -- nothing in code branches on a fixed
+# set of them). "description" is shown under a pack's name in the shop.
+# Both are definitional (this IS what the pack is), so both get synced to
+# Firestore by sync_pack_definitions.py like name/price/rates always have.
+#
+# Availability, by contrast, is a separate, orthogonal concern that
+# deliberately does NOT live here at all -- these only ever live on the
+# Firestore packs/{id} doc itself, the same operational-not-definitional
+# treatment "active"/"times_opened" already get (see
+# sync_pack_definitions.py's own docstring):
+#   - "max_opens": a hard cap on total opens (e.g. the Icon pack selling
+#     out after 30) -- enforced by backend/main.py's _pack_unavailable_reason.
+#   - "expires_at": an ISO datetime after which it can no longer be opened
+#     (e.g. a "timed" pack) -- also _pack_unavailable_reason.
+#   - "visible" / "available_at": opts an otherwise-unavailable pack into
+#     still being shown (grayed out, tagged) instead of hidden outright --
+#     see backend/main.py's _pack_is_teased. Setting "available_at" alone
+#     is enough to imply it; it's purely a display hint ("Available Jan 15"),
+#     not something that auto-flips "active" once the date passes.
+# Set any of these directly on a pack's Firestore doc (no redeploy needed)
+# -- backend/main.py's /pack/open and /pack/list both already enforce/
+# reflect them when present and treat their absence as today's defaults
+# (unlimited, never expires, hidden-when-unavailable).
 
 class PackManager:
     def __init__(self, db: dict, seed=None):

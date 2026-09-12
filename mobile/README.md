@@ -147,6 +147,83 @@ new one it generates a full 11-card bronze roster server-side
 before: a brand new Godot-only account used to have no cards and no
 roster at all until it also signed into the Python client once.
 
+## Shop screen
+
+Two tabs: **Packs** (real, built now) and **Currency** (microtransactions/
+ads -- deliberately a "Coming soon" placeholder; pack mechanics came
+first). The pack catalog is fetched fresh from the backend's new
+`GET /pack/list` every time the scene loads and again after every
+purchase, rather than cached on `GameProfile` like the squad is -- unlike
+your own roster, the catalog can change under you at any time (an admin
+flips a pack inactive, a limited pack sells out from someone else buying
+it), so it's treated as a live storefront, not account data.
+
+Packs have a free-form `type` string (`standard`/`special`/`timed` today,
+extendable to more -- nothing branches on a fixed set of them) plus two
+independent, optional availability limits that live only on the pack's
+Firestore document, never in code: `max_opens` (a hard cap on total opens
+-- e.g. a "special" pack selling out after 30) and `expires_at` (an ISO
+datetime after which it can't be opened -- e.g. a "timed" pack). Both are
+enforced **server-side** in `backend/main.py`'s new `_pack_unavailable_reason()`,
+shared by `/pack/list` (to filter what's shown) and `/pack/open` (to
+reject a purchase) so the two can't disagree -- verified directly against
+8 cases (inactive, under/at/over cap, not-yet/already expired, malformed
+date, a pack with neither field at all) before wiring it in. Buying a pack
+calls `POST /pack/open`, folds the returned cards straight into
+`GameProfile.all_cards` (`add_purchased_cards()`) and updates the credit
+balance, then re-fetches the catalog so a now-sold-out pack's card
+reflects it immediately.
+
+A pack that's currently unavailable is normally hidden from `/pack/list`
+entirely, but an admin can opt one into still being *shown* (grayed tag
+instead of a Buy button) via two more Firestore-only fields:
+`visible: true` and/or `available_at` (an ISO date alone is enough to
+imply it -- e.g. a UCL Promo pack previewed ahead of its real on-sale
+date). `backend/main.py`'s `_pack_is_teased()` decides this; `PackData.tag_text()`
+picks what the tag says (prefers `available_at`'s date over the raw
+`unavailable_reason` when both are present). Neither field auto-flips
+`active` once the date passes -- it's a display hint, not a scheduler.
+
+`PackView.gd` / `scenes/components/PackView.tscn` is the pack visual --
+"they will have their own image like the cards but for now it can be a
+box": a flat rectangle tinted by `PackData.type_color()`, the same
+seam `PlayerCardView`/`PackData`'s own doc comments describe for real card
+art later. Unlike `PlayerCardView` (tap-anywhere, since picking a card is
+low-stakes and reversible), it uses a real labeled **Buy** button --
+spending credits deserves a deliberate tap. It also shows the pack's
+`description` (flavor text from `packEngine.PACK_DATABASE`) and a small
+**i** button in the top-right corner.
+
+### Odds disclosure popup
+
+Tapping a pack's **i** button opens `PackInfoPopup.gd` /
+`scenes/components/PackInfoPopup.tscn` -- a single instance embedded
+statically in `Shop.tscn` (like `PitchView` is in `Team.tscn`), since only
+one can ever be open at a time. It's a `TabContainer` with its tab bar
+hidden, paged with custom Prev/Next buttons across 3 pages: description,
+card tier odds, then position odds -- the per-tier/per-position
+probability disclosure App Store Guideline 3.1.1 and Google Play's loot
+box policy both require showing *before* purchase.
+
+The odds come from `PackData.rates` / `.pos_rates` (tier/position ->
+0..1 probability), which `/pack/list` now actually returns -- these have
+existed in `packEngine.PACK_DATABASE` and been synced to Firestore by
+`sync_pack_definitions.py` since packs were first added, but nothing ever
+read them back until now. Row order on both odds pages is a fixed
+client-side list (`PlayerCard.TIER_COLORS.keys()` for tiers,
+`PackInfoPopup.POSITION_CATEGORY_ORDER` for positions), never dictionary
+iteration order, since a Firestore/JSON map field's key order isn't
+guaranteed to survive the round trip. A tier/position with a 0% rate is
+left off the list entirely rather than shown as a 0% row.
+
+**Backend note**: `packEngine.PACK_DATABASE` gained a `type` field on all
+4 existing packs (Standard/Jumbo -> `standard`, UCL Promo -> `timed`, Icon
+Forward -> `special`), synced by `sync_pack_definitions.py` (now also
+syncing `type`, alongside name/price/cards_per_pack/rates/pos_rates).
+Neither `max_opens` nor `expires_at` were added to any pack's definition,
+by design -- set either directly on a pack's Firestore doc (no redeploy)
+whenever you actually want a specific pack to go live with a cap.
+
 ## Layout
 
 The pitch (70x100, naturally portrait-shaped) always renders inside a fixed
@@ -173,7 +250,7 @@ scripts/
   config/      -- FirebaseConfig.gd (gitignored) + .example.gd
 scenes/
   *.tscn       -- the 7 top-level screens
-  components/  -- PlayerCardView.tscn / PitchView.tscn (mirrors scripts/components/)
+  components/  -- PlayerCardView.tscn / PitchView.tscn / PackView.tscn (mirrors scripts/components/)
 ```
 
 A script's *class_name* (used everywhere scripts reference each other, e.g.
@@ -204,9 +281,10 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
   one deliberate deviation (a real `LineEdit` everywhere instead of
   `main.py`'s browser-vs-desktop branch, since Godot has no pygbag-style
   mobile-text-entry problem to work around).
-- `StubScene.gd` -- shared placeholder script for `scenes/Shop.tscn` /
-  `scenes/Pvp.tscn` (each just sets a different `title`), proving scene
-  navigation works before the real functionality behind each gets built.
+- `Shop.gd` / `scenes/Shop.tscn` -- pack shop (see above).
+- `StubScene.gd` -- shared placeholder script for `scenes/Pvp.tscn` (still
+  just sets a `title`), proving scene navigation works before the real
+  functionality behind it gets built.
 
 ### `components/` -- reusable visuals, not screens themselves
 
@@ -214,6 +292,11 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
   reusable card visual (see above).
 - `PitchView.gd` / `scenes/components/PitchView.tscn` -- the pitch:
   custom-drawn grass/lines + real `Button` slot markers (see above).
+- `PackView.gd` / `scenes/components/PackView.tscn` -- the pack "box"
+  visual (see above).
+- `PackInfoPopup.gd` / `scenes/components/PackInfoPopup.tscn` -- the
+  paginated odds-disclosure popup opened from a `PackView`'s **i** button
+  (see above).
 
 ### `autoload/` -- singletons (registered in `project.godot`)
 
@@ -237,6 +320,11 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
 - `PlayerCard.gd` -- client-side card data model (fields + `overall()` +
   `tier_color()`), no gameplay logic -- the backend simulates matches, this
   scene only ever displays/persists cards.
+- `PackData.gd` -- client-side pack listing data (fields including
+  `rates`/`pos_rates` odds + `type_color()`, `is_limited()`/
+  `limited_label()`, `tag_text()`), same "display-only" boundary as
+  `PlayerCard.gd` -- purchasing is a server-validated backend call, not
+  logic that lives here.
 - `ReplayReader.gd` -- binary reader for the format `packedfootball/replay.py`
   writes (`ReplayRecorder.encode()`). Keep the two in sync if the wire
   format ever changes.
