@@ -17,10 +17,13 @@ extends Control
 ## shader instead of a plain Color) once real art exists.
 ##
 ## The "Model" child (see PlayerModelView.gd) is the placeholder layered
-## character portrait -- currently a mock look derived from player_id
-## alone, not yet stored anywhere (see PlayerAppearance.gd's docstring).
+## character portrait -- a real appearance rolled server-side per card (see
+## PlayerAppearance.gd's docstring), falling back to a mock look derived
+## from player_id alone only for a card that predates that.
 
 signal pressed
+
+const OUT_OF_POSITION_COLOR := Color(1.0, 0.7, 0.3)  # same amber Team.gd uses for "unsaved changes"
 
 @onready var _background: ColorRect = %Background
 @onready var _overall_label: Label = %OverallLabel
@@ -49,6 +52,21 @@ func set_card(card: PlayerCard) -> void:
 	_name_label.text = card.display_name()
 	_tier_label.text = card.tier.capitalize()
 	_model_view.set_card(card)
+	set_out_of_position(false)  # caller re-applies via set_out_of_position() if relevant to this context
+
+
+## Tints the position label amber -- used by Team.gd wherever this card is
+## shown assigned to (or being considered for) a slot whose role differs
+## from card.position (a "similar position" substitution -- see
+## Formations.is_similar_position -- since anything else is never allowed
+## to reach this screen at all). Purely a display hint; the actual 0.9x
+## attribute penalty only ever applies inside gameEngine.py's match
+## simulation, never to what's shown here.
+func set_out_of_position(is_out_of_position: bool) -> void:
+	if is_out_of_position:
+		_position_label.add_theme_color_override("font_color", OUT_OF_POSITION_COLOR)
+	else:
+		_position_label.remove_theme_color_override("font_color")
 
 
 func set_highlighted(is_highlighted: bool) -> void:

@@ -9,6 +9,13 @@ PAGES_URL:= https://cemcoma.github.io/packedfootball/
 
 .PHONY: build-web deploy-web clean-web
 
+########
+#
+# DEPRECEATED. THIS WEB BUILD IS FOR THE PYGAME DEMO.
+# NEW VERSION IS BUILT ON GODOT.
+#
+#######
+
 # Build the pygbag web bundle into $(BUILD_WEB).
 # --width/--height must match main.py's WINDOW_SIZE or the canvas gets
 # stretched to the wrong aspect ratio in the browser.

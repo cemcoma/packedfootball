@@ -60,9 +60,16 @@ func set_formation(slots: Array, slot_assignment: Array, all_cards: Dictionary, 
 
 		var bg_color := Color(0.4, 0.4, 0.4, 0.6)
 		var label_text := role
+		# Not is_similar_position() -- an assigned card whose position isn't
+		# the slot's role is out of position regardless of *why* that's
+		# allowed; Formations.gd's compatibility table only ever gates
+		# whether an assignment is allowed in the first place (see Team.gd),
+		# not whether to show this warning.
+		var out_of_position := false
 		if player_id != "":
 			var card: PlayerCard = all_cards[player_id]
 			bg_color = PlayerCard.tier_color(card.tier)
+			out_of_position = card.position != role
 			label_text = "%s\n%s" % [role, card.display_name()]
 
 		var button := Button.new()
@@ -80,6 +87,9 @@ func set_formation(slots: Array, slot_assignment: Array, all_cards: Dictionary, 
 		if i == selected_index:
 			style.set_border_width_all(3)
 			style.border_color = Color(1.0, 0.9, 0.2)
+		elif out_of_position:
+			style.set_border_width_all(1)
+			style.border_color = Color(1.0, 0.7, 0.3)  # same amber as Team.gd's "unsaved changes"
 		button.add_theme_stylebox_override("normal", style)
 		button.add_theme_stylebox_override("hover", style)
 		button.add_theme_stylebox_override("pressed", style)

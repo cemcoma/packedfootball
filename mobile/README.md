@@ -55,18 +55,45 @@ markings share the same stretch so they still line up with the player
 slots, which are real, tappable `Button`s tinted by tier. Tap a filled slot
 to see their full stats on the right (attributes, goals/assists/matches,
 rendered via `PlayerCardView.gd` -- see below) with **Replace** (opens the
-bench grid, filtered to that slot's role, scrollable rather than
-paginated) and **Clear** buttons; tap an empty slot to jump straight to the
-picker. Switching formations carries a player over to a new slot with the
-same role automatically (e.g. a CB stays a CB moving 4-4-2 -> 3-5-2);
-anyone whose role doesn't exist in the new formation falls back to the
-bench. **Save Team** requires every slot filled; until you save, an
-"Unsaved changes" banner shows and the Save button itself turns amber --
-switching formations or swapping a player never touches Firestore by
-itself, only Save does. **Back to Menu discards any unsaved changes**,
-reverting the live formation/lineup back to what was last actually saved
-(or last loaded, if never saved this session) -- leaving without saving is
-a cancel, not a silent keep.
+bench grid, filtered to that slot's role *and any similar position*,
+scrollable rather than paginated) and **Clear** buttons; tap an empty slot
+to jump straight to the picker. Switching formations carries a player over
+to a new slot with the same role automatically (e.g. a CB stays a CB
+moving 4-4-2 -> 3-5-2); anyone whose role doesn't exist in the new
+formation falls back to the bench. **Save Team** requires every slot
+filled; until you save, an "Unsaved changes" banner shows and the Save
+button itself turns amber -- switching formations or swapping a player
+never touches Firestore by itself, only Save does. **Back to Menu discards
+any unsaved changes**, reverting the live formation/lineup back to what
+was last actually saved (or last loaded, if never saved this session) --
+leaving without saving is a cancel, not a silent keep.
+
+### Playing out of position
+
+A bench card can fill a slot whose role isn't its own exact position if the
+two are "similar" -- `Formations.POSITION_GROUPS` (mirrored in
+`packedfootball/formations.py`) defines this as named groups rather than a
+flat pairwise list: `{CDM, CM}`, `{CM, CAM}`, `{LB, WB, LM, LW}`,
+`{RB, WB, RM, RW}`, `{LW, RW, ST}`. Deliberately not transitive across
+groups (a CDM can play CM and a CM can play CAM, but a CDM can't play CAM
+directly) and not exhaustive (`GK` and `CB` are in no group, so neither
+ever substitutes for anything). Anything outside these pairs stays exactly
+as filtered-out as it always was.
+
+Godot only ever *shows* this -- the picker widens to include similar-
+position cards (tagged, position label tinted amber) alongside exact
+matches, the stats panel adds a warning line when the assigned card is out
+of position, and the pitch marker itself gets an amber border + "(OOP)"
+suffix. The actual gameplay effect -- a flat 10% cut to every non-tendency
+attribute (tendencies are behavioral weights, not skill, so scaling them
+wouldn't mean "worse") -- only ever applies inside `gameEngine.py`'s
+`game.__init__`, as a scaled copy built fresh for that one simulation; the
+stored card and everything the Team screen displays are never touched.
+`backend/main.py`'s `/match/simulate` independently re-derives and rejects
+(before writing anything -- no `games/{id}` doc, no profile write either
+way) any roster/formation pairing that isn't an exact-or-similar match for
+every slot, since the Team scene's own picker isn't something the backend
+can trust a client actually went through.
 
 ### Controls vs. hand-drawn
 
@@ -341,9 +368,10 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
 
 ### `data/` -- pure data models / format readers
 
-- `Formations.gd` -- the same 4 named formations as
-  `packedfootball/formations.py` (see the Team screen section above for the
-  one known discrepancy).
+- `Formations.gd` -- the same 4 named formations plus `POSITION_GROUPS`/
+  `is_similar_position()` as `packedfootball/formations.py` (see the Team
+  screen section above for the one known formation discrepancy and the
+  "Playing out of position" section for the similarity groups).
 - `PlayerCard.gd` -- client-side card data model (fields including the
   real `appearance` dict + `overall()` + `tier_color()`), no gameplay logic
   -- the backend simulates matches, this scene only ever displays/persists

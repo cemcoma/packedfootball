@@ -40,6 +40,7 @@ FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "packedfootball")
 
 from game_state import GameState, player_to_fields
 from gameEngine import game
+from formations import get_formation, is_similar_position
 from packEngine import PLAYER_CLASS_MAP, PackManager, generate_starter_roster
 from player.classes.midfielder import Midfielder
 
@@ -279,6 +280,26 @@ async def leaderboard_players(stat: str = "goals", limit: int = 20, uid: str = D
     }
 
 
+def _validate_formation_positions(profile: dict) -> None:
+    """Raises 400 if any roster player's card position can't legally fill
+    their assigned formation slot -- an exact match, or is_similar_position()
+    (see formations.py) at a penalty. The Team scene's own bench picker
+    already only ever allows these two cases, so reaching this only means a
+    client lied about its roster/formation pairing.
+
+    Called for both sides BEFORE anything about this match gets written to
+    Firestore (see /match/simulate) -- a rejected request leaves no trace at
+    all: no games/{id} doc created, and this never touches either user's
+    own saved roster/formation (nothing about /match/simulate writes those
+    regardless -- it only ever reads them).
+    """
+    slots = get_formation(profile["formation"])
+    for i, p in enumerate(profile["roster"]):
+        role = slots[i]["role"]
+        if p.position != role and not is_similar_position(p.position, role):
+            raise HTTPException(400, f"Player {i + 1} ({p.position}) cannot play {role} in {profile['formation']}")
+
+
 class SimulateMatchRequest(BaseModel):
     opponent_uid: str
     seed: Optional[int] = None
@@ -293,6 +314,7 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
     caller_profile = await caller_state.load_or_create_profile(default_roster=[], default_display_name=uid[:8])
     if len(caller_profile["roster"]) != 11:
         raise HTTPException(400, "Your roster must have exactly 11 players")
+    _validate_formation_positions(caller_profile)
 
     # The lobby entry is the "this uid has opted in to being challenged" gate
     # -- it also stops a typo'd/made-up opponent_uid from silently creating a
@@ -310,6 +332,7 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
     )
     if len(opponent_profile["roster"]) != 11:
         raise HTTPException(400, "Opponent roster must have exactly 11 players")
+    _validate_formation_positions(opponent_profile)
 
     seed = req.seed if req.seed is not None else secrets.randbits(63)
 

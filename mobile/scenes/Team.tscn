@@ -109,6 +109,15 @@ layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 6
 
+[node name="OutOfPositionLabel" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(1.0, 0.7, 0.3, 1)
+theme_override_font_sizes/font_size = 12
+autowrap_mode = 2
+text = ""
+
 [node name="StatsTopRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel" unique_id=1910487448]
 layout_mode = 2
 theme_override_constants/separation = 16

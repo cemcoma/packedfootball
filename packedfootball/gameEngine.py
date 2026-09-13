@@ -1,3 +1,6 @@
+import copy
+from dataclasses import asdict
+
 import numpy as np
 from typing import Final
 
@@ -11,11 +14,40 @@ base_kick_pow:Final = 20
 base_speed:Final = 10.0
 possession_radius: Final = 2.0
 final_whistle_delay: Final = 600
+OUT_OF_POSITION_PENALTY: Final = 0.9
 
 # formations.py imports PITCH_WIDTH/PITCH_HEIGHT from this module, so this
 # import must come after they're defined above to avoid a circular-import
 # failure (formations.py is mid-import of a still-partial gameEngine module).
-from formations import get_formation
+from formations import get_formation, is_similar_position
+
+
+def _apply_out_of_position_penalty(p):
+    """Returns a shallow copy of p with every non-tendency Attributes field
+    scaled by OUT_OF_POSITION_PENALTY (and .overall recomputed to match) --
+    used only for a player playing a formation slot that differs from, but
+    is_similar_position() to, their own card position. The original player
+    object -- and its Attributes instance -- is never mutated: this is a
+    per-match sim detail only, never touching what's persisted or shown on
+    the card (see game.__init__, the only caller).
+
+    Imports player.player locally rather than at module level: player.player
+    itself imports PITCH_WIDTH/PITCH_HEIGHT from this module, so a top-level
+    import here would be a genuine two-way cycle (unlike formations.py's,
+    which only ever needs 2 constants already defined before it's reached).
+    Deferred to call time, well after both modules have fully loaded.
+    """
+    from player.player import Attributes, TENDENCY_FIELDS
+
+    original_fields = asdict(p.attributes)
+    scaled_fields = {
+        field: (value if field in TENDENCY_FIELDS else round(value * OUT_OF_POSITION_PENALTY))
+        for field, value in original_fields.items()
+    }
+    penalized = copy.copy(p)
+    penalized.attributes = Attributes(**scaled_fields)
+    penalized.overall = penalized._calculate_overall()
+    return penalized
 
 
 def _combine_formations(formation_home: str, formation_away: str) -> dict:
@@ -45,7 +77,19 @@ class game:
         self.formation_away = formation_away
         self.formation = _combine_formations(formation_home, formation_away)
 
-        self.all_players = self.teamA.players + self.teamB.players
+        # A player whose card position differs from their assigned slot's
+        # role only ever reaches here already validated as "similar enough"
+        # -- backend/main.py's /match/simulate rejects anything else before
+        # a game() is even constructed (packedfootball/main.py's own local
+        # play never lets this happen either, since it only ever builds a
+        # roster that matches its formation 1:1). So this only ever
+        # penalizes a legitimate similar-position substitution, never an
+        # arbitrary mismatch.
+        raw_players = self.teamA.players + self.teamB.players
+        self.all_players = [
+            p if p.position == self.formation[i]["role"] else _apply_out_of_position_penalty(p)
+            for i, p in enumerate(raw_players)
+        ]
 
         self.positions = np.zeros((22,2),float) # (x,y) pairs
         self.velocity = np.zeros((22,2),float) # (vx,vy) pairs

@@ -46,6 +46,7 @@ var _formation_buttons: Dictionary = {}  # name -> Button
 @onready var _bench_grid: GridContainer = %BenchGrid
 @onready var _cancel_button: Button = %CancelButton
 @onready var _stats_panel: VBoxContainer = %StatsPanel
+@onready var _out_of_position_label: Label = %OutOfPositionLabel
 @onready var _stats_card_view: PlayerCardView = %StatsCard
 @onready var _stats_extra_country: Label = %StatsExtraCountry
 @onready var _stats_extra_gam: Label = %StatsExtraGam #goals assists matches
@@ -116,7 +117,7 @@ func _refresh_right_panel() -> void:
 		var slots := Formations.get_formation(GameProfile.formation)
 		var role: String = slots[selected_slot]["role"]
 		_panel_header.text = "Pick a %s:" % role
-		_populate_bench_grid(_eligible_bench_ids(role))
+		_populate_bench_grid(_eligible_bench_ids(role), role)
 	else:
 		_panel_header.text = "Bench (tap a slot to assign)"
 		_populate_bench_grid(_sorted_bench_ids(GameProfile.bench_ids()))
@@ -128,16 +129,27 @@ func _sorted_bench_ids(ids: Array) -> Array:
 	return sorted_ids
 
 
+## Exact-position matches first, then similar-position ones (see
+## Formations.is_similar_position) -- each group sorted best-overall-first
+## like before. Anything neither exact nor similar for this role is left
+## out entirely, same as today.
 func _eligible_bench_ids(role: String) -> Array:
-	var matching: Array = []
+	var exact: Array = []
+	var similar: Array = []
 	for player_id in GameProfile.bench_ids():
 		var card: PlayerCard = GameProfile.all_cards[player_id]
 		if card.position == role:
-			matching.append(player_id)
-	return _sorted_bench_ids(matching)
+			exact.append(player_id)
+		elif Formations.is_similar_position(card.position, role):
+			similar.append(player_id)
+	return _sorted_bench_ids(exact) + _sorted_bench_ids(similar)
 
 
-func _populate_bench_grid(ids: Array) -> void:
+## `role` is only passed when populating the picker (empty string in the
+## plain bench-browse mode) -- it's what set_out_of_position() compares
+## each card's own position against, so browsing the bench (no slot/role
+## in play at all) never tags anything.
+func _populate_bench_grid(ids: Array, role: String = "") -> void:
 	# This can run from inside a card view's own "pressed" signal (tapping a
 	# bench card -> _on_card_view_pressed -> _refresh_all() -> here), so the
 	# old views can't be torn down with plain free() -- that's only safe once
@@ -159,6 +171,8 @@ func _populate_bench_grid(ids: Array) -> void:
 		var view: PlayerCardView = PLAYER_CARD_SCENE.instantiate()
 		_bench_grid.add_child(view)
 		view.set_card(card)
+		if role != "":
+			view.set_out_of_position(card.position != role)
 		view.pressed.connect(_on_card_view_pressed.bind(player_id))
 
 
@@ -166,6 +180,14 @@ func _populate_stats_panel() -> void:
 	var player_id: String = GameProfile.slot_assignment[selected_slot]
 	var card: PlayerCard = GameProfile.all_cards[player_id]
 	_stats_card_view.set_card(card)
+
+	var slots := Formations.get_formation(GameProfile.formation)
+	var role: String = slots[selected_slot]["role"]
+	var out_of_position: bool = card.position != role
+	_stats_card_view.set_out_of_position(out_of_position)
+	_out_of_position_label.visible = out_of_position
+	if out_of_position:
+		_out_of_position_label.text = "Out of position: a %s playing %s -- attributes reduced 10%% in matches." % [card.position, role]
 
 	for child in _stats_attr_grid.get_children():
 		_stats_attr_grid.remove_child(child)
@@ -262,8 +284,8 @@ func _on_card_view_pressed(player_id: String) -> void:
 	var slots := Formations.get_formation(GameProfile.formation)
 	var role: String = slots[selected_slot]["role"]
 	var card: PlayerCard = GameProfile.all_cards[player_id]
-	if card.position != role:
-		return  # shouldn't happen (list is already role-filtered), but stay safe
+	if card.position != role and not Formations.is_similar_position(card.position, role):
+		return  # shouldn't happen (list is already filtered to exact-or-similar), but stay safe
 	GameProfile.slot_assignment[selected_slot] = player_id
 	selected_slot = -1
 	picker_mode = false
