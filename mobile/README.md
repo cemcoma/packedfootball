@@ -223,19 +223,45 @@ can trust a client actually went through.
 
 ### Controls vs. hand-drawn
 
-Menu/MatchPlayback stayed hand-drawn (`_draw()` + `_unhandled_input()`)
-because they're a handful of static buttons -- cheap either way. Team
-outgrew that: a formation picker, a scrollable card grid, a stats panel,
-several conditional action buttons. Real Control nodes get all of that
-mostly for free (layout/anchoring, hover/press feedback, actual scrolling
-instead of hand-rolled pagination, no manual `Rect2.has_point()` hit-testing
-scattered through input handling) -- see `Team.gd`, `PitchView.gd`, and
-`PlayerCardView.gd`. The one thing that stays custom-drawn is the pitch's
-grass and line markings (still inside `PitchView.gd`'s own `_draw()`) --
-that's inherently a custom visual, not something Controls model well,
-same as `MatchPlayback`'s pitch. Shop/PVP/Profile should follow this same
-pattern once they're built out, rather than the original hand-drawn stub
-style.
+Every real screen is real Control nodes now (`Auth`, `Menu`, `Play`, `Shop`,
+`Team`, `Profile`) -- layout/anchoring, hover/press feedback, actual
+scrolling instead of hand-rolled pagination, no manual `Rect2.has_point()`
+hit-testing scattered through input handling, see `Team.gd`, `PitchView.gd`,
+and `PlayerCardView.gd` for the more involved cases. `Menu.gd` was the last
+holdout (fixed pixel `Rect2`s hand-tested in `_unhandled_input()`) --
+rebuilt the same way as everything else once it stopped being a
+proof-that-scene-switching-works throwaway.
+
+Two things stay genuinely hand-drawn, for two different reasons: `Pvp.tscn`
+(`StubScene.gd`) is just not built yet -- once PVP gets real functionality
+it should get real Controls at the same time, same as Shop/Team/Profile
+already did. `MatchPlayback` (and `PitchView.gd`'s pitch markings) stay
+custom-drawn permanently -- a rendered pitch (grass, lines, a moving ball
+and players under a panning/zooming camera) is inherently a custom visual,
+not something Controls model well.
+
+### Background
+
+`scenes/components/BackgroundLayer.tscn` is a single reusable `TextureRect`
+(cover-fit via `expand_mode`/`stretch_mode`, `mouse_filter` set to ignore so
+it never eats clicks meant for whatever's drawn over it) currently pointed
+at one placeholder image (`sprites/backgrounds/title_background.jpg`) for
+every screen, instanced as the first child of every real screen's root
+(`Auth`, `Menu`, `Play`, `Shop`, `Team`, `Profile`, and the `Pvp`/`Tournament`
+stubs) so it paints behind everything else in that scene. Same image
+everywhere for now -- swapping in a real per-page background later is just
+changing that one instance's `texture` property in the editor, no script or
+layout changes needed. `MatchPlayback` deliberately has no instance of it:
+its own `_draw()` already paints a full-canvas pitch background every
+frame (see "Layout" below), so a `BackgroundLayer` behind it would never
+actually be visible.
+
+`Pvp.tscn`/`Tournament.tscn` are the one place `BackgroundLayer` needs
+`show_behind_parent = true` set on the instance -- `StubScene.gd`'s root
+node draws its own title/back-button directly (`_draw()`), and Godot
+paints a node's children after (on top of) the node's own drawing by
+default, so without that flag the background would cover the stub's text
+instead of sitting behind it.
 
 Team.tscn is deliberately a thin shell (just the root `Control` with the
 script attached) -- the whole node tree is built procedurally in
@@ -244,6 +270,22 @@ there's no Godot editor available in the environment this was built in to
 place nodes visually; procedural construction is just as "real Controls"
 to the engine, and much less error-prone to write blind than a complex
 `.tscn` by hand.
+
+### Button theme
+
+`theme/AppTheme.tres`, set as the project's default theme
+(`project.godot`'s `[gui] theme/custom`), so it applies to every `Button`
+everywhere with no per-scene wiring. Explicit opaque `StyleBoxFlat`s for
+`normal`/`hover`/`pressed`/`hover_pressed` (Godot's own built-in default
+theme doesn't guarantee full alpha across every button state) -- this
+barely showed against a plain clear-color background, but became obvious
+once the photo `BackgroundLayer` (above) sat behind every button: `hover`/
+`pressed` step up to a visibly lighter fill so a press still reads as
+tactile feedback rather than just "more opaque." `focus` is outline-only
+(`draw_center = false`) so keyboard/controller navigation gets a visible
+ring without another filled box competing with `normal`. `disabled` is the
+one state that's *supposed* to look washed out, so it's the one still
+using a translucent `bg_color` on purpose.
 
 ### PlayerCardView.gd -- the reusable "card"
 
@@ -440,10 +482,19 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
 ### `screens/` -- one script per scene
 
 - `Menu.gd` / `scenes/Menu.tscn` -- navigation hub.
-- `Auth.gd` / `scenes/Auth.tscn` -- sign-in/register/guest entry scene (the
-  one scene using real Control nodes -- `LineEdit`/`Button` -- instead of
-  the hand-drawn style MatchPlayback/Menu use, since native text input is
-  exactly what benefits from it).
+- `Auth.gd` / `scenes/Auth.tscn` -- sign-in/register/guest entry scene, real
+  `LineEdit`/`Button` nodes (see "Controls vs. hand-drawn" above) --
+  particularly important here since native text input is exactly what
+  benefits from it. Two separate panels toggled in place (`SignInPanel`/
+  `RegisterPanel`, one `StatusLabel` shared between them): sign-in is just
+  email/password; register is a genuinely different form (manager name in
+  addition to email/password), since a brand new manager needs a name
+  before their squad/leaderboard entry means anything. The chosen name is
+  applied via `GameProfile.set_display_name()` *after* `_go_to_menu()`'s
+  `GameProfile.load_all()` has run the backend's `/account/bootstrap` --
+  writing it any earlier would make bootstrap see an already-existing
+  `users/{uid}` doc and skip starter-roster creation entirely (see
+  `bootstrap_account`'s own docstring in `backend/main.py`).
 - `MatchPlayback.gd` / `scenes/Match.tscn` -- loads a replay and renders it
   every frame: Hermite interpolation between the sparse recorded samples
   using the recorded velocity as the tangent (not a naive straight-line

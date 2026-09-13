@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://c63elogt0cm5d"]
 
 [ext_resource type="Script" uid="uid://ce0gqgfdbq3ou" path="res://scripts/screens/Play.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 
 [node name="Play" type="Control" unique_id=1553461410]
 layout_mode = 3
@@ -8,6 +9,11 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("1")
+
+[node name="Background" parent="." instance=ExtResource("2")]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
 
 [node name="Margin" type="MarginContainer" parent="." unique_id=1416612069]
 layout_mode = 1

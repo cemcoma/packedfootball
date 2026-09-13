@@ -1,8 +1,15 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/StubScene.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 
 [node name="Tournament" type="Node2D"]
 script = ExtResource("1")
 title = "Tournament"
 back_scene = "res://scenes/Play.tscn"
+
+[node name="Background" parent="." instance=ExtResource("2")]
+show_behind_parent = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0

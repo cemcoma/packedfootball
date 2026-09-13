@@ -1,43 +1,38 @@
-extends Node2D
+extends Control
 
-## Main navigation hub. Proves scene switching works end to end; each button
-## opens either the real match playback scaffold or a placeholder stub scene
-## until the real functionality behind it gets built.
+## Main navigation hub. Each button opens either a real feature scene or a
+## placeholder stub scene until the real functionality behind it gets built.
 
-var buttons := [
-	{"label": "Play", "scene": "res://scenes/Play.tscn", "rect": Rect2(540, 150, 220, 50)},
-	{"label": "Shop", "scene": "res://scenes/Shop.tscn", "rect": Rect2(540, 220, 220, 50)},
-	{"label": "Team", "scene": "res://scenes/Team.tscn", "rect": Rect2(540, 290, 220, 50)},
-	{"label": "PVP", "scene": "res://scenes/Pvp.tscn", "rect": Rect2(540, 360, 220, 50)},
-	{"label": "Profile", "scene": "res://scenes/Profile.tscn", "rect": Rect2(540, 430, 220, 50)},
-]
+@onready var _play_button: Button = %PlayButton
+@onready var _shop_button: Button = %ShopButton
+@onready var _team_button: Button = %TeamButton
+@onready var _pvp_button: Button = %PvpButton
+@onready var _profile_button: Button = %ProfileButton
 
 
 func _ready() -> void:
-	queue_redraw()
+	_play_button.pressed.connect(_on_play_pressed)
+	_shop_button.pressed.connect(_on_shop_pressed)
+	_team_button.pressed.connect(_on_team_pressed)
+	_pvp_button.pressed.connect(_on_pvp_pressed)
+	_profile_button.pressed.connect(_on_profile_pressed)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
-		return
-	var pos: Vector2 = make_input_local(event).position
-	for b in buttons:
-		var rect: Rect2 = b["rect"]
-		if rect.has_point(pos):
-			get_tree().change_scene_to_file(b["scene"])
-			return
+func _on_play_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/Play.tscn")
 
 
-func _draw() -> void:
-	var font: Font = ThemeDB.fallback_font
-	var font_size: int = ThemeDB.fallback_font_size
+func _on_shop_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/Shop.tscn")
 
-	draw_string(font, Vector2(540, 100), "Packed Football", HORIZONTAL_ALIGNMENT_LEFT, 500, int(font_size * 2.5), Color.WHITE)
 
-	for b in buttons:
-		var rect: Rect2 = b["rect"]
-		draw_rect(rect, Color(0.15, 0.15, 0.18, 0.9))
-		draw_rect(rect, Color(0.8, 0.8, 0.8), false, 2.0)
-		draw_string(
-			font, rect.position + Vector2(14, rect.size.y * 0.65), b["label"], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 20, font_size, Color.WHITE
-		)
+func _on_team_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/Team.tscn")
+
+
+func _on_pvp_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/Pvp.tscn")
+
+
+func _on_profile_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/Profile.tscn")

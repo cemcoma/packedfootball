@@ -16,6 +16,8 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 color = Color(0.5, 0.5, 0.5, 1)
 
@@ -24,6 +26,8 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 theme_override_constants/margin_left = 8
 theme_override_constants/margin_top = 8
@@ -34,12 +38,27 @@ theme_override_constants/margin_bottom = 8
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="TypeLabel" type="Label" parent="Margin/Content" unique_id=2082580635]
+[node name="HBoxContainer" type="HBoxContainer" parent="Margin/Content" unique_id=2111791969]
+layout_mode = 2
+
+[node name="Control" type="Control" parent="Margin/Content/HBoxContainer" unique_id=1201206656]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+
+[node name="TypeLabel" type="Label" parent="Margin/Content/HBoxContainer" unique_id=2082580635]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 11
 text = "STANDARD"
 horizontal_alignment = 1
+
+[node name="InfoButton" type="Button" parent="Margin/Content/HBoxContainer" unique_id=1670176769]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 10)
+layout_mode = 2
+theme_override_font_sizes/font_size = 10
+text = "i"
 
 [node name="NameLabel" type="Label" parent="Margin/Content" unique_id=1644423619]
 unique_name_in_owner = true
@@ -85,16 +104,3 @@ autowrap_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 text = "Buy"
-
-[node name="InfoButton" type="Button" parent="." unique_id=1670176769]
-unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -28.0
-offset_top = 4.0
-offset_right = -4.0
-offset_bottom = 28.0
-theme_override_font_sizes/font_size = 14
-text = "i"

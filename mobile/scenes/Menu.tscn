@@ -1,6 +1,77 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://bdsubr80cg1he"]
 
-[ext_resource type="Script" path="res://scripts/screens/Menu.gd" id="1"]
+[ext_resource type="Script" uid="uid://bvak6tvlws74j" path="res://scripts/screens/Menu.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 
-[node name="Menu" type="Node2D"]
+[node name="Menu" type="Control" unique_id=2071876182]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1")
+
+[node name="Background" parent="." unique_id=1151852962 instance=ExtResource("2")]
+layout_mode = 1
+
+[node name="CenterContainer" type="CenterContainer" parent="." unique_id=1563356626]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer" unique_id=331694469]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TitleLabel" type="Label" parent="CenterContainer/VBoxContainer" unique_id=546011131]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 32
+text = "Packed Football"
+horizontal_alignment = 1
+
+[node name="TitleSpacer" type="Control" parent="CenterContainer/VBoxContainer" unique_id=1875022012]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+
+[node name="PlayButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=1258583257]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Play"
+
+[node name="ShopButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=53832653]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Shop"
+
+[node name="TeamButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=1876668730]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Team"
+
+[node name="PvpButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=731302606]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "PVP"
+
+[node name="ProfileButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=2136365341]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Profile"
