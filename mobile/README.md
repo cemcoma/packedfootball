@@ -1,10 +1,11 @@
 # Packed Football - Mobile (Godot)
 
-Landscape-first client: real email/anonymous auth, a Menu hub, a real Team
-squad-management screen, a real Quick Match mode (backend-simulated, real
-opponent or a bot fallback), placeholder Shop-currency/Tournament/Profile
-pieces, and a match replay player. See the plan this came from for the
-fuller picture.
+Landscape-first client: real email/anonymous auth, a Menu hub (with an
+account-details panel), a real Team squad-management screen, a real Quick
+Match mode (backend-simulated, real opponent or a bot fallback), a
+Settings screen (rename works; language/color theme are stubs),
+placeholder Shop-currency/Tournament pieces, and a match replay player.
+See the plan this came from for the fuller picture.
 
 ## Try it
 
@@ -26,6 +27,40 @@ fuller picture.
    guest) then the Menu; "Play" opens the mode-select hub -- Quick Match
    actually simulates a real match against a real/bot opponent backend-side;
    "Team" manages your actual squad against your real Firestore data.
+
+## Menu screen
+
+`AccountPanel` (left side, `Menu.tscn`) shows the signed-in manager's own
+account details at a glance -- display name, squad overall, wins/draws/
+losses -- populated fresh in `Menu.gd`'s `_ready()` straight off the
+already-loaded `GameProfile` cache (no extra Firestore read; squad data is
+fetched once at sign-in, see `Auth.gd`'s `_go_to_menu()`). These are the
+same fields the old Profile screen used to show as its whole reason to
+exist -- that screen is **Settings** now (see below), so this is the only
+place they're glanceable without a screen visit. The nav button column
+stays independently centered across the full screen (unchanged) rather
+than being squeezed into the remaining space next to the panel -- at this
+project's fixed 960-wide viewport there's a comfortable gap between them
+either way, so a full `HBoxContainer` restructure wasn't needed.
+
+**Settings** (`Settings.tscn`/`.gd`, was "Profile") -- rename (unchanged
+behavior: only writes if the trimmed name is non-empty and actually
+changed), plus **Language** and **Color Theme** as explicit stubs: disabled
+`OptionButton`s with one placeholder entry each ("English" / "Default")
+and a "Coming soon." hint underneath, no functionality behind either yet.
+Log Out / Switch Account stayed here rather than moving to `AccountPanel`
+-- it's an account-management *action*, not a detail to glance at, so it
+fits a settings screen better than a HUD panel.
+
+`theme/AppTheme.tres` gained a project-wide default `Panel` style
+(`Panel/styles/panel`, same opaque dark/bordered look the "Button theme"
+section above already established for buttons) specifically so
+`AccountPanel` didn't need its own one-off `StyleBoxFlat` -- and
+`Match.tscn`'s `ScoreboardPanel`/`TimerPanel`, which previously each had
+their own explicit override with identical values, now just fall through
+to this same default instead (a node-level `theme_override_styles/panel`
+still wins over the project theme wherever one actually is set, so nothing
+depends on this ordering -- it's a de-duplication, not a behavior change).
 
 ## Play / Quick Match
 
@@ -82,7 +117,21 @@ position still land on the real card, while the temporary scaled
 attributes never do (verified directly: mutating the copy's stats updates
 the original; the two `.attributes` stay independent).
 
-**`MatchSession.gd`** (new autoload) is how the just-fetched result reaches
+**Finding a match shows a popup, not just a status label.** `Play.gd`'s
+`MatchmakingPopup` (a scrim + a small rotating-arc `LoadingSpinner` --
+`scenes/components/LoadingSpinner.tscn`, hand-drawn like everything else
+Godot has no built-in Control for -- + a status label) covers the screen
+for the whole `/match/quick` round trip. That round trip is genuinely one
+request: the backend picks the opponent, simulates the match, and persists
+everything before it replies, so there's no real "phase" for the client
+to observe -- the "Finding an opponent..." -> "Simulating match..." switch
+partway through is a scripted narrative on a timer (`get_tree().create_timer
+(0.6)`), not real server progress, purely so the wait reads as "working on
+it" rather than a frozen button. A guard flag (`_matchmaking_active`)
+stops that timer's callback from touching the status label if the request
+already finished (success or failure) before it fires.
+
+**`MatchSession.gd`** (autoload) is how the just-fetched result reaches
 `MatchPlayback.gd` -- Godot's `change_scene_to_file()` can't carry data
 itself, so this is the same "shared blackboard" idea `GameProfile` already
 is for squad state, just for one in-flight match result. `MatchPlayback.gd`
@@ -92,6 +141,14 @@ a `user://` scratch file and reuses `load_from_file()`'s proven parser
 rather than a second, subtly-different in-memory one); false falls back to
 the bundled local demo replay exactly as before, so that offline path
 (no backend, no signed-in account) still works unchanged.
+
+`MatchPlayback.gd` deliberately does NOT clear `MatchSession` once it's
+read it, unlike every other consumed-once autoload field in this project --
+`MatchResult.tscn` (see "Match screen" below) still needs `score`/
+`credits_earned`/`opponent_display_name`/`opponent_is_bot` off of it after
+full time, so clearing happens there instead once it's actually done
+reading, or immediately in `MatchPlayback.gd`'s own pause-menu "Exit to
+Main Menu" if the player leaves before the match ever gets there.
 
 **`lobby` is gone entirely -- backend and Godot both.** It used to gate
 opponent discovery for both match endpoints through a `lobby/{uid}` "opted
@@ -152,19 +209,154 @@ Quick Match's fully-random pool -- not built yet.
 Match candidate (`roster_player_ids` length == 11) -- a general "how many
 accounts, how complete are their rosters" check.
 
-## Match screen controls
+## Match screen
 
-- **Start Match** -- resets and plays from kickoff.
-- **Jump to Halftime** / **Jump to Full Time** -- skip straight to just
-  before that point (replaying every earlier event first, so the scoreboard
-  is still correct), then let the normal pause/banner trigger naturally.
-- **Camera: Zoom / Full Pitch** -- toggles between a ball-following zoomed
-  camera and the whole pitch fit to the pitch box, matching
-  `gameEngine.py`'s own `render()` camera modes.
-- **Speed: 1x/2x/4x** -- cycles playback speed. Scales everything
-  time-based uniformly (match clock, halftime pause, event flashes/banners),
-  not just the match itself.
-- **Back to Menu** -- returns to the hub.
+`Match.tscn`'s root is a plain `Control` now, not the whole screen's
+script owner -- `MatchPlayback.gd` lives on `PitchCanvas`, a `Control`
+child with `clip_contents = true`, centered horizontally by a
+`CenterContainer` parent. Everything else -- scoreboard, timer, pause/
+camera/speed buttons, the pre-match blackout, the pause overlay -- is real
+Control nodes, siblings of `PitchCanvas` under the same root, overlaid on
+top of the pitch like a HUD rather than living in a separate side panel
+the way the old cramped 350x500-in-a-960 layout did.
+
+**`PitchCanvas`'s size now depends on camera mode**, via
+`_update_pitch_canvas_size()` (called on `_ready()` and every camera
+toggle): "full" mode keeps the old fixed `FULL_MODE_BOX_SIZE` (378x540,
+the pitch's own 70:100 aspect ratio, so the whole pitch fits with zero
+letterboxing); "zoom" mode resizes it to `get_viewport_rect().size` --
+the whole screen -- since a cropped, ball-following view has no aspect
+ratio of its own to preserve, and filling the screen just means more of
+that crop is visible at once. `_compute_camera`, the grass fill, and the
+banner text all read this box's *live* `size` now rather than a fixed
+constant, since it can change out from under them.
+
+Filling the screen in "zoom" mode exposed a real bug in the existing
+horizontal camera-follow math, not just a resize: `visible_x_span`
+(how much pitch width the view covers) scales with the box's own aspect
+ratio, and at full screen width that span (~80 units) exceeds the pitch's
+own width (70 units) for the first time -- the old
+`clampf(ball_x - span/2, 0, PITCH_WIDTH - span)` collapses to a constant
+0 the moment `span > PITCH_WIDTH` (a negative upper clamp bound), which
+pins the pitch flush to the screen's *left* edge with all the leftover
+width dumped on the right, ignoring the ball entirely, rather than
+centering it. `_compute_camera` special-cases `visible_x_span >=
+PITCH_WIDTH` now: center on the pitch's own midline instead of clamping,
+so the pitch reads as centered (a bit of grass past both touchlines) at
+full screen width, while ball-following panning still works exactly as
+before whenever the span *does* fit (e.g. "full" mode's narrower box).
+
+**Two bugs this replaced, not just moved:**
+- Player index labels and the ball-carrier's name used to scale their font
+  size with the camera's current zoom factor (`scale / 5.0`) -- meaning
+  switching from "Full Pitch" to "Zoom" mode (which roughly doubles
+  `scale`) roughly doubled the text size too. Both now draw at a fixed
+  screen-space size regardless of camera mode, the way UI text should.
+- Pitch lines (halfway line, penalty boxes, corner arcs, goal netting) had
+  no clipping at all -- a line only partly inside the visible crop (mostly
+  in "Zoom" mode, which only shows a sub-region of the pitch) still drew
+  its *entire* length, spilling out past where the pitch box visually
+  ends. `clip_contents = true` on `PitchCanvas` fixes this at the engine
+  level for everything drawn there (lines, players, the ball, the goal/
+  banner text) -- Godot clips a Control's own `_draw()` output to its rect,
+  not just its children's, so this needed no manual per-shape clipping.
+  The old per-player "skip if its center point is outside the box" check
+  is gone too, superseded by the same real clipping (and looks better: a
+  player dot right at the crop edge now shows a partial circle instead of
+  vanishing outright).
+
+**Scoreboard** (top-left, `ScoreboardPanel`) is a real opaque `Panel`
+(`StyleBoxFlat`, alpha 1 -- same "actually opaque" fix as the button theme
+below) showing each team's name with a small color swatch underneath it,
+and the score between them. Colors come from `MatchPlayback.gd`'s
+`_team_color(team_index)`, which checks `roster["home_color"]`/
+`roster["away_color"]` (an `[r, g, b]` array) and falls back to
+`DEFAULT_TEAM_COLORS` (blue/red) if absent -- nothing populates that field
+yet (today's blue-for-Team-A/red-for-Team-B is always the fallback), but
+both the scoreboard swatches and the on-pitch player dots already read
+from this one place, so wiring in actual user-chosen shirt colors later is
+just populating that field, no rendering changes needed.
+
+**Timer** (top-center, `TimerBar`) is a `CenterContainer` spanning the full
+width so its small opaque `TimerPanel` centers regardless of screen width,
+rather than being hand-positioned.
+
+**Camera toggle** moved to the bottom-right (was a stacked side-panel
+button); **Pause** is new, top-right, with **Speed** (`SpeedButton`,
+cycling 1x -> 2x -> 4x -> 1x) right beside it. Speed scales everything
+time-based uniformly (`effective_delta = delta * speed_options[speed_index]`
+-- match clock, halftime pause, event flashes/banners), not just the match
+itself, same as before the redesign.
+
+**Pre-match**: the screen starts fully blacked out (`PreMatchOverlay`, an
+opaque `ColorRect` + team names + a **Start Match** button) rather than
+showing a static kickoff frame with a small button among several others.
+Pressing Start hides it and begins playback exactly as before.
+
+**Pause** (top-right button, toggles): freezes `_process()` entirely
+(playback tick, flash timers, banners all hold) and shows a menu with
+**Skip to Halftime**, **Skip to Full Time**, and **Exit to Main Menu** --
+tapping Pause again (its label flips to "Resume") closes the menu and
+un-freezes. Deliberately no scrub-backward control: **Skip to Halftime**
+disables itself once playback has already passed halftime, since jumping
+there from later in the match would rewind the scoreboard (`_jump_to_event`
+replays every event from kickoff up to the target tick to arrive at a
+correct score, which is exactly rewinding if the target is in the past).
+**Exit to Main Menu** is the only way to leave mid-match now -- there's no
+standalone "Back" button during play, on purpose.
+
+Nothing about pausing or exiting early affects the actual result: Quick
+Match's entire simulation already ran and was persisted server-side before
+`Match.tscn` even loaded (see "Play / Quick Match" above) -- this screen
+only ever plays back a replay of an already-decided outcome.
+
+**Full time -> Match Result.** For a real match (not the bundled demo
+replay), reaching FULL TIME -- naturally or via **Skip to Full Time** --
+waits for the usual "FULL TIME" banner to finish, then navigates to
+`MatchResult.tscn`. The demo replay path shows the same banner and simply
+stays there (no account, no result to show, `Exit to Main Menu` still
+works via pause).
+
+## Match Result screen
+
+`MatchResult.tscn`/`.gd` -- Won/Drew/Lost (colored green/amber/red),
+final score, and credits earned, then **Continue** back to Menu. Reads
+`MatchSession.score`/`credits_earned`/`opponent_display_name`/
+`opponent_is_bot` (still sitting there since `MatchPlayback.gd` didn't
+clear it -- see above) and clears it itself once read. Purely a recap
+screen -- nothing here writes anything; the win/loss/credits were already
+final and persisted by the backend before Quick Match's response ever
+reached `Play.gd`.
+
+### Player card stats after a match
+
+**Continue** re-fetches the squad (`await GameProfile.load_all()`) before
+navigating to Menu, showing a `LoadingPopup` ("Loading players...") while
+it does. Fixes a real desync: `/match/quick` already persists each played
+player's updated `goals`/`assists`/`matches_played` server-side (see
+`backend/main.py`'s `_persist_player_stats`), but `GameProfile.all_cards`
+was only ever populated once, at sign-in (`Auth.gd`'s `_go_to_menu()` ->
+`GameProfile.load_all()`) -- nothing had refreshed it since, so `Team`'s
+own card views (via `PlayerCardView.gd`) kept showing whatever a player's
+stats were *before* the match, until a full app restart happened to
+reload everything fresh. The same fix, for the same reason, lives in
+`MatchPlayback.gd`'s pause-menu **Exit to Main Menu** too -- Quick Match's
+entire simulate-and-persist round trip already finished before playback
+ever starts (see "Play / Quick Match" above), so backing out mid-replay
+via pause has the exact same stale-cache problem as watching it through to
+Continue; skipped entirely for the bundled demo replay (`_is_real_match`
+false), since nothing backend-side happened for that path.
+
+`scenes/components/LoadingPopup.tscn` (+ `LoadingPopup.gd`) is a small
+extraction from what was `Play.gd`'s own inline `MatchmakingPopup` markup
+(scrim + `LoadingSpinner` + a status label) -- now a shared component
+(`set_status(text)` + the inherited `visible`) used in all three places a
+screen needs to say "working on it": `Play.gd`'s matchmaking, and these
+two squad-refresh spots. `Play.gd`'s own staged "Finding an opponent..."
+-> "Simulating match..." narrative-over-a-timer logic stayed exactly
+where it was (that's specific to how one round trip is narrated, not
+something the popup component itself needs to know about) -- only the
+markup and the status-label plumbing moved.
 
 ## Team screen
 
@@ -224,7 +416,7 @@ can trust a client actually went through.
 ### Controls vs. hand-drawn
 
 Every real screen is real Control nodes now (`Auth`, `Menu`, `Play`, `Shop`,
-`Team`, `Profile`) -- layout/anchoring, hover/press feedback, actual
+`Team`, `Settings`) -- layout/anchoring, hover/press feedback, actual
 scrolling instead of hand-rolled pagination, no manual `Rect2.has_point()`
 hit-testing scattered through input handling, see `Team.gd`, `PitchView.gd`,
 and `PlayerCardView.gd` for the more involved cases. `Menu.gd` was the last
@@ -234,11 +426,16 @@ proof-that-scene-switching-works throwaway.
 
 Two things stay genuinely hand-drawn, for two different reasons: `Pvp.tscn`
 (`StubScene.gd`) is just not built yet -- once PVP gets real functionality
-it should get real Controls at the same time, same as Shop/Team/Profile
-already did. `MatchPlayback` (and `PitchView.gd`'s pitch markings) stay
-custom-drawn permanently -- a rendered pitch (grass, lines, a moving ball
-and players under a panning/zooming camera) is inherently a custom visual,
-not something Controls model well.
+it should get real Controls at the same time, same as Shop/Team/Settings
+already did. The pitch itself (`MatchPlayback.gd`'s `PitchCanvas`, and
+`PitchView.gd`'s pitch markings) stays custom-drawn permanently -- a
+rendered pitch (grass, lines, a moving ball and players under a panning/
+zooming camera) is inherently a custom visual, not something Controls
+model well. Everything *around* that pitch in `Match.tscn` -- scoreboard,
+timer, pause/camera buttons, the pre-match and pause overlays -- is real
+Controls, same as everywhere else (see "Match screen" below); the
+hand-drawn part is scoped to the pitch rendering specifically, not the
+whole screen the way it used to be.
 
 ### Background
 
@@ -247,14 +444,18 @@ not something Controls model well.
 it never eats clicks meant for whatever's drawn over it) currently pointed
 at one placeholder image (`sprites/backgrounds/title_background.jpg`) for
 every screen, instanced as the first child of every real screen's root
-(`Auth`, `Menu`, `Play`, `Shop`, `Team`, `Profile`, and the `Pvp`/`Tournament`
-stubs) so it paints behind everything else in that scene. Same image
-everywhere for now -- swapping in a real per-page background later is just
-changing that one instance's `texture` property in the editor, no script or
-layout changes needed. `MatchPlayback` deliberately has no instance of it:
-its own `_draw()` already paints a full-canvas pitch background every
-frame (see "Layout" below), so a `BackgroundLayer` behind it would never
-actually be visible.
+(`Auth`, `Menu`, `Play`, `Shop`, `Team`, `Profile`, `Match`, and the
+`Pvp`/`Tournament` stubs) so it paints behind everything else in that
+scene. Same image everywhere for now -- swapping in a real per-page
+background later is just changing that one instance's `texture` property
+in the editor, no script or layout changes needed.
+
+`Match.tscn` gets one too, unlike most of this session's other additions
+to this list -- its pitch box no longer fills the whole screen (see
+"Layout" below), so the `BackgroundLayer` is genuinely visible in the
+empty side margins beside it, not fully hidden behind an opaque pitch
+fill the way it would have been under the old edge-to-edge side-panel
+layout.
 
 `Pvp.tscn`/`Tournament.tscn` are the one place `BackgroundLayer` needs
 `show_behind_parent = true` set on the instance -- `StubScene.gd`'s root
@@ -444,15 +645,22 @@ whenever you actually want a specific pack to go live with a cap.
 
 ## Layout
 
-The pitch (70x100, naturally portrait-shaped) always renders inside a fixed
-on-screen box sized to its own aspect ratio (`PITCH_RECT` in
-`MatchPlayback.gd`), rather than filling the whole window -- a landscape
-phone screen is wide, the pitch is tall, so the extra width next to the
-pitch box is where the scoreboard and buttons live (a side panel), instead
-of overlaid on top of the pitch the way the pygame reference did (it never
-had a side panel to work with, since its window was pitch-only). The
-project is configured for landscape orientation with a fixed-aspect stretch
-mode, so it won't stretch oddly on a real device's exact resolution.
+The pitch (70x100, naturally portrait-shaped) renders inside a box whose
+size depends on camera mode (see "Match screen" above): a fixed
+aspect-correct box (`FULL_MODE_BOX_SIZE` in `MatchPlayback.gd`, 378x540)
+in "full" mode -- a landscape phone screen is wide, the pitch is tall, so
+this leaves real empty margins on both sides (the `BackgroundLayer`
+placeholder shows through there -- see "Background" above) -- or the
+entire viewport in "zoom" mode, where there's no pitch-shaped aspect ratio
+to preserve since the camera only ever shows a ball-following crop anyway.
+Scoreboard/timer/pause/camera/speed controls are overlaid on top of the
+pitch as a HUD in both modes (see "Match screen" above) rather than living
+in a side panel the way this used to work, closer to how the pygame
+reference did it (it never had a side panel to work with, since its window
+was pitch-only) -- just with real Control nodes instead of everything
+hand-drawn. The project is configured for landscape orientation with a
+fixed-aspect stretch mode, so it won't stretch oddly on a real device's
+exact resolution.
 
 ## What's here
 
@@ -481,7 +689,8 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
 
 ### `screens/` -- one script per scene
 
-- `Menu.gd` / `scenes/Menu.tscn` -- navigation hub.
+- `Menu.gd` / `scenes/Menu.tscn` -- navigation hub + account details panel
+  (see "Menu screen" above).
 - `Auth.gd` / `scenes/Auth.tscn` -- sign-in/register/guest entry scene, real
   `LineEdit`/`Button` nodes (see "Controls vs. hand-drawn" above) --
   particularly important here since native text input is exactly what
@@ -501,14 +710,18 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
   lerp, and not an estimated Catmull-Rom tangent -- the real velocity is
   already there), the ball glued to whoever's dribbling it rather than
   interpolated on its own, a brief color flash on events (tackle, shot,
-  goal, etc.), and the zoom/full camera + speed controls described above.
+  goal, etc.), and the zoom/full camera toggle. The script lives on
+  `PitchCanvas`, a clipped sub-`Control`, not the scene root -- see
+  "Match screen" above for the full HUD/pause/pre-match layout.
+- `MatchResult.gd` / `scenes/MatchResult.tscn` -- post-match recap (see
+  "Match Result screen" above).
 - `Team.gd` / `scenes/Team.tscn` -- squad management (see above).
-- `Profile.gd` / `scenes/Profile.tscn` -- manager profile: rename, squad
-  overall/wins/losses/draws, log out. A 1:1 port of
-  `packedfootball/main.py`'s `PROFILE` scene -- see its docstring for the
-  one deliberate deviation (a real `LineEdit` everywhere instead of
-  `main.py`'s browser-vs-desktop branch, since Godot has no pygbag-style
-  mobile-text-entry problem to work around).
+- `Settings.gd` / `scenes/Settings.tscn` (was "Profile") -- rename,
+  Language/Color Theme stubs, log out (see "Menu screen" above). Rename
+  behavior is a 1:1 port of `packedfootball/main.py`'s `PROFILE` scene --
+  see its docstring for the one deliberate deviation (a real `LineEdit`
+  everywhere instead of `main.py`'s browser-vs-desktop branch, since Godot
+  has no pygbag-style mobile-text-entry problem to work around).
 - `Shop.gd` / `scenes/Shop.tscn` -- pack shop (see above).
 - `Play.gd` / `scenes/Play.tscn` -- match-mode hub: Quick Match (real) and
   Tournament (stub) (see "Play / Quick Match" above).
@@ -531,6 +744,19 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
 - `PackInfoPopup.gd` / `scenes/components/PackInfoPopup.tscn` -- the
   paginated odds-disclosure popup opened from a `PackView`'s **i** button
   (see above).
+- `LoadingSpinner.gd` / `scenes/components/LoadingSpinner.tscn` -- a small
+  rotating-arc spinner, hand-drawn since Godot has no built-in
+  indeterminate spinner Control. Used inside `LoadingPopup.tscn` below;
+  generic enough on its own to reuse anywhere else a moment needs a spinner
+  without the rest of a full modal popup.
+- `LoadingPopup.gd` / `scenes/components/LoadingPopup.tscn` -- the shared
+  "working on it" modal (scrim + `LoadingSpinner` + a `set_status(text)`
+  status label) -- `Play.gd`'s matchmaking popup and the two post-match
+  squad-refresh popups (see "Player card stats after a match" above) all
+  use this same component now.
+- `scenes/components/BackgroundLayer.tscn` -- no script, just a
+  pre-configured `TextureRect` (see "Background" above); shared placeholder
+  background image, instanced on every real screen.
 
 ### `autoload/` -- singletons (registered in `project.godot`)
 
@@ -546,10 +772,11 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
   mirroring `packedfootball/game_state.py`'s `GameState` plus the caching
   this scene needed on top of it.
 - `MatchSession.gd` -- carries one just-played real match's result
-  (replay/roster/score/reward) from `Play.gd` to `MatchPlayback.gd` (see
-  "Play / Quick Match" above) -- the same shared-autoload idea as
-  `GameProfile.gd`, just for a single in-flight match instead of the whole
-  squad.
+  (replay/roster/score/reward) from `Play.gd` through `MatchPlayback.gd` to
+  `MatchResult.gd` (see "Play / Quick Match" above) -- the same
+  shared-autoload idea as `GameProfile.gd`, just for a single in-flight
+  match instead of the whole squad. Two hops now, not one: `MatchPlayback`
+  reads it but doesn't clear it, `MatchResult` does.
 
 ### `data/` -- pure data models / format readers
 

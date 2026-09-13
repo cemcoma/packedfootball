@@ -1,4 +1,4 @@
-extends Node2D
+extends Control
 
 ## Match replay playback: loads a locally-dumped match replay (see
 ## packedfootball/scripts/dump_test_replay.py) and renders it with Hermite
@@ -8,16 +8,31 @@ extends Node2D
 ## ball is parented (visually) to whoever's dribbling it rather than
 ## interpolated independently, using the recorded ball_controller.
 ##
-## Layout is landscape-first: the pitch (70x100, naturally portrait-shaped)
-## renders inside a fixed on-screen box sized to its own aspect ratio, and
-## everything else -- scoreboard, playback controls -- lives in the side
-## panel that a wide/landscape screen leaves free next to it, rather than
-## overlaid on top of the pitch the way the pygame reference did (which
-## never had a side panel to work with, since its window was pitch-only).
+## This script lives on Match.tscn's "PitchCanvas" node specifically (a
+## Control with clip_contents = true), not the scene root -- everything it
+## draws is in PitchCanvas's own LOCAL coordinates (relative to its live
+## `size`, not a screen-absolute rect -- see _update_pitch_canvas_size(),
+## since that size now changes with camera_mode), and clip_contents is what
+## keeps a pitch line (or a player, or the ball) that's only partly inside
+## the visible crop from spilling its full extent out over the rest of the
+## screen -- Godot clips a Control's own _draw() output (not just its
+## children) to its rect, so this is real engine-level clipping rather
+## than the old per-shape manual "skip if the center point is outside the
+## box" check, which only ever worked for player dots and never touched
+## the pitch lines at all (that was the actual bug report: a partly-visible
+## halfway line used to draw in full instead of just the visible sliver).
 ##
-## Not wired to the backend yet -- this scaffold is deliberately isolated so
-## the interpolation/rendering can be judged on its own before the rest of
-## the app (auth, menus, networking) exists.
+## The rest of the screen (scoreboard, timer, pause/camera buttons, the
+## pre-match blackout and pause overlay) are real Control nodes, siblings
+## of PitchCanvas under Match.tscn's root -- reached below via the usual
+## %-prefixed unique-name lookups despite this script living on a non-root
+## node (unique names are scoped to the whole edited scene, not to the
+## caller's own subtree).
+##
+## Not wired to the backend for the bundled demo replay path -- that
+## scaffold is deliberately isolated so the interpolation/rendering can be
+## judged on its own with no account/network needed. A real match (Quick
+## Match today) arrives via the MatchSession autoload instead; see _ready().
 
 const PITCH_WIDTH := 70.0
 const PITCH_HEIGHT := 100.0
@@ -25,12 +40,29 @@ const TICKS_PER_SECOND := 60.0
 const REPLAY_PATH := "res://test_data/sample_match.bin"
 const ROSTER_PATH := "res://test_data/sample_match.json"
 
-# On-screen box the pitch always renders within, regardless of camera mode --
-# 5px per pitch unit in both axes (350x500), so "full pitch" mode fits it
-# with zero letterboxing since the ratio already matches the pitch's own.
-var PITCH_RECT := Rect2(20, 20, 350, 500)
+# PitchCanvas's own size in "full" camera mode: full viewport height, width
+# kept at the pitch's own 70:100 aspect ratio so the whole pitch fits with
+# zero letterboxing. In "zoom" mode this script instead resizes the node to
+# the full viewport (see _update_pitch_canvas_size()) -- zoom already only
+# ever shows a cropped sub-region of the pitch, so there's no aspect ratio
+# to preserve, and filling the screen means more of the pitch is visible at
+# once instead of being boxed into the same narrower column "full" mode
+# needs. Position is handled by Match.tscn's layout (a CenterContainer
+# centers this horizontally -- a no-op when the size is already the full
+# viewport width), not by this script -- everything drawn below is in
+# LOCAL coordinates (relative to this box's own top-left, read live off
+# `size` rather than a fixed constant, since that size now changes with
+# camera_mode), not the screen's.
+const FULL_MODE_BOX_SIZE := Vector2(378.0, 540.0)
 const PLAYER_RADIUS_UNITS := 1.3
 const BALL_RADIUS_UNITS := 0.55
+
+# Fallback shirt colors (home/Team A, away/Team B) -- used unless `roster`
+# carries its own "home_color"/"away_color" ([r, g, b] floats in [0, 1]),
+# which nothing writes yet but is exactly the shape a future
+# user-specified-shirt-color feature would send, so both the pitch dots and
+# the scoreboard swatches already read from one place ready to pick that up.
+const DEFAULT_TEAM_COLORS := [Color(0.2, 0.5, 1.0), Color(1.0, 0.35, 0.35)]
 
 var replay: Dictionary = {}
 var roster: Dictionary = {}
@@ -46,27 +78,55 @@ var halftime_pause_remaining: float = 0.0
 const HALFTIME_PAUSE_SECONDS := 3.0  # matches gameEngine.py's halftime_pause_timer=180 ticks @ 60/sec
 
 var has_started: bool = false
+var is_paused: bool = false
+
+# Set once at load (see _ready()) by scanning for the replay's HALFTIME
+# event -- lets the pause menu disable "Skip to Halftime" once playback is
+# already past it, since jumping "back" to halftime from later in the match
+# would otherwise rewind the score (see _jump_to_event's own docstring).
+# -1.0 means "no halftime event in this replay" (shouldn't happen for a
+# real 2-half match, but guards the lookup regardless).
+var _halftime_tick: float = -1.0
+
+# True once FULL TIME has been processed for a real match -- _process()
+# waits for the FULLTIME banner to finish its run before actually leaving,
+# so skip-to-full-time (from the pause menu) and a natural full-time both
+# end the same way instead of one feeling abrupt.
+var _pending_result_transition: bool = false
 
 var camera_mode: String = "zoom"  # "zoom" | "full" -- matches gameEngine.py's render()
-
-# Only meaningful when this playback came from a real MatchSession (Quick
-# Match today) rather than the bundled local demo replay -- captured in
-# _ready() before MatchSession.clear() resets its own copies.
-var _is_real_match: bool = false
-var _result_opponent_is_bot: bool = false
-var _result_credits_earned: int = 0
 
 var speed_options := [1.0, 2.0, 4.0]
 var speed_index: int = 0
 
-# Side-panel playback control buttons, drawn/hit-tested by hand (see _draw()
-# and _unhandled_input()) rather than scene-tree Button nodes.
-var start_button_rect := Rect2(400, 20, 220, 40)
-var halftime_button_rect := Rect2(400, 70, 220, 40)
-var fulltime_button_rect := Rect2(400, 120, 220, 40)
-var camera_button_rect := Rect2(400, 170, 220, 40)
-var speed_button_rect := Rect2(400, 220, 220, 40)
-var back_button_rect := Rect2(400, 270, 220, 40)
+# Only meaningful when this playback came from a real MatchSession (Quick
+# Match today) rather than the bundled local demo replay -- captured in
+# _ready() before this scene either clears MatchSession (on an early exit)
+# or hands off to MatchResult.tscn (which reads MatchSession itself, and
+# clears it once it has).
+var _is_real_match: bool = false
+
+@onready var _home_name_label: Label = %HomeNameLabel
+@onready var _away_name_label: Label = %AwayNameLabel
+@onready var _score_label: Label = %ScoreLabel
+@onready var _home_color_swatch: ColorRect = %HomeColorSwatch
+@onready var _away_color_swatch: ColorRect = %AwayColorSwatch
+@onready var _timer_label: Label = %TimerLabel
+
+@onready var _pause_button: Button = %PauseButton
+@onready var _camera_toggle_button: Button = %CameraToggleButton
+@onready var _speed_button: Button = %SpeedButton
+
+@onready var _pre_match_overlay: Control = %PreMatchOverlay
+@onready var _pre_match_teams_label: Label = %PreMatchTeamsLabel
+@onready var _start_button: Button = %StartButton
+
+@onready var _pause_overlay: Control = %PauseOverlay
+@onready var _skip_halftime_button: Button = %SkipHalftimeButton
+@onready var _skip_fulltime_button: Button = %SkipFulltimeButton
+@onready var _exit_button: Button = %ExitButton
+
+@onready var _loading_popup: Control = %LoadingPopup
 
 
 func _ready() -> void:
@@ -76,13 +136,16 @@ func _ready() -> void:
 	# way this scene is entered directly (no MatchSession data pending),
 	# it falls back to the same local file this always loaded, so the
 	# offline demo path keeps working with no backend/account needed.
+	#
+	# MatchSession is deliberately NOT cleared here -- if this turns out to
+	# be a real match, MatchResult.tscn reads score/credits_earned/opponent
+	# info straight off of it after FULL TIME, and clears it itself once
+	# it has (see class docstring above). An early exit via the pause
+	# menu's "Exit to Main Menu" clears it directly (see _on_exit_pressed).
 	if MatchSession.has_pending():
 		replay = MatchSession.replay()
 		roster = MatchSession.roster()
 		_is_real_match = true
-		_result_opponent_is_bot = MatchSession.opponent_is_bot
-		_result_credits_earned = MatchSession.credits_earned
-		MatchSession.clear()  # consumed -- a later direct visit here shouldn't replay it
 	else:
 		replay = ReplayReader.load_from_file(REPLAY_PATH)
 		roster = _load_roster(ROSTER_PATH)
@@ -90,10 +153,75 @@ func _ready() -> void:
 	if replay.is_empty():
 		push_error("No replay loaded -- run packedfootball/scripts/dump_test_replay.py first.")
 		return
+
 	player_flash_timers.resize(ReplayReader.NUM_PLAYERS)
 	player_flash_timers.fill(0.0)
+
+	for event in replay.get("events", []):
+		if event["type"] == ReplayReader.ActionType.HALFTIME:
+			_halftime_tick = event["tick"]
+			break
+
+	_setup_scoreboard()
+	_pre_match_teams_label.text = "%s vs %s" % [roster.get("home_name", "Home"), roster.get("away_name", "Away")]
+	_update_camera_button_label()
+	_update_speed_button_label()
+	_update_pitch_canvas_size()
+
+	_start_button.pressed.connect(_on_start_match_pressed)
+	_pause_button.pressed.connect(_on_pause_pressed)
+	_camera_toggle_button.pressed.connect(_on_camera_toggle_pressed)
+	_speed_button.pressed.connect(_on_speed_pressed)
+	_skip_halftime_button.pressed.connect(_on_skip_halftime_pressed)
+	_skip_fulltime_button.pressed.connect(_on_skip_fulltime_pressed)
+	_exit_button.pressed.connect(_on_exit_pressed)
+
 	set_process(true)
-	queue_redraw()  # draw the static kickoff frame + buttons before Start is pressed
+	queue_redraw()  # draw the static kickoff frame (hidden behind the pre-match blackout for now)
+
+
+func _setup_scoreboard() -> void:
+	_home_name_label.text = roster.get("home_name", "Home")
+	_away_name_label.text = roster.get("away_name", "Away")
+	_home_color_swatch.color = _team_color(0)
+	_away_color_swatch.color = _team_color(1)
+	_update_score_label()
+
+
+func _team_color(team_index: int) -> Color:
+	var key := "home_color" if team_index == 0 else "away_color"
+	var raw = roster.get(key)
+	if raw is Array and raw.size() >= 3:
+		return Color(raw[0], raw[1], raw[2])
+	return DEFAULT_TEAM_COLORS[team_index]
+
+
+func _update_score_label() -> void:
+	_score_label.text = "%d - %d" % [home_score, away_score]
+
+
+func _update_timer_label() -> void:
+	var clock_total_seconds := int(playback_tick / 2.0)  # matches gameEngine.py's render() clock convention
+	_timer_label.text = "%02d:%02d" % [clock_total_seconds / 60, clock_total_seconds % 60]
+
+
+func _update_camera_button_label() -> void:
+	_camera_toggle_button.text = "Camera: Zoom" if camera_mode == "zoom" else "Camera: Full Pitch"
+
+
+# "Zoom" already only shows a cropped sub-region of the pitch (see
+# _compute_camera), so there's no fixed aspect ratio to preserve the way
+# "full" mode needs -- filling the whole viewport just means more of that
+# crop is visible at once. custom_minimum_size is enough to drive this:
+# PitchCanvas's only parent (PitchCenterContainer) sizes it to exactly its
+# minimum and centers it, which is a no-op once that minimum is already the
+# full viewport width.
+func _update_pitch_canvas_size() -> void:
+	custom_minimum_size = get_viewport_rect().size if camera_mode == "zoom" else FULL_MODE_BOX_SIZE
+
+
+func _update_speed_button_label() -> void:
+	_speed_button.text = "Speed: %dx" % int(speed_options[speed_index])
 
 
 func _load_roster(path: String) -> Dictionary:
@@ -113,24 +241,6 @@ func _player_name(idx: int) -> String:
 	return players[idx].get("lname", "")
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
-		return
-	var pos: Vector2 = make_input_local(event).position
-	if start_button_rect.has_point(pos):
-		_on_start_match_pressed()
-	elif halftime_button_rect.has_point(pos):
-		_jump_to_event(ReplayReader.ActionType.HALFTIME)
-	elif fulltime_button_rect.has_point(pos):
-		_jump_to_event(ReplayReader.ActionType.FULLTIME)
-	elif camera_button_rect.has_point(pos):
-		camera_mode = "full" if camera_mode == "zoom" else "zoom"
-	elif speed_button_rect.has_point(pos):
-		speed_index = (speed_index + 1) % speed_options.size()
-	elif back_button_rect.has_point(pos):
-		get_tree().change_scene_to_file("res://scenes/Menu.tscn")
-
-
 func _reset_state() -> void:
 	next_event_index = 0
 	home_score = 0
@@ -139,14 +249,71 @@ func _reset_state() -> void:
 	banner_timer = 0.0
 	halftime_pause_remaining = 0.0
 	ball_flash_timer = 0.0
+	_pending_result_transition = false
 	for i in range(player_flash_timers.size()):
 		player_flash_timers[i] = 0.0
+	_update_score_label()
 
 
 func _on_start_match_pressed() -> void:
+	_pre_match_overlay.visible = false
 	_reset_state()
 	playback_tick = 0.0
 	has_started = true
+
+
+func _on_pause_pressed() -> void:
+	is_paused = not is_paused
+	_pause_overlay.visible = is_paused
+	_pause_button.text = "Resume" if is_paused else "Pause"
+	if is_paused:
+		# "No going back": once playback has moved past halftime, jumping to
+		# it again would rewind the score -- see _jump_to_event's docstring.
+		_skip_halftime_button.disabled = _halftime_tick < 0.0 or playback_tick >= _halftime_tick
+
+
+func _close_pause_overlay() -> void:
+	is_paused = false
+	_pause_overlay.visible = false
+	_pause_button.text = "Pause"
+
+
+func _on_skip_halftime_pressed() -> void:
+	_jump_to_event(ReplayReader.ActionType.HALFTIME)
+	_close_pause_overlay()
+
+
+func _on_skip_fulltime_pressed() -> void:
+	_jump_to_event(ReplayReader.ActionType.FULLTIME)
+	_close_pause_overlay()
+
+
+## Re-fetches the squad from Firestore before heading back to Menu, same as
+## MatchResult.gd's own _on_continue_pressed() and for the same reason:
+## /match/quick already persisted this match's goals/assists/matches_played
+## server-side, but GameProfile.all_cards was only ever populated once at
+## sign-in, so it stays stale until something re-runs load_all(). Skipped
+## entirely for the bundled demo replay (_is_real_match false) -- nothing
+## backend-side happened for that path, so there's nothing new to fetch.
+func _on_exit_pressed() -> void:
+	if _is_real_match:
+		_exit_button.disabled = true
+		_loading_popup.set_status("Loading players...")
+		_loading_popup.visible = true
+		await GameProfile.load_all()
+	MatchSession.clear()
+	get_tree().change_scene_to_file("res://scenes/Menu.tscn")
+
+
+func _on_camera_toggle_pressed() -> void:
+	camera_mode = "full" if camera_mode == "zoom" else "zoom"
+	_update_camera_button_label()
+	_update_pitch_canvas_size()
+
+
+func _on_speed_pressed() -> void:
+	speed_index = (speed_index + 1) % speed_options.size()
+	_update_speed_button_label()
 
 
 func _jump_to_event(action_type: int) -> void:
@@ -174,7 +341,7 @@ func _process(delta: float) -> void:
 	if samples.is_empty():
 		return
 
-	if not has_started:
+	if not has_started or is_paused:
 		queue_redraw()
 		return
 
@@ -202,6 +369,12 @@ func _process(delta: float) -> void:
 	ball_flash_timer = maxf(0.0, ball_flash_timer - effective_delta)
 	banner_timer = maxf(0.0, banner_timer - effective_delta)
 
+	if _pending_result_transition and banner_timer <= 0.0:
+		_pending_result_transition = false
+		get_tree().change_scene_to_file("res://scenes/MatchResult.tscn")
+		return
+
+	_update_timer_label()
 	queue_redraw()
 
 
@@ -222,6 +395,7 @@ func _process_events(current_tick: float) -> void:
 				home_score += 1
 			else:
 				away_score += 1
+			_update_score_label()
 			var scorer := _player_name(idx)
 			banner_text = "GOAL: %s" % scorer if scorer != "" else "GOAL"
 			banner_timer = 3.0
@@ -232,6 +406,8 @@ func _process_events(current_tick: float) -> void:
 		elif event_type == ReplayReader.ActionType.FULLTIME:
 			banner_text = "FULL TIME"
 			banner_timer = 4.0
+			if _is_real_match:
+				_pending_result_transition = true
 
 		next_event_index += 1
 
@@ -305,14 +481,29 @@ func _interpolated_state() -> Dictionary:
 
 
 # Ported from gameEngine.py's render(): "full" fits the whole pitch into
-# PITCH_RECT (here, with zero letterboxing -- the rect's 350x500 already
-# matches the pitch's own 70x100 aspect ratio); "zoom" follows the ball with
-# a fixed *vertical* (goal-to-goal) span so up/down-field context stays
-# consistent, letting the horizontal (sideline) span be whatever that
-# implies for PITCH_RECT's aspect ratio, clamped to the pitch bounds.
+# this box (here, with zero letterboxing -- FULL_MODE_BOX_SIZE's 378x540
+# already matches the pitch's own 70x100 aspect ratio); "zoom" follows the
+# ball with a fixed *vertical* (goal-to-goal) span so up/down-field context
+# stays consistent, letting the horizontal (sideline) span be whatever that
+# implies for this box's current aspect ratio.
+#
+# Since "zoom" mode fills the full (landscape) viewport width -- see
+# _update_pitch_canvas_size -- that implied horizontal span (~80 units) is
+# now routinely *wider* than the pitch itself (70 units), which the normal
+# ball-following clamp below was never built for: clamping a span wider
+# than its own bounds to `[0, bounds - span]` (a negative upper bound)
+# collapses to a single fixed value of 0 regardless of the ball's actual
+# position, pinning the pitch flush to the screen's left edge with all the
+# leftover width bunched on the right instead of following the ball or
+# even just sitting centered. Handled as its own case: when the span is
+# too wide to pan at all, center it on the pitch's own midline instead
+# (the pitch reads as centered with a bit of grass showing past both
+# touchlines, rather than lopsided) -- panning still works normally the
+# moment the span is narrow enough to fit (e.g. back in "full" mode's
+# narrower box, or if this box's aspect ratio ever changes).
 func _compute_camera(ball_pos: Vector2) -> Dictionary:
-	var w := PITCH_RECT.size.x
-	var h := PITCH_RECT.size.y
+	var w := size.x
+	var h := size.y
 
 	if camera_mode == "full":
 		var scale := minf(w / PITCH_WIDTH, h / PITCH_HEIGHT)
@@ -323,11 +514,20 @@ func _compute_camera(ball_pos: Vector2) -> Dictionary:
 	var visible_y_span := 45.0
 	var visible_x_span := visible_y_span * (w / h)
 	var scale := h / visible_y_span
-	var cam_x := clampf(ball_pos.x - visible_x_span / 2.0, 0.0, maxf(0.0, PITCH_WIDTH - visible_x_span))
+
+	var cam_x: float
+	if visible_x_span >= PITCH_WIDTH:
+		cam_x = (PITCH_WIDTH - visible_x_span) / 2.0
+	else:
+		cam_x = clampf(ball_pos.x - visible_x_span / 2.0, 0.0, PITCH_WIDTH - visible_x_span)
 	var cam_y := clampf(ball_pos.y - visible_y_span / 2.0, 0.0, maxf(0.0, PITCH_HEIGHT - visible_y_span))
 	return {"scale": scale, "cam_x": cam_x, "cam_y": cam_y}
 
 
+# Local to PitchCanvas -- (0, 0) is this box's own top-left, not the
+# screen's. clip_contents on the node this script lives on (see class
+# docstring) is what keeps anything landing outside this box's current
+# `size` from actually showing.
 func _pitch_to_screen(p: Vector2, cam: Dictionary) -> Vector2:
 	# cam's values come back typed as Variant (Dictionary access), which
 	# GDScript's `:=` type inference can't always resolve through an
@@ -336,7 +536,7 @@ func _pitch_to_screen(p: Vector2, cam: Dictionary) -> Vector2:
 	var scale: float = cam.scale
 	var cam_x: float = cam.cam_x
 	var cam_y: float = cam.cam_y
-	return PITCH_RECT.position + Vector2((p.x - cam_x) * scale, (p.y - cam_y) * scale)
+	return Vector2((p.x - cam_x) * scale, (p.y - cam_y) * scale)
 
 
 # Outline of a pitch-space rect (px, py, pw, ph), matching gameEngine.py's
@@ -411,11 +611,9 @@ func _draw_corner_quarter(cam: Dictionary, corner: Vector2, start_angle: float, 
 	var scale: float = cam.scale
 	var base := _pitch_to_screen(corner, cam)
 
-	var arc_radius := 2.0 * scale 
-	var point_count := 16 # Higher count makes the curve smoother
+	var arc_radius := 2.0 * scale
+	var point_count := 16  # Higher count makes the curve smoother
 	draw_arc(base, arc_radius, start_angle, end_angle, point_count, Color.WHITE, 2.0, true)
-
-
 
 
 func _draw() -> void:
@@ -431,13 +629,12 @@ func _draw() -> void:
 	var cam := _compute_camera(state["ball"])
 	var scale: float = cam.scale
 
-	# Background: in "full" mode this fits exactly (PITCH_RECT already
-	# matches the pitch's aspect ratio); in "zoom" mode the camera only ever
-	# shows a sub-region that's entirely inside the pitch, so the whole box
-	# is grass either way. Intersected with PITCH_RECT as a hard safety
-	# bound regardless of mode.
-	var bg_rect: Rect2 = Rect2(_pitch_to_screen(Vector2.ZERO, cam), Vector2(PITCH_WIDTH, PITCH_HEIGHT) * scale)
-	draw_rect(PITCH_RECT.intersection(bg_rect), Color(0.09, 0.47, 0.22))
+	# Grass fill: clip_contents (set on this node in Match.tscn) guarantees
+	# nothing drawn below ever shows outside this box's current `size`
+	# (378x540 in "full" mode, the whole viewport in "zoom" -- see
+	# _update_pitch_canvas_size), so a flat full-box fill is correct in both
+	# modes with no extra math.
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.09, 0.47, 0.22))
 
 	_draw_pitch_lines(cam)
 	_draw_goal(cam, 0.0, -1.0)
@@ -447,114 +644,48 @@ func _draw() -> void:
 	_draw_corner_quarter(cam, Vector2(PITCH_WIDTH, PITCH_HEIGHT), PI, 3.0 * PI / 2.0)
 	_draw_corner_quarter(cam, Vector2(0, PITCH_HEIGHT), -PI / 2.0, 0.0)
 
-	# Godot's built-in clipping needs a dedicated Control node, which this
-	# single-script hand-drawn setup doesn't have -- so anything that would
-	# land outside PITCH_RECT (always true for some players in "zoom" mode,
-	# since most of the pitch is off the visible window) is simply skipped
-	# rather than drawn into the side panel.
 	for i in range(ReplayReader.NUM_PLAYERS):
 		var pos: Vector2 = _pitch_to_screen(players[i], cam)
-		if not PITCH_RECT.has_point(pos):
-			continue
-		var color := Color(0.2, 0.5, 1.0) if i < 11 else Color(1.0, 0.35, 0.35)
+		var color := _team_color(0) if i < 11 else _team_color(1)
 		if player_flash_timers[i] > 0.0:
 			color = Color(1.0, 1.0, 0.2)
 		if i == controller:
 			draw_circle(pos, PLAYER_RADIUS_UNITS * 1.35 * scale, Color(1.0, 1.0, 1.0), false, 2.0)
 		draw_circle(pos, PLAYER_RADIUS_UNITS * scale, color)
+		# Fixed screen-space size regardless of camera zoom -- this used to
+		# scale with `scale` (the camera's current zoom factor), which made
+		# these roughly double in size switching from "full" to "zoom" mode
+		# (that mode's scale is ~11 vs "full"'s ~5.4) instead of staying a
+		# constant on-screen size the way UI text should.
 		draw_string(
 			font,
 			pos + Vector2(-6, 5),
 			str(i),
 			HORIZONTAL_ALIGNMENT_CENTER,
 			24,
-			maxi(8, int(font_size * 0.6 * (scale / 5.0))),
+			maxi(8, int(font_size * 0.6)),
 			Color.BLACK
 		)
 
 	if controller != -1:
 		var carrier_pos: Vector2 = _pitch_to_screen(players[controller], cam)
-		if PITCH_RECT.has_point(carrier_pos):
-			var name: String = _player_name(controller)
-			if name != "":
-				draw_string(
-					font,
-					carrier_pos + Vector2(-40, -PLAYER_RADIUS_UNITS * scale - 10),
-					name,
-					HORIZONTAL_ALIGNMENT_CENTER,
-					80,
-					maxi(8, int(font_size * (scale / 5.0))),
-					Color.WHITE
-				)
+		var name: String = _player_name(controller)
+		if name != "":
+			draw_string(
+				font,
+				carrier_pos + Vector2(-40, -PLAYER_RADIUS_UNITS * scale - 10),
+				name,
+				HORIZONTAL_ALIGNMENT_CENTER,
+				80,
+				font_size,
+				Color.WHITE
+			)
 
 	var ball_pos: Vector2 = _pitch_to_screen(state["ball"], cam)
-	if PITCH_RECT.has_point(ball_pos):
-		var ball_color := Color(1.0, 0.85, 0.2) if ball_flash_timer > 0.0 else Color(1.0, 1.0, 1.0)
-		draw_circle(ball_pos, BALL_RADIUS_UNITS * scale, ball_color)
+	var ball_color := Color(1.0, 0.85, 0.2) if ball_flash_timer > 0.0 else Color(1.0, 1.0, 1.0)
+	draw_circle(ball_pos, BALL_RADIUS_UNITS * scale, ball_color)
 
-	_draw_scoreboard(font, font_size)
 	_draw_banner(font, font_size)
-	_draw_buttons(font, font_size)
-
-
-func _draw_button(rect: Rect2, label: String, font: Font, font_size: int) -> void:
-	draw_rect(rect, Color(0.15, 0.15, 0.18, 0.9))
-	draw_rect(rect, Color(0.8, 0.8, 0.8), false, 2.0)
-	draw_string(
-		font, rect.position + Vector2(14, rect.size.y * 0.65), label, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 20, font_size, Color.WHITE
-	)
-
-
-func _draw_buttons(font: Font, font_size: int) -> void:
-	_draw_button(start_button_rect, "Start Match", font, font_size)
-	_draw_button(halftime_button_rect, "Jump to Halftime", font, font_size)
-	_draw_button(fulltime_button_rect, "Jump to Full Time", font, font_size)
-	var camera_label := "Camera: Zoom" if camera_mode == "zoom" else "Camera: Full Pitch"
-	_draw_button(camera_button_rect, camera_label, font, font_size)
-	_draw_button(speed_button_rect, "Speed: %dx" % int(speed_options[speed_index]), font, font_size)
-	_draw_button(back_button_rect, "Back to Menu", font, font_size)
-
-
-func _draw_scoreboard(font: Font, font_size: int) -> void:
-	var home_name: String = roster.get("home_name", "Home")
-	var away_name: String = roster.get("away_name", "Away")
-	var rect := Rect2(400, 320, 220, 70 + (25 if _is_real_match else 0))
-
-	draw_rect(rect, Color(0, 0, 0, 0.6))
-	draw_string(
-		font,
-		rect.position + Vector2(10, 25),
-		"%s %d - %d %s" % [home_name, home_score, away_score, away_name],
-		HORIZONTAL_ALIGNMENT_LEFT,
-		200,
-		font_size,
-		Color.WHITE
-	)
-
-	var clock_total_seconds := int(playback_tick / 2.0)  # matches gameEngine.py's render() clock convention
-	var minutes := clock_total_seconds / 60
-	var seconds := clock_total_seconds % 60
-	draw_string(
-		font,
-		rect.position + Vector2(10, 50),
-		"%02d:%02d" % [minutes, seconds],
-		HORIZONTAL_ALIGNMENT_LEFT,
-		200,
-		int(font_size * 0.8),
-		Color(0.85, 0.85, 0.85)
-	)
-
-	if _is_real_match:
-		var result_text := "Quick Match vs %s -- +%d credits" % ["a Bot" if _result_opponent_is_bot else "opponent", _result_credits_earned]
-		draw_string(
-			font,
-			rect.position + Vector2(10, 70),
-			result_text,
-			HORIZONTAL_ALIGNMENT_LEFT,
-			200,
-			int(font_size * 0.7),
-			Color(0.6, 1.0, 0.6)
-		)
 
 
 func _draw_banner(font: Font, font_size: int) -> void:
@@ -564,7 +695,7 @@ func _draw_banner(font: Font, font_size: int) -> void:
 	var alpha: float = clampf(banner_timer, 0.0, 1.0)
 	draw_string(
 		font,
-		PITCH_RECT.position + Vector2(PITCH_RECT.size.x / 2.0 - 150, PITCH_RECT.size.y / 2.0),
+		Vector2(size.x / 2.0 - 150, size.y / 2.0),
 		banner_text,
 		HORIZONTAL_ALIGNMENT_CENTER,
 		300,

@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://ce0gqgfdbq3ou" path="res://scripts/screens/Play.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="3"]
 
 [node name="Play" type="Control" unique_id=1553461410]
 layout_mode = 3
@@ -94,3 +95,9 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 0
 text = "Back to Menu"
+
+[node name="MatchmakingPopup" parent="." instance=ExtResource("3")]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0

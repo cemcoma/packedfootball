@@ -1,0 +1,108 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/screens/Settings.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
+
+[node name="Settings" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1")
+
+[node name="Background" parent="." instance=ExtResource("2")]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 20
+
+[node name="CenterContainer" type="CenterContainer" parent="Margin"]
+layout_mode = 2
+
+[node name="RootVBox" type="VBoxContainer" parent="Margin/CenterContainer"]
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TitleLabel" type="Label" parent="Margin/CenterContainer/RootVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "SETTINGS"
+horizontal_alignment = 1
+
+[node name="NameRow" type="HBoxContainer" parent="Margin/CenterContainer/RootVBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="NameField" type="LineEdit" parent="Margin/CenterContainer/RootVBox/NameRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Manager name"
+
+[node name="SaveNameButton" type="Button" parent="Margin/CenterContainer/RootVBox/NameRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save Name"
+
+[node name="LanguageRow" type="HBoxContainer" parent="Margin/CenterContainer/RootVBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="LanguageLabel" type="Label" parent="Margin/CenterContainer/RootVBox/LanguageRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Language"
+
+[node name="LanguageOption" type="OptionButton" parent="Margin/CenterContainer/RootVBox/LanguageRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+
+[node name="LanguageHint" type="Label" parent="Margin/CenterContainer/RootVBox"]
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 11
+text = "Coming soon."
+
+[node name="ThemeRow" type="HBoxContainer" parent="Margin/CenterContainer/RootVBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ThemeLabel" type="Label" parent="Margin/CenterContainer/RootVBox/ThemeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Color Theme"
+
+[node name="ThemeOption" type="OptionButton" parent="Margin/CenterContainer/RootVBox/ThemeRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+
+[node name="ThemeHint" type="Label" parent="Margin/CenterContainer/RootVBox"]
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 11
+text = "Coming soon."
+
+[node name="Spacer" type="Control" parent="Margin/CenterContainer/RootVBox"]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+
+[node name="BackButton" type="Button" parent="Margin/CenterContainer/RootVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Back to Menu"
+
+[node name="LogoutButton" type="Button" parent="Margin/CenterContainer/RootVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Log Out / Switch Account"

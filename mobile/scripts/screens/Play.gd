@@ -13,6 +13,13 @@ extends Control
 ## autoload is how that handoff works, since change_scene_to_file() can't
 ## carry data itself).
 ##
+## The whole /match/quick call is one request-response round trip -- the
+## backend picks an opponent AND simulates the match AND persists the
+## result before it ever replies -- so "Finding an opponent..." ->
+## "Simulating match..." below isn't the server reporting real progress,
+## it's a scripted status narrative shown while that one request is still
+## in flight, so the wait doesn't read as a stuck/frozen button.
+##
 ## Tournament is a stub for now (Tournament.tscn) -- 1-day, 10-match
 ## brackets across 4 skill categories (promotion by winning), not built yet.
 
@@ -21,6 +28,10 @@ extends Control
 @onready var _tournament_button: Button = %TournamentButton
 @onready var _back_button: Button = %BackButton
 
+@onready var _matchmaking_popup: Control = %MatchmakingPopup
+
+var _matchmaking_active: bool = false
+
 
 func _ready() -> void:
 	_quick_match_button.pressed.connect(_on_quick_match_pressed)
@@ -28,14 +39,37 @@ func _ready() -> void:
 	_back_button.pressed.connect(_on_back_pressed)
 
 
+func _show_matchmaking_popup(status: String) -> void:
+	_matchmaking_active = true
+	_matchmaking_popup.set_status(status)
+	_matchmaking_popup.visible = true
+
+
+func _set_matchmaking_status(status: String) -> void:
+	if not _matchmaking_active:
+		return  # the request already finished (or failed) before this fired
+	_matchmaking_popup.set_status(status)
+
+
+func _hide_matchmaking_popup() -> void:
+	_matchmaking_active = false
+	_matchmaking_popup.visible = false
+
+
 func _on_quick_match_pressed() -> void:
 	_quick_match_button.disabled = true
 	_tournament_button.disabled = true
-	_status_label.text = "Finding an opponent..."
+	_status_label.text = ""
+	_show_matchmaking_popup("Finding an opponent...")
+
+	# Not awaited -- fires on its own while the request below is in flight,
+	# purely to move the status text along; see class docstring.
+	get_tree().create_timer(0.6).timeout.connect(_on_matchmaking_midpoint)
 
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_POST, "/match/quick")
 
 	if not res.ok:
+		_hide_matchmaking_popup()
 		_status_label.text = "Could not start a match -- try again."
 		_quick_match_button.disabled = false
 		_tournament_button.disabled = false
@@ -43,6 +77,7 @@ func _on_quick_match_pressed() -> void:
 
 	MatchSession.set_from_match_response(res.data)
 	if not MatchSession.has_pending():
+		_hide_matchmaking_popup()
 		_status_label.text = "Match finished, but the replay couldn't be loaded -- try again."
 		_quick_match_button.disabled = false
 		_tournament_button.disabled = false
@@ -58,7 +93,15 @@ func _on_quick_match_pressed() -> void:
 	GameProfile.wins = _int(res.data, "wins", GameProfile.wins)
 	GameProfile.losses = _int(res.data, "losses", GameProfile.losses)
 	GameProfile.draws = _int(res.data, "draws", GameProfile.draws)
+
+	_set_matchmaking_status("Match found!")
+	await get_tree().create_timer(0.4).timeout
+	_hide_matchmaking_popup()
 	get_tree().change_scene_to_file("res://scenes/Match.tscn")
+
+
+func _on_matchmaking_midpoint() -> void:
+	_set_matchmaking_status("Simulating match...")
 
 
 static func _int(data: Dictionary, key: String, default: int) -> int:

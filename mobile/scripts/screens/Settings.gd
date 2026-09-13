@@ -1,30 +1,27 @@
 extends Control
 
-## Manager profile: rename, and see squad overall/wins/losses/draws.
-## Deliberately a 1:1 port of packedfootball/main.py's PROFILE scene --
-## same fields shown (squad overall, wins, losses, draws; notably NOT
-## campaign_level, even though main.py loads that too -- the Python screen
-## just never displays it, so neither does this one), same rename behavior
-## (only writes if the trimmed name is non-empty and actually changed).
+## Account settings: rename, and (stubs for now) language/color theme, plus
+## log out. Squad/account details (overall, wins/draws/losses) that used to
+## live on this screen (back when it was "Profile") moved to Menu's own
+## AccountPanel instead -- glanceable from the hub every visit rather than
+## needing a whole screen just to see them, leaving this screen for actual
+## settings. Rename behavior is unchanged from that screen (only writes if
+## the trimmed name is non-empty and actually changed).
+##
 ## GameProfile.gd (unlike game_state.py's own profile shape) has no elo
 ## field at all -- by design decision, elo was removed from the active
 ## Godot+backend system entirely. There is also no `lobby` collection
 ## publish anywhere anymore -- leaderboards will read straight from
 ## `users`/`players` docs instead of a separate snapshot.
 ##
-## One deliberate difference: main.py branches on _IS_EMSCRIPTEN for the
-## rename field (a real LineEdit on desktop, a native HTML form overlay in
-## the browser build) purely because pygame/pygbag has no reliable native
-## text entry on mobile Safari -- see native_form.py's docstring. Godot's
-## LineEdit works natively on every export target, so there's only one path
-## here, the same reason Auth.gd never needed that branch either.
+## Language/Color Theme are explicit stubs -- disabled OptionButtons with a
+## single placeholder entry each, no functionality behind them yet (see
+## mobile/README.md).
 
 @onready var _name_field: LineEdit = %NameField
 @onready var _save_name_button: Button = %SaveNameButton
-@onready var _overall_label: Label = %OverallLabel
-@onready var _wins_label: Label = %WinsLabel
-@onready var _losses_label: Label = %LossesLabel
-@onready var _draws_label: Label = %DrawsLabel
+@onready var _language_option: OptionButton = %LanguageOption
+@onready var _theme_option: OptionButton = %ThemeOption
 @onready var _back_button: Button = %BackButton
 @onready var _logout_button: Button = %LogoutButton
 
@@ -33,15 +30,13 @@ func _ready() -> void:
 	_save_name_button.pressed.connect(_on_save_name_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 	_logout_button.pressed.connect(_on_logout_pressed)
-	_refresh()
 
-
-func _refresh() -> void:
 	_name_field.text = GameProfile.display_name
-	_overall_label.text = "Squad Overall: %d" % GameProfile.average_overall()
-	_wins_label.text = "Wins: %d" % GameProfile.wins
-	_draws_label.text = "Draws: %d" % GameProfile.draws
-	_losses_label.text = "Losses: %d" % GameProfile.losses
+
+	_language_option.add_item("English")
+	_language_option.disabled = true
+	_theme_option.add_item("Default")
+	_theme_option.disabled = true
 
 
 func _on_save_name_pressed() -> void:

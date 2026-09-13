@@ -1,6 +1,270 @@
 [gd_scene format=3 uid="uid://b82yjwhx7x5sg"]
 
 [ext_resource type="Script" uid="uid://b38lnsyksyii6" path="res://scripts/screens/MatchPlayback.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="3"]
 
-[node name="Match" type="Node2D" unique_id=681069530]
+[node name="Match" type="Control" unique_id=2007280519]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" parent="." unique_id=652370243 instance=ExtResource("2")]
+layout_mode = 1
+
+[node name="PitchCenterContainer" type="CenterContainer" parent="." unique_id=551083191]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PitchCanvas" type="Control" parent="PitchCenterContainer" unique_id=1636939444]
+clip_contents = true
+custom_minimum_size = Vector2(378, 540)
+layout_mode = 2
 script = ExtResource("1")
+
+[node name="ScoreboardPanel" type="Panel" parent="." unique_id=2022534552]
+layout_mode = 1
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 232.0
+offset_bottom = 86.0
+
+[node name="Margin" type="MarginContainer" parent="ScoreboardPanel" unique_id=86366777]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 6
+
+[node name="VBox" type="VBoxContainer" parent="ScoreboardPanel/Margin" unique_id=288160547]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="NamesScoreRow" type="HBoxContainer" parent="ScoreboardPanel/Margin/VBox" unique_id=834138712]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="HomeNameLabel" type="Label" parent="ScoreboardPanel/Margin/VBox/NamesScoreRow" unique_id=1320637039]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 14
+text = "Home"
+clip_text = true
+
+[node name="ScoreLabel" type="Label" parent="ScoreboardPanel/Margin/VBox/NamesScoreRow" unique_id=553138202]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "0 - 0"
+horizontal_alignment = 1
+
+[node name="AwayNameLabel" type="Label" parent="ScoreboardPanel/Margin/VBox/NamesScoreRow" unique_id=175190416]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 14
+text = "Away"
+horizontal_alignment = 2
+clip_text = true
+
+[node name="SwatchRow" type="HBoxContainer" parent="ScoreboardPanel/Margin/VBox" unique_id=331502564]
+layout_mode = 2
+
+[node name="HomeColorSwatch" type="ColorRect" parent="ScoreboardPanel/Margin/VBox/SwatchRow" unique_id=415374918]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(36, 6)
+layout_mode = 2
+color = Color(0.2, 0.5, 1, 1)
+
+[node name="SwatchSpacer" type="Control" parent="ScoreboardPanel/Margin/VBox/SwatchRow" unique_id=1608070699]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AwayColorSwatch" type="ColorRect" parent="ScoreboardPanel/Margin/VBox/SwatchRow" unique_id=1182727286]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(36, 6)
+layout_mode = 2
+color = Color(1, 0.35, 0.35, 1)
+
+[node name="TimerBar" type="CenterContainer" parent="." unique_id=1061265193]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 12.0
+offset_bottom = 48.0
+
+[node name="TimerPanel" type="Panel" parent="TimerBar" unique_id=1598735240]
+custom_minimum_size = Vector2(110, 36)
+layout_mode = 2
+
+[node name="Center" type="CenterContainer" parent="TimerBar/TimerPanel" unique_id=214945537]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TimerLabel" type="Label" parent="TimerBar/TimerPanel/Center" unique_id=2113633902]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "00:00"
+
+[node name="CameraToggleButton" type="Button" parent="." unique_id=1267550313]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -172.0
+offset_top = -52.0
+offset_right = -12.0
+offset_bottom = -12.0
+text = "Camera: Zoom"
+
+[node name="SpeedButton" type="Button" parent="." unique_id=1282521202]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -221.0
+offset_top = 12.0
+offset_right = -139.0
+offset_bottom = 52.0
+grow_horizontal = 0
+text = "Speed: 1x"
+
+[node name="PauseOverlay" type="Control" parent="." unique_id=547318735]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="PauseOverlay" unique_id=607976146]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.6)
+
+[node name="Center" type="CenterContainer" parent="PauseOverlay" unique_id=649439426]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PauseOverlay/Center" unique_id=996598230]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="PausedLabel" type="Label" parent="PauseOverlay/Center/VBoxContainer" unique_id=58577765]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Paused"
+horizontal_alignment = 1
+
+[node name="SkipHalftimeButton" type="Button" parent="PauseOverlay/Center/VBoxContainer" unique_id=739398850]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 48)
+layout_mode = 2
+text = "Skip to Halftime"
+
+[node name="SkipFulltimeButton" type="Button" parent="PauseOverlay/Center/VBoxContainer" unique_id=1644536213]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 48)
+layout_mode = 2
+text = "Skip to Full Time"
+
+[node name="ExitButton" type="Button" parent="PauseOverlay/Center/VBoxContainer" unique_id=1112151136]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 48)
+layout_mode = 2
+text = "Exit to Main Menu"
+
+[node name="PauseButton" type="Button" parent="." unique_id=123477771]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -102.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = 52.0
+text = "Pause"
+
+[node name="PreMatchOverlay" type="Control" parent="." unique_id=87841212]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="PreMatchOverlay" unique_id=537398396]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 1)
+
+[node name="Center" type="CenterContainer" parent="PreMatchOverlay" unique_id=1603823087]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PreMatchOverlay/Center" unique_id=1647133026]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="PreMatchTeamsLabel" type="Label" parent="PreMatchOverlay/Center/VBoxContainer" unique_id=1550734794]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Home vs Away"
+horizontal_alignment = 1
+
+[node name="StartButton" type="Button" parent="PreMatchOverlay/Center/VBoxContainer" unique_id=38405616]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 56)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 18
+text = "Start Match"
+
+[node name="LoadingPopup" parent="." instance=ExtResource("3")]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
