@@ -1,13 +1,13 @@
-"""Server-side counterpart to packedfootball/firebase_client.py.
+"""Server-side counterpart to mobile/scripts/autoload/Firestore.gd.
 
 game_state.GameState only ever calls five async methods on whatever "client"
 object it's handed (get_document, list_collection, set_document,
-add_document, delete_document) plus a `.uid` attribute. On the game client
-that object is firebase_client.FirebaseClient, authenticated as the signed-in
-user's own ID token -- the CLIENT-TRUSTED path. Here it's this class instead,
-backed by the Admin SDK (a service account), so GameState's exact same
-persistence logic can run as the authoritative side behind the backend
-without being duplicated.
+add_document, delete_document) plus a `.uid` attribute. On the Godot client
+that object is Firestore.gd, authenticated as the signed-in user's own ID
+token -- the CLIENT-TRUSTED path (see game_state.py's own module docstring).
+Here it's this class instead, backed by the Admin SDK (a service account),
+so GameState's exact same persistence logic can run as the authoritative
+side behind the backend without being duplicated.
 """
 
 from __future__ import annotations

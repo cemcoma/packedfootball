@@ -1,14 +1,23 @@
 """Firestore-backed persistence for a signed-in user's profile, roster, and
-card inventory, plus the public lobby entries PvP matchmaking reads from.
+card inventory. Used both directly by the Godot client
+(mobile/scripts/autoload/Firestore.gd, with the signed-in user's own ID
+token) and, for anything that needs to be authoritative, by backend/main.py's
+Cloud Run service (via AdminFirestoreClient, not subject to firestore.rules
+at all).
 
-CLIENT-TRUSTED PHASE: every write here happens with the signed-in user's own
-ID token, straight from the game client. Firestore Security Rules stop one
-user from touching another user's data, but nothing here validates that the
-user isn't lying about their own state (crediting themselves extra coins,
-say). That's an accepted trade-off for this phase, not an oversight -- see
-firebase_client.py's module docstring. Moving credit- and inventory-affecting
-writes behind a Cloud Run service that enforces what these rules currently
-just trust is the planned next step.
+CLIENT-TRUSTED PHASE: a *direct* write here (as opposed to one mediated by
+the backend) happens with the signed-in user's own ID token. Firestore
+Security Rules stop one user from touching another user's data, but nothing
+stops the user from lying about their own state over a write like that
+(crediting themselves extra coins, say). That's an accepted trade-off for
+whatever's still written this way -- today, formation/roster_player_ids
+(Team.gd's save_team()) and display_name -- not an oversight; the
+higher-stakes operations (pack opening, match simulation, both of which
+touch credits and generate new cards) already moved behind the backend
+specifically because of this. Tightening firestore.rules to deny direct
+writes to the still-client-trusted fields, once nothing needs to write them
+directly anymore, remains the natural next step (see backend/README.md's
+"Still to do").
 
 Schema:
     users/{uid}                -> {display_name, credits, roster_player_ids: [id, ...]}
@@ -19,9 +28,6 @@ Schema:
                                    cross-user leaderboard can query this
                                    collection directly instead of joining
                                    through every user's roster/inventory.
-    lobby/{uid}                -> public squad snapshot used for PvP discovery
-                                   (still fully denormalized -- see
-                                   publish_lobby_entry)
 """
 
 from __future__ import annotations
@@ -34,7 +40,6 @@ from typing import Any
 from player.player import Attributes
 
 DEFAULT_STARTING_CREDITS = 1000
-DEFAULT_STARTING_ELO = 1200
 DEFAULT_FORMATION = "4-4-2"
 
 
@@ -124,7 +129,7 @@ class GameState:
         self, default_roster: list, default_display_name: str, default_formation: str = DEFAULT_FORMATION
     ) -> dict[str, Any]:
         """Returns {"credits", "display_name", "wins", "losses", "draws",
-        "elo", "campaign_level", "roster", "formation"}.
+        "campaign_level", "roster", "formation"}.
 
         If this uid has no profile document yet (brand new account), creates
         one seeded with default_roster, default_display_name, default_formation,
@@ -148,7 +153,6 @@ class GameState:
                 "wins": 0,
                 "losses": 0,
                 "draws": 0,
-                "elo": DEFAULT_STARTING_ELO,
                 "campaign_level": 0,
                 "roster_player_ids": list(roster_player_ids),
                 "formation": default_formation,
@@ -160,7 +164,6 @@ class GameState:
                 "wins": 0,
                 "losses": 0,
                 "draws": 0,
-                "elo": DEFAULT_STARTING_ELO,
                 "campaign_level": 0,
                 "roster": list(default_roster),
                 "formation": default_formation,
@@ -171,7 +174,6 @@ class GameState:
             "wins": doc.get("wins", 0),
             "losses": doc.get("losses", 0),
             "draws": doc.get("draws", 0),
-            "elo": doc.get("elo", DEFAULT_STARTING_ELO),
             "campaign_level": doc.get("campaign_level", 0),
             "roster": await self._load_players(doc.get("roster_player_ids", [])),
             "formation": doc.get("formation", DEFAULT_FORMATION),
@@ -194,9 +196,6 @@ class GameState:
 
     async def record_match_result(self, wins: int, losses: int, draws: int) -> None:
         await self.update_profile_fields({"wins": wins, "losses": losses, "draws": draws})
-
-    async def set_elo(self, elo: int) -> None:
-        await self.update_profile_fields({"elo": elo})
 
     async def set_campaign_level(self, campaign_level: int) -> None:
         await self.update_profile_fields({"campaign_level": campaign_level})
@@ -256,70 +255,3 @@ class GameState:
         for card in bench:
             if not getattr(card, "doc_id", None):
                 await self.add_inventory_card(card)
-
-    # -- PvP lobby --------------------------------------------------------------
-
-    async def publish_lobby_entry(
-        self, display_name: str, roster: list, wins: int = 0, elo: int = DEFAULT_STARTING_ELO, campaign_level: int = 0
-    ) -> None:
-        """Publishes a public snapshot used for both PvP matchmaking (the
-        roster) and the leaderboard (wins/elo/campaign_level). One document
-        serves both since they're both "things anyone signed in can see
-        about this player" -- no separate leaderboard collection needed.
-        """
-        uid = self.client.uid
-        overall = round(sum(p.overall for p in roster) / len(roster)) if roster else 0
-        await self.client.set_document(
-            f"lobby/{uid}",
-            {
-                "display_name": display_name,
-                "overall": overall,
-                "wins": wins,
-                "elo": elo,
-                "campaign_level": campaign_level,
-                "roster": [player_to_fields(p) for p in roster],
-            },
-            merge=False,
-        )
-
-    async def list_opponents(self) -> list[dict[str, Any]]:
-        """Returns other users' published squads for the PvP menu.
-
-        Each entry: {"uid", "display_name", "overall", "elo", "players": [player, ...]}
-        """
-        entries = await self.client.list_collection("lobby")
-        uid = self.client.uid
-        opponents = []
-        for entry in entries:
-            if entry["id"] == uid:
-                continue
-            opponents.append(
-                {
-                    "uid": entry["id"],
-                    "display_name": entry.get("display_name", entry["id"][:8]),
-                    "overall": entry.get("overall", 0),
-                    "elo": entry.get("elo", DEFAULT_STARTING_ELO),
-                    "players": self._to_players(entry.get("roster", [])),
-                }
-            )
-        return opponents
-
-    async def list_leaderboard(self) -> list[dict[str, Any]]:
-        """Returns every published player's standings for the leaderboard.
-
-        Each entry: {"uid", "display_name", "wins", "elo", "campaign_level"}.
-        Includes the caller themself (unlike list_opponents) so they can see
-        their own rank. Doesn't need roster/player data, so it skips the
-        player deserialization list_opponents does.
-        """
-        entries = await self.client.list_collection("lobby")
-        return [
-            {
-                "uid": entry["id"],
-                "display_name": entry.get("display_name", entry["id"][:8]),
-                "wins": entry.get("wins", 0),
-                "elo": entry.get("elo", DEFAULT_STARTING_ELO),
-                "campaign_level": entry.get("campaign_level", 0),
-            }
-            for entry in entries
-        ]

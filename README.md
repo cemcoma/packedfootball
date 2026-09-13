@@ -17,4 +17,4 @@ Social mechanics - 30%
 PvP - 0%
 
 Setup:
-Copy packedfootball/firebase_config.example.py to packedfootball/firebase_config.py and fill in your own Firebase project's API key and project ID. firebase_config.py is gitignored so your credentials won't be committed.
+See mobile/README.md (Godot client) and backend/README.md (Cloud Run backend) for current setup instructions. packedfootball/ is now just the shared game-logic modules the backend reuses (gameEngine, packEngine, player/*, game_state, formations, replay) -- the original pygame/pygbag client that used to live there has been removed.

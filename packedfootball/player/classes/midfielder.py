@@ -464,9 +464,6 @@ class DefensiveMid(Midfielder):
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
 
-        self.attributes.defending = min(100, self.attributes.defending + 12)
-        self.attributes.tackling = min(100, self.attributes.tackling + 8)
-
 
 class AttackingMid(Midfielder):
     """CAM: the creative outlet in the pocket behind the striker. Signature
@@ -479,6 +476,3 @@ class AttackingMid(Midfielder):
         self.action_profile = AttackingMidActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
-
-        self.attributes.vision = min(100, self.attributes.vision + 12)
-        self.attributes.shoot_tendency = min(100, self.attributes.shoot_tendency + 10)

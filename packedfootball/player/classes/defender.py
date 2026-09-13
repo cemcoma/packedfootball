@@ -369,10 +369,6 @@ class CenterBack(Defender):
         self.action_profile = CenterBackActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
-        
-        self.attributes.drible_tendency = max(0, self.attributes.drible_tendency - 20)
-        self.attributes.aggression += 10
-        self.attributes.defending += 10
 
 class Fullback(Defender):
     primary_stats = ("defending", "tackling", "speed","passing")
@@ -382,9 +378,6 @@ class Fullback(Defender):
         self.action_profile = FullbackActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
-        
-        self.attributes.speed = min(100, self.attributes.speed + 15)
-        self.attributes.stamina = min(100, self.attributes.stamina + 10)
 
 
 class Wingback(Defender):
@@ -398,6 +391,3 @@ class Wingback(Defender):
         self.action_profile = WingbackActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
-
-        self.attributes.speed = min(100, self.attributes.speed + 20)
-        self.attributes.stamina = min(100, self.attributes.stamina + 15)

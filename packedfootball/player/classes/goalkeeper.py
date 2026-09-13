@@ -23,9 +23,6 @@ class Goalkeeper(player):
         self.action_profile = GoalkeeperActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
-        
-        self.attributes.ballcontrol = min(100, self.attributes.ballcontrol + 20)
-        self.attributes.agility = min(100, self.attributes.agility + 15)
 
     def _get_keeper_line(self, state: dict) -> float:
         return 1 if state.get("a_direction", 1) == 1 else PITCH_HEIGHT-1
@@ -61,6 +58,7 @@ class Goalkeeper(player):
                 
             # Fuzziness: Lower vision creates larger positional misjudgments
             fuzz = state["rng"].normal(0, max(0.0, (100 - self.attributes.vision) / 40.0))
+            fuzz = max(0,fuzz)
             intercept_x += fuzz
             
             # Clamp strictly to the goal posts (35.0 +/- ~3.75) with slight padding

@@ -1,13 +1,14 @@
 """Authoritative game backend: the Cloud Run service that closes the
-CLIENT-TRUSTED gap called out in packedfootball/firebase_client.py,
-firestore.rules, and game_state.py.
+CLIENT-TRUSTED gap firestore.rules and game_state.py's own module
+docstring call out -- nothing stops a client from lying about its own
+state over a bare ID-token-authenticated Firestore write.
 
-Pack opening and match results now happen here, using a server-generated
-seed and the *same* gameEngine/packEngine code the client used to run
-locally -- so a client can no longer just tell the server it won, or that it
-opened five icon cards. It reads/writes Firestore with the Admin SDK
-(AdminFirestoreClient), which is not subject to firestore.rules, instead of
-the user's own ID token.
+Pack opening and match results happen here instead, using a
+server-generated seed and the *same* gameEngine/packEngine code any client
+would otherwise run locally -- so a client can no longer just tell the
+server it won, or that it opened five icon cards. It reads/writes
+Firestore with the Admin SDK (AdminFirestoreClient), which is not subject
+to firestore.rules, instead of the user's own ID token.
 """
 
 from __future__ import annotations

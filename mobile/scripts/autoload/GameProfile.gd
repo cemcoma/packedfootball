@@ -209,11 +209,7 @@ func bench_ids() -> Array:
 ## just moved bench->roster, so its stale bench pointer document gets
 ## deleted; a bench card with no .doc_id just moved roster->bench, so it
 ## gets a fresh one created. On success, refreshes saved_formation/
-## saved_slot_assignment so is_dirty() goes false again, and republishes
-## the public lobby entry -- every account with a complete saved squad is
-## discoverable as a Quick Match opponent this way (see backend/main.py's
-## _pick_opponent_profile), not just accounts that happened to rename in
-## Profile.gd (the only other place this got called before). Returns false
+## saved_slot_assignment so is_dirty() goes false again. Returns false
 ## (writing nothing) if any slot is still empty -- callers should already
 ## be blocking that in their own UI, this is just a last-resort guard.
 func save_team() -> bool:
@@ -242,7 +238,6 @@ func save_team() -> bool:
 
 	saved_formation = formation
 	saved_slot_assignment = slot_assignment.duplicate()
-	await publish_lobby_entry()
 	return true
 
 
@@ -277,42 +272,6 @@ func set_display_name(new_name: String) -> bool:
 	if ok:
 		display_name = new_name
 	return ok
-
-
-## Publishes the public leaderboard snapshot -- called after anything that
-## changes a leaderboard-visible stat (renaming from Profile.gd; every
-## successful save_team(), see above). Leaderboard fields only (no roster):
-## nothing that actually runs a match ever reads this doc for squad data --
-## /match/simulate and /match/quick both deliberately re-fetch the real
-## profile fresh via GameState.load_or_create_profile(), specifically
-## because a lobby snapshot could be stale. Carrying a full roster here was
-## dead weight on that path -- 11 players' worth of attributes/appearance,
-## written on every save, never read back by anything that matters.
-##
-## This mirrors game_state.py's OWN publish_lobby_entry/list_opponents --
-## deliberately NOT touched to match: those are packedfootball/main.py's
-## (the original pygame client, not part of the active Godot+backend
-## system) own independent write/read path, and list_opponents() there
-## still genuinely needs a roster to run its own local PvP matches. The
-## two clients simply publish a differently-shaped lobby doc now; a pygame
-## client browsing a Godot-published entry specifically would see an empty
-## squad for it, which is fine given main.py isn't the active path.
-##
-## merge=false (full replace, not a merge) below is what makes this
-## automatic: the very next publish from an account that still has an old
-## roster-carrying doc overwrites it entirely, dropping the stale field
-## with no separate cleanup/migration needed.
-func publish_lobby_entry() -> bool:
-	return await Firestore.set_document(
-		"lobby/%s" % FirebaseAuth.uid,
-		{
-			"display_name": display_name,
-			"overall": average_overall(),
-			"wins": wins,
-			"campaign_level": campaign_level,
-		},
-		false
-	)
 
 
 ## Clears the cached profile/squad state -- called on sign-out (mirrors

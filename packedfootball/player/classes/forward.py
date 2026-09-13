@@ -73,7 +73,6 @@ class Forward(player):
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         self.action_profile = ForwardActionProfile()
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
-        self.attributes.power +=5
 
     def _build_action(self, decision: str, state: dict) -> dict | None:
         if decision == "stop":
@@ -435,6 +434,3 @@ class Winger(Forward):
         self.action_profile = WingerActionProfile()
         self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
-
-        self.attributes.dribbiling = min(100, self.attributes.dribbiling + 10)
-        self.attributes.agility = min(100, self.attributes.agility + 10)

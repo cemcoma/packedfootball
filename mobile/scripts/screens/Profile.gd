@@ -5,11 +5,12 @@ extends Control
 ## same fields shown (squad overall, wins, losses, draws; notably NOT
 ## campaign_level, even though main.py loads that too -- the Python screen
 ## just never displays it, so neither does this one), same rename behavior
-## (only writes if the trimmed name is non-empty and actually changed,
-## then republishes the public lobby entry so PvP-visible stats stay in
-## sync -- see main.py's _publish_lobby()). GameProfile.gd (unlike
-## game_state.py's own profile shape) has no elo field at all -- by design
-## decision, elo was removed from the active Godot+backend system entirely.
+## (only writes if the trimmed name is non-empty and actually changed).
+## GameProfile.gd (unlike game_state.py's own profile shape) has no elo
+## field at all -- by design decision, elo was removed from the active
+## Godot+backend system entirely. There is also no `lobby` collection
+## publish anywhere anymore -- leaderboards will read straight from
+## `users`/`players` docs instead of a separate snapshot.
 ##
 ## One deliberate difference: main.py branches on _IS_EMSCRIPTEN for the
 ## rename field (a real LineEdit on desktop, a native HTML form overlay in
@@ -48,7 +49,6 @@ func _on_save_name_pressed() -> void:
 	if new_name == "" or new_name == GameProfile.display_name:
 		return
 	await GameProfile.set_display_name(new_name)
-	await GameProfile.publish_lobby_entry()
 
 
 func _on_back_pressed() -> void:

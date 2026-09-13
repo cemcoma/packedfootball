@@ -1,6 +1,6 @@
 import os
 import random
-from player.player import Attributes, APPEARANCE_SLOTS, APPEARANCE_OPTION_COUNT, player
+from player.player import Attributes, APPEARANCE_SLOTS, APPEARANCE_OPTION_COUNT, TENDENCY_FIELDS, player
 
 from player.classes.goalkeeper import Goalkeeper
 from player.classes.defender import CenterBack, Fullback, Wingback
@@ -49,11 +49,169 @@ TIER_RANGES = {
     "bronze": (45, 53),
     "silver": (55, 60),
     "gold": (62, 70),
-    "platinum": (72, 80),
-    "diamond": (82, 87),
-    "special": (90, 99),
-    "icon": (100,110)
+    "platinum": (72, 87),
+    "diamond": (80, 85),
+    "special": (85, 90),
+    "icon": (95,100)
 }
+
+# Tendencies are a *role* disposition, not a skill -- a bronze CDM and an
+# icon CDM should be similarly conservative in tendency, just different in
+# how well they execute, so these ranges are fixed and independent of tier
+# (unlike TIER_RANGES/skill attributes, which scale with card quality).
+# "composure" is a skill attribute despite living in player.py's
+# TENDENCY_FIELDS (see that set's own comment) -- it's tier-rolled below,
+# not one of these.
+TENDENCY_RANGES = {
+    "pass_tendency": (30, 70),
+    "shoot_tendency": (20, 70),
+    "drible_tendency": (30, 80),
+    "aggression": (15, 65),
+    "clear_tendency": (5, 45),
+}
+
+_TENDENCY_STAT_NAMES = TENDENCY_FIELDS - {"composure"}
+_SKILL_STAT_NAMES = tuple(f for f in Attributes.__dataclass_fields__ if f not in _TENDENCY_STAT_NAMES)
+
+# Per-position stat tiers: "primary" (rolls in the top half of its range),
+# "secondary" (full range -- the default for anything not listed here),
+# "tertiary" (bottom half -- a real but secondary-to-that trait), or
+# "nerfed" (this position basically never grows this stat, regardless of
+# card tier -- see _roll_skill_stat). Loosely informed by real football/
+# EA FC-style attribute weighting per position, adapted to this project's
+# own stat vocabulary -- not a port of any specific game's exact numbers,
+# and very much a first pass: tweak freely, nothing else depends on the
+# exact values, only on primary/secondary/tertiary/nerfed being one of
+# those four strings.
+#
+# LB/RB, LM/RM, and LW/RW are mirrored sides -- nothing here distinguishes
+# left from right, so each pair repeats the same profile.
+POSITION_STAT_TIERS = {
+    "GK": {
+        "passing": "primary", "agility": "primary", "composure": "primary", "ballcontrol": "primary",
+        "defending": "nerfed", "tackling": "nerfed", "shooting": "nerfed", "dribbiling": "nerfed",
+        "speed": "tertiary", "power": "secondary", "accuracy": "secondary", "vision": "secondary",
+        "stamina": "nerfed",
+        "clear_tendency": "primary", "pass_tendency": "secondary", "aggression": "tertiary",
+        "shoot_tendency": "nerfed", "drible_tendency": "nerfed",
+    },
+    "CB": {
+        "defending": "primary", "tackling": "primary",
+        "shooting": "nerfed", "dribbiling": "nerfed", "speed": "nerfed",
+        "passing": "tertiary", "ballcontrol": "tertiary", "agility": "tertiary", "accuracy": "tertiary", "vision": "tertiary",
+        "power": "secondary", "composure": "secondary",
+        "stamina": "tertiary",
+        "clear_tendency": "primary", "aggression": "secondary",
+        "pass_tendency": "tertiary", "shoot_tendency": "nerfed", "drible_tendency": "nerfed",
+    },
+    "LB": {
+        "defending": "primary", "tackling": "primary",
+        "shooting": "nerfed", "accuracy": "nerfed",
+        "passing": "secondary", "speed": "secondary",
+        "dribbiling": "tertiary", "ballcontrol": "tertiary", "agility": "tertiary", "power": "tertiary",
+        "vision": "tertiary", "composure": "tertiary",
+        "stamina": "primary",
+        "clear_tendency": "secondary", "pass_tendency": "secondary",
+        "drible_tendency": "tertiary", "aggression": "tertiary", "shoot_tendency": "nerfed",
+    },
+    "WB": {
+        "speed": "primary", "passing": "primary",
+        "shooting": "nerfed", "accuracy": "nerfed",
+        "defending": "secondary", "tackling": "secondary", "dribbiling": "secondary",
+        "ballcontrol": "secondary", "agility": "secondary", "vision": "secondary",
+        "power": "tertiary", "composure": "tertiary",
+        "stamina": "primary",
+        "pass_tendency": "secondary", "drible_tendency": "secondary",
+        "clear_tendency": "tertiary", "aggression": "tertiary", "shoot_tendency": "nerfed",
+    },
+    "CDM": {
+        "defending": "primary", "tackling": "primary", "passing": "primary",
+        "shooting": "nerfed", "drible_tendency": "nerfed",
+        "ballcontrol": "secondary", "power": "secondary", "vision": "secondary", "composure": "secondary",
+        "dribbiling": "tertiary", "speed": "tertiary", "agility": "tertiary", "accuracy": "tertiary",
+        "stamina": "primary",
+        "pass_tendency": "secondary", "clear_tendency": "secondary", "aggression": "secondary",
+        "shoot_tendency": "nerfed",
+    },
+    "CM": {
+        "passing": "primary", "ballcontrol": "primary", "vision": "primary",
+        "dribbiling": "secondary", "speed": "secondary", "agility": "secondary", "composure": "secondary",
+        "defending": "tertiary", "tackling": "tertiary", "shooting": "tertiary", "power": "tertiary", "accuracy": "tertiary",
+        "stamina": "primary",
+        "pass_tendency": "primary", "drible_tendency": "secondary",
+        "shoot_tendency": "tertiary", "aggression": "tertiary", "clear_tendency": "tertiary",
+    },
+    "CAM": {
+        "passing": "primary", "ballcontrol": "primary", "vision": "primary", "shooting": "primary",
+        "defending": "nerfed", "tackling": "nerfed",
+        "dribbiling": "secondary", "speed": "secondary", "agility": "secondary", "accuracy": "secondary", "composure": "secondary",
+        "power": "tertiary",
+        "stamina": "tertiary",
+        "shoot_tendency": "primary", "pass_tendency": "secondary", "drible_tendency": "secondary",
+        "aggression": "nerfed", "clear_tendency": "nerfed",
+    },
+    "LM": {
+        "passing": "primary", "ballcontrol": "primary", "speed": "primary",
+        "dribbiling": "secondary", "agility": "secondary", "vision": "secondary",
+        "defending": "tertiary", "tackling": "tertiary", "shooting": "tertiary", "power": "tertiary",
+        "accuracy": "tertiary", "composure": "tertiary",
+        "stamina": "secondary",
+        "pass_tendency": "secondary", "drible_tendency": "secondary",
+        "shoot_tendency": "tertiary", "aggression": "tertiary", "clear_tendency": "tertiary",
+    },
+    "LW": {
+        "speed": "primary", "agility": "primary", "dribbiling": "primary",
+        "defending": "nerfed", "tackling": "nerfed", "aggression": "nerfed", "clear_tendency": "nerfed",
+        "ballcontrol": "secondary", "shooting": "secondary", "accuracy": "secondary",
+        "passing": "tertiary", "power": "tertiary", "vision": "tertiary", "composure": "tertiary",
+        "stamina": "tertiary",
+        "drible_tendency": "primary", "shoot_tendency": "secondary", "pass_tendency": "tertiary",
+    },
+    "ST": {
+        "shooting": "primary", "power": "primary", "accuracy": "primary",
+        "defending": "nerfed", "tackling": "nerfed", "pass_tendency": "nerfed", "clear_tendency": "nerfed",
+        "dribbiling": "secondary", "ballcontrol": "secondary", "speed": "secondary", "agility": "secondary", "composure": "secondary",
+        "passing": "tertiary", "vision": "tertiary",
+        "stamina": "tertiary",
+        "shoot_tendency": "primary", "drible_tendency": "tertiary", "aggression": "tertiary",
+    },
+}
+POSITION_STAT_TIERS["RB"] = POSITION_STAT_TIERS["LB"]
+POSITION_STAT_TIERS["RM"] = POSITION_STAT_TIERS["LM"]
+POSITION_STAT_TIERS["RW"] = POSITION_STAT_TIERS["LW"]
+
+
+def _roll_skill_stat(rng: random.Random, stat_type: str, min_s: int, max_s: int) -> int:
+    """Tier-scaling roll for anything in _SKILL_STAT_NAMES. "nerfed" is
+    deliberately its own shape rather than "bottom slice of (min_s, max_s)"
+    -- it's meant to stay low-ish regardless of tier (a nerfed stat barely
+    grows even on an icon card), where tertiary/secondary/primary all
+    scale up together with tier.
+    """
+    if stat_type == "primary":
+        return rng.randint(min_s + (max_s - min_s) // 2, max_s)
+    elif stat_type == "tertiary":
+        return rng.randint(min_s, min_s + (max_s - min_s) // 2)
+    elif stat_type == "nerfed":
+        return rng.randint(int(25 + min_s * 0.1), int(40 + max_s * 0.1))
+    return rng.randint(min_s, max_s)  # "secondary", and the fallback for anything unrecognized
+
+
+def _roll_tendency_stat(rng: random.Random, stat_type: str, low: int, high: int) -> int:
+    """Same primary/secondary/tertiary/nerfed shape as _roll_skill_stat, but
+    against a tendency's own fixed (low, high) range instead of a
+    tier-dependent one (see TENDENCY_RANGES) -- "nerfed" here is just the
+    bottom quarter of that fixed range, not a separate low-and-flat band,
+    since the range is already tier-independent.
+    """
+    span = high - low
+    if stat_type == "primary":
+        return rng.randint(low + span // 2, high)
+    elif stat_type == "tertiary":
+        return rng.randint(low, low + span // 2)
+    elif stat_type == "nerfed":
+        return rng.randint(low, low + max(1, span // 4))
+    return rng.randint(low, high)  # "secondary", and the fallback for anything unrecognized
 
 
 PACK_DATABASE = {
@@ -179,45 +337,22 @@ class PackManager:
         return new_cards
 
     def _generate_tier_attributes(self, tier: str, position: str) -> Attributes:
+        """Rolls a full Attributes set for one card: every skill attribute
+        (tier-scaling -- see _roll_skill_stat) plus every tendency
+        (role-scaling only -- see _roll_tendency_stat), using position's
+        entry in POSITION_STAT_TIERS to decide primary/secondary/tertiary/
+        nerfed per stat (default "secondary" for anything that position's
+        entry doesn't mention, or for an unrecognized position entirely).
+        """
         min_s, max_s = TIER_RANGES.get(tier, (40, 50))
+        position_profile = POSITION_STAT_TIERS.get(position, {})
 
-        def roll_stat(stat_type):
-            if stat_type == "primary":
-                return self.rng.randint(min_s + (max_s - min_s) // 2, max_s)
-            elif stat_type == "secondary":
-                return self.rng.randint(min_s, max_s)
-            elif stat_type == "nerfed":
-                return self.rng.randint(int(25 + min_s * 0.1), int(40 + max_s * 0.1))
-
-        profile = {
-            "speed": "secondary", "agility": "secondary", "passing": "secondary", 
-            "ballcontrol": "secondary", "defending": "secondary", "tackling": "secondary", 
-            "dribbiling": "secondary", "shooting": "secondary", "power": "secondary", 
-            "accuracy": "secondary", "vision": "secondary", "composure": "secondary"
-        }
-
-        if position == "GK":
-            profile.update(defending="nerfed", tackling="nerfed", shooting="nerfed", dribbiling="nerfed", passing="primary", agility="primary", composure="primary", ballcontrol="primary")
-        elif position in ["CB"]:
-            profile.update(defending="primary", tackling="primary", shooting="nerfed", dribbiling="nerfed")
-        elif position in ["LB","RB"]:
-            profile.update(defending="primary" ,tackling="primary", shooting="nerfed")
-        elif position == "WB":
-            profile.update(speed="primary", passing="primary", defending="secondary", tackling="secondary", shooting="nerfed")
-        elif position == "CDM":
-            profile.update(defending="primary", tackling="primary", passing="primary", shooting="nerfed")
-        elif position in ["CM", "AM", "CAM"]:
-            profile.update(passing="primary", ballcontrol="primary", vision="primary")
-            if position in ["AM", "CAM"]:
-                profile.update(shooting="primary", defending="nerfed", tackling="nerfed")
-        elif position in ["LM", "RM"]:
-            profile.update(passing="primary", ballcontrol="primary", speed="primary")
-        elif position in ["LW", "RW"]:
-            profile.update(speed="primary", agility="primary", dribbiling="primary", defending="nerfed", tackling="nerfed")
-        elif position == "ST":
-            profile.update(shooting="primary", power="primary", accuracy="primary", defending="nerfed", tackling="nerfed")
-
-        generated_stats = {stat: roll_stat(s_type) for stat, s_type in profile.items()}
+        generated_stats = {}
+        for stat in _SKILL_STAT_NAMES:
+            generated_stats[stat] = _roll_skill_stat(self.rng, position_profile.get(stat, "secondary"), min_s, max_s)
+        for stat in _TENDENCY_STAT_NAMES:
+            low, high = TENDENCY_RANGES[stat]
+            generated_stats[stat] = _roll_tendency_stat(self.rng, position_profile.get(stat, "secondary"), low, high)
 
         return Attributes(**generated_stats)
 

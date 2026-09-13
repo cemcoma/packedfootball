@@ -93,40 +93,43 @@ rather than a second, subtly-different in-memory one); false falls back to
 the bundled local demo replay exactly as before, so that offline path
 (no backend, no signed-in account) still works unchanged.
 
-**`lobby` is gone from the backend entirely.** It used to gate opponent
-discovery for both match endpoints through a `lobby/{uid}` "opted in to
-being challenged" doc -- an extra collection that only ever needed to
-answer "does this account exist and have a complete roster", which
-`users/{uid}` already answers directly. `_pick_opponent_profile` now
-queries `list_collection("users")` (filtering by `roster_player_ids`
-length) instead of `list_collection("lobby")`, and `/match/simulate`'s
-opponent-exists check reads `users/{opponent_uid}` instead of
-`lobby/{opponent_uid}`. Nothing in `backend/main.py` reads or writes
-`lobby` anymore.
+**`lobby` is gone entirely -- backend and Godot both.** It used to gate
+opponent discovery for both match endpoints through a `lobby/{uid}` "opted
+in to being challenged" doc -- an extra collection that only ever needed
+to answer "does this account exist and have a complete roster", which
+`users/{uid}` already answers directly. `_pick_opponent_profile` queries
+`list_collection("users")` (filtering by `roster_player_ids` length)
+instead, and `/match/simulate`'s opponent-exists check reads
+`users/{opponent_uid}` instead of `lobby/{opponent_uid}`. Nothing in
+`backend/main.py` reads or writes `lobby`.
 
-`GameProfile.gd` still *publishes* to `lobby/{uid}` after every
+`GameProfile.gd` used to also *publish* to `lobby/{uid}` after every
 `save_team()` (leaderboard-relevant fields only -- `display_name`/
-`overall`/`wins`/`campaign_level`, no roster, see the git history on this
-section for that earlier cleanup) -- that write is unaffected by this
-change, but now has no reader anywhere in the active system either (the
-backend never looks at `lobby` at all, and Godot never reads it, only
-writes it). Whether to keep publishing to a collection nothing consumes,
-in case an account-level leaderboard reads it later, is an open question,
-not yet decided. `packedfootball/game_state.py`'s own
-`publish_lobby_entry`/`list_opponents`/`list_leaderboard` -- the legacy
-pygame client's independent, already-scrapped write/read path -- is
-untouched and still fully self-consistent on its own.
+`overall`/`wins`/`campaign_level`, no roster), but that write had no reader
+anywhere at all by that point (the backend never looked at `lobby`, and
+Godot never read it either, only wrote it), so it's been deleted too --
+`save_team()`/`set_display_name()` no longer touch `lobby` in any way.
+Player-blob leaderboards (see `players/{player_id}.statistics` below) will
+be built later by reading straight from `users`/`players` docs, not from a
+separate snapshot collection -- there is no `lobby` collection anywhere in
+this project anymore, client or server.
 
 **Elo is gone from the active system entirely** -- no computation, no
 storage, no display, anywhere in `backend/main.py` or `GameProfile.gd`.
 `/match/simulate` no longer computes or updates a rating after a match,
-and `GameProfile.gd` has no `elo` field at all. Scoped the same way as
-`lobby` above: `packedfootball/game_state.py`'s own elo scaffolding
-(`DEFAULT_STARTING_ELO`, `GameState.set_elo`, the `elo` field
-`load_or_create_profile`/`publish_lobby_entry`/`list_opponents`/
-`list_leaderboard` all carry) is deliberately left alone, since
-`packedfootball/main.py` -- not part of the active system -- still
-depends on it for its own local elo-based challenge/leaderboard UI.
+and `GameProfile.gd` has no `elo` field at all.
+
+**The original pygame/pygbag client has been removed from the repo
+entirely** -- `packedfootball/main.py`, `auth_scene.py`,
+`firebase_client.py`, `firebase_config.example.py`, `native_form.py`, and
+its `build/` output are all gone. That was the last caller of
+`packedfootball/game_state.py`'s own `publish_lobby_entry`/`list_opponents`/
+`list_leaderboard` and its elo scaffolding (`DEFAULT_STARTING_ELO`,
+`GameState.set_elo`, the `elo` field `load_or_create_profile` used to
+carry) -- both had been deliberately left in place through the `lobby` and
+elo cleanups above specifically because that client still depended on
+them; with it gone, so are they. `packedfootball/` is backend-critical
+code only now (see `backend/README.md`).
 
 **`games/{id}` now always carries a roster snapshot.** `/match/simulate`
 already embedded a `"teams"` field (both sides' uid/display_name/formation/
@@ -145,10 +148,9 @@ promotion by winning, matched against similarly-ranked players rather than
 Quick Match's fully-random pool -- not built yet.
 
 **Diagnostics**: `backend/scripts/list_accounts.py` (read-only) lists every
-`users/{uid}` doc and whether it has a published `lobby/{uid}` entry -- the
-`lobby/{uid}` column is vestigial now that Quick Match's opponent pool
-comes straight from `users/{uid}` (see above), still useful as a general
-"how many accounts, how complete are their rosters" check.
+`users/{uid}` doc and whether its roster is complete enough to be a Quick
+Match candidate (`roster_player_ids` length == 11) -- a general "how many
+accounts, how complete are their rosters" check.
 
 ## Match screen controls
 
@@ -491,8 +493,7 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
 - `GameProfile.gd` -- the live squad model (profile fields, formation, slot
   assignment, every owned card, dirty-checking) on top of `Firestore.gd`,
   mirroring `packedfootball/game_state.py`'s `GameState` plus the caching
-  this scene needed on top of it. `save_team()` also republishes the
-  lobby entry (see "Play / Quick Match" above).
+  this scene needed on top of it.
 - `MatchSession.gd` -- carries one just-played real match's result
   (replay/roster/score/reward) from `Play.gd` to `MatchPlayback.gd` (see
   "Play / Quick Match" above) -- the same shared-autoload idea as

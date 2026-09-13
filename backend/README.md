@@ -64,12 +64,9 @@ re-run any time:
   using a fixed per-tier look so at least tiers read as visually distinct
   while testing.
 - `scripts/list_accounts.py` -- read-only; lists every `users/{uid}` doc and
-  whether it has a published `lobby/{uid}` entry. That second column is
-  vestigial now (see "No more `lobby` in the backend" below) -- kept
-  useful as a general "how many accounts, how complete are their rosters"
-  check, just no longer describing the actual Quick Match opponent pool
-  (which now comes straight from `users/{uid}`, no `lobby` step at all).
-  Never writes anything.
+  whether its roster is complete enough to be a Quick Match candidate
+  (`roster_player_ids` length == 11) -- a general "how many accounts, how
+  complete are their rosters" check. Never writes anything.
 
 ## Match endpoints
 
@@ -85,34 +82,40 @@ re-run any time:
   (`score`, `replay`, `roster`, ...) for
   `mobile/scripts/screens/MatchPlayback.gd` to play back.
 
-### No more `lobby` in the backend
+### No more `lobby` anywhere -- backend or Godot
 
 Both endpoints used to gate opponent discovery through a `lobby/{uid}`
 "opted in to being challenged" doc -- an extra collection that only ever
 needed to answer "does this account exist and have a complete roster",
 which `users/{uid}` already answers directly. Removed entirely:
-`_pick_opponent_profile` now calls `list_collection("users")` (filtering
-candidates by `roster_player_ids` length) instead of `list_collection("lobby")`,
-and `/match/simulate`'s opponent-exists check reads `users/{opponent_uid}`
-instead of `lobby/{opponent_uid}`. Nothing in `backend/main.py` reads or
-writes `lobby` anymore.
+`_pick_opponent_profile` calls `list_collection("users")` (filtering
+candidates by `roster_player_ids` length), and `/match/simulate`'s
+opponent-exists check reads `users/{opponent_uid}` instead of
+`lobby/{opponent_uid}`. Nothing in `backend/main.py` reads or writes
+`lobby`.
 
-Deliberately not touched: `GameProfile.gd` still *publishes* to
-`lobby/{uid}` after every save (leaderboard-relevant fields only, no
-roster -- see `mobile/README.md`), and `packedfootball/game_state.py`'s own
-`publish_lobby_entry`/`list_opponents`/`list_leaderboard` (the legacy
-pygame client's independent, already-scrapped write/read path) still use
-it too. Whether Godot should keep publishing to a collection the backend
-no longer reads at all is worth a follow-up call.
+The original pygame/pygbag client (`packedfootball/main.py` and everything
+only it needed -- `auth_scene.py`, `firebase_client.py`,
+`firebase_config.example.py`, `native_form.py`) has been removed from the
+repo entirely, which also took its `game_state.GameState.publish_lobby_entry`/
+`list_opponents`/`list_leaderboard` (the only callers, now gone) and its
+`elo` scaffolding (`DEFAULT_STARTING_ELO`, `GameState.set_elo`, the `elo`
+field `load_or_create_profile` used to carry) down with it -- both were
+kept around this far specifically because that client still depended on
+them, and now nothing does. `packedfootball/` is backend-critical code
+only now: `gameEngine.py`, `packEngine.py`, `game_state.py`, `formations.py`,
+`replay.py`, `player/*`, plus `scripts/dump_test_replay.py` (Godot demo-replay
+tooling, not part of the old client) and the `data/` name lists.
 
-Neither match endpoint touches elo at all -- removed from the active
-system entirely (no computation, no storage, no field on `GameProfile.gd`
-or in what gets published to `lobby/{uid}`). `packedfootball/game_state.py`'s
-own elo scaffolding (`DEFAULT_STARTING_ELO`, `GameState.set_elo`, the `elo`
-field its `load_or_create_profile`/`publish_lobby_entry`/`list_opponents`/
-`list_leaderboard` all carry) is deliberately left alone, for the same
-reason as `lobby` itself: `packedfootball/main.py` still depends on it for
-its own local elo-based UI, even though it's not part of the active system.
+`GameProfile.gd` used to also *publish* to `lobby/{uid}` after every save
+(leaderboard-relevant fields only, no roster), but that write had no
+reader anywhere by that point -- nothing server-side or client-side ever
+read `lobby` back, only wrote it -- so it's been deleted too (see
+`mobile/README.md`). There is no `lobby` collection or code path left in
+this project, client or server; `firestore.rules` no longer grants it any
+access either. Leaderboards (sorting the actual player-card blobs, not
+user accounts) will be built later by reading `players/{player_id}`
+docs directly.
 
 Both endpoints also call `_persist_player_stats` right after
 `_run_match()`: each of the CALLER's own players' goals/assists/
