@@ -21,6 +21,7 @@ Firestore="*res://scripts/autoload/Firestore.gd"
 Backend="*res://scripts/autoload/Backend.gd"
 GameProfile="*res://scripts/autoload/GameProfile.gd"
 MatchSession="*res://scripts/autoload/MatchSession.gd"
+PackSession="*res://scripts/autoload/PackSession.gd"
 
 [display]
 

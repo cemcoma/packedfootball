@@ -50,6 +50,18 @@ static func tier_color(tier: String) -> Color:
 	return TIER_COLORS.get(tier, Color(0.5, 0.5, 0.5))
 
 
+## Rarity ordering (bronze=0 ... icon=6), for anything that needs to know
+## which of two cards is the bigger pull -- e.g. PackReveal.gd sorting a
+## just-opened pack so the best card lands last. TIER_COLORS.keys() is
+## already this project's established source of truth for tier order
+## elsewhere (PackInfoPopup.gd's own odds rows use it the same way,
+## deliberately not raw dict iteration order, since a Firestore/JSON map
+## field's key order isn't guaranteed to survive the round trip).
+static func tier_rank(tier: String) -> int:
+	var rank := TIER_COLORS.keys().find(tier)
+	return rank if rank != -1 else 0
+
+
 ## Dictionary.get(key, default) only falls back to `default` when the key
 ## is entirely absent -- a present key holding JSON null comes back as null
 ## regardless, and assigning null into a statically-typed String var is a

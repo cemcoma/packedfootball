@@ -5,11 +5,11 @@ extends Control
 ## overall/position/name/tier. The actual template lives in the companion
 ## PlayerCardView.tscn (open it in the editor to restyle) -- this script
 ## only fills in the fields and forwards taps. Used everywhere a card needs
-## to be shown (the bench grid, the selected-slot detail panel in
-## Team.tscn, and future screens like Shop/PVP) so there is exactly one
-## template to redesign when real card art/a real character portrait
-## exists, instead of every screen that shows a card needing its own
-## update.
+## to be shown (Team's bench grid and selected-slot detail panel,
+## PackReveal's reveal animation/browse grid/stats popup) so there is
+## exactly one template to redesign when real card art/a real character
+## portrait exists, instead of every screen that shows a card needing its
+## own update.
 ##
 ## Styling today is just PlayerCard.tier_color() as a flat background (the
 ## scene's "Background" ColorRect) -- see that function's own doc comment

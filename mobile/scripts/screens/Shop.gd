@@ -19,7 +19,7 @@ const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
 @onready var _currency_tab_button: Button = %CurrencyTabButton
 @onready var _status_label: Label = %StatusLabel
 @onready var _packs_scroll: ScrollContainer = %PacksScroll
-@onready var _packs_grid: GridContainer = %PacksGrid
+@onready var _packs_grid: HBoxContainer = %PacksGrid
 @onready var _currency_panel: VBoxContainer = %CurrencyPanel
 @onready var _back_button: Button = %BackButton
 @onready var _info_popup: PackInfoPopup = %InfoPopup
@@ -130,11 +130,10 @@ func _on_buy_pressed(pack: PackData) -> void:
 	var credits_remaining: int = credits_raw if typeof(credits_raw) in [TYPE_INT, TYPE_FLOAT] else GameProfile.credits
 	GameProfile.add_purchased_cards(cards, credits_remaining)
 
-	_refresh_credits_label()
-	var names: Array = []
-	for card in cards:
-		var typed_card: PlayerCard = card
-		names.append(typed_card.display_name())
-	_status_label.text = "Got: %s" % ", ".join(names)
-
-	await _load_packs()  # remaining_opens/sold-out state may have changed
+	# The reveal screen is the actual "you got these" moment now -- see
+	# PackReveal.gd. No need to refresh credits/status/the pack grid here:
+	# Shop.tscn's own _ready() reloads all of that fresh (including
+	# remaining_opens/sold-out state) the next time this scene is entered,
+	# which is exactly when it'll matter again.
+	PackSession.set_pending(pack.pack_name, cards)
+	get_tree().change_scene_to_file("res://scenes/PackReveal.tscn")

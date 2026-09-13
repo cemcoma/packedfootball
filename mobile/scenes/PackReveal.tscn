@@ -1,0 +1,179 @@
+[gd_scene format=3 uid="uid://dhq7q1k6g4mo5"]
+
+[ext_resource type="Script" uid="uid://wdo1vcjayvhe" path="res://scripts/screens/PackReveal.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
+[ext_resource type="PackedScene" uid="uid://ulrndvhqpktd" path="res://scenes/components/PlayerCardView.tscn" id="3"]
+
+[node name="PackReveal" type="Control" unique_id=1255259700]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" parent="." unique_id=1085058952 instance=ExtResource("2")]
+layout_mode = 1
+
+[node name="RevealLayer" type="Control" parent="." unique_id=699122102]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="SkipCatcher" type="Button" parent="." unique_id=2094010080]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+flat = true
+
+[node name="SkipHintLabel" type="Label" parent="." unique_id=1393396913]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -160.0
+offset_top = -30.0
+offset_right = -12.0
+offset_bottom = -8.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 12
+text = "Tap to skip"
+horizontal_alignment = 2
+
+[node name="BrowseLayer" type="Control" parent="." unique_id=2003895313]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="BrowseLayer" unique_id=1142405631]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="RootVBox" type="VBoxContainer" parent="BrowseLayer/Margin" unique_id=73934302]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TitleLabel" type="Label" parent="BrowseLayer/Margin/RootVBox" unique_id=338519621]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "PACK OPENED"
+
+[node name="CardsScroll" type="ScrollContainer" parent="BrowseLayer/Margin/RootVBox" unique_id=1181711653]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="CardsGrid" type="GridContainer" parent="BrowseLayer/Margin/RootVBox/CardsScroll" unique_id=97098289]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 12
+columns = 4
+
+[node name="BackButton" type="Button" parent="BrowseLayer/Margin/RootVBox" unique_id=1085272806]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Back to Shop"
+
+[node name="StatsPopup" type="Control" parent="." unique_id=1876874277]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_right = 480.0
+offset_bottom = 540.0
+grow_horizontal = 2
+
+[node name="Scrim" type="ColorRect" parent="StatsPopup" unique_id=1962301924]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.6)
+
+[node name="Center" type="CenterContainer" parent="StatsPopup" unique_id=236097141]
+layout_mode = 1
+
+[node name="Panel" type="Panel" parent="StatsPopup/Center" unique_id=79146303]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="StatsPopup/Center/Panel" unique_id=1029826704]
+layout_mode = 0
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="StatsPopup/Center/Panel/Margin" unique_id=898476303]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="HeroRow" type="HBoxContainer" parent="StatsPopup/Center/Panel/Margin/VBox" unique_id=784720609]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="LeftCol" type="VBoxContainer" parent="StatsPopup/Center/Panel/Margin/VBox/HeroRow" unique_id=2124412618]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="StatsCardView" parent="StatsPopup/Center/Panel/Margin/VBox/HeroRow/LeftCol" unique_id=781753064 instance=ExtResource("3")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="StatsExtraCountry" type="Label" parent="StatsPopup/Center/Panel/Margin/VBox/HeroRow/LeftCol" unique_id=764466026]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+horizontal_alignment = 1
+
+[node name="StatsExtraGam" type="Label" parent="StatsPopup/Center/Panel/Margin/VBox/HeroRow/LeftCol" unique_id=1943278115]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+horizontal_alignment = 1
+
+[node name="StatsAttrGrid" type="GridContainer" parent="StatsPopup/Center/Panel/Margin/VBox/HeroRow" unique_id=1651759316]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 16
+columns = 2
+
+[node name="CloseStatsButton" type="Button" parent="StatsPopup/Center/Panel/Margin/VBox" unique_id=408287038]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Close"

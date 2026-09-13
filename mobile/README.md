@@ -494,11 +494,13 @@ using a translucent `bg_color` on purpose.
 
 A real `.tscn`-authored `Control` (`scenes/components/PlayerCardView.tscn`,
 instanced via `PLAYER_CARD_SCENE.instantiate()`) used anywhere a card needs
-to be shown -- currently the bench grid and the stats panel's header, later
-Shop/Leaderboard too (the Players tab is plain text rows for now -- see
-"Leaderboard screen" below). `set_card(a_player_card)` populates it: a flat background
-tinted by `PlayerCard.tier_color()`, overall/position/name/tier labels, and
-a `PlayerModelView` child (see below) for the character portrait. When a
+to be shown -- `Team.tscn`'s bench grid and stats panel header, and now
+`PackReveal.tscn`'s reveal/browse/stats popup too (see "Pack reveal
+screen" above). Not `Leaderboard.tscn`'s Players tab, deliberately -- that
+one's plain text rows for now (see "Leaderboard screen" below).
+`set_card(a_player_card)` populates it: a flat background tinted by
+`PlayerCard.tier_color()`, overall/position/name/tier labels, and a
+`PlayerModelView` child (see below) for the character portrait. When a
 real card template/art exists (per-tier background art, a "galaxy" effect
 for special/icon tiers), only this one file needs to change -- every
 screen that shows a card already goes through it.
@@ -593,8 +595,11 @@ reject a purchase) so the two can't disagree -- verified directly against
 date, a pack with neither field at all) before wiring it in. Buying a pack
 calls `POST /pack/open`, folds the returned cards straight into
 `GameProfile.all_cards` (`add_purchased_cards()`) and updates the credit
-balance, then re-fetches the catalog so a now-sold-out pack's card
-reflects it immediately.
+balance, then hands the opened cards off to the new **Pack reveal
+screen** (see below) instead of staying on `Shop.tscn` -- the catalog
+naturally re-fetches next time this scene is (re)entered anyway (`_ready()`
+already calls `_load_packs()` every visit), so a now-sold-out pack's card
+reflects it by the time you're back here regardless.
 
 A pack that's currently unavailable is normally hidden from `/pack/list`
 entirely, but an admin can opt one into still being *shown* (grayed tag
@@ -645,6 +650,77 @@ syncing `type`, alongside name/price/cards_per_pack/rates/pos_rates).
 Neither `max_opens` nor `expires_at` were added to any pack's definition,
 by design -- set either directly on a pack's Firestore doc (no redeploy)
 whenever you actually want a specific pack to go live with a cap.
+
+## Pack reveal screen
+
+`PackReveal.gd`/`scenes/PackReveal.tscn` -- an EA-FC-style reveal for a
+just-bought pack, reached from `Shop.gd`'s `_on_buy_pressed` via a new
+`PackSession` autoload (mirrors `MatchSession.gd`'s exact contract --
+`has_pending()`/a setter/`clear()` -- just simpler: `Shop.gd` already
+builds the typed `Array[PlayerCard]` locally for `GameProfile.
+add_purchased_cards()`, so this holds that same array directly, no raw-
+dict/base64 decoding step the way replay bytes need).
+
+Two states. **Reveal**: each card gets its own `PlayerCardView` instance
+(the same reusable component the bench grid and Shop already use --
+nothing new needed for the card visual itself), shown one at a time via a
+`Tween` (scale + fade in, hold, fade out), worst tier first
+(`PlayerCard.tier_rank()`, a new static helper alongside the existing
+`tier_color()` -- rarity first, `overall()` as the tiebreak, same as EA FC
+hypes a pull) so the best card lands last as a bigger "hero" moment --
+how much bigger scales with *that card's own tier*, not a flat multiplier
+(`HERO_SCALE_BY_TIER`: 1.25x for a bronze hero up to 2x for icon), plus
+`PlayerCardView.set_highlighted()` (an existing hook, previously only used
+by `Team.gd`) for a subtle tint. Tapping anywhere while an *earlier*
+(non-hero) card is showing skips straight to **Browse** with every card
+already in its final resting state -- skip means skip *all* of it, not
+advance one card at a time. The hero card itself is different: it never
+auto-advances no matter how long you leave it -- `_wait_for_tap()` just
+awaits the same tap-anywhere button's own `pressed` signal directly, no
+timer at all, forcing an explicit tap before continuing (the hint label
+switches from "Tap to skip" to "Tap to continue" at that point). Since
+the hero is always the last card either way, "skip the rest" and "tap to
+continue past the hero" land on the exact same next state, so this needed
+no separate bookkeeping.
+
+This is the first `Tween` usage anywhere in this project (grepped before
+starting -- zero prior `Tween`/`AnimationPlayer` usage at all). A killed
+`Tween` never fires `finished`, which would hang `await tween.finished`
+forever if skip just called `.kill()` -- it instead fast-forwards the
+active `Tween` via `custom_step(9999.0)` (a real step, so it still
+finishes normally) and force-expires the active hold's `SceneTreeTimer`
+via `time_left = 0.0`, so whatever's currently awaited resumes on the very
+next frame either way.
+
+An earlier pass added a diamond+ sparkle overlay on `PlayerCardView` and a
+firework burst for the special/icon hero moment, both fully hand-drawn
+(no texture/particle assets, same reasoning as `PlayerModelView`) -- both
+were removed again shortly after (real art/animation for this is coming
+later instead), so if you go looking: the tier-based hero *scale* is the
+one part of that pass that stayed.
+
+**Browse**: every card (reparented from the reveal, or freshly
+instantiated on the spot for any card an early skip never got to --
+both cases are handled explicitly, not just the ones that got a turn) in
+a scrollable grid, same disposable-child population pattern as Shop's
+pack grid and Team's bench grid. Tapping a card reuses `PlayerCardView`'s
+existing `pressed` signal (already proven this way in `Team.gd`) to open
+a stats popup -- same attribute list as `Team.gd`'s own `ATTR_ROWS`,
+looked up by `player_id` from `GameProfile.all_cards` (already merged in
+by `add_purchased_cards()` before this screen ever loads), the same
+lookup `Team.gd`'s own stats panel already does. Deliberately **not** a
+shared refactor of `Team.gd`'s stats panel into a new component -- a
+reasonable future cleanup once a third call site wants this, not
+something worth touching already-shipped `Team.gd` code for today; the
+attribute-row list is duplicated between the two screens on purpose for
+the same reason.
+
+**What this doesn't have yet, on purpose**: no real card-frame art or
+animation assets exist anywhere in this project -- the reveal animates
+the same placeholder visuals (`PlayerCardView`'s tier-colored background,
+`PlayerModelView`'s hand-drawn portrait) used everywhere else today, just
+in motion. No audio either -- this project has zero sound anywhere, and
+none was added here. Both are real future work, not oversights.
 
 ## Leaderboard screen
 
@@ -755,6 +831,8 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
   everywhere instead of `main.py`'s browser-vs-desktop branch, since Godot
   has no pygbag-style mobile-text-entry problem to work around).
 - `Shop.gd` / `scenes/Shop.tscn` -- pack shop (see above).
+- `PackReveal.gd` / `scenes/PackReveal.tscn` -- pack-opening reveal
+  animation (see "Pack reveal screen" above).
 - `Play.gd` / `scenes/Play.tscn` -- match-mode hub: Quick Match (real) and
   Tournament (stub) (see "Play / Quick Match" above).
 - `Leaderboard.gd` / `scenes/Leaderboard.tscn` (was "Pvp") -- Users/Players
@@ -813,6 +891,9 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
   shared-autoload idea as `GameProfile.gd`, just for a single in-flight
   match instead of the whole squad. Two hops now, not one: `MatchPlayback`
   reads it but doesn't clear it, `MatchResult` does.
+- `PackSession.gd` -- same shared-autoload idea, one hop: `Shop.gd` ->
+  `PackReveal.gd` (see "Pack reveal screen" above), for one just-opened
+  pack's cards.
 
 ### `data/` -- pure data models / format readers
 
