@@ -1,7 +1,8 @@
 extends Control
 
-## Main navigation hub. Each button opens either a real feature scene or a
-## placeholder stub scene until the real functionality behind it gets built.
+## Main navigation hub. Every button here now opens a real feature scene --
+## Leaderboard (last to get one) was the final holdout; Tournament is still
+## a stub, but one level deeper, behind Play.
 ##
 ## AccountPanel (left side) shows the signed-in manager's own account
 ## details at a glance -- display name, squad overall, wins/draws/losses --
@@ -16,7 +17,7 @@ extends Control
 @onready var _play_button: Button = %PlayButton
 @onready var _shop_button: Button = %ShopButton
 @onready var _team_button: Button = %TeamButton
-@onready var _pvp_button: Button = %PvpButton
+@onready var _leaderboard_button: Button = %LeaderboardButton
 @onready var _settings_button: Button = %SettingsButton
 
 @onready var _account_name_label: Label = %AccountNameLabel
@@ -30,7 +31,7 @@ func _ready() -> void:
 	_play_button.pressed.connect(_on_play_pressed)
 	_shop_button.pressed.connect(_on_shop_pressed)
 	_team_button.pressed.connect(_on_team_pressed)
-	_pvp_button.pressed.connect(_on_pvp_pressed)
+	_leaderboard_button.pressed.connect(_on_leaderboard_pressed)
 	_settings_button.pressed.connect(_on_settings_pressed)
 
 	_refresh_account_panel()
@@ -56,8 +57,8 @@ func _on_team_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/Team.tscn")
 
 
-func _on_pvp_pressed() -> void:
-	get_tree().change_scene_to_file("res://scenes/Pvp.tscn")
+func _on_leaderboard_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/Leaderboard.tscn")
 
 
 func _on_settings_pressed() -> void:

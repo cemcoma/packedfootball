@@ -278,6 +278,37 @@ async def leaderboard_players(stat: str = "goals", limit: int = 20, uid: str = D
     }
 
 
+# Only "wins" for now, by design -- the mobile Leaderboard screen's Users
+# tab is a deliberately minimal first pass (see mobile/README.md). Shaped
+# the same way as PLAYER_LEADERBOARD_STATS/leaderboard_players above (a
+# dict of allowed stats, checked the same way) so adding another one later
+# (credits, campaign_level, ...) is just another entry, not new plumbing.
+USER_LEADERBOARD_STATS = {
+    "wins": "wins",
+}
+
+
+@app.get("/leaderboard/users")
+async def leaderboard_users(stat: str = "wins", limit: int = 20, uid: str = Depends(verify_id_token)):
+    field_path = USER_LEADERBOARD_STATS.get(stat)
+    if field_path is None:
+        raise HTTPException(400, f"stat must be one of {list(USER_LEADERBOARD_STATS)}")
+    limit = max(1, min(limit, 100))
+
+    docs = await AdminFirestoreClient(uid).query_top("users", field_path, limit)
+    return {
+        "stat": stat,
+        "entries": [
+            {
+                "uid": d["id"],
+                "display_name": d.get("display_name"),
+                "value": d.get(stat, 0),
+            }
+            for d in docs
+        ],
+    }
+
+
 def _validate_formation_positions(profile: dict) -> None:
     """Raises 400 if any roster player's card position can't legally fill
     their assigned formation slot -- an exact match, or is_similar_position()

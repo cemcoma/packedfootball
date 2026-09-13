@@ -110,7 +110,7 @@ func is_limited() -> bool:
 func limited_label() -> String:
 	if not is_limited():
 		return ""
-	return "%d left" % remaining_opens
+	return "%d packs left to open!" % remaining_opens
 
 
 ## What to show in place of (or alongside) the Buy button when this pack

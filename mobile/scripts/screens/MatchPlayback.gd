@@ -616,6 +616,22 @@ func _draw_corner_quarter(cam: Dictionary, corner: Vector2, start_angle: float, 
 	draw_arc(base, arc_radius, start_angle, end_angle, point_count, Color.WHITE, 2.0, true)
 
 
+# Everything drawn on PitchCanvas is raw CanvasItem calls, not themed Control
+# nodes -- AppTheme.tres's project-wide Label shadow (see mobile/README.md's
+# "Naked text" section) has no effect here at all, so text drawn directly
+# over the pitch (which is a busy, moving, colored scene, unlike a flat
+# panel background) needs its own manual shadow: the same string drawn
+# twice, once offset in dark and mostly-transparent, once for real on top.
+# Shadow alpha rides on the real text's own alpha so a fading banner's
+# shadow fades with it instead of leaving a lingering dark smudge behind.
+func _draw_string_with_shadow(
+	font: Font, pos: Vector2, text: String, alignment: int, width: float, font_size: int, color: Color
+) -> void:
+	var shadow_color := Color(0.0, 0.0, 0.0, color.a * 0.8)
+	draw_string(font, pos + Vector2(2, 2), text, alignment, width, font_size, shadow_color)
+	draw_string(font, pos, text, alignment, width, font_size, color)
+
+
 func _draw() -> void:
 	if replay.is_empty():
 		return
@@ -671,7 +687,7 @@ func _draw() -> void:
 		var carrier_pos: Vector2 = _pitch_to_screen(players[controller], cam)
 		var name: String = _player_name(controller)
 		if name != "":
-			draw_string(
+			_draw_string_with_shadow(
 				font,
 				carrier_pos + Vector2(-40, -PLAYER_RADIUS_UNITS * scale - 10),
 				name,
@@ -693,7 +709,7 @@ func _draw_banner(font: Font, font_size: int) -> void:
 		return
 	# Fades out over its last second, however long the banner's total duration was.
 	var alpha: float = clampf(banner_timer, 0.0, 1.0)
-	draw_string(
+	_draw_string_with_shadow(
 		font,
 		Vector2(size.x / 2.0 - 150, size.y / 2.0),
 		banner_text,

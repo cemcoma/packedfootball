@@ -17,6 +17,7 @@ extends Control
 ##   1. Rates -- card tier odds (bronze/silver/... -> %), from PackData.rates.
 ##   2. Position rates -- goalkeeper/defender/midfielder/attacker -> %,
 ##      from PackData.pos_rates.
+##   3. Availability -- If there is any limitations on the pack it is shown here
 ##
 ## Row order on both odds pages is a fixed client-side list, NOT dictionary
 ## iteration order -- Firestore/JSON round-tripping doesn't guarantee a map
@@ -27,7 +28,7 @@ extends Control
 ## else client-side needs those four names today.
 
 const POSITION_CATEGORY_ORDER := ["goalkeeper", "defender", "midfielder", "attacker"]
-const PAGE_COUNT := 3
+const PAGE_COUNT := 4
 
 @onready var _panel_title: Label = %PanelTitle
 @onready var _type_label: Label = %TypeLabel
@@ -37,6 +38,7 @@ const PAGE_COUNT := 3
 @onready var _rates_empty_label: Label = %RatesEmptyLabel
 @onready var _position_rates_grid: GridContainer = %PositionRatesGrid
 @onready var _position_rates_empty_label: Label = %PositionRatesEmptyLabel
+@onready var _availability_label: Label = %AvailabilityLabel
 @onready var _page_label: Label = %PageLabel
 @onready var _prev_button: Button = %PrevButton
 @onready var _next_button: Button = %NextButton
@@ -58,6 +60,10 @@ func open_for(pack: PackData) -> void:
 	_description_label.text = pack.description if pack.description != "" else "No description available."
 	_populate_grid(_rates_grid, _rates_empty_label, _odds_rows(pack.rates, PlayerCard.TIER_COLORS.keys()))
 	_populate_grid(_position_rates_grid, _position_rates_empty_label, _odds_rows(pack.pos_rates, POSITION_CATEGORY_ORDER))
+	if pack.remaining_opens != null or pack.expires_at != "":
+		_availability_text(pack.remaining_opens,pack.expires_at)
+	else:
+		_availability_label.text = "Always available (Admin decision)"
 	_page = 0
 	_refresh_page()
 	visible = true
@@ -91,6 +97,15 @@ func _populate_grid(grid: GridContainer, empty_label: Label, rows: Array) -> voi
 		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		grid.add_child(value_label)
 
+func _availability_text(remaining_opens,expires_at:String) -> void:
+	var remaining_opens_text :=  ""
+	var expires_at_text :=  ""
+	if remaining_opens != null:
+		remaining_opens_text = "Remaning opens: %d" % remaining_opens
+	if expires_at != "":
+		expires_at_text = "Expires at: %s" % expires_at
+		
+	_availability_label.text = "%s\n%s" % [remaining_opens_text,expires_at_text]
 
 func _refresh_page() -> void:
 	_pages.current_tab = _page

@@ -1,8 +1,9 @@
 extends Node2D
 
 ## Placeholder scene proving scene navigation works before the real
-## functionality (PVP matchmaking) gets built. Only Pvp.tscn uses this now
-## -- Shop.tscn got its own real script once pack mechanics landed.
+## functionality behind it gets built. Only Tournament.tscn uses this now --
+## Shop.tscn and Pvp.tscn (now Leaderboard.tscn) each got their own real
+## script once there was something real to build.
 
 @export var title: String = "Stub"
 @export var back_scene: String = "res://scenes/Menu.tscn"  # wherever this stub was actually launched from

@@ -59,12 +59,12 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Team"
 
-[node name="PvpButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=731302606]
+[node name="LeaderboardButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=731302606]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
-text = "PVP"
+text = "Leaderboard"
 
 [node name="SettingsButton" type="Button" parent="CenterContainer/VBoxContainer" unique_id=2136365341]
 unique_name_in_owner = true

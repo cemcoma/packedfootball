@@ -141,6 +141,30 @@ opponent -- real or bot -- never chose to play this specific match, so
 their own players' stats are left untouched, same as neither endpoint has
 ever updated the opponent's own account-level wins/losses/draws.
 
+## Leaderboard endpoints
+
+Both shaped the same way -- a `{stat: field_path}` allow-list dict, a
+`stat` query param defaulting to whatever `mobile/scripts/screens/
+Leaderboard.gd` actually shows, and `AdminFirestoreClient.query_top(...)`
+(a plain Firestore `order_by(...).limit(...)`, no `where` clause, so it
+needs no manually-defined composite index even on a dotted nested-field
+path like `statistics.goals`) -- adding another rankable stat later to
+either one is just another dict entry, not new plumbing:
+
+- `GET /leaderboard/players` -- ranks `players/{id}` docs (`stat` in
+  `goals`/`assists`/`matches_played`, defaults to `goals`). Existed
+  already; see "Individual player stats" above for why its `statistics.*`
+  fields are trustworthy now (they weren't always).
+- `GET /leaderboard/users` -- ranks `users/{uid}` docs (`stat` in `wins`
+  only, for now). New -- backs the mobile Leaderboard screen's Users tab
+  (was the Pvp stub screen; see `mobile/README.md`).
+
+Both just return `{"stat": ..., "entries": [...]}`, entries already in
+rank order (index + 1 = rank -- neither response carries an explicit rank
+field) -- deliberately minimal, proof-of-concept shaped for early testers
+per the mobile client's own docstring; expect more stats and filtering
+once there's real usage to design against.
+
 ## Still to do
 
 - Tighten `firestore.rules` to deny direct client writes to

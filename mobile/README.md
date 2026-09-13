@@ -424,10 +424,12 @@ holdout (fixed pixel `Rect2`s hand-tested in `_unhandled_input()`) --
 rebuilt the same way as everything else once it stopped being a
 proof-that-scene-switching-works throwaway.
 
-Two things stay genuinely hand-drawn, for two different reasons: `Pvp.tscn`
-(`StubScene.gd`) is just not built yet -- once PVP gets real functionality
-it should get real Controls at the same time, same as Shop/Team/Settings
-already did. The pitch itself (`MatchPlayback.gd`'s `PitchCanvas`, and
+Two things stay genuinely hand-drawn, for two different reasons:
+`Tournament.tscn` (`StubScene.gd`) is just not built yet -- once it gets
+real functionality it should get real Controls at the same time, same as
+Shop/Team/Settings/Leaderboard already did (Leaderboard, formerly the Pvp
+stub, was the last of those -- see "Leaderboard screen" below). The pitch
+itself (`MatchPlayback.gd`'s `PitchCanvas`, and
 `PitchView.gd`'s pitch markings) stays custom-drawn permanently -- a
 rendered pitch (grass, lines, a moving ball and players under a panning/
 zooming camera) is inherently a custom visual, not something Controls
@@ -444,9 +446,9 @@ whole screen the way it used to be.
 it never eats clicks meant for whatever's drawn over it) currently pointed
 at one placeholder image (`sprites/backgrounds/title_background.jpg`) for
 every screen, instanced as the first child of every real screen's root
-(`Auth`, `Menu`, `Play`, `Shop`, `Team`, `Profile`, `Match`, and the
-`Pvp`/`Tournament` stubs) so it paints behind everything else in that
-scene. Same image everywhere for now -- swapping in a real per-page
+(`Auth`, `Menu`, `Play`, `Shop`, `Team`, `Settings`, `Leaderboard`,
+`Match`, and the `Tournament` stub) so it paints behind everything else in
+that scene. Same image everywhere for now -- swapping in a real per-page
 background later is just changing that one instance's `texture` property
 in the editor, no script or layout changes needed.
 
@@ -457,7 +459,7 @@ empty side margins beside it, not fully hidden behind an opaque pitch
 fill the way it would have been under the old edge-to-edge side-panel
 layout.
 
-`Pvp.tscn`/`Tournament.tscn` are the one place `BackgroundLayer` needs
+`Tournament.tscn` is the one remaining place `BackgroundLayer` needs
 `show_behind_parent = true` set on the instance -- `StubScene.gd`'s root
 node draws its own title/back-button directly (`_draw()`), and Godot
 paints a node's children after (on top of) the node's own drawing by
@@ -493,7 +495,8 @@ using a translucent `bg_color` on purpose.
 A real `.tscn`-authored `Control` (`scenes/components/PlayerCardView.tscn`,
 instanced via `PLAYER_CARD_SCENE.instantiate()`) used anywhere a card needs
 to be shown -- currently the bench grid and the stats panel's header, later
-Shop/PVP too. `set_card(a_player_card)` populates it: a flat background
+Shop/Leaderboard too (the Players tab is plain text rows for now -- see
+"Leaderboard screen" below). `set_card(a_player_card)` populates it: a flat background
 tinted by `PlayerCard.tier_color()`, overall/position/name/tier labels, and
 a `PlayerModelView` child (see below) for the character portrait. When a
 real card template/art exists (per-tier background art, a "galaxy" effect
@@ -643,6 +646,35 @@ Neither `max_opens` nor `expires_at` were added to any pack's definition,
 by design -- set either directly on a pack's Firestore doc (no redeploy)
 whenever you actually want a specific pack to go live with a cap.
 
+## Leaderboard screen
+
+`Leaderboard.gd`/`scenes/Leaderboard.tscn` -- replaces what used to be
+`Pvp.tscn` (a `StubScene.gd` placeholder, never anything real). Two tabs,
+switched by a `toggle_mode` `Button` pair sharing a `ButtonGroup` (same
+mutual-exclusivity idea as `Team.tscn`'s formation row) rather than a
+`TabContainer`, matching `Shop.tscn`'s own Packs/Currency tab pattern:
+
+- **Users** -- ranked by wins, `GET /leaderboard/users` (new).
+- **Players** -- ranked by goals, `GET /leaderboard/players` (already
+  existed -- see `backend/README.md`'s "Leaderboard endpoints").
+
+Each tab lazy-loads once, the first time it's opened, and caches its
+result for the rest of the screen's lifetime -- switching back and forth
+doesn't refetch. Rows are plain dynamically-created `Label`s (`"1. Alice --
+12 wins"`, `"1. Leo Rossi (ST) -- 9 goals"`) built the same
+remove-then-`queue_free()`-then-repopulate way `Shop.gd`'s pack grid and
+`Team.gd`'s bench grid both already do -- deliberately not `PlayerCardView`
+for the Players tab (see "PlayerCardView.gd" above); rank is just
+`index + 1`, since neither endpoint's response carries an explicit rank
+field.
+
+Explicitly a minimal first pass, not a finished design -- proves the
+page/tab/backend-round-trip shape end to end for early testers who want to
+see pages exist, same spirit as Shop's own Currency tab. Both backend
+endpoints are already shaped to make adding more (a third tab, more stats
+per tab, pagination past the top 20) a small, mechanical follow-up rather
+than new plumbing, whenever that's actually wanted.
+
 ## Layout
 
 The pitch (70x100, naturally portrait-shaped) renders inside a box whose
@@ -725,10 +757,14 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
 - `Shop.gd` / `scenes/Shop.tscn` -- pack shop (see above).
 - `Play.gd` / `scenes/Play.tscn` -- match-mode hub: Quick Match (real) and
   Tournament (stub) (see "Play / Quick Match" above).
-- `StubScene.gd` -- shared placeholder script for `scenes/Pvp.tscn` and
+- `Leaderboard.gd` / `scenes/Leaderboard.tscn` (was "Pvp") -- Users/Players
+  tabs (see "Leaderboard screen" above).
+- `StubScene.gd` -- shared placeholder script, now only for
   `scenes/Tournament.tscn` (sets a `title` + a `back_scene` to return to),
   proving scene navigation works before the real functionality behind it
-  gets built.
+  gets built. `scenes/Pvp.tscn` used to be its other user, before becoming
+  `Leaderboard.gd`/`scenes/Leaderboard.tscn` (see "Leaderboard screen"
+  above).
 
 ### `components/` -- reusable visuals, not screens themselves
 
