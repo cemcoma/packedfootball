@@ -1,15 +1,16 @@
 # Packed Football - Mobile (Godot)
 
 Landscape-first client: real email/anonymous auth, a Menu hub, a real Team
-squad-management screen, placeholder Shop/PVP/Profile screens, and a match
-replay player. The match replay is still loaded from a local file rather
-than fetched from the deployed Cloud Run service -- that's the remaining
-piece of backend networking not wired up yet. See the plan this came from
-for the fuller picture.
+squad-management screen, a real Quick Match mode (backend-simulated, real
+opponent or a bot fallback), placeholder Shop-currency/Tournament/Profile
+pieces, and a match replay player. See the plan this came from for the
+fuller picture.
 
 ## Try it
 
-1. Generate (or regenerate) a test replay:
+1. Generate (or regenerate) a local demo replay (used as a fallback when
+   Play's Quick Match hasn't been used yet -- see "Play / Quick Match"
+   below):
    ```sh
    python3 packedfootball/scripts/dump_test_replay.py
    ```
@@ -22,9 +23,132 @@ for the fuller picture.
    as `packedfootball/firebase_config.example.py`.
 3. Open this `mobile/` folder as a project in Godot 4.3+.
 4. Run the project. It opens on Auth (sign in, register, or continue as
-   guest) then the Menu; "Play Match" loads `test_data/sample_match.bin` and
-   plays it back once you hit Start; "Team" manages your actual squad
-   against your real Firestore data.
+   guest) then the Menu; "Play" opens the mode-select hub -- Quick Match
+   actually simulates a real match against a real/bot opponent backend-side;
+   "Team" manages your actual squad against your real Firestore data.
+
+## Play / Quick Match
+
+Menu's old direct-to-replay "Play Match" button is now "Play", opening
+`Play.tscn`: **Quick Match** (real) and **Tournament** (stub -- see below).
+
+Quick Match calls the backend's new `POST /match/quick`, which:
+1. Validates your own saved roster/formation the same way `/match/simulate`
+   already does (`_validate_formation_positions` -- rejects before writing
+   anything if it's not exact-or-similar-position-legal for every slot).
+2. Picks a random opponent (`_pick_opponent_profile`): a real signed-up
+   account with a complete (11-player) saved roster, queried straight from
+   `users/{uid}` and tried in random order, or -- if none exists, or every
+   candidate's own data turns out stale -- a freshly-rolled bot instead
+   (random formation *and* random tier, bronze through icon, so a bot can
+   plausibly be "the best or worst player" too). Quick Match should always
+   find *someone* to play.
+3. Runs the actual simulation (`_run_match`, shared with `/match/simulate`)
+   and returns the score, the base64 replay, and both sides' full roster
+   (so `MatchPlayback.gd` can show real names) -- `Play.gd` hands all of it
+   to the new `MatchSession` autoload before navigating to `Match.tscn`.
+4. Grants a small credit reward, scaled by outcome
+   (`QUICK_MATCH_REWARD_CREDITS = {"win": 100, "draw": 25, "loss": 10}`),
+   records wins/losses/draws, persists each player's updated
+   goals/assists/matches_played back to their own `players/{id}` doc (see
+   `_persist_player_stats` below), and snapshots both rosters into the
+   `games/{id}` doc (see `_teams_snapshot` below).
+
+**Individual player stats now actually persist after a match -- for the
+initiator's own roster only.** `gameEngine.py` was already correctly
+tracking each player's goals/assists/matches_played *in memory* during
+simulation (`player.py`'s `scored()`/`assisted()`/`match_played()`, called
+from `game`'s own goal/full-time handling) -- but nothing ever wrote that
+back to Firestore, so `/leaderboard/players` (which already queries
+`players/{id}.statistics.*` directly) would only ever have seen the zeros
+every card starts at. Both `/match/simulate` and `/match/quick` now call
+the new `_persist_player_stats` right after `_run_match()`, which re-saves
+the CALLER's roster via `GameState.save_roster()`.
+
+Deliberately caller-only, by design decision: whoever's on the other side
+of a match (a real opponent or a bot) never chose to play that specific
+game -- having a saved account isn't agreeing to any one match -- so their
+own players' stats aren't touched, matching how neither endpoint has ever
+updated the opponent's own account-level wins/losses/draws. Also sets up
+cleanly for a future where a player's own match count matters for
+something like a contract, which should only ever move for whoever
+actually chose to play.
+
+Also correct for an out-of-position player specifically: the
+scaled-attributes copy `_apply_out_of_position_penalty` builds is a
+*shallow* copy, so it shares the exact same `statistics` dict object as
+the real, persisted player -- goals/assists scored while playing out of
+position still land on the real card, while the temporary scaled
+attributes never do (verified directly: mutating the copy's stats updates
+the original; the two `.attributes` stay independent).
+
+**`MatchSession.gd`** (new autoload) is how the just-fetched result reaches
+`MatchPlayback.gd` -- Godot's `change_scene_to_file()` can't carry data
+itself, so this is the same "shared blackboard" idea `GameProfile` already
+is for squad state, just for one in-flight match result. `MatchPlayback.gd`
+checks `MatchSession.has_pending()` on `_ready()`: true plays that real
+match (decoded via `ReplayReader.load_from_bytes()` -- writes the bytes to
+a `user://` scratch file and reuses `load_from_file()`'s proven parser
+rather than a second, subtly-different in-memory one); false falls back to
+the bundled local demo replay exactly as before, so that offline path
+(no backend, no signed-in account) still works unchanged.
+
+**`lobby` is gone from the backend entirely.** It used to gate opponent
+discovery for both match endpoints through a `lobby/{uid}` "opted in to
+being challenged" doc -- an extra collection that only ever needed to
+answer "does this account exist and have a complete roster", which
+`users/{uid}` already answers directly. `_pick_opponent_profile` now
+queries `list_collection("users")` (filtering by `roster_player_ids`
+length) instead of `list_collection("lobby")`, and `/match/simulate`'s
+opponent-exists check reads `users/{opponent_uid}` instead of
+`lobby/{opponent_uid}`. Nothing in `backend/main.py` reads or writes
+`lobby` anymore.
+
+`GameProfile.gd` still *publishes* to `lobby/{uid}` after every
+`save_team()` (leaderboard-relevant fields only -- `display_name`/
+`overall`/`wins`/`campaign_level`, no roster, see the git history on this
+section for that earlier cleanup) -- that write is unaffected by this
+change, but now has no reader anywhere in the active system either (the
+backend never looks at `lobby` at all, and Godot never reads it, only
+writes it). Whether to keep publishing to a collection nothing consumes,
+in case an account-level leaderboard reads it later, is an open question,
+not yet decided. `packedfootball/game_state.py`'s own
+`publish_lobby_entry`/`list_opponents`/`list_leaderboard` -- the legacy
+pygame client's independent, already-scrapped write/read path -- is
+untouched and still fully self-consistent on its own.
+
+**Elo is gone from the active system entirely** -- no computation, no
+storage, no display, anywhere in `backend/main.py` or `GameProfile.gd`.
+`/match/simulate` no longer computes or updates a rating after a match,
+and `GameProfile.gd` has no `elo` field at all. Scoped the same way as
+`lobby` above: `packedfootball/game_state.py`'s own elo scaffolding
+(`DEFAULT_STARTING_ELO`, `GameState.set_elo`, the `elo` field
+`load_or_create_profile`/`publish_lobby_entry`/`list_opponents`/
+`list_leaderboard` all carry) is deliberately left alone, since
+`packedfootball/main.py` -- not part of the active system -- still
+depends on it for its own local elo-based challenge/leaderboard UI.
+
+**`games/{id}` now always carries a roster snapshot.** `/match/simulate`
+already embedded a `"teams"` field (both sides' uid/display_name/formation/
+full player fields at match time); `/match/quick` now does too, both
+sharing the new `_teams_snapshot` helper. The point: a dispute or bug can
+be checked afterwards against exactly what was actually played, independent
+of whatever either account's `players/{id}` docs look like by the time
+anyone looks -- whether from later, legitimate pack opens or suspected
+tampering.
+
+**Tournament** (`Tournament.tscn`) is an explicit stub for now -- reuses
+`StubScene.gd` (now with a configurable `back_scene`, so its Back button
+returns to Play rather than Menu). The eventual design: a 1-day, 10-match
+bracket per entry, 4 skill categories (Amateur -> Semi-Pro -> ... ),
+promotion by winning, matched against similarly-ranked players rather than
+Quick Match's fully-random pool -- not built yet.
+
+**Diagnostics**: `backend/scripts/list_accounts.py` (read-only) lists every
+`users/{uid}` doc and whether it has a published `lobby/{uid}` entry -- the
+`lobby/{uid}` column is vestigial now that Quick Match's opponent pool
+comes straight from `users/{uid}` (see above), still useful as a general
+"how many accounts, how complete are their rosters" check.
 
 ## Match screen controls
 
@@ -333,9 +457,12 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
   `main.py`'s browser-vs-desktop branch, since Godot has no pygbag-style
   mobile-text-entry problem to work around).
 - `Shop.gd` / `scenes/Shop.tscn` -- pack shop (see above).
-- `StubScene.gd` -- shared placeholder script for `scenes/Pvp.tscn` (still
-  just sets a `title`), proving scene navigation works before the real
-  functionality behind it gets built.
+- `Play.gd` / `scenes/Play.tscn` -- match-mode hub: Quick Match (real) and
+  Tournament (stub) (see "Play / Quick Match" above).
+- `StubScene.gd` -- shared placeholder script for `scenes/Pvp.tscn` and
+  `scenes/Tournament.tscn` (sets a `title` + a `back_scene` to return to),
+  proving scene navigation works before the real functionality behind it
+  gets built.
 
 ### `components/` -- reusable visuals, not screens themselves
 
@@ -364,7 +491,13 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
 - `GameProfile.gd` -- the live squad model (profile fields, formation, slot
   assignment, every owned card, dirty-checking) on top of `Firestore.gd`,
   mirroring `packedfootball/game_state.py`'s `GameState` plus the caching
-  this scene needed on top of it.
+  this scene needed on top of it. `save_team()` also republishes the
+  lobby entry (see "Play / Quick Match" above).
+- `MatchSession.gd` -- carries one just-played real match's result
+  (replay/roster/score/reward) from `Play.gd` to `MatchPlayback.gd` (see
+  "Play / Quick Match" above) -- the same shared-autoload idea as
+  `GameProfile.gd`, just for a single in-flight match instead of the whole
+  squad.
 
 ### `data/` -- pure data models / format readers
 
@@ -388,7 +521,9 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
   logic that lives here.
 - `ReplayReader.gd` -- binary reader for the format `packedfootball/replay.py`
   writes (`ReplayRecorder.encode()`). Keep the two in sync if the wire
-  format ever changes.
+  format ever changes. `load_from_bytes()` (new) is `load_from_file()` fed
+  by a scratch file instead of a bundled one, for a replay that arrived
+  over the network (see "Play / Quick Match" above).
 
 All buttons across every scene are hand-drawn/hit-tested (`_draw()` +
 `_unhandled_input()` with `Rect2.has_point()`) rather than scene-tree

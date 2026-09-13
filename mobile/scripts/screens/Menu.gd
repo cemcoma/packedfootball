@@ -5,7 +5,7 @@ extends Node2D
 ## until the real functionality behind it gets built.
 
 var buttons := [
-	{"label": "Play Match", "scene": "res://scenes/Match.tscn", "rect": Rect2(540, 150, 220, 50)},
+	{"label": "Play", "scene": "res://scenes/Play.tscn", "rect": Rect2(540, 150, 220, 50)},
 	{"label": "Shop", "scene": "res://scenes/Shop.tscn", "rect": Rect2(540, 220, 220, 50)},
 	{"label": "Team", "scene": "res://scenes/Team.tscn", "rect": Rect2(540, 290, 220, 50)},
 	{"label": "PVP", "scene": "res://scenes/Pvp.tscn", "rect": Rect2(540, 360, 220, 50)},

@@ -49,6 +49,13 @@ var has_started: bool = false
 
 var camera_mode: String = "zoom"  # "zoom" | "full" -- matches gameEngine.py's render()
 
+# Only meaningful when this playback came from a real MatchSession (Quick
+# Match today) rather than the bundled local demo replay -- captured in
+# _ready() before MatchSession.clear() resets its own copies.
+var _is_real_match: bool = false
+var _result_opponent_is_bot: bool = false
+var _result_credits_earned: int = 0
+
 var speed_options := [1.0, 2.0, 4.0]
 var speed_index: int = 0
 
@@ -63,11 +70,26 @@ var back_button_rect := Rect2(400, 270, 220, 40)
 
 
 func _ready() -> void:
-	replay = ReplayReader.load_from_file(REPLAY_PATH)
+	# A real match just played via Play.gd's Quick Match (or, later, a
+	# ranked challenge) takes priority over the bundled local demo replay --
+	# see MatchSession.gd's own docstring for why this exists at all. Either
+	# way this scene is entered directly (no MatchSession data pending),
+	# it falls back to the same local file this always loaded, so the
+	# offline demo path keeps working with no backend/account needed.
+	if MatchSession.has_pending():
+		replay = MatchSession.replay()
+		roster = MatchSession.roster()
+		_is_real_match = true
+		_result_opponent_is_bot = MatchSession.opponent_is_bot
+		_result_credits_earned = MatchSession.credits_earned
+		MatchSession.clear()  # consumed -- a later direct visit here shouldn't replay it
+	else:
+		replay = ReplayReader.load_from_file(REPLAY_PATH)
+		roster = _load_roster(ROSTER_PATH)
+
 	if replay.is_empty():
 		push_error("No replay loaded -- run packedfootball/scripts/dump_test_replay.py first.")
 		return
-	roster = _load_roster(ROSTER_PATH)
 	player_flash_timers.resize(ReplayReader.NUM_PLAYERS)
 	player_flash_timers.fill(0.0)
 	set_process(true)
@@ -496,7 +518,7 @@ func _draw_buttons(font: Font, font_size: int) -> void:
 func _draw_scoreboard(font: Font, font_size: int) -> void:
 	var home_name: String = roster.get("home_name", "Home")
 	var away_name: String = roster.get("away_name", "Away")
-	var rect := Rect2(400, 320, 220, 70)
+	var rect := Rect2(400, 320, 220, 70 + (25 if _is_real_match else 0))
 
 	draw_rect(rect, Color(0, 0, 0, 0.6))
 	draw_string(
@@ -521,6 +543,18 @@ func _draw_scoreboard(font: Font, font_size: int) -> void:
 		int(font_size * 0.8),
 		Color(0.85, 0.85, 0.85)
 	)
+
+	if _is_real_match:
+		var result_text := "Quick Match vs %s -- +%d credits" % ["a Bot" if _result_opponent_is_bot else "opponent", _result_credits_earned]
+		draw_string(
+			font,
+			rect.position + Vector2(10, 70),
+			result_text,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			200,
+			int(font_size * 0.7),
+			Color(0.6, 1.0, 0.6)
+		)
 
 
 func _draw_banner(font: Font, font_size: int) -> void:

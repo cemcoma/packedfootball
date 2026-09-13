@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import os
+import random
 import secrets
 import sys
 from datetime import datetime, timezone
@@ -40,27 +41,23 @@ FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "packedfootball")
 
 from game_state import GameState, player_to_fields
 from gameEngine import game
-from formations import get_formation, is_similar_position
-from packEngine import PLAYER_CLASS_MAP, PackManager, generate_starter_roster
+from formations import FORMATIONS, get_formation, is_similar_position
+from packEngine import PLAYER_CLASS_MAP, TIER_RANGES, PackManager, generate_starter_roster
 from player.classes.midfielder import Midfielder
 
 from admin_firestore_client import AdminFirestoreClient
 
 firebase_admin.initialize_app(options={"projectId": FIREBASE_PROJECT_ID})
 
-ELO_K = 32  # matches packedfootball/main.py's client-side formula
 STARTER_FORMATION = "4-4-2"
 STARTER_TIER = "bronze"
 
+QUICK_MATCH_REWARD_CREDITS = {"loss":10,"draw":25,"win":100}
+
 app = FastAPI(title="Packed Football backend")
 
-# The pygbag web build runs in-browser from GitHub Pages, a different origin
-# than this service's own *.run.app domain, so browser fetches need CORS
-# explicitly enabled -- desktop builds use `requests` instead, which isn't
-# subject to CORS at all. Add any other deployed frontend origins here
-# (a custom domain, a future Godot web export, etc).
+#allowed websites to call this backend
 ALLOWED_ORIGINS = ["https://cemcoma.github.io"]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -290,14 +287,226 @@ def _validate_formation_positions(profile: dict) -> None:
     Called for both sides BEFORE anything about this match gets written to
     Firestore (see /match/simulate) -- a rejected request leaves no trace at
     all: no games/{id} doc created, and this never touches either user's
-    own saved roster/formation (nothing about /match/simulate writes those
-    regardless -- it only ever reads them).
+    own saved roster/formation.
     """
     slots = get_formation(profile["formation"])
     for i, p in enumerate(profile["roster"]):
         role = slots[i]["role"]
         if p.position != role and not is_similar_position(p.position, role):
             raise HTTPException(400, f"Player {i + 1} ({p.position}) cannot play {role} in {profile['formation']}")
+
+
+def _run_match(caller_profile: dict, opponent_profile: dict, seed: int) -> dict:
+    """Runs one simulated match and returns everything both /match/simulate
+    and /match/quick need for their HTTP response: the score, the base64
+    replay (see packedfootball/replay.py's ReplayRecorder), and every
+    player from both sides serialized in the exact index order
+    gameEngine.game.all_players uses (caller's 11, then opponent's 11) --
+    MatchPlayback.gd needs this to show real names during playback, the
+    same way packedfootball/main.py's local test replay ships a matching
+    roster sidecar.
+    """
+    match = game(
+        _Team(caller_profile["display_name"], caller_profile["roster"]),
+        _Team(opponent_profile["display_name"], opponent_profile["roster"]),
+        seed=seed,
+        record_replay=True,
+        formation_home=caller_profile["formation"],
+        formation_away=opponent_profile["formation"],
+    )
+    match.run_match(max_steps=10800, render=False)  # 90 real-minute match, matching packedfootball/main.py's own loop
+    my_score, opp_score = match.scores
+    replay_b64 = base64.b64encode(match.replay.encode()).decode()
+    roster_fields = [player_to_fields(p) for p in caller_profile["roster"]] + [
+        player_to_fields(p) for p in opponent_profile["roster"]
+    ]
+    return {"score": [my_score, opp_score], "replay": replay_b64, "roster": roster_fields}
+
+
+def _teams_snapshot(uid: str, caller_profile: dict, opponent_uid: str, opponent_profile: dict) -> dict:
+    """The roster/formation snapshot embedded in a games/{id} doc at match
+    start -- both players/{id}.attributes and players/{id}.statistics can
+    (legitimately, or from tampering) look different by the time anyone
+    checks afterwards, so this is the actual record of what was played,
+    independent of whatever either account's cards look like now. Shared
+    by both /match/simulate and /match/quick so a dispute or bug gets
+    investigated against the same shape regardless of which mode it was.
+    """
+    return {
+        "initiator": {
+            "uid": uid,
+            "display_name": caller_profile["display_name"],
+            "formation": caller_profile["formation"],
+            "players": [player_to_fields(p) for p in caller_profile["roster"]],
+        },
+        "opponent": {
+            "uid": opponent_uid,
+            "display_name": opponent_profile["display_name"],
+            "formation": opponent_profile["formation"],
+            "players": [player_to_fields(p) for p in opponent_profile["roster"]],
+        },
+    }
+
+
+async def _persist_player_stats(caller_state: GameState, caller_profile: dict) -> None:
+    """Writes the CALLER's players' updated statistics (goals/assists/
+    matches_played) back to their own players/{id} docs after a match.
+
+    _run_match() (just above) mutates these in place during simulation --
+    player.py's scored()/assisted()/match_played(), called from
+    gameEngine.py's game -- but a Python object mutation isn't a Firestore
+    write; without this, /leaderboard/players (which already queries
+    players/{id}.statistics.* directly) would only ever see the zeros every
+    card starts at. GameState.save_roster() re-persists every field
+    (player_to_fields()), not just statistics, but nothing else about a
+    player changes mid-match, so that's a no-op for everything except the
+    stats that actually did change.
+
+    Deliberately caller-only: the opponent (real or bot) never chose to
+    play this specific match -- having a saved account is not agreeing to
+    any one match -- so their own players' stats aren't touched here,
+    matching how neither endpoint has ever updated the opponent's own
+    account-level wins/losses/draws.
+    Also sets up cleanly for a future where a player's own match count
+    matters for something like a contract -- that should only ever move
+    for whoever actually chose to play.
+    """
+    await caller_state.save_roster(caller_profile["roster"])
+
+
+def _generate_bot_opponent() -> tuple[str, dict]:
+    """A freshly-rolled bot squad -- random formation AND random tier (the
+    full TIER_RANGES spread, bronze through icon) so a Quick Match bot can
+    plausibly be "the best or worst player" too, not always a bronze
+    pushover. Never persisted anywhere; exists only for this one match.
+    """
+    formation = random.choice(list(FORMATIONS.keys()))
+    tier = random.choice(list(TIER_RANGES.keys()))
+    roster = generate_starter_roster(formation, tier, seed=secrets.randbits(63))
+    bot_uid = f"bot_{secrets.token_hex(6)}"  # never collides with a real Firebase uid's shape
+    profile = {"display_name": f"{tier.capitalize()} Bot", "formation": formation, "roster": roster}
+    return bot_uid, profile
+
+
+async def _pick_opponent_profile(uid: str) -> tuple[str, dict]:
+    """Picks a random opponent for a Quick Match directly from users/{uid}
+    -- any account with a complete (11-player) saved roster is a candidate,
+    tried in random order, fetched fresh at match time (no separate
+    "opted in" collection to go stale or need republishing). Or, if none
+    exists at all (or every candidate's own saved data turns out stale/
+    invalid), a freshly-generated bot instead (see _generate_bot_opponent).
+    Quick Match should always find *someone* to play, even the very first
+    account ever on this deployment, or if every real candidate happens to
+    have bad data -- that's their problem to fix, not a reason to block
+    this caller's match.
+
+    Returns (opponent_uid, profile); opponent_uid is a "bot_..." sentinel
+    (never a real Firebase uid) when a bot was used.
+    """
+    candidates = await AdminFirestoreClient(uid).list_collection("users")
+    candidate_uids = [
+        c["id"] for c in candidates if c["id"] != uid and len(c.get("roster_player_ids", [])) == 11
+    ]
+    random.shuffle(candidate_uids)
+
+    for candidate_uid in candidate_uids:
+        state = GameState(AdminFirestoreClient(candidate_uid), PLAYER_CLASS_MAP, Midfielder)
+        profile = await state.load_or_create_profile(default_roster=[], default_display_name=candidate_uid[:8])
+        print(profile["display_name"])
+        if len(profile["roster"]) != 11:
+            continue  # roster_player_ids pointed at a players/{id} doc that's since been deleted
+        try:
+            _validate_formation_positions(profile)
+        except HTTPException:
+            continue  # this candidate's own saved data is invalid -- try another, or fall back to a bot below
+        return candidate_uid, profile
+
+    return _generate_bot_opponent()
+
+
+@app.post("/match/quick")
+async def quick_match(uid: str = Depends(verify_id_token)):
+    """Quick Match: always-available, casual match against a randomly
+    picked opponent (see _pick_opponent_profile) for a small credit reward
+    (see QUICK_MATCH_REWARD_CREDITS). Records wins/losses/draws like
+    /match/simulate does.
+    """
+    caller_state = _game_state_for(uid)
+    caller_profile = await caller_state.load_or_create_profile(default_roster=[], default_display_name=uid[:8])
+    if len(caller_profile["roster"]) != 11:
+        raise HTTPException(400, "Your roster must have exactly 11 players")
+    _validate_formation_positions(caller_profile)
+
+    opponent_uid, opponent_profile = await _pick_opponent_profile(uid)
+    is_bot = opponent_uid.startswith("bot_")
+    seed = secrets.randbits(63)
+
+    # Same "in_progress" -> "finished" two-phase write /match/simulate uses,
+    # so a crash mid-simulation leaves an honestly-stuck record rather than
+    # none at all. Same "teams" roster/formation snapshot too (see
+    # _teams_snapshot) -- lets a bug or suspected tampering get checked
+    # afterwards against exactly what was actually played, bot opponents
+    # included (opponent_uid is just their "bot_..." sentinel, same as
+    # everywhere else that isn't a real Firebase uid).
+    games_client = caller_state.client
+    game_id = await games_client.add_document(
+        "games",
+        {
+            "status": "in_progress",
+            "mode": "quick",
+            "participants": [uid, opponent_uid],
+            "initiator_uid": uid,
+            "opponent_uid": opponent_uid,
+            "opponent_is_bot": is_bot,
+            "seed": seed,
+            "teams": _teams_snapshot(uid, caller_profile, opponent_uid, opponent_profile),
+            "created_at": firestore.SERVER_TIMESTAMP,
+            "finished_at": None,
+            "score": None,
+        },
+    )
+
+    result = _run_match(caller_profile, opponent_profile, seed)
+    my_score, opp_score = result["score"]
+
+    await games_client.set_document(
+        f"games/{game_id}",
+        {"status": "finished", "finished_at": firestore.SERVER_TIMESTAMP, "score": result["score"]},
+        merge=True,
+    )
+
+    await _persist_player_stats(caller_state, caller_profile)
+
+    credits_earned = 0
+
+    wins, losses, draws = caller_profile["wins"], caller_profile["losses"], caller_profile["draws"]
+    if my_score > opp_score:
+        wins += 1
+        credits_earned = QUICK_MATCH_REWARD_CREDITS["win"]
+    elif my_score == opp_score:
+        draws += 1
+        credits_earned = QUICK_MATCH_REWARD_CREDITS["draw"]
+    else:
+        losses += 1
+        credits_earned = QUICK_MATCH_REWARD_CREDITS["loss"]
+    await caller_state.record_match_result(wins, losses, draws)
+    new_credits = caller_profile["credits"] + credits_earned
+    await caller_state.set_credits(new_credits)
+
+    return {
+        "seed": seed,
+        "score": result["score"],
+        "opponent_display_name": opponent_profile["display_name"],
+        "opponent_is_bot": is_bot,
+        "credits_earned": credits_earned,
+        "credits_remaining": new_credits,
+        "wins": wins,
+        "losses": losses,
+        "draws": draws,
+        "game_id": game_id,
+        "replay": result["replay"],
+        "roster": result["roster"],
+    }
 
 
 class SimulateMatchRequest(BaseModel):
@@ -316,19 +525,19 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
         raise HTTPException(400, "Your roster must have exactly 11 players")
     _validate_formation_positions(caller_profile)
 
-    # The lobby entry is the "this uid has opted in to being challenged" gate
-    # -- it also stops a typo'd/made-up opponent_uid from silently creating a
-    # junk profile document below. Once confirmed, the actual roster/elo used
-    # for the match comes fresh from their own profile (via GameState, same
-    # path the caller's own data went through), not the lobby's snapshot,
-    # which could be stale if they changed their team without republishing.
-    lobby_doc = await AdminFirestoreClient(req.opponent_uid).get_document(f"lobby/{req.opponent_uid}")
-    if lobby_doc is None:
-        raise HTTPException(404, "Opponent has not published a lobby entry")
+    # Confirming the uid is a real, existing account first (rather than
+    # calling load_or_create_profile on it directly) stops a typo'd/made-up
+    # opponent_uid from silently creating a junk profile document below --
+    # load_or_create_profile's whole point is creating one for a uid that
+    # doesn't have one yet, which is exactly wrong for an opponent that
+    # should already exist.
+    opponent_doc = await AdminFirestoreClient(req.opponent_uid).get_document(f"users/{req.opponent_uid}")
+    if opponent_doc is None:
+        raise HTTPException(404, "Unknown opponent")
 
     opponent_state = GameState(AdminFirestoreClient(req.opponent_uid), PLAYER_CLASS_MAP, Midfielder)
     opponent_profile = await opponent_state.load_or_create_profile(
-        default_roster=[], default_display_name=lobby_doc.get("display_name", req.opponent_uid[:8])
+        default_roster=[], default_display_name=opponent_doc.get("display_name", req.opponent_uid[:8])
     )
     if len(opponent_profile["roster"]) != 11:
         raise HTTPException(400, "Opponent roster must have exactly 11 players")
@@ -347,49 +556,21 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
         "initiator_uid": uid,
         "opponent_uid": req.opponent_uid,
         "seed": seed,
-        "teams": {
-            "initiator": {
-                "uid": uid,
-                "display_name": caller_profile["display_name"],
-                "elo": caller_profile["elo"],
-                "formation": caller_profile["formation"],
-                "players": [player_to_fields(p) for p in caller_profile["roster"]],
-            },
-            "opponent": {
-                "uid": req.opponent_uid,
-                "display_name": opponent_profile["display_name"],
-                "elo": opponent_profile["elo"],
-                "formation": opponent_profile["formation"],
-                "players": [player_to_fields(p) for p in opponent_profile["roster"]],
-            },
-        },
+        "teams": _teams_snapshot(uid, caller_profile, req.opponent_uid, opponent_profile),
         "created_at": firestore.SERVER_TIMESTAMP,
         "finished_at": None,
         "score": None,
     }
     game_id = await games_client.add_document("games", game_doc)
 
-    match = game(
-        _Team(caller_profile["display_name"], caller_profile["roster"]),
-        _Team(opponent_profile["display_name"], opponent_profile["roster"]),
-        seed=seed,
-        record_replay=True,
-        formation_home=caller_profile["formation"],
-        formation_away=opponent_profile["formation"],
-    )
-    match.run_match(max_steps=10800, render=False)  # 90 real-minute match, matching packedfootball/main.py's own loop
-    my_score, opp_score = match.scores
-    replay_b64 = base64.b64encode(match.replay.encode()).decode()
+    result = _run_match(caller_profile, opponent_profile, seed)
+    my_score, opp_score = result["score"]
 
     await games_client.set_document(
         f"games/{game_id}",
-        {"status": "finished", "finished_at": firestore.SERVER_TIMESTAMP, "score": [my_score, opp_score]},
+        {"status": "finished", "finished_at": firestore.SERVER_TIMESTAMP, "score": result["score"]},
         merge=True,
     )
-
-    actual = 1.0 if my_score > opp_score else (0.5 if my_score == opp_score else 0.0)
-    expected = 1.0 / (1.0 + 10 ** ((opponent_profile["elo"] - caller_profile["elo"]) / 400.0))
-    new_elo = round(caller_profile["elo"] + ELO_K * (actual - expected))
 
     wins, losses, draws = caller_profile["wins"], caller_profile["losses"], caller_profile["draws"]
     if my_score > opp_score:
@@ -399,16 +580,15 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
     else:
         losses += 1
 
-    await caller_state.set_elo(new_elo)
     await caller_state.record_match_result(wins, losses, draws)
 
     return {
         "seed": seed,
-        "score": [my_score, opp_score],
-        "elo": new_elo,
+        "score": result["score"],
         "wins": wins,
         "losses": losses,
         "draws": draws,
         "game_id": game_id,
-        "replay": replay_b64,
+        "replay": result["replay"],
+        "roster": result["roster"],
     }

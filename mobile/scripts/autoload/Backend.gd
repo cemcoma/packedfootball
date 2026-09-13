@@ -21,7 +21,18 @@ func call_endpoint(method: HTTPClient.Method, path: String, body: Dictionary = {
 	var http := HTTPRequest.new()
 	add_child(http)
 	var url := FirebaseConfig.BACKEND_URL + path
-	var body_str := JSON.stringify(body) if not body.is_empty() else ""
+	# A method that conventionally carries a body (POST/PUT/PATCH) needs real
+	# body framing even when there's nothing to send -- an empty string ("")
+	# body for one of these left Cloud Run's own front end rejecting the
+	# request outright with "411 Length Required" before it ever reached
+	# main.py, for any body-less call (e.g. /match/quick, /account/bootstrap,
+	# both called with no body argument at all). "{}" is a real, non-empty
+	# JSON value FastAPI safely ignores on any endpoint that doesn't declare
+	# a body parameter, so it's a safe default regardless of what's actually
+	# being called. GET (and everything else with no body convention) is
+	# untouched -- only the methods that expect one get this fallback.
+	var carries_body := method in [HTTPClient.METHOD_POST, HTTPClient.METHOD_PUT, HTTPClient.METHOD_PATCH]
+	var body_str := JSON.stringify(body) if (not body.is_empty() or carries_body) else ""
 	var err := http.request(url, _auth_headers(), method, body_str)
 	if err != OK:
 		http.queue_free()

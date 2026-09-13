@@ -2,12 +2,14 @@ extends Control
 
 ## Manager profile: rename, and see squad overall/wins/losses/draws.
 ## Deliberately a 1:1 port of packedfootball/main.py's PROFILE scene --
-## same fields shown (squad overall, wins, losses, draws; notably NOT elo
-## or campaign_level, even though main.py loads those too -- the Python
-## screen just never displays them, so neither does this one), same rename
-## behavior (only writes if the trimmed name is non-empty and actually
-## changed, then republishes the public lobby entry so PvP-visible stats
-## stay in sync -- see main.py's _publish_lobby()).
+## same fields shown (squad overall, wins, losses, draws; notably NOT
+## campaign_level, even though main.py loads that too -- the Python screen
+## just never displays it, so neither does this one), same rename behavior
+## (only writes if the trimmed name is non-empty and actually changed,
+## then republishes the public lobby entry so PvP-visible stats stay in
+## sync -- see main.py's _publish_lobby()). GameProfile.gd (unlike
+## game_state.py's own profile shape) has no elo field at all -- by design
+## decision, elo was removed from the active Godot+backend system entirely.
 ##
 ## One deliberate difference: main.py branches on _IS_EMSCRIPTEN for the
 ## rename field (a real LineEdit on desktop, a native HTML form overlay in

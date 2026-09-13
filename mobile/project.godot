@@ -20,6 +20,7 @@ FirebaseAuth="*res://scripts/autoload/FirebaseAuth.gd"
 Firestore="*res://scripts/autoload/Firestore.gd"
 Backend="*res://scripts/autoload/Backend.gd"
 GameProfile="*res://scripts/autoload/GameProfile.gd"
+MatchSession="*res://scripts/autoload/MatchSession.gd"
 
 [display]
 

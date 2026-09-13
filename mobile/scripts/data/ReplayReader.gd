@@ -39,6 +39,26 @@ static func _to_signed16(value: int) -> int:
 	return value - 65536 if value >= 32768 else value
 
 
+## For a replay that arrived over the network (backend/main.py's
+## /match/quick or /match/simulate, base64-decoded by the caller) rather
+## than a local file. Godot has no "parse a binary format straight out of
+## a PackedByteArray" reader with the same get_8()/get_16()/get_32() API
+## FileAccess offers, so this writes the bytes to a scratch file in the
+## app's own sandboxed user:// directory and reuses load_from_file()
+## unchanged -- one extra disk round-trip, negligible for a one-time
+## per-match load, and zero risk of a second, subtly-different parser
+## drifting from the proven-working one.
+static func load_from_bytes(bytes: PackedByteArray) -> Dictionary:
+	var tmp_path := "user://_last_match_replay.bin"
+	var file := FileAccess.open(tmp_path, FileAccess.WRITE)
+	if file == null:
+		push_error("Could not create scratch replay file: %s" % FileAccess.get_open_error())
+		return {}
+	file.store_buffer(bytes)
+	file.close()
+	return load_from_file(tmp_path)
+
+
 static func load_from_file(path: String) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:

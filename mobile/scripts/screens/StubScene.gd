@@ -5,6 +5,7 @@ extends Node2D
 ## -- Shop.tscn got its own real script once pack mechanics landed.
 
 @export var title: String = "Stub"
+@export var back_scene: String = "res://scenes/Menu.tscn"  # wherever this stub was actually launched from
 
 var back_button_rect := Rect2(20, 20, 200, 40)
 
@@ -18,7 +19,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var pos: Vector2 = make_input_local(event).position
 	if back_button_rect.has_point(pos):
-		get_tree().change_scene_to_file("res://scenes/Menu.tscn")
+		get_tree().change_scene_to_file(back_scene)
 
 
 func _draw() -> void:
