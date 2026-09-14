@@ -25,6 +25,9 @@ extends Control
 @onready var _account_wins_label: Label = %AccountWinsLabel
 @onready var _account_draws_label: Label = %AccountDrawsLabel
 @onready var _account_losses_label: Label = %AccountLossesLabel
+@onready var _account_credits_label: Label = %AccountCreditsLabel
+@onready var _account_bucks_label: Label = %AccountBucksLabel
+@onready var _account_medals_label: Label = %AccountMedalsLabel
 
 
 func _ready() -> void:
@@ -43,6 +46,7 @@ func _refresh_account_panel() -> void:
 	_account_wins_label.text = "Wins: %d" % GameProfile.wins
 	_account_draws_label.text = "Draws: %d" % GameProfile.draws
 	_account_losses_label.text = "Losses: %d" % GameProfile.losses
+	_account_credits_label.text = "Credits: %d" % GameProfile.credits
 
 
 func _on_play_pressed() -> void:

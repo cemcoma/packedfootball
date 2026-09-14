@@ -73,60 +73,75 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Settings"
 
-[node name="AccountPanel" type="Panel" parent="."]
-anchor_left = 0.0
+[node name="AccountPanel" type="Panel" parent="." unique_id=575644052]
+layout_mode = 0
 anchor_top = 0.5
-anchor_right = 0.0
 anchor_bottom = 0.5
 offset_left = 24.0
 offset_top = -100.0
 offset_right = 264.0
 offset_bottom = 100.0
 
-[node name="Margin" type="MarginContainer" parent="AccountPanel"]
+[node name="Margin" type="MarginContainer" parent="AccountPanel" unique_id=1572266967]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_constants/margin_left = 14
 theme_override_constants/margin_top = 14
 theme_override_constants/margin_right = 14
 theme_override_constants/margin_bottom = 14
 
-[node name="VBox" type="VBoxContainer" parent="AccountPanel/Margin"]
+[node name="VBox" type="VBoxContainer" parent="AccountPanel/Margin" unique_id=994809262]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="AccountNameLabel" type="Label" parent="AccountPanel/Margin/VBox"]
+[node name="AccountNameLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=1227703727]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Manager"
 autowrap_mode = 2
 
-[node name="AccountDivider" type="HSeparator" parent="AccountPanel/Margin/VBox"]
+[node name="AccountDivider" type="HSeparator" parent="AccountPanel/Margin/VBox" unique_id=1731579856]
 layout_mode = 2
 
-[node name="AccountOverallLabel" type="Label" parent="AccountPanel/Margin/VBox"]
+[node name="AccountOverallLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=183895737]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Squad Overall: 0"
 
-[node name="AccountWinsLabel" type="Label" parent="AccountPanel/Margin/VBox"]
+[node name="AccountWinsLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=1780616385]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Wins: 0"
 
-[node name="AccountDrawsLabel" type="Label" parent="AccountPanel/Margin/VBox"]
+[node name="AccountDrawsLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=525650991]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Draws: 0"
 
-[node name="AccountLossesLabel" type="Label" parent="AccountPanel/Margin/VBox"]
+[node name="AccountLossesLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=2042400648]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Losses: 0"
+
+[node name="AccountCreditsLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=1450111887]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="AccountBucksLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=1578472355]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="AccountMedalsLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=569855796]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2

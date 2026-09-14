@@ -57,6 +57,11 @@ const DEFAULT_HERO_SCALE := 1.25
 @onready var _cards_grid: GridContainer = %CardsGrid
 @onready var _back_button: Button = %BackButton
 
+## No stream assigned yet -- a ready-but-silent hook for whatever hero-moment
+## sound gets supplied later. Guarded by `.stream != null` wherever it's
+## played so an unset stream is a quiet no-op instead of a console warning.
+@onready var _hero_sound: AudioStreamPlayer = %HeroSound
+
 @onready var _stats_popup: Control = %StatsPopup
 @onready var _stats_card_view: PlayerCardView = %StatsCardView
 @onready var _stats_extra_country: Label = %StatsExtraCountry
@@ -155,6 +160,8 @@ func _play_reveal_sequence() -> void:
 
 		if is_hero:
 			view.set_highlighted(true)  # a subtle golden-white pulse, PlayerCardView's own existing hook
+			if _hero_sound.stream != null:
+				_hero_sound.play()
 			_skip_hint_label.text = "Tap to continue"
 			await _wait_for_tap()
 		else:

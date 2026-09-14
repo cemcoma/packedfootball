@@ -28,10 +28,11 @@ var is_loaded: bool = false
 # Profile fields (mirrors game_state.py's load_or_create_profile shape).
 var display_name: String = ""
 var credits: int = 0
+var bucks: int = 0
+var medals: int = 0
 var wins: int = 0
 var losses: int = 0
 var draws: int = 0
-var campaign_level: int = 0
 
 # Squad state -- the live, possibly-unsaved lineup.
 var formation: String = DEFAULT_FORMATION
@@ -95,10 +96,11 @@ func load_all() -> void:
 	if doc != null:
 		display_name = _str(doc, "display_name")
 		credits = _int(doc, "credits")
+		bucks = _int(doc, "bucks")
+		medals = _int(doc, "medals")
 		wins = _int(doc, "wins")
 		losses = _int(doc, "losses")
 		draws = _int(doc, "draws")
-		campaign_level = _int(doc, "campaign_level")
 		formation = _str(doc, "formation", DEFAULT_FORMATION)
 		ids = _array(doc, "roster_player_ids", [])
 
@@ -282,10 +284,11 @@ func reset() -> void:
 	is_loaded = false
 	display_name = ""
 	credits = 0
+	bucks = 0
+	medals = 0
 	wins = 0
 	losses = 0
 	draws = 0
-	campaign_level = 0
 	formation = DEFAULT_FORMATION
 	slot_assignment = []
 	all_cards = {}
@@ -304,3 +307,19 @@ func add_purchased_cards(cards: Array, credits_remaining: int) -> void:
 		var typed_card: PlayerCard = card
 		all_cards[typed_card.player_id] = typed_card
 	credits = credits_remaining
+
+
+## Folds an authoritative balance from a currency-affecting backend endpoint
+## (POST /currency/exchange/redeem, /deals/redeem) into the live cache. Pass
+## null (the default) for whichever balance a given endpoint's response
+## doesn't carry, so a caller can't accidentally zero out a currency that
+## endpoint never touched. NOT used for bucks bought via the Bucks tab --
+## RevenueCat's webhook grants those independently of this client, so
+## CurrencyPanel.gd just calls load_all() again after a purchase instead.
+func apply_currency_balances(new_credits = null, new_bucks = null, new_medals = null) -> void:
+	if typeof(new_credits) in [TYPE_INT, TYPE_FLOAT]:
+		credits = new_credits
+	if typeof(new_bucks) in [TYPE_INT, TYPE_FLOAT]:
+		bucks = new_bucks
+	if typeof(new_medals) in [TYPE_INT, TYPE_FLOAT]:
+		medals = new_medals

@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://bcue62vg6d2aj" path="res://scripts/screens/Shop.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://cl2jiom47jugr" path="res://scenes/components/PackInfoPopup.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/components/CurrencyPanel.tscn" id="4"]
 
 [node name="Shop" type="Control" unique_id=24893147]
 layout_mode = 3
@@ -47,6 +48,18 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "0 credits"
 
+[node name="BucksLabel" type="Label" parent="Margin/RootVBox/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "0 cash"
+
+[node name="MedalsLabel" type="Label" parent="Margin/RootVBox/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "0 medals"
+
 [node name="TabRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=2141861707]
 layout_mode = 2
 theme_override_constants/separation = 8
@@ -90,10 +103,9 @@ visible = false
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="CurrencyComingSoonLabel" type="Label" parent="Margin/RootVBox/CurrencyPanel" unique_id=157214674]
+[node name="CurrencyTabs" parent="Margin/RootVBox/CurrencyPanel" instance=ExtResource("4")]
+unique_name_in_owner = true
 layout_mode = 2
-text = "Coming soon."
-horizontal_alignment = 1
 
 [node name="BackButton" type="Button" parent="Margin/RootVBox" unique_id=1679033898]
 unique_name_in_owner = true

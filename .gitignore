@@ -2,6 +2,10 @@ __pycache__/
 *.pyc
 .DS_Store
 mobile/scripts/config/FirebaseConfig.gd
+mobile/scripts/config/RevenueCatConfig.gd
+backend/.env
 google-cloud-sdk/
 mobile/.godot
 mobile/test_data
+mobile/ios/
+mobile/android/

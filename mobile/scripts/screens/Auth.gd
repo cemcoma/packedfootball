@@ -101,6 +101,7 @@ func _show_register() -> void:
 func _go_to_menu(chosen_display_name: String = "") -> void:
 	_status_label.text = "Loading your squad..."
 	await GameProfile.load_all()
+	IapClient.initialize_for_signed_in_user(FirebaseAuth.uid)
 	if chosen_display_name != "":
 		await GameProfile.set_display_name(chosen_display_name)
 	get_tree().change_scene_to_file("res://scenes/Menu.tscn")

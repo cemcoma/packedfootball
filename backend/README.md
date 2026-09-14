@@ -5,6 +5,28 @@ Authoritative match simulation and pack opening. Reuses `gameEngine.py`,
 `admin_firestore_client.py` for how it plugs into `GameState` as a
 service-account-backed client instead of the game client's own ID token.
 
+## Local development
+
+Copy `.env.example` to `.env` (gitignored, and excluded from the Docker
+build context via the repo-root `.dockerignore` -- never baked into the
+deployed image either way) and fill in real values, then run:
+
+```sh
+pip install -r backend/requirements.txt
+uvicorn main:app --reload --app-dir backend
+```
+
+`main.py` calls `load_dotenv()` right at the top, which fills in
+`os.environ` from that file -- but never overrides a variable that's
+already set (`python-dotenv`'s own default), so this changes nothing about
+the deployed service below, which gets its real values via
+`--set-env-vars`/`--set-secrets` and has no `.env` file in the image at
+all. `.env` is purely a local shortcut so `uvicorn` works without
+exporting a dozen variables by hand first -- as more secrets show up
+(RevenueCat today, others later), add them to both `.env.example`
+(placeholder) and the real deploy command below (real value), same as
+`REVENUECAT_WEBHOOK_SECRET` did.
+
 ## Deploying
 
 Build via the repo-root `cloudbuild.yaml` (needed because the Dockerfile
@@ -24,8 +46,12 @@ gcloud run deploy packedfootball-backend \
   --region europe-west3 \
   --allow-unauthenticated \
   --max-instances 3 \
-  --set-env-vars FIREBASE_PROJECT_ID=<project-id>
+  --env-vars-file backend/.env
 ```
+
+`--env-vars-file` reads the exact same `backend/.env` used for local development above (`gcloud` accepts plain dotenv-format files directly, not just YAML) -- one file, kept up to date, used both places, rather than retyping values into a `--set-env-vars` list by hand.
+
+**Replaces the whole env var list on every use** -- `gcloud` removes every existing environment variable on the service before applying the file's, so `backend/.env` needs to hold *every* variable the service actually needs, not just the one you're currently changing. Point every future deploy/update at the same file for exactly this reason: a one-off `--set-env-vars SOME_VAR=value` on an update call would silently wipe out any other var not named in that command (this already happened once here with `FIREBASE_PROJECT_ID` -- harmless only because its code-level default already matches the real project id).
 
 `--allow-unauthenticated` makes the HTTPS endpoint public; per-user auth is
 still enforced in-app via each request's Firebase ID token
@@ -63,6 +89,20 @@ re-run any time:
   newly generated already gets one from `PackManager._generate_appearance()`),
   using a fixed per-tier look so at least tiers read as visually distinct
   while testing.
+- `scripts/sync_deal_definitions.py` -- the Deals-tab counterpart to
+  `sync_pack_definitions.py`, pushing `packedfootball/deal_database.py`'s
+  `DEAL_DATABASE` (name/description/cost_currency/cost_amount/
+  reward_credits/reward_bucks) onto `deals/{deal_id}` docs, same
+  operational-fields-stay-in-Firestore-only rule. Unlike the pack version,
+  a deal id with no existing doc gets one *created* (seeded `active: false`
+  by default -- pass `--activate-new` to seed it `active: true` instead;
+  either way this never touches an *existing* doc's `active` value) rather
+  than skipped -- there's no separate one-time `seed_deals.py`. A synced
+  deal that stays `active: false` won't appear in `GET /deals/list` at all
+  (same as an inactive pack) until you flip it, in the Firestore console or
+  via `--activate-new` on its first sync.
+- `scripts/list_deals.py` -- read-only counterpart to `list_packs.py`, for
+  inspecting live `deals/{id}` docs.
 - `scripts/list_accounts.py` -- read-only; lists every `users/{uid}` doc and
   whether its roster is complete enough to be a Quick Match candidate
   (`roster_player_ids` length == 11) -- a general "how many accounts, how
@@ -165,12 +205,84 @@ field) -- deliberately minimal, proof-of-concept shaped for early testers
 per the mobile client's own docstring; expect more stats and filtering
 once there's real usage to design against.
 
+## Currency endpoints
+
+Three currencies live on `users/{uid}`: `credits` (existing, soft), `bucks`
+(new -- hard, real-money purchased, also spendable on credits), `medals`
+(new -- schema only for now; nothing grants these yet, the same state
+`campaign_level` used to be in before it was deleted as dead code -- zero
+callers anywhere, confirmed by a repo-wide grep, and not part of the next
+iteration of the game). All three are backend-only writes
+(`GameState.set_credits`/`set_bucks`/`set_medals`), same as credits already
+was -- see `firestore.rules`.
+
+- `GET /currency/exchange/list` / `POST /currency/exchange/redeem` -- the
+  Credits Exchange tab. Fixed, code-defined rates (`CREDIT_EXCHANGE_RATES`
+  in `main.py`), not Firestore-backed like packs/deals, since these aren't
+  meant to be admin-editable without a redeploy. Spends bucks, grants
+  credits, one combined `update_profile_fields` write so a crash mid-redeem
+  can't leave bucks deducted with the credits reward never landing, and
+  re-validates the bucks balance server-side (never trusts the client's own
+  affordability check, same principle `/pack/open` already follows for
+  credits).
+- `GET /currency/bucks/list` -- the Bucks tab's real-money catalog.
+  `BUCKS_IAP_CATALOG` maps a product id to a bucks amount; the client passes
+  that product id to RevenueCat's SDK to start a real purchase (see
+  `mobile/scripts/autoload/IapClient.gd`).
+- `POST /webhooks/revenuecat` -- grants bucks for a real-money purchase.
+  **Not the client calling this** -- [RevenueCat](https://www.revenuecat.com)
+  verifies the purchase with Apple/Google itself and calls this directly,
+  server-to-server, independent of whether the client that made the
+  purchase is even still running by the time it lands. Gated by
+  `verify_revenuecat_webhook` (a `Depends`, same shape as `verify_id_token`
+  elsewhere in this file): RevenueCat signs webhook requests with whatever
+  literal string is configured as the "Authorization header value" in
+  their dashboard, checked here against the `REVENUECAT_WEBHOOK_SECRET` env
+  var via a constant-time comparison, failing closed if that env var isn't
+  set at all. Only handles the `NON_RENEWING_PURCHASE` event type (that's
+  RevenueCat's term for a consumable/one-time purchase -- exactly what a
+  bucks top-up is, not a subscription); any other event type gets a 200
+  "ignored" response rather than an error, since RevenueCat retries non-2xx
+  responses indefinitely and an event type this endpoint will never handle
+  should never end up in an infinite retry loop. `iap_transactions/{event_id}`
+  is the anti-replay guard -- same mechanism a previous, now-removed
+  direct-Apple-verification design already used, just keyed by RevenueCat's
+  own event id instead of a raw platform transaction id.
+
+  Webhook URL to configure in RevenueCat's dashboard:
+  `<BACKEND_URL>/webhooks/revenuecat`. Needs `REVENUECAT_WEBHOOK_SECRET` set
+  as a Cloud Run env var/secret, matching whatever string is entered as the
+  Authorization header value on RevenueCat's side -- an arbitrary shared
+  secret you choose, not something RevenueCat generates for you.
+
+- `GET /deals/list` / `POST /deals/redeem` -- the Deals tab, DB-based timed
+  offers, direct structural cousin of packs: `deals/{deal_id}` Firestore
+  docs with the same `active`/`expires_at`/`visible`/`available_at`
+  operational-fields convention (see `_deal_unavailable_reason`, an async
+  version of `_pack_unavailable_reason` -- async because the new
+  `max_redemptions_per_account` cap needs a real Firestore read that packs'
+  global-only `max_redemptions` cap never needed). Both caps are optional
+  and independent -- a deal can set a global cap, a per-account cap, both,
+  or neither. Rewards are currency-only for now (`reward_credits`/
+  `reward_bucks`) -- no free packs/cards yet, an easy later extension. See
+  the Scripts section above for `deal_database.py` + its sync/list scripts.
+
 ## Still to do
 
-- Tighten `firestore.rules` to deny direct client writes to
-  `credits`/`roster`/`wins`/`losses`/`draws`/`campaign_level`/`inventory/*`,
-  once a client actually calls this backend instead of writing Firestore
-  directly.
+- ~~Tighten `firestore.rules`~~ -- done. `users/{uid}`'s `update` rule is
+  now an allow-list (`display_name`/`roster_player_ids`/`formation` only,
+  the exact 3 fields the client ever writes there directly -- confirmed by
+  grepping every `Firestore.set_document`/`add_document`/`delete_document`
+  call site in `mobile/scripts/`), so `credits`/`bucks`/`medals`/`wins`/
+  `losses`/`draws` are all backend-only now, and any future sensitive field
+  added to this doc is deny-by-default automatically rather than needing
+  its own rule update. `players/{playerId}` similarly denies client
+  `create`/`update`/`delete` outright -- the client only ever reads its own
+  cards directly, every mutation already went through
+  `GameState._ensure_player_doc` via the Admin SDK, so this was pure
+  unused-but-exploitable surface (a modified client could previously
+  rewrite its own card's tier/attributes to anything).
 - Tournament mode (1-day, 10-match bracket, 4 skill categories with
   promotion by winning) -- `mobile/scenes/Tournament.tscn` is an explicit
-  stub for now, nothing server-side exists yet.
+  stub for now, nothing server-side exists yet. Medals (see Currency
+  endpoints above) have nowhere to be earned until this exists.

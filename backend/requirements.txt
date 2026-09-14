@@ -3,3 +3,4 @@ uvicorn[standard]>=0.30
 firebase-admin>=6.5
 numpy
 requests
+python-dotenv>=1.0

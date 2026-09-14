@@ -104,6 +104,9 @@ layout_mode = 2
 size_flags_horizontal = 0
 text = "Back to Shop"
 
+[node name="HeroSound" type="AudioStreamPlayer" parent="." unique_id=3480197255]
+unique_name_in_owner = true
+
 [node name="StatsPopup" type="Control" parent="." unique_id=1876874277]
 unique_name_in_owner = true
 visible = false

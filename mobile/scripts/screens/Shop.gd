@@ -1,8 +1,9 @@
 extends Control
 
-## Shop: two segments -- Packs (real, backend-driven) and Currency
-## (microtransactions/ads, deliberately a "coming soon" placeholder for
-## now -- pack mechanics come first).
+## Shop: two segments -- Packs (real, backend-driven) and Currency (its own
+## 3 sub-tabs -- Exchange/Bucks/Deals, see CurrencyPanel.gd -- instanced
+## into the CurrencyPanel node below rather than built inline here, keeping
+## this file focused on the pack catalog it already owned).
 ##
 ## Packs are fetched fresh from the backend's GET /pack/list every time
 ## this scene loads (and again after every purchase, so a limited pack's
@@ -15,6 +16,9 @@ extends Control
 const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
 
 @onready var _credits_label: Label = %CreditsLabel
+@onready var _bucks_label: Label = %BucksLabel
+@onready var _medals_label: Label = %MedalsLabel
+@onready var _currency_tabs: CurrencyPanel = %CurrencyTabs
 @onready var _packs_tab_button: Button = %PacksTabButton
 @onready var _currency_tab_button: Button = %CurrencyTabButton
 @onready var _status_label: Label = %StatusLabel
@@ -31,13 +35,16 @@ func _ready() -> void:
 	_packs_tab_button.pressed.connect(_on_packs_tab_pressed)
 	_currency_tab_button.pressed.connect(_on_currency_tab_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
+	_currency_tabs.currency_changed.connect(_refresh_currency_labels)
 
-	_refresh_credits_label()
+	_refresh_currency_labels()
 	await _load_packs()
 
 
-func _refresh_credits_label() -> void:
-	_credits_label.text = "%d credits" % GameProfile.credits
+func _refresh_currency_labels() -> void:
+	_credits_label.text = "%d %s" % [GameProfile.credits, CurrencyDisplay.lowercase_label_for("credits")]
+	_bucks_label.text = "%d %s" % [GameProfile.bucks, CurrencyDisplay.lowercase_label_for("bucks")]
+	_medals_label.text = "%d %s" % [GameProfile.medals, CurrencyDisplay.lowercase_label_for("medals")]
 
 
 func _on_packs_tab_pressed() -> void:

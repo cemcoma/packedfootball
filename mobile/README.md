@@ -22,8 +22,18 @@ See the plan this came from for the fuller picture.
    `scripts/config/FirebaseConfig.gd` (gitignored) and fill in your Firebase
    project's real values -- same idea
    as `packedfootball/firebase_config.example.py`.
-3. Open this `mobile/` folder as a project in Godot 4.3+.
-4. Run the project. It opens on Auth (sign in, register, or continue as
+3. For the Currency tab's Bucks sub-tab: download
+   [`godotx_revenue_cat.zip`](https://github.com/godot-x/revenuecat/releases/latest)
+   (the GodotX RevenueCat plugin) and extract its `ios/` and `android/`
+   folders directly into `mobile/` (siblings of `mobile/addons/`, matching
+   the zip's own layout). Both are gitignored -- ~1GB unpacked, almost all
+   of it platform slices and debug symbols this iPhone-only project never
+   uses, well past GitHub's per-file limit -- so this is a one-time local
+   fetch, not something `git pull` ever gives you.
+   `mobile/addons/godotx_revenue_cat/` (the actual plugin code) IS
+   committed and needs no extra step.
+4. Open this `mobile/` folder as a project in Godot 4.3+.
+5. Run the project. It opens on Auth (sign in, register, or continue as
    guest) then the Menu; "Play" opens the mode-select hub -- Quick Match
    actually simulates a real match against a real/bot opponent backend-side;
    "Team" manages your actual squad against your real Firestore data.
@@ -573,9 +583,10 @@ roster at all until it also signed into the Python client once.
 
 ## Shop screen
 
-Two tabs: **Packs** (real, built now) and **Currency** (microtransactions/
-ads -- deliberately a "Coming soon" placeholder; pack mechanics came
-first). The pack catalog is fetched fresh from the backend's new
+Two tabs: **Packs** (below) and **Currency** (its own 3 sub-tabs -- see
+"Currency tab" further down -- instanced into this scene rather than built
+inline here, now that pack mechanics have company). The pack catalog is
+fetched fresh from the backend's new
 `GET /pack/list` every time the scene loads and again after every
 purchase, rather than cached on `GameProfile` like the squad is -- unlike
 your own roster, the catalog can change under you at any time (an admin
@@ -650,6 +661,142 @@ syncing `type`, alongside name/price/cards_per_pack/rates/pos_rates).
 Neither `max_opens` nor `expires_at` were added to any pack's definition,
 by design -- set either directly on a pack's Firestore doc (no redeploy)
 whenever you actually want a specific pack to go live with a cap.
+
+## Currency tab
+
+Three currencies now live on the account: `credits` (existing, soft --
+earned from matches, spent on packs), `bucks` (new -- hard currency, bought
+with real money, also spendable on credits), and `medals` (new -- earned
+only by winning the best tournament, which doesn't exist yet, so this is a
+balance with nowhere to earn it for now, same spot `campaign_level` used to
+be in before it was deleted as dead code -- zero callers anywhere, not part
+of the next iteration of the game). All three show in `Shop.tscn`'s header
+(`CreditsLabel`/`BucksLabel`/`MedalsLabel`) -- the only place any of this is
+visible at all, refreshed via `_refresh_currency_labels()` whenever
+`CurrencyPanel.gd` emits `currency_changed` after a successful redeem.
+
+`Shop.tscn`'s Currency tab (previously a bare "Coming soon" label) now
+instances `scenes/components/CurrencyPanel.tscn` (named `CurrencyTabs` in
+the scene tree, to avoid confusion with Shop's own outer "CurrencyPanel"
+visibility-toggle node it lives inside), which is its own 3-sub-tab screen
+using the same `ButtonGroup` + toggle-`Button` + lazy-load-once-per-tab
+pattern the Leaderboard screen established:
+
+- **Exchange** -- spend bucks for credits, at 4 fixed rates
+  (`CREDIT_EXCHANGE_RATES` in `backend/main.py`: 10/25/100/200 bucks for
+  1000/2600/12500/30000 credits). Code-defined, not Firestore-backed like
+  packs/deals -- these aren't meant to be admin-editable without a
+  redeploy. `GET /currency/exchange/list` + `POST /currency/exchange/redeem`,
+  the latter re-validating the bucks balance server-side (never trusting
+  the client's own affordability check, same as `/pack/open` already does
+  for credits) and writing the new bucks/credits balances in one combined
+  call so a mid-redeem crash can't deduct bucks without the credits reward
+  landing.
+- **Bucks** -- real-money in-app purchases, 4 tiers ($1/$5/$10/$20 for
+  10/55/125/300 bucks, `BUCKS_IAP_CATALOG` in `main.py`), via
+  [RevenueCat](https://www.revenuecat.com) rather than a direct
+  Apple/Google integration -- see "In-app purchases via RevenueCat" below.
+- **Deals** -- DB-based timed offers, direct structural cousin of packs:
+  `deals/{deal_id}` Firestore docs with the same `active`/`expires_at`/
+  `visible`/`available_at` convention (`packedfootball/deal_database.py` +
+  `backend/scripts/sync_deal_definitions.py`/`list_deals.py` mirror
+  `PACK_DATABASE` + its own sync/list scripts). Rewards are currency-only
+  for now (`reward_credits`/`reward_bucks`) -- no free packs/cards yet, an
+  easy later extension. Redemption caps are optional and independent: a
+  deal can set a global cap (`max_redemptions`, mirrors `packs.max_opens`),
+  a per-account cap (`max_redemptions_per_account`, new -- tracked in a
+  `deals/{id}/redemptions/{uid}` subcollection, checked by
+  `_deal_unavailable_reason` in `main.py`, an async cousin of
+  `_pack_unavailable_reason`), both, or neither.
+
+`CurrencyTileView.gd`/`.tscn` is a new, deliberately simple shared tile for
+Exchange + Bucks (both are fixed "pay X get Y" offers with no availability/
+expiry concept, unlike packs/deals, so it skips `PackView`'s tag/
+unavailable machinery entirely). `DealView.gd`/`.tscn` mirrors `PackView`
+closely instead (deals genuinely have availability/expiry/teasing) but
+deliberately has no info/odds-popup button -- that exists on `PackView`
+specifically for randomized-reward odds disclosure (App Store Guideline
+3.1.1), and a deal's reward is fixed and shown directly on the tile, so
+there's nothing to disclose.
+
+### In-app purchases via RevenueCat
+
+Real purchases go through [RevenueCat](https://www.revenuecat.com) rather
+than a direct Apple/Google integration this project would have to maintain
+itself -- RevenueCat verifies the purchase with Apple/Google and notifies
+the backend independently, server-to-server, instead of this client ever
+handling or forwarding a raw platform receipt.
+
+**Client side**: the [`godotx_revenue_cat`](https://github.com/godot-x/revenuecat)
+plugin (`mobile/addons/godotx_revenue_cat/` -- GDScript-facing code, committed;
+`mobile/ios/` + `mobile/android/` -- native `.xcframework`/`.aar` binaries,
+gitignored, ~1GB unpacked, see "Try it" above for how to re-fetch them).
+`IapClient.gd` wraps its `GodotxRevenueCat` singleton (confirmed against the
+plugin's own README, not guessed): `initialize(api_key, uid, debug)` is
+called once, right after sign-in (`Auth.gd`'s `_go_to_menu()`), using
+`RevenueCatConfig.gd`'s public key (gitignored like `FirebaseConfig.gd`,
+same reasoning -- see `RevenueCatConfig.example.gd`) and the signed-in
+Firebase uid as RevenueCat's `app_user_id`, which is what the backend
+webhook later uses to know which account to credit. `purchase(product_id)`
+starts a real purchase; the `purchase_result` signal only carries
+success/failure for UI feedback (`IapClient.purchase_completed`/
+`purchase_failed`) -- there's no receipt data to forward anywhere anymore,
+unlike an earlier direct-Apple-verification design this replaced. On
+success, `CurrencyPanel.gd` shows a status message and calls
+`GameProfile.load_all()` again after a short delay to pick up the balance
+the webhook grants independently, rather than trusting anything the
+purchase call itself returned.
+
+**Server side**: see `backend/README.md`'s "Currency endpoints" section for
+`POST /webhooks/revenuecat` -- the endpoint RevenueCat calls directly, not
+the client. Needs `REVENUECAT_WEBHOOK_SECRET` set as a Cloud Run env
+var/secret, matching whatever string is entered as the "Authorization
+header value" in RevenueCat's own webhook dashboard config (an arbitrary
+shared secret you choose, not one RevenueCat generates for you), and the
+webhook URL there set to `<BACKEND_URL>/webhooks/revenuecat`.
+
+**Still ahead**: Xcode signing (automatic signing via "Team" in
+Signing & Capabilities is the simple path -- Godot's own
+`code_sign_identity`/`provisioning_profile_specifier` export fields can
+stay blank for that), enabling the plugin in the iOS/Android export
+preset's own Plugins list (separate from just enabling it in
+Project Settings), a RevenueCat Android public key (`goog_...`) once
+Play Store support actually happens, and the real end-to-end purchase
+test -- nothing about an actual StoreKit/Play Billing round trip is
+possible to verify from this sandbox.
+
+### `firestore.rules` -- production posture
+
+Brought to a genuinely production-shaped default-deny posture, not just
+patched for `bucks`: `users/{uid}`'s `update` rule is now an **allow-list**
+(`display_name`/`roster_player_ids`/`formation` -- the exact 3 fields the
+client ever writes there directly, confirmed by grepping every
+`Firestore.set_document`/`add_document`/`delete_document` call site in
+`mobile/scripts/`) rather than a block-list of known-sensitive fields.
+That's a deliberate choice over listing `credits`/`bucks`/`medals`
+specifically: a block-list needs remembering to add every new sensitive
+field forever (which is exactly how `wins`/`losses`/`draws` stayed
+client-writable long after `credits` moved server-side), while an
+allow-list fails closed automatically for anything not named, today or
+later. `inventory/*` is now its own explicit `match` (still fully
+client-writable, matching `Team.gd`'s `save_team()`) instead of a blanket
+`{subcollection=**}` wildcard, so any future subcollection added under a
+user's doc starts denied by default rather than silently inheriting access.
+
+`players/{playerId}` got the bigger fix: `create`/`update`/`delete` are now
+denied outright. The client only ever *reads* its own cards directly
+(`GameProfile.gd`'s `get_document` calls) -- every card mutation already
+went through `GameState._ensure_player_doc` via the Admin SDK -- so the old
+"owner may update their own card" rule was pure unused-but-exploitable
+surface: a modified client could previously rewrite its own card's
+tier/attributes to anything, a bigger problem than a fake currency balance
+since `gameEngine.py`'s match simulation trusts those values directly with
+no server-side re-validation.
+
+`create: if false` on `users/{uid}` is unchanged from the earlier pass
+(the only legitimate creation path is `POST /account/bootstrap`, Admin
+SDK), and `packs`/`deals`/`iap_transactions` still have no `match` block at
+all -- Firestore's own default-deny already covers them.
 
 ## Pack reveal screen
 
@@ -781,7 +928,7 @@ scripts/
   components/  -- reusable visual building blocks, instanced from screens
   autoload/    -- singletons registered in project.godot's [autoload]
   data/        -- pure data models / format readers -- no I/O, no UI
-  config/      -- FirebaseConfig.gd (gitignored) + .example.gd
+  config/      -- FirebaseConfig.gd + RevenueCatConfig.gd (both gitignored) + .example.gd each
 scenes/
   *.tscn       -- the 7 top-level screens
   components/  -- PlayerCardView.tscn / PlayerModelView.tscn / PitchView.tscn /
@@ -871,6 +1018,14 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
 - `scenes/components/BackgroundLayer.tscn` -- no script, just a
   pre-configured `TextureRect` (see "Background" above); shared placeholder
   background image, instanced on every real screen.
+- `CurrencyPanel.gd` / `scenes/components/CurrencyPanel.tscn` (instanced
+  into `Shop.tscn` as `CurrencyTabs`) -- the Currency tab's Exchange/Bucks/
+  Deals sub-tabs (see "Currency tab" above).
+- `CurrencyTileView.gd` / `scenes/components/CurrencyTileView.tscn` -- the
+  simple "pay X, get Y" tile shared by the Exchange and Bucks sub-tabs (see
+  "Currency tab" above).
+- `DealView.gd` / `scenes/components/DealView.tscn` -- the Deals sub-tab's
+  visual, closely mirroring `PackView` (see "Currency tab" above).
 
 ### `autoload/` -- singletons (registered in `project.godot`)
 
@@ -894,6 +1049,10 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
 - `PackSession.gd` -- same shared-autoload idea, one hop: `Shop.gd` ->
   `PackReveal.gd` (see "Pack reveal screen" above), for one just-opened
   pack's cards.
+- `IapClient.gd` -- thin wrapper around the `godotx_revenue_cat` plugin's
+  `GodotxRevenueCat` singleton (see "In-app purchases via RevenueCat"
+  above); `is_available()` reports whether that singleton actually exists
+  in this build.
 
 ### `data/` -- pure data models / format readers
 
@@ -920,6 +1079,10 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
   format ever changes. `load_from_bytes()` (new) is `load_from_file()` fed
   by a scratch file instead of a bundled one, for a replay that arrived
   over the network (see "Play / Quick Match" above).
+- `ExchangeRateData.gd` / `BucksProductData.gd` / `DealData.gd` -- client-side
+  listing data for the Currency tab's 3 sub-tabs (see "Currency tab" above),
+  same display-only boundary and defensive `_int`/`_str` field-coercion
+  idiom as `PackData.gd`.
 
 All buttons across every scene are hand-drawn/hit-tested (`_draw()` +
 `_unhandled_input()` with `Rect2.has_point()`) rather than scene-tree

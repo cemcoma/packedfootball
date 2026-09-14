@@ -1,0 +1,18 @@
+# backend/Dockerfile builds with the REPO ROOT as context (see
+# cloudbuild.yaml / the Dockerfile's own top comment: `docker build -f
+# backend/Dockerfile .`), so this file has to live here, not inside
+# backend/ -- Docker only ever reads a .dockerignore from the build
+# context's root.
+#
+# The Dockerfile only COPYs packedfootball/ and backend/ -- everything
+# else here exists purely to keep what Docker tars up and sends to the
+# daemon lean, and backend/.env specifically out of the image entirely
+# (COPY backend/ backend/ would otherwise ship it straight into the built
+# image and the registry it gets pushed to).
+
+.git/
+mobile/
+backend/.env
+__pycache__/
+*.pyc
+.DS_Store

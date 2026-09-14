@@ -20,7 +20,7 @@ directly anymore, remains the natural next step (see backend/README.md's
 "Still to do").
 
 Schema:
-    users/{uid}                -> {display_name, credits, roster_player_ids: [id, ...]}
+    users/{uid}                -> {display_name, credits, bucks, medals, roster_player_ids: [id, ...]}
     users/{uid}/inventory/{id} -> {player_id} pointer, one per benched card
     players/{player_id}        -> the actual card fields (owner_uid, attributes,
                                    statistics, ...) -- the single copy roster
@@ -40,6 +40,8 @@ from typing import Any
 from player.player import Attributes
 
 DEFAULT_STARTING_CREDITS = 1000
+DEFAULT_STARTING_BUCKS = 0
+DEFAULT_STARTING_MEDALS = 0
 DEFAULT_FORMATION = "4-4-2"
 
 
@@ -128,8 +130,8 @@ class GameState:
     async def load_or_create_profile(
         self, default_roster: list, default_display_name: str, default_formation: str = DEFAULT_FORMATION
     ) -> dict[str, Any]:
-        """Returns {"credits", "display_name", "wins", "losses", "draws",
-        "campaign_level", "roster", "formation"}.
+        """Returns {"credits", "bucks", "medals", "display_name", "wins",
+        "losses", "draws", "roster", "formation"}.
 
         If this uid has no profile document yet (brand new account), creates
         one seeded with default_roster, default_display_name, default_formation,
@@ -149,32 +151,35 @@ class GameState:
             roster_player_ids = await asyncio.gather(*(self._ensure_player_doc(p) for p in default_roster))
             doc = {
                 "credits": DEFAULT_STARTING_CREDITS,
+                "bucks": DEFAULT_STARTING_BUCKS,
+                "medals": DEFAULT_STARTING_MEDALS,
                 "display_name": default_display_name,
                 "wins": 0,
                 "losses": 0,
                 "draws": 0,
-                "campaign_level": 0,
                 "roster_player_ids": list(roster_player_ids),
                 "formation": default_formation,
             }
             await self.client.set_document(f"users/{uid}", doc, merge=False)
             return {
                 "credits": doc["credits"],
+                "bucks": doc["bucks"],
+                "medals": doc["medals"],
                 "display_name": doc["display_name"],
                 "wins": 0,
                 "losses": 0,
                 "draws": 0,
-                "campaign_level": 0,
                 "roster": list(default_roster),
                 "formation": default_formation,
             }
         return {
             "credits": doc.get("credits", DEFAULT_STARTING_CREDITS),
+            "bucks": doc.get("bucks", DEFAULT_STARTING_BUCKS),
+            "medals": doc.get("medals", DEFAULT_STARTING_MEDALS),
             "display_name": doc.get("display_name", default_display_name),
             "wins": doc.get("wins", 0),
             "losses": doc.get("losses", 0),
             "draws": doc.get("draws", 0),
-            "campaign_level": doc.get("campaign_level", 0),
             "roster": await self._load_players(doc.get("roster_player_ids", [])),
             "formation": doc.get("formation", DEFAULT_FORMATION),
         }
@@ -191,14 +196,17 @@ class GameState:
     async def set_credits(self, credits: int) -> None:
         await self.update_profile_fields({"credits": credits})
 
+    async def set_bucks(self, bucks: int) -> None:
+        await self.update_profile_fields({"bucks": bucks})
+
+    async def set_medals(self, medals: int) -> None:
+        await self.update_profile_fields({"medals": medals})
+
     async def set_display_name(self, display_name: str) -> None:
         await self.update_profile_fields({"display_name": display_name})
 
     async def record_match_result(self, wins: int, losses: int, draws: int) -> None:
         await self.update_profile_fields({"wins": wins, "losses": losses, "draws": draws})
-
-    async def set_campaign_level(self, campaign_level: int) -> None:
-        await self.update_profile_fields({"campaign_level": campaign_level})
 
     # -- inventory (bench) ------------------------------------------------------
 
