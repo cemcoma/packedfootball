@@ -53,6 +53,7 @@ def replays():
     return out
 
 
+@pytest.mark.slow
 def test_fulltime_is_reachable_by_playback(replays):
     """The regression: the client must actually be able to reach FULL TIME."""
     for seed, _g, d in replays:
@@ -65,6 +66,7 @@ def test_fulltime_is_reachable_by_playback(replays):
         )
 
 
+@pytest.mark.slow
 def test_no_event_is_stranded_past_the_last_sample(replays):
     """Same trap, generalised: nothing should be unreachable."""
     names = {int(a): a.name for a in ActionType}
@@ -74,6 +76,7 @@ def test_no_event_is_stranded_past_the_last_sample(replays):
         assert not stranded, f"seed {seed}: unreachable events {stranded} (last sample {last_sample})"
 
 
+@pytest.mark.slow
 def test_events_are_in_tick_order(replays):
     """Playback walks events with a single forward index and never rewinds."""
     for seed, _g, d in replays:
@@ -81,12 +84,14 @@ def test_events_are_in_tick_order(replays):
         assert ticks == sorted(ticks), f"seed {seed}: events out of order"
 
 
+@pytest.mark.slow
 def test_samples_are_in_tick_order(replays):
     for seed, _g, d in replays:
         ticks = [s["tick"] for s in d["samples"]]
         assert ticks == sorted(ticks), f"seed {seed}: samples out of order"
 
 
+@pytest.mark.slow
 def test_halftime_and_fulltime_both_present_once(replays):
     for seed, _g, d in replays:
         for action in (ActionType.HALFTIME, ActionType.FULLTIME):
@@ -94,11 +99,13 @@ def test_halftime_and_fulltime_both_present_once(replays):
             assert count == 1, f"seed {seed}: {action.name} appears {count} times"
 
 
+@pytest.mark.slow
 def test_fulltime_is_the_last_event(replays):
     for seed, _g, d in replays:
         assert d["events"][-1]["type"] == int(ActionType.FULLTIME), f"seed {seed}"
 
 
+@pytest.mark.slow
 def test_goal_events_match_the_final_score(replays):
     for seed, g, d in replays:
         goals = sum(1 for e in d["events"] if e["type"] == int(ActionType.GOAL))

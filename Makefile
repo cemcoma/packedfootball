@@ -1,4 +1,26 @@
-# Godot web export -- a TEST BUILD ONLY.
+# Two things live here: 
+# the Python engine test suite (make test) and 
+# the Godot web export (make web).
+#
+# --- Engine tests ----------------------------------------------------------
+#
+#   make test          everything (~3 min -- 35 of these simulate whole
+#                      matches, the only honest way to test an engine)
+#   make test-fast     108 tests, ~3s. Everything except those simulations,
+#                      which is what you want while editing.
+#   make test-slow     only the full-match simulations, stdout shown
+#   make test-gap      icon XI vs bronze XI, prints the scoreline table
+#   make test-one T=tests/test_goalkeeper.py            one file
+#   make test-one T=tests/test_goalkeeper.py::test_name one test
+#   make test-k K=keeper                                by name substring
+#   make sim                    10 matches, prints the shooting/keeper table
+#   make sim MATCHES=30 SEED=5  more matches, different seeds
+#
+# `sim` is the calibration harness, not a test: it prints shots, shots on
+# target, save rate, goals and how long the ball spends airborne, which is
+# what the balance constants in gameEngine.py are tuned against.
+#
+# --- Godot web export -- a TEST BUILD ONLY.
 #
 # Real-money purchases are deliberately absent on web: there is no
 # RevenueCat (or any other) payment path on that platform, so the Shop's
@@ -21,7 +43,43 @@ PORT       ?= 8060
 BRANCH     := gh-pages
 PAGES_URL  := https://cemcoma.github.io/packedfootball/
 
-.PHONY: web serve-web deploy-web clean-web
+PYTHON  ?= python3
+PYTEST  := $(PYTHON) -m pytest
+MATCHES ?= 10
+SEED    ?= 1
+
+.PHONY: test test-fast test-slow test-gap test-one test-k sim \
+        web serve-web deploy-web clean-web
+
+## Everything. Config (testpaths, sys.path) comes from pytest.ini.
+test:
+	$(PYTEST)
+
+## Skip anything marked `slow` -- i.e. every test that simulates full matches.
+test-fast:
+	$(PYTEST) -m "not slow"
+
+## Only the full-match simulations. -s so their printed summaries show up.
+test-slow:
+	$(PYTEST) -m slow -s
+
+## Icon XI vs bronze XI. The printed table is the point, hence -s.
+test-gap:
+	$(PYTEST) -s tests/test_quality_gap.py
+
+## One file, or one test: make test-one T=tests/test_goalkeeper.py::test_name
+test-one:
+	@test -n "$(T)" || { echo 'usage: make test-one T=tests/test_goalkeeper.py[::test_name]'; exit 1; }
+	$(PYTEST) -s $(T)
+
+## Every test whose name contains K: make test-k K=save
+test-k:
+	@test -n "$(K)" || { echo 'usage: make test-k K=<name substring>'; exit 1; }
+	$(PYTEST) -s -k "$(K)"
+
+## Balance harness -- simulate matches and print the shooting/keeper table.
+sim:
+	$(PYTHON) packedfootball/scripts/simulate_matches.py --matches $(MATCHES) --seed $(SEED)
 
 ## Export the Godot client to $(BUILD_WEB).
 # --headless so it never opens the editor window. Godot creates the output

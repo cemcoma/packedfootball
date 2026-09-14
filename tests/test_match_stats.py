@@ -37,6 +37,7 @@ def test_new_cards_start_with_every_statistic(rosters):
         assert key in home[0].statistics, f"missing {key}"
 
 
+@pytest.mark.slow
 def test_a_match_produces_shots_and_passes(finished):
     total_shots = sum(s["shots"] for s in finished.match_stats)
     total_passes = sum(s["passes"] for s in finished.match_stats)
@@ -44,26 +45,31 @@ def test_a_match_produces_shots_and_passes(finished):
     assert total_passes > 0
 
 
+@pytest.mark.slow
 def test_completed_passes_never_exceed_passes(finished):
     for i, s in enumerate(finished.match_stats):
         assert s["passes_completed"] <= s["passes"], f"player {i}"
 
 
+@pytest.mark.slow
 def test_shots_on_target_never_exceed_shots(finished):
     for i, s in enumerate(finished.match_stats):
         assert s["shots_on_target"] <= s["shots"], f"player {i}"
 
 
+@pytest.mark.slow
 def test_tackles_won_never_exceed_tackles(finished):
     for i, s in enumerate(finished.match_stats):
         assert s["tackles_won"] <= s["tackles"], f"player {i}"
 
 
+@pytest.mark.slow
 def test_goals_conceded_matches_the_scoreline(finished):
     assert finished.match_stats[11]["goals_conceded"] == finished.scores[0]
     assert finished.match_stats[0]["goals_conceded"] == finished.scores[1]
 
 
+@pytest.mark.slow
 def test_clean_sheet_only_when_nothing_was_conceded(finished):
     for keeper in KEEPERS:
         conceded = finished.match_stats[keeper]["goals_conceded"]
@@ -71,12 +77,14 @@ def test_clean_sheet_only_when_nothing_was_conceded(finished):
         assert sheet == (1 if conceded == 0 else 0)
 
 
+@pytest.mark.slow
 def test_outfield_players_never_get_clean_sheets(finished):
     for i in range(22):
         if i not in KEEPERS:
             assert finished.match_stats[i]["clean_sheets"] == 0
 
 
+@pytest.mark.slow
 def test_career_totals_absorb_the_match(finished):
     for i in range(22):
         career = finished.all_players[i].statistics
@@ -84,12 +92,14 @@ def test_career_totals_absorb_the_match(finished):
             assert career[field] >= finished.match_stats[i][field]
 
 
+@pytest.mark.slow
 def test_every_player_is_rated(finished):
     for p in finished.all_players:
         assert p.statistics["rating_count"] == 1
         assert 1.0 <= p.average_rating() <= 10.0
 
 
+@pytest.mark.slow
 def test_ratings_are_not_all_identical(finished):
     ratings = {p.average_rating() for p in finished.all_players}
     assert len(ratings) > 1, "rating is not responding to what players did"

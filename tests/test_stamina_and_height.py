@@ -25,6 +25,7 @@ def test_everyone_starts_a_match_on_full_stamina(match):
     assert np.all(match.stamina == STAMINA_MAX)
 
 
+@pytest.mark.slow
 def test_stamina_depletes_over_a_match(make_match):
     g = make_match(seed=11)
     g.run_match(max_steps=REGULATION_FRAMES, render=False)
@@ -95,6 +96,7 @@ def test_stamina_is_exposed_to_player_ai(match):
     assert 0.0 <= float(match.stamina[3]) <= STAMINA_MAX
 
 
+@pytest.mark.slow
 def test_stamina_never_reaches_the_saved_card(make_match):
     """Match state must not leak into what gets persisted to Firestore."""
     from game_state import player_to_fields

@@ -12,6 +12,10 @@ PENALTY_BOX_HALF_WIDTH = 21.0
 SWEEP_MAX_DISTANCE = 16.0
 SWEEP_SAFE_BALL_SPEED = 10.0
 KEEPER_AUTHORITY_DEPTH = 8.0
+# Within this, a dive becomes a real save attempt instead of repositioning.
+# Matches gameEngine.SAVE_ENGAGE_DISTANCE, so the keeper commits exactly when
+# the engine is willing to resolve a save.
+DIVE_COMMIT_DISTANCE = 6.0
 
 
 class GoalkeeperActionProfile(ActionProfile):
@@ -77,20 +81,21 @@ class Goalkeeper(player):
             return {"type": "pass", "target": target, "power": min(1.0, self.attributes.power / 40.0), "pass_type": "clearance"}
 
         elif decision == "dive":
-            keeper_y = self._get_keeper_line(state)
-            ball_pos = state["ball_pos"]
-            ball_vel = state.get("ball_velocity", np.zeros(2, dtype=float))
+            # Close enough to actually reach it -- throw yourself at it. The
+            # engine's _attempt_save handles the dive movement and the single
+            # save roll (which already penalises how far there is to go), so
+            # a dive genuinely stops shots rather than only repositioning.
+            dist_to_ball = float(np.linalg.norm(state["ball_pos"] - state["my_pos"]))
+            if dist_to_ball <= DIVE_COMMIT_DISTANCE:
+                return {"type": "save", "stat": self.attributes.agility}
 
-            # Predict intercept accounting for basic trajectory
-            if abs(ball_vel[1]) > 0.1:
-                time_to_intercept = (keeper_y - ball_pos[1]) / ball_vel[1]
-                intercept_x = ball_pos[0] + (ball_vel[0] * time_to_intercept)
-            else:
-                intercept_x = ball_pos[0]
+            # Still coming -- get across to where it will cross the line.
+            keeper_y = self._get_keeper_line(state)
+            crossing = state.get("goal_crossing")
+            intercept_x = float(crossing["x"]) if crossing else float(state["ball_pos"][0])
 
             # Fuzziness: Lower vision creates larger positional misjudgments
-            fuzz = state["rng"].normal(0, max(0.0, (100 - self.attributes.vision) / 40.0))
-            intercept_x += fuzz
+            intercept_x += state["rng"].normal(0, max(0.0, (100 - self.attributes.vision) / 40.0))
 
             target_x = np.clip(
                 intercept_x,
@@ -188,13 +193,18 @@ class Goalkeeper(player):
         if dist_to_ball < 1.5:
             return "capture"
 
-        if moving_to_goal and dist_to_ball < 4.0:
+        # Is this ball actually going in? The engine works out where it will
+        # cross our goal line (gameEngine.predict_goal_crossing) and hands it
+        # over in state. Without this the keeper dove at everything -- 63% of
+        # all "saves" were of balls already heading wide or over the bar.
+        crossing = state.get("goal_crossing")
+        threatening = bool(crossing) and bool(crossing.get("on_target"))
+
+        if threatening and dist_to_ball < 4.0:
             return "save"
 
-        if moving_to_goal and ball_speed > 10.0:
-            time_to_impact = abs((own_goal_y - ball_pos[1]) / (ball_vel[1] + 1e-8))
-            if time_to_impact < 1.2:
-                return "dive"
+        if threatening and ball_speed > 10.0 and float(crossing.get("time", 99.0)) < 1.2:
+            return "dive"
 
         # Deliberately NOT gated on `not moving_to_goal`: almost every loose
         # ball near a keeper drifts goalwards to some degree, and excluding

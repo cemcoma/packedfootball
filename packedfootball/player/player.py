@@ -349,7 +349,10 @@ class player(ABC):
         goal_y = 100.0 if state["a_direction"] == 1 else 0.0 
         
         rng = state["rng"]
-        target_x = 31.5 if rng.choice([True, False]) else 38.5
+        # Aim inside the frame, not at the post itself. The goal's inner edges
+        # are ~31.5/38.5, so aiming exactly there made even a perfectly struck
+        # shot a coin flip to go wide however good the shooter was.
+        target_x = 32.2 if rng.choice([True, False]) else 37.8
         intended_target = np.array([target_x, goal_y, rng.uniform(0.5, 2.0)])
         
         pressure_penalty = state["pressure_count"] * ((100.0 - self.attributes.composure) / 20.0)
@@ -358,7 +361,7 @@ class player(ABC):
         
         heading_penalty = max(0.0, (0.8 - np.dot(state["my_heading"], unit_to_goal)) * 5.0) 
         total_variance = ((100.0 - self.attributes.shooting) / 15.0) + pressure_penalty + heading_penalty
-        total_variance = max(total_variance,5.0)
+        total_variance = max(total_variance, 2.1)
         
         actual_x = intended_target[0] + rng.normal(0, total_variance)
         actual_z = max(0.0, intended_target[2] + rng.normal(0, total_variance * 0.5))
@@ -424,7 +427,7 @@ class player(ABC):
         """Folds one match's counters and rating into this card's career
         totals. Called once per player at full time.
         """
-        
+
         for field in MATCH_STAT_FIELDS:
             self.statistics[field] += int(match_stats[field])
         self.statistics["rating_sum"] += float(rating)

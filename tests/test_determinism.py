@@ -72,6 +72,21 @@ def test_skill_and_tendency_names_do_not_overlap():
     assert not (set(_SKILL_STAT_NAMES) & set(_TENDENCY_STAT_NAMES))
 
 
+def test_engine_version_is_a_semver_string():
+    """It is stamped onto every games/{id} doc, so its TYPE is part of the
+    stored schema -- a doc written as a number and read back as a string (or
+    the reverse) is a silent mismatch in the dev/admin panel. It is also the
+    only thing that tells you which engine produced a reported match, so the
+    shape has to stay major.minor.patch.
+    """
+    from gameEngine import ENGINE_VERSION
+
+    assert isinstance(ENGINE_VERSION, str), "version must be a string, not a number"
+    parts = ENGINE_VERSION.split(".")
+    assert len(parts) == 3, f"expected major.minor.patch, got {ENGINE_VERSION!r}"
+    assert all(p.isdigit() for p in parts), f"non-numeric component in {ENGINE_VERSION!r}"
+
+
 def test_every_attribute_is_generated():
     """No Attributes field may be silently dropped from generation.
 

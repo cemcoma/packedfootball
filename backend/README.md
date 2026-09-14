@@ -171,10 +171,21 @@ throw-ins, corners, goal kicks, woodwork), with seeded jitter, and capped by
 ### Engine versioning
 
 `gameEngine.ENGINE_VERSION` is stamped onto every `games/{id}` document
-along with `replay.FORMAT_VERSION` and the existing `seed`. Bump it whenever
-match behaviour changes. Seed + engine version together reproduce a reported
-match exactly, which is what makes a bug report or a dispute investigable
-after the engine has moved on.
+along with `replay.FORMAT_VERSION` and the existing `seed`. Seed + engine
+version together reproduce a reported match exactly, which is what makes a
+bug report or a dispute investigable after the engine has moved on.
+
+It is a **string**, `MAJOR.MINOR.PATCH` (currently `"2.1.0"`) -- bump it
+whenever match behaviour changes:
+
+| | means | effect on a stored match |
+| --- | --- | --- |
+| MAJOR | the sim was reshaped | an old seed replays into a different match; old results aren't comparable |
+| MINOR | balance, or a new mechanic | an old seed replays differently, but stats and wire format still mean the same thing |
+| PATCH | a fix that doesn't change how a match is meant to play | seeds may still diverge if the bug was in the sim itself |
+
+The full history lives in the comment above the constant in
+`packedfootball/gameEngine.py`.
 
 **Pack generation is seed-reproducible across processes.** It briefly wasn't:
 `packEngine` rolled attributes by iterating a `set`, and Python randomises

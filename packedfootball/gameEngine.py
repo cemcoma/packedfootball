@@ -6,15 +6,30 @@ from typing import Final
 
 from replay import ActionType, ReplayRecorder
 
-# Bump whenever match behaviour changes. 
+# Bump whenever match behaviour changes.
 # Stamped onto every games/{id} doc so a reported match can be read against the engine
 # that actually produced it -- seed + ENGINE_VERSION together reproduce a
-# game exactly. 
-# 
-# v2: goal frame with posts/crossbar, throw-ins from the real
-# out point, real stoppage time, match stats + ratings, keeper can leave its
-# line, stamina, height.
-ENGINE_VERSION: Final[int] = 2
+# game exactly.
+#
+# MAJOR.MINOR.PATCH, and what each one means for a stored match:
+#   MAJOR -- the sim was reshaped. An old seed no longer replays into
+#            anything like the same match; old results aren't comparable.
+#   MINOR -- balance or a new mechanic. An old seed replays differently,
+#            but the match still means the same thing (same stats, same
+#            wire format).
+#   PATCH -- a fix that doesn't change how a match is meant to play out.
+#            Seeds may still diverge if the bug was in the sim itself.
+#
+# History:
+#   1.0.0  first engine.
+#   2.0.0  goal frame with posts/crossbar, throw-ins from the real out point,
+#          real stoppage time, match stats + ratings, keeper can leave its
+#          line, stamina, height.
+#   2.1.0  shooting/goalkeeping rebalance: one save attempt per shot, save
+#          odds from shot difficulty, a beaten keeper stays down, shots on
+#          target counted from the predicted crossing instead of from keeper
+#          touches, slower ball descent (BALL_GRAVITY).
+ENGINE_VERSION: Final[str] = "2.1.0"
 
 PITCH_WIDTH: Final[float] = 70.0
 PITCH_HEIGHT: Final[float] = 100.0
@@ -60,6 +75,33 @@ STAMINA_RECOVERY_PER_STEP: Final = 0.010 # paid back only while barely moving
 # effort and nobody ever got tired.
 STAMINA_RECOVERY_EFFORT: Final = 0.25
 STAMINA_MIN_SPEED_FACTOR: Final = 0.65   # pace kept when completely empty
+
+# --- Goalkeeping -----------------------------------------------------------
+# A save is one roll per shot, and how likely it is depends on the SHOT, not
+# just the keeper. Anchors: a 100-rated keeper saves ~100% of an easy shot
+# (slow, straight at them) and ~50% of a hard one (fast, full stretch).
+KEEPER_QUALITY_BASE: Final = 0.55        # save odds floor before attributes
+HARD_SHOT_SPEED: Final = 37.0            # ball speed counting as "hard" (observed max)
+KEEPER_REACH: Final = 6.2                # lateral units = a full-stretch dive
+SAVE_DIFFICULTY_SPEED_WEIGHT: Final = 0.5
+SAVE_DIFFICULTY_REACH_WEIGHT: Final = 0.5
+MAX_DIFFICULTY_PENALTY: Final = 0.5      # hardest shot halves the save chance
+KEEPER_BEATEN_FRAMES: Final = 90 # How long a beaten keeper is on the floor.
+SAVE_COMMIT_MARGIN: Final = 1.0
+# The keeper only commits once the ball is genuinely on them -- either this
+# close, or this near to reaching the line. Without it a save would resolve
+# the instant a shot left the boot, from clear across the box.
+SAVE_ENGAGE_DISTANCE: Final = 6.0
+SAVE_ENGAGE_TIME: Final = 0.45
+
+# How fast a ball loses height, in units per second. Deliberately NOT 9.8:
+# ball height shares the pitch's unit scale, where the whole goal is only
+# GOAL_HEIGHT (2.5) tall, so real gravity dropped a ball from crossbar height
+# to the turf in a quarter of a second and nothing ever looked airborne.
+# Applied straight to height rather than to a vertical velocity, so this is a
+# descent RATE, not an acceleration -- balls fall in a straight line, not an
+# arc. Lower means loftier crosses, clearances and chips.
+BALL_GRAVITY: Final = 5.0
 
 base_kick_pow:Final = 20
 base_speed:Final = 10.0
@@ -172,6 +214,11 @@ class game:
 
         self.last_shot_player = -1
         self.last_pass_player = -1
+        # Identifies the shot currently in flight so each keeper gets exactly
+        # one save attempt at it. -1 means no live shot.
+        self.active_shot_id = -1
+        self._shot_counter = 0
+        self.save_attempted_shot = [-1] * 22
         self._match_goals = [0] * 22
         self._match_assists = [0] * 22
         self.stamina = np.full(22, STAMINA_MAX, dtype=float)
@@ -975,7 +1022,7 @@ class game:
         if self.ball_controller == -1:
             self.ball[0] += self.ball[2] * dt
             self.ball[1] += self.ball[3] * dt
-            self.ball[4] -= 9.8 * dt
+            self.ball[4] -= BALL_GRAVITY * dt
             
             friction = 0.5 ** dt
             self.ball[2] *= friction
@@ -1070,6 +1117,13 @@ class game:
     def _attempt_capture(self, index: int) -> bool:
         if self.ball_controller == index:
             return True
+
+        # A beaten keeper is on the floor and can't quietly rescue the shot
+        # they just missed via a block roll. Time-based, so a ball that clips
+        # the post and trickles back still finds them down -- and one that
+        # takes long enough to come back finds them up again.
+        if self.player_stun_cooldown[index] > 0:
+            return False
 
         if self.ball_capture_player == index and self.ball_capture_cooldown > 0:
             return False
@@ -1197,6 +1251,42 @@ class game:
 
     def _goal_for_player(self, player_index: int) -> np.ndarray:
         return np.array([PITCH_WIDTH/2, 100.0]) if player_index < 11 else np.array([PITCH_WIDTH/2, 0.0])
+
+    def goal_frame_bounds(self) -> tuple[float, float]:
+        """Inside edges of the posts -- the x range a ball must cross to score."""
+        post_min = PITCH_WIDTH / 2 - GOAL_WIDTH / 2.0
+        post_max = PITCH_WIDTH / 2 + GOAL_WIDTH / 2.0
+        return post_min + GOAL_POST_RADIUS, post_max - GOAL_POST_RADIUS
+
+    def predict_goal_crossing(self, defending_team: int) -> dict | None:
+        """Where the loose ball will cross `defending_team`'s goal line.
+
+        Returns {"x", "z", "time", "on_target"} or None when the ball isn't
+        travelling toward that goal at all.
+
+        The single source of truth for "is this shot going in" -- the keeper's
+        decision, the save roll and the shots-on-target stat all read it, so
+        they can never disagree. Straight-line projection with the same linear
+        height falloff tick() applies (see the gravity term there); the ball
+        has no curve, so this is exact rather than an approximation.
+        """
+        goal_y = 0.0 if defending_team == 0 else PITCH_HEIGHT
+        ball_y = float(self.ball[1])
+        vel_y = float(self.ball[3])
+
+        # Moving away from (or parallel to) that goal line.
+        if abs(vel_y) < 1e-6:
+            return None
+        time_to_line = (goal_y - ball_y) / vel_y
+        if time_to_line <= 0.0:
+            return None
+
+        cross_x = float(self.ball[0]) + float(self.ball[2]) * time_to_line
+        cross_z = max(0.0, float(self.ball[4]) - BALL_GRAVITY * time_to_line)
+
+        inner_min, inner_max = self.goal_frame_bounds()
+        on_target = inner_min <= cross_x <= inner_max and cross_z < GOAL_HEIGHT
+        return {"x": cross_x, "z": cross_z, "time": time_to_line, "on_target": on_target}
 
     def _resolve_goal_frame(self, prev_xy: np.ndarray, prev_height: float) -> str | None:
         """Resolves a ball that crossed a goal plane this tick.
@@ -1363,6 +1453,15 @@ class game:
         self.ball_controller = -1
         self.ball_release_player = owner_index
         self.last_pass_player = owner_index if event_type in ("pass", "throw_in") else -1
+
+        # A new shot is a new save opportunity. Anything else ends the current
+        # one, so a parried or cleared ball can't be "saved" a second time.
+        if event_type == "shot":
+            self._shot_counter += 1
+            self.active_shot_id = self._shot_counter
+        else:
+            self.active_shot_id = -1
+
         self._register_touch(owner_index)
         
         if aerial:
@@ -1555,79 +1654,140 @@ class game:
             self._attempt_capture(index)
 
         elif action_type == "save":
-            if self.ball_controller != -1:
-                return
-                
-            dist = np.linalg.norm(self.ball[0:2] - self.positions[index])
-            
-            if dist <= 4.0:
-                ball_speed = np.linalg.norm(self.ball[2:4])
-                gk_attrs = self.all_players[index].attributes
-                
-                save_stat = (gk_attrs.agility * 0.6) + (gk_attrs.vision * 0.4) + (gk_attrs.ballcontrol)*0.3
-                save_chance = float(np.clip((save_stat / 100.0) * 0.80, 0.10, 0.95))
-                
-                if self.rng.random() < save_chance:
-                    self.match_stats[index]["saves"] += 1
-                    # A shot that had to be saved was on target. Credited to
-                    # whoever struck it, not to the keeper.
-                    if self.last_shot_player >= 0:
-                        self.match_stats[self.last_shot_player]["shots_on_target"] += 1
-                        self.last_shot_player = -1
+            self._attempt_save(index)
 
-                    self.visual_action[index] = "save"
-                    self.visual_action_timer[index] = 20
-                    if self.replay:
-                        self.replay.event(self.match_clock_frames, ActionType.SAVE, player_idx=index, team=0 if index < 11 else 1)
+    def _attempt_save(self, index: int) -> bool:
+        """The one and only way a keeper stops a shot.
 
+        Both the "save" and "dive" decisions route here, and each shot gets
+        exactly ONE attempt: the ball is either kept out or the keeper is
+        beaten.
+        """
+        if self.ball_controller != -1:
+            return False
+        if self.player_stun_cooldown[index] > 0:
+            return False  # already beaten and on the floor
 
-                    handling_stat = (gk_attrs.composure * 0.6) + (gk_attrs.ballcontrol * 0.4)
-                    gather_chance = float(np.clip((handling_stat / 100.0) * 0.85 - (ball_speed / 40.0), 0.05, 0.85))
-                    
-                    if self.rng.random() < gather_chance:
-                        # --- SUCCESSFUL GATHER (CATCH) ---
-                        self.ball_controller = index
-                        self.ball_capture_player = index
-                        self.ball_event = "neutral"
-                        self._register_touch(index)
-                        self.ball_capture_cooldown = 8
-                        
-                        self.ball[0:2] = self.positions[index]
-                        self.ball[2:4] = self.velocity[index]
-                        self.ball[4] = 0.0
-                        
-                        self.velocity[index] = np.zeros(2, dtype=float)
-                        self.player_stun_cooldown[index] = 6 # Faster recovery for catching safely
-                    else:
-                        # --- DEFLECTION (PARRY) ---
-                        if self.rng.random() < 0.7: #sideways
-                            side_dir = -2.0 if self.positions[index][0] < 35.0 else 2.0
-                            deflect_x = side_dir * self.rng.uniform(0.8, 1.2)
-                            deflect_y = -0.5 if self.positions[index][1] < 50.0 else 0.5
-                        else: # punch out
-                            deflect_x = self.rng.uniform(-1.0, 1.0)
-                            deflect_y = 1.0 if self.positions[index][1] < 50.0 else -1.0 
-                            
-                        deflect_dir = np.array([deflect_x, deflect_y])
-                        deflect_dir = deflect_dir / np.linalg.norm(deflect_dir)
-                        
-                        self.ball_controller = -1
-                        self.last_touch_team = 0 if index < 11 else 1
-                        self.ball_capture_player = index
-                        self.ball_capture_cooldown = 20
-                        self.ball_release_player = index
-                        self.ball_release_cooldown = 10
-                        
-                        self.ball[0:2] = self.positions[index]
-                        self.ball[2:4] = deflect_dir * max(6.0, ball_speed * 0.7)
-                        self.ball[4] = self.rng.uniform(1.0, 4.0)
-                        
-                        self.velocity[index] = np.zeros(2, dtype=float)
-                        self.player_stun_cooldown[index] = 30 # Longer recovery for diving
-                else:
-                    # Goal...
-                    self.velocity[index] = np.zeros(2, dtype=float)
-                    self.player_stun_cooldown[index] = 45
+        shot_id = self.active_shot_id
+        if shot_id >= 0 and self.save_attempted_shot[index] == shot_id:
+            return False  # one attempt per shot, already used
+
+        defending_team = 0 if index < 11 else 1
+        crossing = self.predict_goal_crossing(defending_team)
+        if crossing is None:
+            return False
+
+        # Wait until the ball is actually on them. Checked BEFORE the attempt
+        # is recorded, so a keeper starting to dive early doesn't burn the
+        # shot's single save on a ball still halfway across the box.
+        dist_to_ball = float(np.linalg.norm(self.ball[0:2] - self.positions[index]))
+        if dist_to_ball > SAVE_ENGAGE_DISTANCE and crossing["time"] > SAVE_ENGAGE_TIME:
+            return False
+
+        # Don't dive at a ball that isn't going in. A small margin keeps the
+        # keeper reacting to one whistling just past the post.
+        inner_min, inner_max = self.goal_frame_bounds()
+        if not (
+            inner_min - SAVE_COMMIT_MARGIN <= crossing["x"] <= inner_max + SAVE_COMMIT_MARGIN
+            and crossing["z"] < GOAL_HEIGHT + SAVE_COMMIT_MARGIN
+        ):
+            return False
+
+        if shot_id >= 0:
+            self.save_attempted_shot[index] = shot_id
+
+        ball_speed = float(np.linalg.norm(self.ball[2:4]))
+        lateral = abs(crossing["x"] - float(self.positions[index][0]))
+        gk_attrs = self.all_players[index].attributes
+
+        # Throw themselves at where the ball is going, so a save reads as a
+        # dive in the replay rather than a keeper standing still.
+        if lateral > 0.3:
+            direction = 1.0 if crossing["x"] > self.positions[index][0] else -1.0
+            dive_speed = max(4.0, (gk_attrs.agility / 100.0) * base_speed * 1.6)
+            self.velocity[index] = np.array([direction * dive_speed, 0.0], dtype=float)
+
+        save_chance = self._save_chance(gk_attrs, ball_speed, lateral)
+
+        if self.rng.random() >= save_chance: #beaten
+            self.velocity[index] = np.zeros(2, dtype=float)
+            self.player_stun_cooldown[index] = KEEPER_BEATEN_FRAMES
+            return False
+
+        self.match_stats[index]["saves"] += 1
+        if crossing["on_target"] and self.last_shot_player >= 0:
+            self.match_stats[self.last_shot_player]["shots_on_target"] += 1
+            self.last_shot_player = -1
+
+        self.visual_action[index] = "save"
+        self.visual_action_timer[index] = 20
+        if self.replay:
+            self.replay.event(self.match_clock_frames, ActionType.SAVE, player_idx=index, team=defending_team)
+
+        handling_stat = (gk_attrs.composure * 0.6) + (gk_attrs.ballcontrol * 0.4)
+        gather_chance = float(np.clip((handling_stat / 100.0) * 0.85 - (ball_speed / 40.0), 0.05, 0.85))
+
+        if self.rng.random() < gather_chance:
+            # --- SUCCESSFUL GATHER (CATCH) ---
+            self.ball_controller = index
+            self.ball_capture_player = index
+            self.ball_event = "neutral"
+            self._register_touch(index)
+            self.ball_capture_cooldown = 8
+
+            self.ball[0:2] = self.positions[index]
+            self.ball[2:4] = self.velocity[index]
+            self.ball[4] = 0.0
+
+            self.velocity[index] = np.zeros(2, dtype=float)
+            self.player_stun_cooldown[index] = 6  # Faster recovery for catching safely
+        else:
+            # --- DEFLECTION (PARRY) ---
+            if self.rng.random() < 0.7:  # sideways
+                side_dir = -2.0 if self.positions[index][0] < 35.0 else 2.0
+                deflect_x = side_dir * self.rng.uniform(0.8, 1.2)
+                deflect_y = -0.5 if self.positions[index][1] < 50.0 else 0.5
+            else:  # punch out
+                deflect_x = self.rng.uniform(-1.0, 1.0)
+                deflect_y = 1.0 if self.positions[index][1] < 50.0 else -1.0
+
+            deflect_dir = np.array([deflect_x, deflect_y])
+            deflect_dir = deflect_dir / np.linalg.norm(deflect_dir)
+
+            self.ball_controller = -1
+            self.last_touch_team = defending_team
+            self.ball_capture_player = index
+            self.ball_capture_cooldown = 20
+            self.ball_release_player = index
+            self.ball_release_cooldown = 10
+
+            self.ball[0:2] = self.positions[index]
+            self.ball[2:4] = deflect_dir * max(6.0, ball_speed * 0.7)
+            self.ball[4] = self.rng.uniform(1.0, 4.0)
+
+            self.velocity[index] = np.zeros(2, dtype=float)
+            self.player_stun_cooldown[index] = 30  # Longer recovery for diving
+        return True
+
+    def _save_chance(self, gk_attrs, ball_speed: float, lateral: float) -> float:
+        """How likely this keeper is to stop THIS shot.
+
+        Quality scales with the keeper; difficulty comes from the shot -- how
+        fast it is, and how far they have to move to reach where it will
+        cross the line. Anchored so a 100-rated keeper is near-certain on a
+        slow ball straight at them and about even money on a fast one at full
+        stretch.
+        """
+        save_stat = (gk_attrs.agility * 0.6) + (gk_attrs.vision * 0.4) + (gk_attrs.ballcontrol * 0.3)
+        quality = KEEPER_QUALITY_BASE + (1.0 - KEEPER_QUALITY_BASE) * min(1.0, save_stat / 100.0)
+
+        speed_term = min(1.0, max(0.0, ball_speed / HARD_SHOT_SPEED))
+        reach_term = min(1.0, max(0.0, lateral / KEEPER_REACH))
+        difficulty = (
+            SAVE_DIFFICULTY_SPEED_WEIGHT * speed_term + SAVE_DIFFICULTY_REACH_WEIGHT * reach_term
+        )
+
+        return float(np.clip(quality * (1.0 - MAX_DIFFICULTY_PENALTY * difficulty), 0.02, 0.99))
 
     def step(self):
         self.step_count += 1
@@ -1756,6 +1916,13 @@ class game:
                 # themselves; fatigue already slows movement regardless (see
                 # _fatigue_factor).
                 "stamina": float(self.stamina[i]),
+                # Where the loose ball will cross this player's own goal line,
+                # or null. Only the keeper reads it (see goalkeeper.py) -- it
+                # is what lets them tell a shot that's going in from one
+                # drifting wide, instead of diving at everything.
+                "goal_crossing": self.predict_goal_crossing(0 if i < 11 else 1)
+                if self.ball_controller == -1
+                else None,
                 "rng": self.rng,
             }
             intended_action = self.all_players[i].step(state)

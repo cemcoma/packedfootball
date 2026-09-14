@@ -30,11 +30,13 @@ def played(make_match):
     return _play
 
 
+@pytest.mark.slow
 def test_match_reaches_at_least_ninety_minutes(played):
     g = played()
     assert clock_seconds(g) >= 90 * 60, f"match ended at {mmss(g)}"
 
 
+@pytest.mark.slow
 def test_match_no_longer_ends_at_88_30(played):
     """The exact regression: 10800 - 180 frames = 5310s = 88:30."""
     g = played()
@@ -42,6 +44,7 @@ def test_match_no_longer_ends_at_88_30(played):
 
 
 @pytest.mark.parametrize("seed", [1, 7, 42])
+@pytest.mark.slow
 def test_added_time_is_played_on_both_halves(played, seed):
     g = played(seed=seed)
     assert g.added_time_frames[0] > 0
@@ -50,6 +53,7 @@ def test_added_time_is_played_on_both_halves(played, seed):
     assert g.match_clock_frames >= expected
 
 
+@pytest.mark.slow
 def test_added_time_is_capped(played):
     from gameEngine import ADDED_TIME_MAX_FRAMES
 
@@ -58,6 +62,7 @@ def test_added_time_is_capped(played):
         assert 0 < half <= ADDED_TIME_MAX_FRAMES, f"{half} frames is outside a believable range"
 
 
+@pytest.mark.slow
 def test_added_time_is_deterministic_for_a_seed(make_match):
     a, b = make_match(seed=31), make_match(seed=31)
     a.run_match(max_steps=REGULATION_FRAMES, render=False)
@@ -88,6 +93,7 @@ def test_added_time_only_counts_the_current_half(make_match):
     assert second < first
 
 
+@pytest.mark.slow
 def test_every_player_is_credited_with_the_match(played):
     g = played()
     assert all(p.statistics["matches_played"] == 1 for p in g.all_players)

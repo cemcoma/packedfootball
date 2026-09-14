@@ -20,12 +20,28 @@ KEEPER_B = 11  # defends y=100
 
 
 def keeper_state(g, idx, ball_xy, ball_vel=(0.0, 0.0), is_loose=True, **overrides):
-    """Builds the state dict the engine would hand this keeper."""
+    """Builds the state dict the engine would hand this keeper.
+
+    `goal_crossing` is computed by the engine itself rather than written by
+    hand: since the rebalance, save/dive fire only for a ball predicted to
+    cross inside the frame, so a hand-built state that omits the key makes
+    every shot look harmless and the keeper stands still. The ball is put
+    where the caller says, asked, and put back.
+    """
+    ball_height = float(overrides.get("ball_height", 0.0))
+    saved_ball = np.array(g.ball, dtype=float)
+    g.ball[0:2] = np.asarray(ball_xy, dtype=float)
+    g.ball[2:4] = np.asarray(ball_vel, dtype=float)
+    g.ball[4] = ball_height
+    crossing = g.predict_goal_crossing(0 if idx < 11 else 1)
+    g.ball[:] = saved_ball
+
     base = {
         "has_ball": False,
         "ball_pos": np.array(ball_xy, dtype=float),
         "ball_velocity": np.array(ball_vel, dtype=float),
-        "ball_height": 0.0,
+        "ball_height": ball_height,
+        "goal_crossing": crossing,
         "my_pos": np.array(g.positions[idx], dtype=float),
         "my_velocity": np.zeros(2),
         "my_heading": np.array([0.0, 1.0]),
@@ -155,6 +171,7 @@ def test_keeper_bounds_derive_from_goal_width():
     assert gk_mod.KEEPER_LINE_HALF_WIDTH == pytest.approx(GOAL_WIDTH / 2 + 0.5)
 
 
+@pytest.mark.slow
 def test_sweep_actually_fires_in_a_real_match(make_match):
     """The one that matters.
 
