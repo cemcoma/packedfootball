@@ -43,6 +43,9 @@ DEFAULT_STARTING_CREDITS = 1000
 DEFAULT_STARTING_BUCKS = 0
 DEFAULT_STARTING_MEDALS = 0
 DEFAULT_FORMATION = "4-4-2"
+# "" means "no kit chosen, renderer picks" -- see load_or_create_profile's
+# docstring for why this end deliberately doesn't spell out a default shirt.
+DEFAULT_KIT = ""
 
 
 def player_to_fields(p) -> dict:
@@ -74,10 +77,6 @@ def fields_to_player(fields: dict, player_class_map: dict, default_class):
         hometown=fields.get("hometown"),
         appearance=fields.get("appearance"),
     )
-    # Strict on purpose. Every players/{id} doc is written by the current
-    # code via player_to_fields, so a doc missing "statistics" is a genuine
-    # problem worth failing loudly on rather than papering over. Cards
-    # predating the extended statistics were deleted, not migrated.
     p.statistics = dict(fields["statistics"])
     return p
 
@@ -135,7 +134,7 @@ class GameState:
         self, default_roster: list, default_display_name: str, default_formation: str = DEFAULT_FORMATION
     ) -> dict[str, Any]:
         """Returns {"credits", "bucks", "medals", "display_name", "wins",
-        "losses", "draws", "roster", "formation"}.
+        "losses", "draws", "roster", "formation", "kit"}.
 
         If this uid has no profile document yet (brand new account), creates
         one seeded with default_roster, default_display_name, default_formation,
@@ -148,6 +147,19 @@ class GameState:
         schema so the backend can read it too (see backend/main.py's
         /match/simulate, which needs to know each side's real formation
         instead of assuming everyone plays 4-4-2).
+
+        "kit" is the same arrangement: the manager's shirt, written by the
+        client's Customize Kit screen and read here only to hand back to
+        whoever is rendering the match. It is passed through UNINSPECTED and
+        UNVALIDATED on purpose -- the format is deliberately extendable (see
+        mobile/scripts/data/KitDesign.gd), the only consumer is a renderer
+        that already treats anything unparseable as the default kit, and
+        nothing in the simulation or the economy reads it. Parsing it here
+        would mean two implementations of the format to keep in step, and
+        would make every future kit feature a backend deploy.
+        DEFAULT_KIT is the empty string rather than a spelled-out default
+        for the same reason: "unset, you decide" is one fewer place for the
+        two ends to disagree about what a default shirt looks like.
         """
         uid = self.client.uid
         doc = await self.client.get_document(f"users/{uid}")
@@ -163,6 +175,7 @@ class GameState:
                 "draws": 0,
                 "roster_player_ids": list(roster_player_ids),
                 "formation": default_formation,
+                "kit": DEFAULT_KIT,
             }
             await self.client.set_document(f"users/{uid}", doc, merge=False)
             return {
@@ -175,6 +188,7 @@ class GameState:
                 "draws": 0,
                 "roster": list(default_roster),
                 "formation": default_formation,
+                "kit": DEFAULT_KIT,
             }
         return {
             "credits": doc.get("credits", DEFAULT_STARTING_CREDITS),
@@ -186,6 +200,8 @@ class GameState:
             "draws": doc.get("draws", 0),
             "roster": await self._load_players(doc.get("roster_player_ids", [])),
             "formation": doc.get("formation", DEFAULT_FORMATION),
+            # Absent on every account created before kits existed.
+            "kit": doc.get("kit", DEFAULT_KIT),
         }
 
     async def update_profile_fields(self, fields: dict) -> None:

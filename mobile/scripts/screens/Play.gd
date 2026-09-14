@@ -28,6 +28,9 @@ extends Control
 @onready var _tournament_button: Button = %TournamentButton
 @onready var _back_button: Button = %BackButton
 
+@onready var _quick_match_hint: Label = %QuickMatchHint
+@onready var _tournament_hint: Label = %TournamentHint
+
 @onready var _matchmaking_popup: Control = %MatchmakingPopup
 
 var _matchmaking_active: bool = false
@@ -37,6 +40,19 @@ func _ready() -> void:
 	_quick_match_button.pressed.connect(_on_quick_match_pressed)
 	_tournament_button.pressed.connect(_on_tournament_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
+
+	ThemeManager.theme_changed.connect(_apply_theme_colors)
+	_apply_theme_colors()
+
+
+## The two hints sit straight on the screen background with no panel behind
+## them, so the Theme's Label color doesn't reach them (they carry their own
+## override) -- on light mode their pale grey was invisible. See
+## ThemeManager's note on text_hint.
+func _apply_theme_colors() -> void:
+	var hint := ThemeManager.color("text_hint")
+	_quick_match_hint.add_theme_color_override("font_color", hint)
+	_tournament_hint.add_theme_color_override("font_color", hint)
 
 
 func _show_matchmaking_popup(status: String) -> void:

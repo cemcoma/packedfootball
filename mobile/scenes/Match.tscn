@@ -185,9 +185,17 @@ theme_override_constants/separation = 12
 
 [node name="PausedLabel" type="Label" parent="PauseOverlay/Center/VBoxContainer" unique_id=58577765]
 layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 24
 text = "Paused"
 horizontal_alignment = 1
+
+[node name="LegendGrid" type="GridContainer" parent="PauseOverlay/Center/VBoxContainer" unique_id=1930000001]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 4
+columns = 4
 
 [node name="SkipHalftimeButton" type="Button" parent="PauseOverlay/Center/VBoxContainer" unique_id=739398850]
 unique_name_in_owner = true
@@ -253,6 +261,7 @@ theme_override_constants/separation = 20
 [node name="PreMatchTeamsLabel" type="Label" parent="PreMatchOverlay/Center/VBoxContainer" unique_id=1550734794]
 unique_name_in_owner = true
 layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 22
 text = "Home vs Away"
 horizontal_alignment = 1

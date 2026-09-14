@@ -8,12 +8,13 @@ rules_version = '2';
 // only ever writes directly for a small, explicitly enumerated set of
 // low-stakes fields (confirmed by grepping every Firestore.set_document/
 // add_document/delete_document call site in mobile/scripts/): a manager's
-// own display_name, their live roster_player_ids/formation, and their own
-// inventory pointers. Everything else is deny-by-default, both at the
-// collection level (no match block at all for packs/deals/
-// iap_transactions -- an unmatched path is denied automatically) and at
-// the field level (users/{uid}'s update rule allow-lists exactly those 3
-// fields, rather than block-listing the ones known to be sensitive -- a
+// own display_name, their live roster_player_ids/formation, their kit
+// (cosmetic shirt colors), and their own inventory pointers. Everything
+// else is deny-by-default, both at the collection level (no match block at
+// all for packs/deals/iap_transactions -- an unmatched path is denied
+// automatically) and at the field level (users/{uid}'s update rule
+// allow-lists exactly those 4 fields, rather than block-listing the ones
+// known to be sensitive -- a
 // block-list needs remembering to add every new sensitive field forever,
 // which is exactly how wins/losses/draws stayed client-writable long after
 // credits moved server-side; an allow-list fails closed automatically for
@@ -21,58 +22,22 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Private per-user data: profile + live roster/formation. Only the
-    // signed-in owner may read their own doc. The only legitimate way this
-    // doc is ever CREATED is POST /account/bootstrap (Admin SDK) -- denied
-    // outright client-side rather than trying to validate a client-supplied
-    // new-account document's starting field values. UPDATE only ever
-    // touches display_name (Settings rename) or roster_player_ids +
-    // formation together (Team's Save Team) -- credits/bucks/medals/wins/
-    // losses/draws are backend-only, written via GameState.set_credits/
-    // set_bucks/set_medals/record_match_result through AdminFirestoreClient.
     match /users/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow create: if false;
       allow update: if request.auth != null && request.auth.uid == uid
                     && request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['display_name', 'roster_player_ids', 'formation']);
+                         .hasOnly(['display_name', 'roster_player_ids', 'formation', 'kit']);
       allow delete: if false;
 
-      // Bench-card pointers ({player_id} only) -- written directly by
-      // Team.gd's save_team(): a new pointer doc is added when a card
-      // moves onto the bench, deleted when it moves back into the roster.
-      // An explicit `inventory` match rather than a blanket
-      // `{subcollection=**}` wildcard on purpose: a wildcard would
-      // silently grant full read/write to any future subcollection added
-      // under a user's doc without a deliberate decision each time.
       match /inventory/{invId} {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }
     }
 
-    // Player cards: users/*.roster_player_ids and users/*/inventory/* hold
-    // only ids into this collection (see game_state.py). The client only
-    // ever READS its own cards directly (GameProfile.gd's get_document
-    // calls in _load_cards/load_inventory) -- every card MUTATION (a new
-    // card from a pack, updated statistics after a match, a saved roster's
-    // attribute snapshot) goes through GameState._ensure_player_doc via
-    // the backend's Admin SDK, which bypasses these rules entirely.
-    // create/update/delete are denied outright here for exactly that
-    // reason: nothing legitimate needs them, and allowing "update your own
-    // card" (the previous rule) would let a modified client rewrite its
-    // own card's tier/attributes to anything -- a bigger exploit than a
-    // fake currency balance, since gameEngine.py's match simulation trusts
-    // these values directly with no server-side re-validation.
     match /players/{playerId} {
       allow read: if request.auth != null && resource.data.owner_uid == request.auth.uid;
       allow create, update, delete: if false;
     }
-
-    // packs/{packId}, deals/{dealId} (+ deals/*/redemptions/*), and
-    // iap_transactions/{transactionId} are read only via GET /pack/list +
-    // /deals/list and written only via POST /pack/open + /deals/redeem +
-    // /currency/iap_redeem -- all backend-only (AdminFirestoreClient).
-    // Deliberately no match block for any of them -- the default with no
-    // matching rule is deny, so there's no client access at all.
   }
 }

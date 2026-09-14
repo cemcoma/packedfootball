@@ -67,6 +67,8 @@ STARTER_TIER = "bronze"
 
 QUICK_MATCH_REWARD_CREDITS = {"loss":10,"draw":25,"win":100}
 
+BOT_KIT = "v1;pattern=stripes;primary=c8102e;secondary=121216"
+
 app = FastAPI(title="Packed Football backend")
 
 #allowed websites to call this backend
@@ -670,6 +672,10 @@ def _run_match(caller_profile: dict, opponent_profile: dict, seed: int) -> dict:
         "player_match_stats": match.match_summary(),
         # Added time per half, in clock seconds, for the frontend to show as "+x" at the end of each half.
         "added_time": [frames // 2 for frames in match.added_time_frames],
+        # Both sides' shirts, [caller, opponent], passed straight through
+        # from each profile -- see game_state.load_or_create_profile on why
+        # this end never parses them. A bot's comes from BOT_KIT.
+        "kits": [caller_profile.get("kit", ""), opponent_profile.get("kit", "")],
     }
 
 
@@ -687,12 +693,18 @@ def _teams_snapshot(uid: str, caller_profile: dict, opponent_uid: str, opponent_
             "uid": uid,
             "display_name": caller_profile["display_name"],
             "formation": caller_profile["formation"],
+            # What they actually wore. A manager can change their kit any
+            # time, so without this a replayed game would be rendered in
+            # whatever shirt they happen to own today, not the one in the
+            # screenshot attached to the bug report.
+            "kit": caller_profile.get("kit", ""),
             "players": [player_to_fields(p) for p in caller_profile["roster"]],
         },
         "opponent": {
             "uid": opponent_uid,
             "display_name": opponent_profile["display_name"],
             "formation": opponent_profile["formation"],
+            "kit": opponent_profile.get("kit", ""),
             "players": [player_to_fields(p) for p in opponent_profile["roster"]],
         },
     }
@@ -734,7 +746,12 @@ def _generate_bot_opponent() -> tuple[str, dict]:
     tier = random.choice(list(TIER_RANGES.keys()))
     roster = generate_starter_roster(formation, tier, seed=secrets.randbits(63))
     bot_uid = f"bot_{secrets.token_hex(6)}"  # never collides with a real Firebase uid's shape
-    profile = {"display_name": f"{tier.capitalize()} Bot", "formation": formation, "roster": roster}
+    profile = {
+        "display_name": f"{tier.capitalize()} Bot",
+        "formation": formation,
+        "roster": roster,
+        "kit": BOT_KIT,
+    }
     return bot_uid, profile
 
 
@@ -861,6 +878,12 @@ async def quick_match(uid: str = Depends(verify_id_token)):
         "replay": result["replay"],
         "roster": result["roster"],
         "added_time": result["added_time"],
+        # Per-player numbers for THIS match, and both sides' shirts. Both
+        # were computed by _run_match from the start and simply never made
+        # it into either response -- so MatchStats.tscn and the kit
+        # rendering had nothing to read.
+        "player_match_stats": result["player_match_stats"],
+        "kits": result["kits"],
     }
 
 
@@ -956,4 +979,10 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
         "replay": result["replay"],
         "roster": result["roster"],
         "added_time": result["added_time"],
+        # Per-player numbers for THIS match, and both sides' shirts. Both
+        # were computed by _run_match from the start and simply never made
+        # it into either response -- so MatchStats.tscn and the kit
+        # rendering had nothing to read.
+        "player_match_stats": result["player_match_stats"],
+        "kits": result["kits"],
     }

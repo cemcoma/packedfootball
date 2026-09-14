@@ -70,10 +70,21 @@ func set_from_match_response(data: Dictionary) -> void:
 	var name_raw = data.get("opponent_display_name")
 	opponent_display_name = name_raw if name_raw is String and name_raw != "" else "Opponent"
 
+	# Both sides' shirts, as the raw strings the backend passed through from
+	# each profile (see backend/main.py's _run_match). Kept as strings and
+	# handed to whoever draws them -- MatchPlayback parses them with
+	# KitDesign, which turns anything missing or unparseable into the
+	# default kit, so an older backend that doesn't send "kits" at all just
+	# means both sides wear the default.
+	var kits_raw = data.get("kits")
+	var kits: Array = kits_raw if kits_raw is Array else []
+
 	var players_raw = data.get("roster")
 	_roster = {
 		"home_name": GameProfile.display_name,
 		"away_name": opponent_display_name,
+		"home_kit": kits[0] if kits.size() > 0 and kits[0] is String else "",
+		"away_kit": kits[1] if kits.size() > 1 and kits[1] is String else "",
 		"players": players_raw if players_raw is Array else [],
 	}
 
@@ -171,6 +182,10 @@ func scorers(team: int) -> Array:
 	var events: Array = _replay.get("events", [])
 	var order: Array = []
 	var by_player: Dictionary = {}
+	# Goal minutes are shown on the same clock the playback screen shows, so
+	# a 90th-minute winner doesn't read as 92' here just because the first
+	# half ran long. See ReplayReader.display_tick.
+	var halftime := ReplayReader.halftime_tick(_replay)
 
 	for event in events:
 		if not (event is Dictionary):
@@ -184,7 +199,8 @@ func scorers(team: int) -> Array:
 		if scorer_team != team:
 			continue
 
-		var minute: int = int(float(event.get("tick", 0)) / 2.0 / 60.0) + 1
+		var shown := ReplayReader.display_tick(float(event.get("tick", 0)), halftime)
+		var minute: int = int(shown / 2.0 / 60.0) + 1
 		if by_player.has(idx):
 			by_player[idx]["goals"] += 1
 			by_player[idx]["minutes"].append(minute)

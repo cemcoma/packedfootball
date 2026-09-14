@@ -57,23 +57,63 @@ const FULL_MODE_BOX_SIZE := Vector2(378.0, 540.0)
 const PLAYER_RADIUS_UNITS := 1.3
 const BALL_RADIUS_UNITS := 0.55
 
-# Fallback shirt colors (home/Team A, away/Team B) -- used unless `roster`
-# carries its own "home_color"/"away_color" ([r, g, b] floats in [0, 1]),
-# which nothing writes yet but is exactly the shape a future
-# user-specified-shirt-color feature would send, so both the pitch dots and
-# the scoreboard swatches already read from one place ready to pick that up.
+# Shirt colors for home/Team A and away/Team B when the roster carries no
+# kit -- the bundled demo replay, or a response from a backend that predates
+# kits. A real match sends both managers' kits (see _resolve_team_colors).
 const DEFAULT_TEAM_COLORS := [Color(0.2, 0.5, 1.0), Color(1.0, 0.35, 0.35)]
+
+# How different two shirts have to be before the away side is made to
+# change. Straight RGB distance, which is crude but right for the job: these
+# are 3-pixel dots, and the only question that matters is "can you tell the
+# two teams apart at a glance".
+const TEAM_COLOR_MIN_DISTANCE := 0.42
+# Tried in order when the away kit clashes, first one far enough from the
+# home shirt wins: their own second color, then the built-in away red, then
+# near-white and near-black (between them nothing can clash with both).
+const CHANGE_KIT_FALLBACKS := [Color(0.95, 0.95, 0.96), Color(0.12, 0.12, 0.14)]
+
+# Every action in the replay stream used to flash the same yellow, so the
+# pitch told you SOMETHING happened but never what. These are the same
+# events, colored by what they actually are -- see _action_color(), which is
+# the single place the mapping lives.
+#
+# Chosen to read against the pitch green (0.09, 0.47, 0.22) and against both
+# shirt colors, and grouped so related events share a family: the ball
+# leaving a foot is warm (pass/cross/clearance), a duel is hot
+# (tackle/anklebreaker), goalkeeping is cold, and a restart is neutral.
+const ACTION_COLOR_GOAL := Color(1.0, 0.85, 0.15)          # gold
+const ACTION_COLOR_SHOOT := Color(1.0, 0.45, 0.1)          # orange
+const ACTION_COLOR_SAVE := Color(0.25, 0.85, 1.0)          # cyan
+const ACTION_COLOR_TACKLE := Color(1.0, 0.25, 0.25)        # red
+const ACTION_COLOR_ANKLEBREAKER := Color(0.85, 0.35, 1.0)  # violet
+const ACTION_COLOR_PASS := Color(1.0, 1.0, 1.0)            # white
+const ACTION_COLOR_RECEIVED := Color(0.6, 1.0, 0.75)       # mint
+const ACTION_COLOR_CROSS := Color(0.55, 0.75, 1.0)         # pale blue
+const ACTION_COLOR_CLEARANCE := Color(0.95, 0.75, 0.45)    # sand
+const ACTION_COLOR_RESTART := Color(0.85, 0.9, 0.95)       # pale grey
+# Anything the enum grows that nobody has assigned a color to yet: the
+# original flash, so a new event type still shows rather than going invisible.
+const ACTION_COLOR_DEFAULT := Color(1.0, 1.0, 0.2)
+
+# Size of one color chip in the pause screen's key (see _build_legend).
+const LEGEND_SWATCH_SIZE := Vector2(14.0, 14.0)
 
 var replay: Dictionary = {}
 var roster: Dictionary = {}
 var playback_tick: float = 0.0
 var next_event_index: int = 0
 var player_flash_timers: Array = []
+# Parallel to player_flash_timers: what color that player's current flash is,
+# i.e. which action they just performed. Kept as a second array rather than
+# recomputed at draw time because by then the event is long past.
+var player_flash_colors: Array = []
 var ball_flash_timer: float = 0.0
+var ball_flash_color: Color = ACTION_COLOR_GOAL
 var home_score: int = 0
 var away_score: int = 0
 var banner_text: String = ""
 var banner_timer: float = 0.0
+var banner_color: Color = Color.WHITE
 var halftime_pause_remaining: float = 0.0
 const HALFTIME_PAUSE_SECONDS := 3.0  # matches gameEngine.py's halftime_pause_timer=180 ticks @ 60/sec
 
@@ -93,6 +133,10 @@ var _halftime_tick: float = -1.0
 # so skip-to-full-time (from the pause menu) and a natural full-time both
 # end the same way instead of one feeling abrupt.
 var _pending_result_transition: bool = false
+
+# [home, away], worked out once at load from both managers' kits -- see
+# _resolve_team_colors() for the clash rule.
+var _team_colors: Array = DEFAULT_TEAM_COLORS.duplicate()
 
 var camera_mode: String = "zoom"  # "zoom" | "full" -- matches gameEngine.py's render()
 
@@ -122,6 +166,7 @@ var _is_real_match: bool = false
 @onready var _start_button: Button = %StartButton
 
 @onready var _pause_overlay: Control = %PauseOverlay
+@onready var _legend_grid: GridContainer = %LegendGrid
 @onready var _skip_halftime_button: Button = %SkipHalftimeButton
 @onready var _skip_fulltime_button: Button = %SkipFulltimeButton
 @onready var _exit_button: Button = %ExitButton
@@ -156,13 +201,14 @@ func _ready() -> void:
 
 	player_flash_timers.resize(ReplayReader.NUM_PLAYERS)
 	player_flash_timers.fill(0.0)
+	player_flash_colors.resize(ReplayReader.NUM_PLAYERS)
+	player_flash_colors.fill(ACTION_COLOR_DEFAULT)
 
-	for event in replay.get("events", []):
-		if event["type"] == ReplayReader.ActionType.HALFTIME:
-			_halftime_tick = event["tick"]
-			break
+	_halftime_tick = ReplayReader.halftime_tick(replay)
 
+	_resolve_team_colors()  # before _setup_scoreboard -- it paints the swatches
 	_setup_scoreboard()
+	_build_legend()
 	_pre_match_teams_label.text = "%s vs %s" % [roster.get("home_name", "Home"), roster.get("away_name", "Away")]
 	_update_camera_button_label()
 	_update_speed_button_label()
@@ -187,13 +233,79 @@ func _setup_scoreboard() -> void:
 	_away_color_swatch.color = _team_color(1)
 	_update_score_label()
 
+func _legend_entries() -> Array:
+	return [
+		[ReplayReader.ActionType.GOAL, "Goal"],
+		[ReplayReader.ActionType.SHOOT, "Shot"],
+		[ReplayReader.ActionType.SAVE, "Save"],
+		[ReplayReader.ActionType.TACKLE, "Tackle"],
+		[ReplayReader.ActionType.ANKLEBREAKER, "Skill move"],
+		[ReplayReader.ActionType.PASS, "Pass"],
+		[ReplayReader.ActionType.RECEIVED_PASS, "Received"],
+		[ReplayReader.ActionType.CROSS, "Cross"],
+		[ReplayReader.ActionType.CLEARANCE, "Clearance"],
+		[ReplayReader.ActionType.THROW_IN, "Restart"],
+	]
+
+func _build_legend() -> void:
+	for child in _legend_grid.get_children():
+		_legend_grid.remove_child(child)
+		child.queue_free()
+
+	for entry in _legend_entries():
+		var swatch := ColorRect.new()
+		swatch.color = _action_color(entry[0])
+		swatch.custom_minimum_size = LEGEND_SWATCH_SIZE
+		swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_legend_grid.add_child(swatch)
+
+		var label := Label.new()
+		label.text = entry[1]
+		label.add_theme_font_size_override("font_size", 12)
+		# The pause scrim is black in BOTH themes, so this is explicitly
+		# white rather than left to the Theme's Label color, which goes
+		# near-black in light mode and would vanish here.
+		label.add_theme_color_override("font_color", Color.WHITE)
+		_legend_grid.add_child(label)
+
+
+## Works out what each side wears, once, at load. Called before anything
+## draws; _team_color() just reads the answer.
+##
+## The pitch dots are small circles, so only ONE color per side survives to
+## the screen -- the kit's primary. Pattern and secondary still matter
+## (they're what the Customize Kit preview and, later, anything bigger than
+## a dot will show), they just can't be rendered at this size.
+##
+## Hence the clash rule. Two managers who both picked royal blue would
+## otherwise be indistinguishable for 90 minutes, and real football solves
+## exactly this with a change kit: the AWAY side is the one that changes,
+## the home side always wears what it picked.
+## TODO: Have the teams actually wear the kit
+func _resolve_team_colors() -> void:
+	var home_kit := KitDesign.parse(roster.get("home_kit", ""))
+	var away_kit := KitDesign.parse(roster.get("away_kit", ""))
+
+	var home: Color = home_kit.primary_color() if roster.has("home_kit") else DEFAULT_TEAM_COLORS[0]
+	var away: Color = away_kit.primary_color() if roster.has("away_kit") else DEFAULT_TEAM_COLORS[1]
+
+	if _too_similar(home, away):
+		var candidates := [away_kit.secondary_color(), DEFAULT_TEAM_COLORS[1]]
+		candidates.append_array(CHANGE_KIT_FALLBACKS)
+		for candidate in candidates:
+			if not _too_similar(home, candidate):
+				away = candidate
+				break
+
+	_team_colors = [home, away]
+
+
+func _too_similar(a: Color, b: Color) -> bool:
+	return Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length() < TEAM_COLOR_MIN_DISTANCE
+
 
 func _team_color(team_index: int) -> Color:
-	var key := "home_color" if team_index == 0 else "away_color"
-	var raw = roster.get(key)
-	if raw is Array and raw.size() >= 3:
-		return Color(raw[0], raw[1], raw[2])
-	return DEFAULT_TEAM_COLORS[team_index]
+	return _team_colors[team_index]
 
 
 func _update_score_label() -> void:
@@ -201,7 +313,11 @@ func _update_score_label() -> void:
 
 
 func _update_timer_label() -> void:
-	var clock_total_seconds := int(playback_tick / 2.0)  # matches gameEngine.py's render() clock convention
+	# display_tick, not the raw playback tick: the second half restarts at
+	# 45:00 rather than carrying on from wherever the first half's stoppage
+	# left off. Same convention as gameEngine.py's render().
+	var shown := ReplayReader.display_tick(playback_tick, _halftime_tick)
+	var clock_total_seconds := int(shown / 2.0)
 	_timer_label.text = "%02d:%02d" % [clock_total_seconds / 60, clock_total_seconds % 60]
 
 
@@ -247,11 +363,14 @@ func _reset_state() -> void:
 	away_score = 0
 	banner_text = ""
 	banner_timer = 0.0
+	banner_color = Color.WHITE
 	halftime_pause_remaining = 0.0
 	ball_flash_timer = 0.0
+	ball_flash_color = ACTION_COLOR_GOAL
 	_pending_result_transition = false
 	for i in range(player_flash_timers.size()):
 		player_flash_timers[i] = 0.0
+		player_flash_colors[i] = ACTION_COLOR_DEFAULT
 	_update_score_label()
 
 
@@ -377,6 +496,30 @@ func _process(delta: float) -> void:
 	_update_timer_label()
 	queue_redraw()
 
+func _action_color(event_type: int) -> Color:
+	match event_type:
+		ReplayReader.ActionType.GOAL:
+			return ACTION_COLOR_GOAL
+		ReplayReader.ActionType.SHOOT:
+			return ACTION_COLOR_SHOOT
+		ReplayReader.ActionType.SAVE:
+			return ACTION_COLOR_SAVE
+		ReplayReader.ActionType.TACKLE:
+			return ACTION_COLOR_TACKLE
+		ReplayReader.ActionType.ANKLEBREAKER:
+			return ACTION_COLOR_ANKLEBREAKER
+		ReplayReader.ActionType.PASS:
+			return ACTION_COLOR_PASS
+		ReplayReader.ActionType.RECEIVED_PASS:
+			return ACTION_COLOR_RECEIVED
+		ReplayReader.ActionType.CROSS:
+			return ACTION_COLOR_CROSS
+		ReplayReader.ActionType.CLEARANCE:
+			return ACTION_COLOR_CLEARANCE
+		ReplayReader.ActionType.KICKOFF, ReplayReader.ActionType.THROW_IN, ReplayReader.ActionType.CORNER, ReplayReader.ActionType.GOAL_KICK:
+			return ACTION_COLOR_RESTART
+	return ACTION_COLOR_DEFAULT
+
 
 func _process_events(current_tick: float) -> void:
 	var events: Array = replay["events"]
@@ -387,9 +530,15 @@ func _process_events(current_tick: float) -> void:
 
 		if idx >= 0 and idx < ReplayReader.NUM_PLAYERS:
 			player_flash_timers[idx] = 0.3
+			player_flash_colors[idx] = _action_color(event_type)
+
+		if event_type == ReplayReader.ActionType.SHOOT or event_type == ReplayReader.ActionType.SAVE:
+			ball_flash_timer = 0.4
+			ball_flash_color = _action_color(event_type)
 
 		if event_type == ReplayReader.ActionType.GOAL:
 			ball_flash_timer = 1.0
+			ball_flash_color = ACTION_COLOR_GOAL
 			var team: int = event["team"]
 			if team == 0:
 				home_score += 1
@@ -399,13 +548,16 @@ func _process_events(current_tick: float) -> void:
 			var scorer := _player_name(idx)
 			banner_text = "GOAL: %s" % scorer if scorer != "" else "GOAL"
 			banner_timer = 3.0
+			banner_color = ACTION_COLOR_GOAL
 		elif event_type == ReplayReader.ActionType.HALFTIME:
 			banner_text = "HALF TIME"
 			banner_timer = HALFTIME_PAUSE_SECONDS
+			banner_color = Color.WHITE
 			halftime_pause_remaining = HALFTIME_PAUSE_SECONDS
 		elif event_type == ReplayReader.ActionType.FULLTIME:
 			banner_text = "FULL TIME"
 			banner_timer = 4.0
+			banner_color = Color.WHITE
 			if _is_real_match:
 				_pending_result_transition = true
 
@@ -664,15 +816,10 @@ func _draw() -> void:
 		var pos: Vector2 = _pitch_to_screen(players[i], cam)
 		var color := _team_color(0) if i < 11 else _team_color(1)
 		if player_flash_timers[i] > 0.0:
-			color = Color(1.0, 1.0, 0.2)
+			color = player_flash_colors[i]
 		if i == controller:
 			draw_circle(pos, PLAYER_RADIUS_UNITS * 1.35 * scale, Color(1.0, 1.0, 1.0), false, 2.0)
 		draw_circle(pos, PLAYER_RADIUS_UNITS * scale, color)
-		# Fixed screen-space size regardless of camera zoom -- this used to
-		# scale with `scale` (the camera's current zoom factor), which made
-		# these roughly double in size switching from "full" to "zoom" mode
-		# (that mode's scale is ~11 vs "full"'s ~5.4) instead of staying a
-		# constant on-screen size the way UI text should.
 		draw_string(
 			font,
 			pos + Vector2(-6, 5),
@@ -698,7 +845,7 @@ func _draw() -> void:
 			)
 
 	var ball_pos: Vector2 = _pitch_to_screen(state["ball"], cam)
-	var ball_color := Color(1.0, 0.85, 0.2) if ball_flash_timer > 0.0 else Color(1.0, 1.0, 1.0)
+	var ball_color := ball_flash_color if ball_flash_timer > 0.0 else Color(1.0, 1.0, 1.0)
 	draw_circle(ball_pos, BALL_RADIUS_UNITS * scale, ball_color)
 
 	_draw_banner(font, font_size)
@@ -709,6 +856,8 @@ func _draw_banner(font: Font, font_size: int) -> void:
 		return
 	# Fades out over its last second, however long the banner's total duration was.
 	var alpha: float = clampf(banner_timer, 0.0, 1.0)
+	var color := banner_color
+	color.a = alpha
 	_draw_string_with_shadow(
 		font,
 		Vector2(size.x / 2.0 - 150, size.y / 2.0),
@@ -716,5 +865,5 @@ func _draw_banner(font: Font, font_size: int) -> void:
 		HORIZONTAL_ALIGNMENT_CENTER,
 		300,
 		int(font_size * 1.6),
-		Color(1.0, 1.0, 1.0, alpha)
+		color
 	)

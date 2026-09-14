@@ -74,6 +74,7 @@ custom_minimum_size = Vector2(160, 0)
 layout_mode = 2
 
 [node name="LanguageHint" type="Label" parent="Margin/CenterContainer/RootVBox" unique_id=1765921253]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 11
@@ -94,6 +95,7 @@ custom_minimum_size = Vector2(160, 0)
 layout_mode = 2
 
 [node name="ThemeHint" type="Label" parent="Margin/CenterContainer/RootVBox" unique_id=123617072]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 11

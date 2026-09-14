@@ -29,7 +29,9 @@ from replay import ActionType, ReplayRecorder
 #          odds from shot difficulty, a beaten keeper stays down, shots on
 #          target counted from the predicted crossing instead of from keeper
 #          touches, slower ball descent (BALL_GRAVITY).
-ENGINE_VERSION: Final[str] = "2.1.0"
+#   2.1.1  the second half restarts on 45:00 instead of carrying on from the
+#          first half's stoppage (display_clock_frames).
+ENGINE_VERSION: Final[str] = "2.1.1"
 
 PITCH_WIDTH: Final[float] = 70.0
 PITCH_HEIGHT: Final[float] = 100.0
@@ -40,6 +42,7 @@ POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
 
 FRAMES_PER_CLOCK_SECOND: Final = 2 # match_clock_frames / 2 = seconds, so 90:00 == 10800
+REGULATION_FRAMES: Final = 10800   # 90:00, before any added time
 
 # Stoppage time, in frames. Weighted heavy per event on purpose: this engine
 # keeps the ball in play far more than real football (~5 restarts a match,
@@ -230,6 +233,14 @@ class game:
         self.player_radius = 1
         self.step_count = 0
         self.match_clock_frames = 0
+
+        # Half length in clock frames, and where the first half stopped.
+        # run_match overwrites the first from its own max_steps and sets the
+        # second at the whistle; together they let display_clock_frames put
+        # the second half back at 45:00. -1 means "first half still".
+        self.regulation_half_frames = REGULATION_FRAMES // 2
+        self.halftime_clock_frames = -1
+
         self.ball_release_cooldown = 0
         self.ball_release_player = -1
         self.ball_capture_cooldown = 0
@@ -649,7 +660,7 @@ class game:
         # HUD: Scoreboard and Clock
         hud_font = pygame.font.SysFont(None, 36)
         hud_small = pygame.font.SysFont(None, 22)
-        clock_total_seconds = int(self.match_clock_frames / 2.0)
+        clock_total_seconds = int(self.display_clock_frames() / 2.0)
         minutes = clock_total_seconds // 60
         seconds = clock_total_seconds % 60
         
@@ -860,6 +871,10 @@ class game:
             running = True
 
         regulation_half = max_steps // 2
+        # display_clock_frames measures the second half from here, and
+        # max_steps is a parameter -- a test playing a short match still has
+        # its halves start where they should.
+        self.regulation_half_frames = regulation_half
         first_half_end = None   # regulation + added time for the 1st half
         second_half_end = None  # ditto for the 2nd
         halftime_done = False
@@ -898,6 +913,10 @@ class game:
                     self.goal_popup = {"text": "HALF TIME", "timer": 180, "team": None}
                     self.halftime_pause_timer = 180
                     self.reset_positions(restart_type="kickoff", team=1)
+                    # Where the first half actually stopped, which is 45:00
+                    # plus however much stoppage it ran. display_clock_frames
+                    # needs it to restart the shown clock at 45:00.
+                    self.halftime_clock_frames = self.match_clock_frames
                     if self.replay:
                         self.replay.event(self.match_clock_frames, ActionType.HALFTIME)
                         self.replay.event(self.match_clock_frames, ActionType.KICKOFF, team=1)
@@ -1248,6 +1267,29 @@ class game:
         else:
             self.velocity[index] *= 0.85
         return False
+
+    def display_clock_frames(self) -> int:
+        """The clock a VIEWER should see, which is not the same thing as
+        match_clock_frames.
+
+        match_clock_frames is one continuous timeline and has to stay that
+        way -- every replay sample and event is ordered by it, so it can
+        never go backwards. That means the second half simply carries on
+        from wherever the first one stopped: play 2:12 of stoppage before
+        the break and the second half kicks off at 47:12.
+
+        Football doesn't work like that. The second half starts at 45:00
+        however long the first half over-ran, and full time lands on 90:00
+        plus only the second half's own stoppage. Shifting the shown clock
+        back by exactly the first half's overrun is what makes the two
+        agree, and it leaves the stored timeline untouched.
+
+        The Godot client does the same arithmetic off the replay's HALFTIME
+        event -- see ReplayReader.display_tick. Keep the two in step.
+        """
+        if self.halftime_clock_frames < 0 or self.match_clock_frames <= self.halftime_clock_frames:
+            return self.match_clock_frames
+        return self.match_clock_frames - (self.halftime_clock_frames - self.regulation_half_frames)
 
     def _goal_for_player(self, player_index: int) -> np.ndarray:
         return np.array([PITCH_WIDTH/2, 100.0]) if player_index < 11 else np.array([PITCH_WIDTH/2, 0.0])

@@ -34,6 +34,13 @@ var wins: int = 0
 var losses: int = 0
 var draws: int = 0
 
+# The manager's shirt, as the raw string stored on users/{uid}.kit -- see
+# KitDesign.gd for the format and why it's one string rather than a set of
+# fields. Kept raw here (not as a parsed KitDesign) so a value written by a
+# newer client survives a round trip through an older one untouched: parse
+# it with kit_design() when you need to draw it.
+var kit: String = ""
+
 # Squad state -- the live, possibly-unsaved lineup.
 var formation: String = DEFAULT_FORMATION
 var slot_assignment: Array = []  # player_ids, "" where empty, index == formation slot index
@@ -102,6 +109,9 @@ func load_all() -> void:
 		losses = _int(doc, "losses")
 		draws = _int(doc, "draws")
 		formation = _str(doc, "formation", DEFAULT_FORMATION)
+		# Absent on every account created before kits existed -- an empty
+		# string parses to the default kit, so nothing needs migrating.
+		kit = _str(doc, "kit", "")
 		ids = _array(doc, "roster_player_ids", [])
 
 	var slots: Array = Formations.get_formation(formation)
@@ -276,6 +286,25 @@ func set_display_name(new_name: String) -> bool:
 	return ok
 
 
+## The manager's shirt, parsed. Always returns a usable design: an account
+## that has never opened Customize Kit, or one holding a string this build
+## can't make sense of, gets KitDesign's default rather than null.
+func kit_design() -> KitDesign:
+	return KitDesign.parse(kit)
+
+
+## Saves a shirt to users/{uid}.kit and updates the local cache on success.
+## Mirrors set_display_name -- a direct client write, which firestore.rules
+## allows for exactly this field set (`kit` is cosmetic; nothing in the sim
+## or the economy reads it).
+func set_kit(design: KitDesign) -> bool:
+	var encoded := design.serialize()
+	var ok := await Firestore.set_document(_user_doc_path(), {"kit": encoded}, true)
+	if ok:
+		kit = encoded
+	return ok
+
+
 ## Clears the cached profile/squad state -- called on sign-out (mirrors
 ## main.py setting its own game_state = None) so a second account signing
 ## in on the same running app never briefly sees the previous account's
@@ -289,6 +318,7 @@ func reset() -> void:
 	wins = 0
 	losses = 0
 	draws = 0
+	kit = ""
 	formation = DEFAULT_FORMATION
 	slot_assignment = []
 	all_cards = {}

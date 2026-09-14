@@ -31,6 +31,11 @@ const PALETTES := {
 		"surface_border": Color(0.45, 0.45, 0.5),
 		"text_muted": Color(0.7, 0.7, 0.75),
 		"accent": Color(1.0, 0.85, 0.35),
+		"text_hint": Color(0.72, 0.72, 0.76),
+		"heading": Color(0.75, 0.85, 1.0),
+		"heading_away": Color(1.0, 0.8, 0.75),
+		"positive": Color(0.6, 1.0, 0.6),
+		"warning": Color(1.0, 0.7, 0.3),
 	},
 	"light": {
 		# Deeper, more saturated than their dark counterparts on purpose --
@@ -43,8 +48,32 @@ const PALETTES := {
 		"surface_border": Color(0.6, 0.6, 0.66),
 		"text_muted": Color(0.35, 0.35, 0.42),
 		"accent": Color(0.85, 0.6, 0.05),
+		"text_hint": Color(0.1, 0.1, 0.13),
+		"heading": Color(0.13, 0.28, 0.6),
+		"heading_away": Color(0.6, 0.22, 0.16),
+		"positive": Color(0.1, 0.5, 0.22),
+		"warning": Color(0.72, 0.42, 0.0),
 	},
 }
+
+## The five keys above `text_hint` and below exist for ONE situation: text
+## drawn straight onto the screen background, with no panel behind it.
+##
+## Anything inside a themed Panel is already handled -- the Theme resource
+## swaps that Label color wholesale. Anything inside a DELIBERATELY dark
+## panel (Match.tscn's overlay scrims, MatchResult's contrast panel) must
+## stay light in both modes and should hardcode white, NOT read from here.
+## These are only for the naked case, where a pale grey/blue/green that reads
+## on a dark photo background is invisible on a light one:
+##
+##   text_hint     muted secondary text ("Tap to skip") -- black in light mode
+##   heading       a section/column heading (the cool blue one)
+##   heading_away  its warm counterpart, so two squad lists stay tellable apart
+##   positive      "Saved!", clean sheet, anything good
+##   warning       "Unsaved changes", out of position, anything that wants a look
+##
+## Screens using these must rebuild on theme_changed -- an
+## add_theme_color_override is a one-time write, not a live binding.
 
 const FALLBACK_COLOR := Color(0.7, 0.7, 0.75)
 

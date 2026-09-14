@@ -81,6 +81,9 @@ func _ready() -> void:
 	_back_button.pressed.connect(_on_back_pressed)
 	_mode_button.pressed.connect(_on_mode_pressed)
 
+	ThemeManager.theme_changed.connect(_apply_theme_colors)
+	_apply_theme_colors()
+
 	var score: Array = MatchSession.score
 	var my_score: int = score[0] if score.size() == 2 else 0
 	var opp_score: int = score[1] if score.size() == 2 else 0
@@ -237,6 +240,17 @@ func _stat_text(stats: Dictionary, key: String, kind: String) -> String:
 			return "Yes" if int(value) > 0 else "No"
 		_:
 			return str(int(value))
+
+
+## The two squad columns are plain VBoxContainers -- no panel behind them --
+## so their headers sit directly on the screen background and the Theme's
+## Label color never reaches them. Their pale blue/pink read well on the dark
+## backdrop and washed out completely on the light one. The detail panel is a
+## different case: it has its own permanently-dark stylebox, so the colors in
+## _add_section/_add_row/_add_note stay light in both modes on purpose.
+func _apply_theme_colors() -> void:
+	_home_header.add_theme_color_override("font_color", ThemeManager.color("heading"))
+	_away_header.add_theme_color_override("font_color", ThemeManager.color("heading_away"))
 
 
 func _add_section(title: String) -> void:

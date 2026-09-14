@@ -81,6 +81,12 @@ func _ready() -> void:
 	_back_button.pressed.connect(_on_back_pressed)
 	_close_stats_button.pressed.connect(_on_close_stats_pressed)
 
+	# "Tap to skip" is drawn straight over the screen background with no
+	# panel behind it -- its own pale grey override made it invisible in
+	# light mode. See ThemeManager's note on text_hint.
+	ThemeManager.theme_changed.connect(_apply_theme_colors)
+	_apply_theme_colors()
+
 	_cards = PackSession.cards().duplicate()
 	_cards.sort_custom(_is_worse_pull)
 	PackSession.clear()
@@ -90,6 +96,10 @@ func _ready() -> void:
 		return
 
 	_play_reveal_sequence()
+
+
+func _apply_theme_colors() -> void:
+	_skip_hint_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 
 
 ## Ascending sort predicate ("does a belong before b") -- worst tier first,

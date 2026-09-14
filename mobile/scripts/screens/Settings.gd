@@ -30,6 +30,9 @@ const THEME_MODES := ["dark", "light"]
 @onready var _back_button: Button = %BackButton
 @onready var _logout_button: Button = %LogoutButton
 
+@onready var _language_hint: Label = %LanguageHint
+@onready var _theme_hint: Label = %ThemeHint
+
 
 func _ready() -> void:
 	_save_name_button.pressed.connect(_on_save_name_pressed)
@@ -46,6 +49,20 @@ func _ready() -> void:
 	_theme_option.add_item("Light")
 	_theme_option.select(THEME_MODES.find(ThemeManager.mode))
 	_theme_option.item_selected.connect(_on_theme_selected)
+
+	ThemeManager.theme_changed.connect(_apply_theme_colors)
+	_apply_theme_colors()
+
+
+## Both hints sit straight on the screen background with no panel behind
+## them, so they carry their own color override and the Theme's Label color
+## never reaches them -- which left them a pale, near-invisible grey in light
+## mode. Doubly worth getting right here: this is the screen you flip the
+## theme ON, so it recolors live. See ThemeManager's note on text_hint.
+func _apply_theme_colors() -> void:
+	var hint := ThemeManager.color("text_hint")
+	_language_hint.add_theme_color_override("font_color", hint)
+	_theme_hint.add_theme_color_override("font_color", hint)
 
 
 func _on_theme_selected(index: int) -> void:

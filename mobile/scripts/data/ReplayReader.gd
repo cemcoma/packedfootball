@@ -27,6 +27,40 @@ const POSITION_SCALE := 100.0
 const MAGIC := "PFRP"
 const NUM_PLAYERS := 22
 
+## 45:00 in clock frames, at gameEngine's FRAMES_PER_CLOCK_SECOND = 2.
+const REGULATION_HALF_FRAMES := 5400
+
+
+## The tick the HALFTIME event sits on, or -1.0 if this replay has none.
+static func halftime_tick(replay: Dictionary) -> float:
+	for event in replay.get("events", []):
+		if not (event is Dictionary):
+			continue
+		if int(event.get("type", -1)) == ActionType.HALFTIME:
+			return float(event.get("tick", -1))
+	return -1.0
+
+
+## The clock a viewer should SEE for a raw replay tick.
+##
+## A replay's tick is one continuous timeline -- it has to be, every sample
+## and event is ordered by it -- so the second half carries straight on from
+## wherever the first one stopped: 2:12 of stoppage before the break and the
+## second half would kick off reading 47:12.
+##
+## Football restarts the second half at 45:00 however long the first one
+## over-ran, so this shifts the shown clock back by exactly that overrun.
+## Full time then lands on 90:00 plus only the second half's own stoppage.
+## The stored timeline is untouched -- this is display only.
+##
+## gameEngine.game.display_clock_frames() is the same arithmetic on the
+## Python side (it has the halftime frame directly rather than having to
+## find the event). Keep the two in step.
+static func display_tick(tick: float, halftime: float) -> float:
+	if halftime < 0.0 or tick <= halftime:
+		return tick
+	return tick - (halftime - float(REGULATION_HALF_FRAMES))
+
 # FileAccess's get_8()/get_16() signedness isn't something this project can
 # verify without running Godot, so these two helpers make the result correct
 # either way: if the value already came back signed (-128..127 / -32768..32767)

@@ -126,9 +126,19 @@ Quick Match grants a credit reward scaled by outcome
 (`QUICK_MATCH_REWARD_CREDITS = {"win": 100, "draw": 25, "loss": 10}`) and
 records wins/losses/draws.
 
-Both responses carry `engine_version`, `replay_format_version` and
-`added_time` (clock seconds per half), and both stamp the two versions onto
+Both responses carry `engine_version`, `replay_format_version`,
+`added_time` (clock seconds per half), `player_match_stats` (this match's
+per-player numbers, same index order as `roster`) and `kits` (both sides'
+shirt strings, `[caller, opponent]`). Both also stamp the two versions onto
 the `games/{id}` doc alongside the seed -- see Engine versioning below.
+
+`kits` is passed straight through from each profile's `users/{uid}.kit` and
+is never parsed server-side -- the format lives in
+`mobile/scripts/data/KitDesign.gd` and is meant to grow without a backend
+deploy. A bot opponent has no user document, so its shirt comes from
+`BOT_KIT`. The `games/{id}` teams snapshot records each side's kit too, so a
+replayed match is drawn in what was actually worn rather than whatever that
+manager happens to own today.
 
 ### Match statistics and ratings
 

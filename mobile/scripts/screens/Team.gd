@@ -85,6 +85,7 @@ var _formation_buttons: Dictionary = {}  # name -> Button
 @onready var _clear_button: Button = %ClearButton
 @onready var _close_button: Button = %CloseButton
 @onready var _status_label: Label = %StatusLabel
+@onready var _kit_button: Button = %KitButton
 @onready var _save_button: Button = %SaveButton
 @onready var _back_button: Button = %BackButton
 
@@ -106,10 +107,27 @@ func _ready() -> void:
 	_clear_button.pressed.connect(_on_clear_pressed)
 	_close_button.pressed.connect(_on_close_stats_pressed)
 	_stats_page_button.pressed.connect(_on_stats_page_pressed)
+	_kit_button.pressed.connect(_on_kit_pressed)
 	_save_button.pressed.connect(_on_save_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 
+	ThemeManager.theme_changed.connect(_apply_theme_colors)
+	_apply_theme_colors()
+
 	_refresh_all()
+
+
+## StatsPanel is a plain VBoxContainer -- nothing is drawn behind it -- so
+## everything in it sits directly on the screen background and the Theme's
+## Label color never reaches the labels that carry their own override. The
+## pale blue heading and grey subtitle read fine on the dark backdrop and
+## washed out on the light one. _refresh_bottom() recolors the status label
+## on the same palette (it flips between positive and warning).
+func _apply_theme_colors() -> void:
+	_stats_page_label.add_theme_color_override("font_color", ThemeManager.color("heading"))
+	_stats_extra_country.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+	_out_of_position_label.add_theme_color_override("font_color", ThemeManager.color("warning"))
+	_refresh_bottom()
 
 
 # -- state -> UI --------------------------------------------------------------
@@ -307,7 +325,9 @@ func _refresh_bottom() -> void:
 	if (status_text == "" or status_text == "Saved!") and dirty:
 		message = "Unsaved changes"
 	_status_label.text = message
-	_status_label.add_theme_color_override("font_color", Color(1.0, 0.7, 0.3) if dirty else Color(0.6, 1.0, 0.6))
+	_status_label.add_theme_color_override(
+		"font_color", ThemeManager.color("warning") if dirty else ThemeManager.color("positive")
+	)
 	_save_button.text = "Save Team*" if dirty else "Save Team"
 
 
@@ -392,6 +412,14 @@ func _on_save_pressed() -> void:
 	var ok: bool = await GameProfile.save_team()
 	status_text = "Saved!" if ok else "Save failed -- try again."
 	_refresh_all()
+
+
+## Deliberately does NOT discard unsaved lineup changes the way Back does:
+## formation/slot_assignment live on the GameProfile autoload, not on this
+## scene, so they survive the trip to CustomizeKit and back and the manager
+## picks up exactly where they left off.
+func _on_kit_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/CustomizeKit.tscn")
 
 
 func _on_back_pressed() -> void:
