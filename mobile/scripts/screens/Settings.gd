@@ -14,9 +14,14 @@ extends Control
 ## publish anywhere anymore -- leaderboards will read straight from
 ## `users`/`players` docs instead of a separate snapshot.
 ##
-## Language/Color Theme are explicit stubs -- disabled OptionButtons with a
-## single placeholder entry each, no functionality behind them yet (see
-## mobile/README.md).
+## Color Theme is real now: it swaps ThemeManager between its dark and light
+## palettes, which restyles every screen (and persists the choice). Language
+## is still an explicit stub -- a disabled OptionButton with one placeholder
+## entry, nothing behind it yet (see mobile/README.md).
+
+## Dropdown index -> ThemeManager mode key. Keep in step with the
+## add_item() order in _ready().
+const THEME_MODES := ["dark", "light"]
 
 @onready var _name_field: LineEdit = %NameField
 @onready var _save_name_button: Button = %SaveNameButton
@@ -35,8 +40,17 @@ func _ready() -> void:
 
 	_language_option.add_item("English")
 	_language_option.disabled = true
-	_theme_option.add_item("Default")
-	_theme_option.disabled = true
+
+	# Index order must match THEME_MODES below.
+	_theme_option.add_item("Dark")
+	_theme_option.add_item("Light")
+	_theme_option.select(THEME_MODES.find(ThemeManager.mode))
+	_theme_option.item_selected.connect(_on_theme_selected)
+
+
+func _on_theme_selected(index: int) -> void:
+	if index >= 0 and index < THEME_MODES.size():
+		ThemeManager.set_mode(THEME_MODES[index])
 
 
 func _on_save_name_pressed() -> void:

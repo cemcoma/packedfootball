@@ -1,7 +1,6 @@
 [gd_scene format=3 uid="uid://b82yjwhx7x5sg"]
 
 [ext_resource type="Script" uid="uid://b38lnsyksyii6" path="res://scripts/screens/MatchPlayback.gd" id="1"]
-[ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="3"]
 
 [node name="Match" type="Control" unique_id=2007280519]
@@ -12,8 +11,15 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Background" parent="." unique_id=652370243 instance=ExtResource("2")]
+[node name="ColorRect" type="ColorRect" parent="." unique_id=2023386460]
+propagate_maximum_size = true
 layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(9.62615e-07, 0.458502, 0.25632533, 1)
 
 [node name="PitchCenterContainer" type="CenterContainer" parent="." unique_id=551083191]
 layout_mode = 1
@@ -24,8 +30,8 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="PitchCanvas" type="Control" parent="PitchCenterContainer" unique_id=1636939444]
-clip_contents = true
 custom_minimum_size = Vector2(378, 540)
+clip_contents = true
 layout_mode = 2
 script = ExtResource("1")
 
@@ -89,28 +95,15 @@ custom_minimum_size = Vector2(36, 6)
 layout_mode = 2
 color = Color(0.2, 0.5, 1, 1)
 
-[node name="SwatchSpacer" type="Control" parent="ScoreboardPanel/Margin/VBox/SwatchRow" unique_id=1608070699]
+[node name="TimerBar" type="CenterContainer" parent="ScoreboardPanel/Margin/VBox/SwatchRow" unique_id=1061265193]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="AwayColorSwatch" type="ColorRect" parent="ScoreboardPanel/Margin/VBox/SwatchRow" unique_id=1182727286]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(36, 6)
-layout_mode = 2
-color = Color(1, 0.35, 0.35, 1)
-
-[node name="TimerBar" type="CenterContainer" parent="." unique_id=1061265193]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_top = 12.0
-offset_bottom = 48.0
-
-[node name="TimerPanel" type="Panel" parent="TimerBar" unique_id=1598735240]
+[node name="TimerPanel" type="Panel" parent="ScoreboardPanel/Margin/VBox/SwatchRow/TimerBar" unique_id=1598735240]
 custom_minimum_size = Vector2(110, 36)
 layout_mode = 2
 
-[node name="Center" type="CenterContainer" parent="TimerBar/TimerPanel" unique_id=214945537]
+[node name="Center" type="CenterContainer" parent="ScoreboardPanel/Margin/VBox/SwatchRow/TimerBar/TimerPanel" unique_id=214945537]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -118,11 +111,17 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="TimerLabel" type="Label" parent="TimerBar/TimerPanel/Center" unique_id=2113633902]
+[node name="TimerLabel" type="Label" parent="ScoreboardPanel/Margin/VBox/SwatchRow/TimerBar/TimerPanel/Center" unique_id=2113633902]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "00:00"
+
+[node name="AwayColorSwatch" type="ColorRect" parent="ScoreboardPanel/Margin/VBox/SwatchRow" unique_id=1182727286]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(36, 6)
+layout_mode = 2
+color = Color(1, 0.35, 0.35, 1)
 
 [node name="CameraToggleButton" type="Button" parent="." unique_id=1267550313]
 unique_name_in_owner = true
@@ -136,6 +135,8 @@ offset_left = -172.0
 offset_top = -52.0
 offset_right = -12.0
 offset_bottom = -12.0
+grow_horizontal = 0
+grow_vertical = 0
 text = "Camera: Zoom"
 
 [node name="SpeedButton" type="Button" parent="." unique_id=1282521202]
@@ -216,6 +217,7 @@ offset_left = -102.0
 offset_top = 12.0
 offset_right = -12.0
 offset_bottom = 52.0
+grow_horizontal = 0
 text = "Pause"
 
 [node name="PreMatchOverlay" type="Control" parent="." unique_id=87841212]
@@ -263,8 +265,8 @@ size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 18
 text = "Start Match"
 
-[node name="LoadingPopup" parent="." instance=ExtResource("3")]
+[node name="LoadingPopup" parent="." unique_id=244858371 instance=ExtResource("3")]
 unique_name_in_owner = true
 layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2

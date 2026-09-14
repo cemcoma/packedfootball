@@ -4,6 +4,10 @@
 [ext_resource type="PackedScene" uid="uid://cl2jiom47jugr" path="res://scenes/components/PackInfoPopup.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/components/CurrencyPanel.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/components/CurrencyChip.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="6"]
+
+[sub_resource type="ButtonGroup" id="ButtonGroup_shop_tabs"]
 
 [node name="Shop" type="Control" unique_id=24893147]
 layout_mode = 3
@@ -42,23 +46,20 @@ text = "SHOP"
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="CreditsLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1040497509]
+[node name="CreditsChip" parent="Margin/RootVBox/HeaderRow" instance=ExtResource("5")]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
-text = "0 credits"
+size_flags_vertical = 4
 
-[node name="BucksLabel" type="Label" parent="Margin/RootVBox/HeaderRow"]
+[node name="BucksChip" parent="Margin/RootVBox/HeaderRow" instance=ExtResource("5")]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
-text = "0 cash"
+size_flags_vertical = 4
 
-[node name="MedalsLabel" type="Label" parent="Margin/RootVBox/HeaderRow"]
+[node name="MedalsChip" parent="Margin/RootVBox/HeaderRow" instance=ExtResource("5")]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
-text = "0 medals"
+size_flags_vertical = 4
 
 [node name="TabRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=2141861707]
 layout_mode = 2
@@ -69,25 +70,47 @@ unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 button_pressed = true
+button_group = SubResource("ButtonGroup_shop_tabs")
 text = "Packs"
 
 [node name="CurrencyTabButton" type="Button" parent="Margin/RootVBox/TabRow" unique_id=1190713276]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
+button_group = SubResource("ButtonGroup_shop_tabs")
 text = "Currency"
 
 [node name="StatusLabel" type="Label" parent="Margin/RootVBox" unique_id=75092524]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="PacksScroll" type="ScrollContainer" parent="Margin/RootVBox" unique_id=327384293]
+[node name="PacksPanel" type="VBoxContainer" parent="Margin/RootVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="PackTypeRow" type="HBoxContainer" parent="Margin/RootVBox/PacksPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PackTypeLabel" type="Label" parent="Margin/RootVBox/PacksPanel/PackTypeRow"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 14
+text = "Pack type"
+
+[node name="PackTypeDropdown" type="OptionButton" parent="Margin/RootVBox/PacksPanel/PackTypeRow"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="PacksScroll" type="ScrollContainer" parent="Margin/RootVBox/PacksPanel" unique_id=327384293]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 10
 vertical_scroll_mode = 0
 
-[node name="PacksGrid" type="HBoxContainer" parent="Margin/RootVBox/PacksScroll" unique_id=683860734]
+[node name="PacksGrid" type="HBoxContainer" parent="Margin/RootVBox/PacksPanel/PacksScroll" unique_id=683860734]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -116,3 +139,9 @@ text = "Back to Menu"
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
+
+[node name="PackOpeningPopup" parent="." instance=ExtResource("6")]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0

@@ -35,7 +35,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "packedfo
 from packEngine import PACK_DATABASE # fallback packs
 
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "packedfootball")
-DEFINITION_FIELDS = ("name", "type", "description", "price", "cards_per_pack", "rates", "pos_rates")
+# "price_currency" is optional in PACK_DATABASE -- a pack that omits it is
+# priced in credits (main.py defaults it), so the dict comprehension below
+# simply skips it and nothing gets written for credit-priced packs.
+DEFINITION_FIELDS = (
+    "name", "type", "description", "price", "price_currency", "cards_per_pack", "rates", "pos_rates",
+)
 
 
 def main():

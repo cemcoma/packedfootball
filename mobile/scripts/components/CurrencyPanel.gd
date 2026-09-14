@@ -1,11 +1,15 @@
 class_name CurrencyPanel
 extends Control
 
-## The Currency tab's own 3 sub-tabs -- Exchange (spend bucks for credits),
-## Bucks (real-money IAP), Deals (DB-based timed offers) -- instanced
-## inside Shop.tscn's CurrencyPanel node, replacing the old "Coming soon."
+## The Currency tab's own sub-tabs -- Exchange (spend cash for credits),
+## Cash (real-money IAP), Deals (DB-based timed offers), and Free (rewarded
+## ads, a deliberate stub -- see _on_ads_tab_pressed) -- instanced inside
+## Shop.tscn's CurrencyPanel node, replacing the old "Coming soon."
 ## placeholder. Same ButtonGroup + toggle-Button + lazy-load-once-per-tab
-## pattern Leaderboard.gd already established, one tab wider.
+## pattern Leaderboard.gd already established, a couple of tabs wider.
+##
+## "Cash" is the display name; "bucks" stays the backend/field name
+## everywhere in code -- see CurrencyDisplay.gd for why those differ.
 ##
 ## Emits currency_changed after any successful redeem so Shop.gd can
 ## refresh its header labels -- this panel never touches Shop's header
@@ -19,6 +23,7 @@ const DEAL_VIEW_SCENE := preload("res://scenes/components/DealView.tscn")
 @onready var _exchange_tab_button: Button = %ExchangeTabButton
 @onready var _bucks_tab_button: Button = %BucksTabButton
 @onready var _deals_tab_button: Button = %DealsTabButton
+@onready var _ads_tab_button: Button = %AdsTabButton
 
 @onready var _status_label: Label = %StatusLabel
 
@@ -28,6 +33,7 @@ const DEAL_VIEW_SCENE := preload("res://scenes/components/DealView.tscn")
 @onready var _bucks_grid: HBoxContainer = %BucksGrid
 @onready var _deals_scroll: ScrollContainer = %DealsScroll
 @onready var _deals_grid: HBoxContainer = %DealsGrid
+@onready var _ads_panel: CenterContainer = %AdsPanel
 
 var _exchange_loaded: bool = false
 var _bucks_loaded: bool = false
@@ -42,34 +48,47 @@ func _ready() -> void:
 	_exchange_tab_button.pressed.connect(_on_exchange_tab_pressed)
 	_bucks_tab_button.pressed.connect(_on_bucks_tab_pressed)
 	_deals_tab_button.pressed.connect(_on_deals_tab_pressed)
+	_ads_tab_button.pressed.connect(_on_ads_tab_pressed)
 	IapClient.purchase_completed.connect(_on_iap_purchase_completed)
 	IapClient.purchase_failed.connect(_on_iap_purchase_failed)
 
 	await _load_exchange()
 
 
+## One list to extend when a tab is added, rather than every handler having
+## to remember to hide every sibling (which is exactly how a tab gets left
+## visible underneath another one).
+func _show_only(panel: Control) -> void:
+	for candidate in [_exchange_scroll, _bucks_scroll, _deals_scroll, _ads_panel]:
+		candidate.visible = candidate == panel
+
+
 func _on_exchange_tab_pressed() -> void:
-	_exchange_scroll.visible = true
-	_bucks_scroll.visible = false
-	_deals_scroll.visible = false
+	_show_only(_exchange_scroll)
 	if not _exchange_loaded:
 		await _load_exchange()
 
 
 func _on_bucks_tab_pressed() -> void:
-	_exchange_scroll.visible = false
-	_bucks_scroll.visible = true
-	_deals_scroll.visible = false
+	_show_only(_bucks_scroll)
 	if not _bucks_loaded:
 		await _load_bucks()
 
 
 func _on_deals_tab_pressed() -> void:
-	_exchange_scroll.visible = false
-	_bucks_scroll.visible = false
-	_deals_scroll.visible = true
+	_show_only(_deals_scroll)
 	if not _deals_loaded:
 		await _load_deals()
+
+
+## Rewarded ads -- deliberately a stub for now (the real thing means an ad
+## SDK, a server-side grant endpoint with its own anti-abuse/cooldown
+## rules, and its own store-policy review, all of which is its own pass).
+## The tab exists so the shape is visible and the wiring point is obvious;
+## nothing behind it is real yet.
+func _on_ads_tab_pressed() -> void:
+	_show_only(_ads_panel)
+	_status_label.text = ""
 
 
 # ============================================================ Exchange tab
@@ -108,11 +127,9 @@ func _populate_exchange_grid() -> void:
 		var typed_rate: ExchangeRateData = rate
 		var tile: CurrencyTileView = CURRENCY_TILE_SCENE.instantiate()
 		_exchange_grid.add_child(tile)
-		tile.set_tile(
-			"%d %s" % [typed_rate.bucks_cost, CurrencyDisplay.lowercase_label_for("bucks")],
-			"%d %s" % [typed_rate.credits_reward, CurrencyDisplay.lowercase_label_for("credits")],
-			"Exchange"
-		)
+		tile.set_reward("credits", typed_rate.credits_reward)
+		tile.set_cost_currency("bucks", typed_rate.bucks_cost)
+		tile.set_action_text("Exchange")
 		tile.set_affordable(GameProfile.bucks >= typed_rate.bucks_cost)
 		tile.action_pressed.connect(_on_exchange_tile_pressed.bind(typed_rate))
 
@@ -173,11 +190,9 @@ func _populate_bucks_grid() -> void:
 		var typed_product: BucksProductData = product
 		var tile: CurrencyTileView = CURRENCY_TILE_SCENE.instantiate()
 		_bucks_grid.add_child(tile)
-		tile.set_tile(
-			typed_product.reference_price_text(),
-			"%d %s" % [typed_product.bucks_amount, CurrencyDisplay.lowercase_label_for("bucks")],
-			"Buy" if available else "Coming Soon"
-		)
+		tile.set_reward("bucks", typed_product.bucks_amount)
+		tile.set_cost_text(typed_product.reference_price_text())
+		tile.set_action_text("Buy" if available else "Coming Soon")
 		tile.set_affordable(available)
 		tile.action_pressed.connect(_on_bucks_tile_pressed.bind(typed_product))
 

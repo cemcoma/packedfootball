@@ -1,5 +1,5 @@
 class_name DealView
-extends Control
+extends PanelContainer
 
 ## Reusable deal "box" visual for the Deals sub-tab -- closely mirrors
 ## PackView.gd (deals genuinely have availability/expiry/teasing, same as
@@ -10,12 +10,15 @@ extends Control
 ## comment) -- a deal's reward is fixed and fully known upfront (shown
 ## directly on the tile), so there's nothing to disclose.
 
+const CURRENCY_AMOUNT_SCENE := preload("res://scenes/components/CurrencyAmount.tscn")
+
 signal redeem_pressed
 
 @onready var _name_label: Label = %NameLabel
 @onready var _description_label: Label = %DescriptionLabel
-@onready var _cost_label: Label = %CostLabel
-@onready var _reward_label: Label = %RewardLabel
+@onready var _cost_prefix: Label = %CostPrefixLabel
+@onready var _cost_amount: CurrencyAmount = %CostAmount
+@onready var _reward_row: HBoxContainer = %RewardRow
 @onready var _limited_label: Label = %LimitedLabel
 @onready var _tag_label: Label = %TagLabel
 @onready var _redeem_button: Button = %RedeemButton
@@ -26,6 +29,32 @@ var _affordable: bool = true
 
 func _ready() -> void:
 	_redeem_button.pressed.connect(_on_redeem_button_pressed)
+	ThemeManager.theme_changed.connect(_restyle)
+	_restyle()
+
+
+## Deals are promotional rather than tied to one currency, so they take the
+## palette's accent color rather than a per-currency tint -- same rounded,
+## bordered, softly-shadowed panel the currency tiles use, so the two read
+## as the same family. Rebuilt on theme_changed like everything else that
+## draws with palette colors.
+func _restyle() -> void:
+	var accent: Color = ThemeManager.color("accent")
+	var surface: Color = ThemeManager.color("surface")
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = surface.lerp(accent, 0.14)
+	style.border_color = Color(accent.r, accent.g, accent.b, 0.6)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(12)
+	style.shadow_color = Color(0, 0, 0, 0.18 if ThemeManager.is_light() else 0.35)
+	style.shadow_size = 4
+	style.shadow_offset = Vector2(0, 2)
+	add_theme_stylebox_override("panel", style)
+
+	_name_label.add_theme_color_override("font_color", accent)
+	_description_label.add_theme_color_override("font_color", ThemeManager.color("text_muted"))
+	_cost_prefix.add_theme_color_override("font_color", ThemeManager.color("text_muted"))
 
 
 func _on_redeem_button_pressed() -> void:
@@ -36,20 +65,30 @@ func set_deal(deal: DealData) -> void:
 	_deal = deal
 	_name_label.text = deal.deal_name
 	_description_label.text = deal.description
-	_cost_label.text = "%d %s" % [deal.cost_amount, CurrencyDisplay.lowercase_label_for(deal.cost_currency)]
-	_reward_label.text = _reward_text(deal)
+	_cost_amount.set_amount(deal.cost_currency, deal.cost_amount)
+	_populate_rewards(deal)
 	_limited_label.text = deal.limited_label()
 	_limited_label.visible = deal.is_limited()
 	_refresh_redeem_button()
 
 
-static func _reward_text(deal: DealData) -> String:
-	var parts: Array[String] = []
-	if deal.reward_credits > 0:
-		parts.append("%d %s" % [deal.reward_credits, CurrencyDisplay.lowercase_label_for("credits")])
-	if deal.reward_bucks > 0:
-		parts.append("%d %s" % [deal.reward_bucks, CurrencyDisplay.lowercase_label_for("bucks")])
-	return " + ".join(parts) if not parts.is_empty() else "--"
+## A deal can pay out in more than one currency at once, so the reward line
+## is however many CurrencyAmounts it takes -- same disposable-child
+## repopulation pattern every grid in this project uses, since set_deal()
+## can run again on the same view.
+func _populate_rewards(deal: DealData) -> void:
+	for child in _reward_row.get_children():
+		_reward_row.remove_child(child)
+		child.queue_free()
+
+	for pair in [["credits", deal.reward_credits], ["bucks", deal.reward_bucks]]:
+		var amount: int = pair[1]
+		if amount <= 0:
+			continue
+		var reward: CurrencyAmount = CURRENCY_AMOUNT_SCENE.instantiate()
+		_reward_row.add_child(reward)
+		reward.set_amount(pair[0], amount)
+		reward.set_sizes(26, 20)
 
 
 ## GET /deals/list's own "available" only covers active/expiry/redemption

@@ -1,0 +1,39 @@
+[gd_scene format=3 uid="uid://y83i6vgck6iw"]
+
+[ext_resource type="Script" uid="uid://h58skbpncx8j" path="res://scripts/components/CurrencyChip.gd" id="1"]
+
+[node name="CurrencyChip" type="PanelContainer" unique_id=383784348]
+script = ExtResource("1")
+
+[node name="Row" type="HBoxContainer" parent="." unique_id=212977995]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Icon" type="TextureRect" parent="Row" unique_id=1130244212]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(30, 30)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Dot" type="ColorRect" parent="Row" unique_id=1250465413]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(8, 8)
+layout_mode = 2
+size_flags_vertical = 4
+color = Color(0.95, 0.75, 0.25, 1)
+
+[node name="AmountLabel" type="Label" parent="Row" unique_id=426341834]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "0"
+
+[node name="NameLabel" type="Label" parent="Row" unique_id=1428826838]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 8
+text = "Credits"

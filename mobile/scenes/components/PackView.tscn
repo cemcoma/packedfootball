@@ -1,6 +1,9 @@
 [gd_scene format=3 uid="uid://dotomlsg3mhik"]
 
 [ext_resource type="Script" uid="uid://cw8vr0qytgoyu" path="res://scripts/components/PackView.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/CurrencyAmount.tscn" id="2"]
+
+[sub_resource type="Theme" id="Theme_by453"]
 
 [node name="PackView" type="Control" unique_id=63076157]
 custom_minimum_size = Vector2(150, 230)
@@ -57,6 +60,7 @@ horizontal_alignment = 1
 unique_name_in_owner = true
 custom_minimum_size = Vector2(20, 10)
 layout_mode = 2
+theme = SubResource("Theme_by453")
 theme_override_font_sizes/font_size = 10
 text = "i"
 
@@ -84,12 +88,9 @@ theme_override_font_sizes/font_size = 12
 text = "0 cards"
 horizontal_alignment = 1
 
-[node name="PriceLabel" type="Label" parent="Margin/Content" unique_id=1155397504]
+[node name="PriceAmount" parent="Margin/Content" unique_id=2005534479 instance=ExtResource("2")]
 unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-text = "0"
-horizontal_alignment = 1
+alignment = 1
 
 [node name="TagLabel" type="Label" parent="Margin/Content" unique_id=718022053]
 unique_name_in_owner = true

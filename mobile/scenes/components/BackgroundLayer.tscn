@@ -1,8 +1,10 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Texture2D" uid="uid://bjv30gw4s5bjf" path="res://sprites/backgrounds/title_background.jpg" id="1"]
+[ext_resource type="Script" path="res://scripts/components/BackgroundLayer.gd" id="2"]
 
 [node name="BackgroundLayer" type="TextureRect"]
+script = ExtResource("2")
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

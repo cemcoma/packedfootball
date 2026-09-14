@@ -20,7 +20,7 @@ signal info_pressed  ## "i" button tapped -- see Shop.gd, which opens PackInfoPo
 @onready var _name_label: Label = %NameLabel
 @onready var _cards_label: Label = %CardsLabel
 @onready var _limited_label: Label = %LimitedLabel
-@onready var _price_label: Label = %PriceLabel
+@onready var _price_amount: CurrencyAmount = %PriceAmount
 @onready var _tag_label: Label = %TagLabel
 @onready var _buy_button: Button = %BuyButton
 @onready var _info_button: Button = %InfoButton
@@ -50,7 +50,8 @@ func set_pack(pack: PackData) -> void:
 	_cards_label.text = "%d cards" % pack.cards_per_pack
 	_limited_label.text = pack.limited_label()
 	_limited_label.visible = pack.is_limited()
-	_price_label.text = "%d credits" % pack.price
+	_price_amount.set_amount(pack.price_currency, pack.price)
+	_price_amount.set_sizes(20, 18)
 	_refresh_buy_button()
 
 

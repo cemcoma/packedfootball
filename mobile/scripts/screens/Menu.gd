@@ -25,9 +25,9 @@ extends Control
 @onready var _account_wins_label: Label = %AccountWinsLabel
 @onready var _account_draws_label: Label = %AccountDrawsLabel
 @onready var _account_losses_label: Label = %AccountLossesLabel
-@onready var _account_credits_label: Label = %AccountCreditsLabel
-@onready var _account_bucks_label: Label = %AccountBucksLabel
-@onready var _account_medals_label: Label = %AccountMedalsLabel
+@onready var _account_credits_chip: CurrencyChip = %AccountCreditsChip
+@onready var _account_bucks_chip: CurrencyChip = %AccountBucksChip
+@onready var _account_medals_chip: CurrencyChip = %AccountMedalsChip
 
 
 func _ready() -> void:
@@ -36,6 +36,10 @@ func _ready() -> void:
 	_team_button.pressed.connect(_on_team_pressed)
 	_leaderboard_button.pressed.connect(_on_leaderboard_pressed)
 	_settings_button.pressed.connect(_on_settings_pressed)
+
+	_account_credits_chip.set_currency("credits")
+	_account_bucks_chip.set_currency("bucks")
+	_account_medals_chip.set_currency("medals")
 
 	_refresh_account_panel()
 
@@ -46,7 +50,9 @@ func _refresh_account_panel() -> void:
 	_account_wins_label.text = "Wins: %d" % GameProfile.wins
 	_account_draws_label.text = "Draws: %d" % GameProfile.draws
 	_account_losses_label.text = "Losses: %d" % GameProfile.losses
-	_account_credits_label.text = "Credits: %d" % GameProfile.credits
+	_account_credits_chip.set_amount(GameProfile.credits)
+	_account_bucks_chip.set_amount(GameProfile.bucks)
+	_account_medals_chip.set_amount(GameProfile.medals)
 
 
 func _on_play_pressed() -> void:

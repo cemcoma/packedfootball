@@ -200,6 +200,7 @@ async def list_packs(uid: str = Depends(verify_id_token)):
                 "type": doc.get("type", "standard"),
                 "description": doc.get("description", ""),
                 "price": doc.get("price"),
+                "price_currency": doc.get("price_currency", "credits"),
                 "cards_per_pack": doc.get("cards_per_pack"),
                 "rates": doc.get("rates", {}),
                 "pos_rates": doc.get("pos_rates", {}),
@@ -214,6 +215,12 @@ async def list_packs(uid: str = Depends(verify_id_token)):
         )
     packs.sort(key=lambda p: p["pack_id"])
     return {"packs": packs}
+
+
+# What a pack's "price_currency" is allowed to be -- these are exactly the
+# balance fields on users/{uid}, since the check and the deduction both
+# index the profile by this name.
+PACK_PRICE_CURRENCIES = ("credits", "bucks", "medals")
 
 
 class OpenPackRequest(BaseModel):
@@ -234,22 +241,38 @@ async def open_pack(req: OpenPackRequest, uid: str = Depends(verify_id_token)):
     state = _game_state_for(uid)
     profile = await state.load_or_create_profile(default_roster=[], default_display_name=uid[:8])
 
+    # A pack is priced in exactly ONE currency -- deliberately no joint
+    # "5 medals AND 200 credits" pricing, which is what keeps this a single
+    # field rather than a cost map. Absent means credits, so every pack that
+    # predates this field keeps working untouched (no migration).
+    price_currency = config.get("price_currency", "credits")
+    if price_currency not in PACK_PRICE_CURRENCIES:
+        raise HTTPException(500, f"Pack has unsupported price_currency: {price_currency}")
+
     price = config["price"]
-    if profile["credits"] < price:
-        raise HTTPException(402, "Not enough credits")
+    if profile[price_currency] < price:
+        raise HTTPException(402, f"Not enough {price_currency}")
 
     seed = secrets.randbits(63)
     cards = PackManager({req.pack_id: config}, seed=seed).open_pack(req.pack_id)
 
-    remaining_credits = profile["credits"] - price
-    await state.set_credits(remaining_credits)
+    remaining = profile[price_currency] - price
+    await state.update_profile_fields({price_currency: remaining})
     for card in cards:
         await state.add_inventory_card(card)
     await packs_client.set_document(pack_path, {"times_opened": firestore.Increment(1)}, merge=True)
 
+    # Every balance, not just the one spent: the client mirrors all three
+    # and shouldn't have to guess which one moved. credits_remaining stays
+    # in the response under its original name so nothing that already reads
+    # it breaks.
+    balances = {currency: profile[currency] for currency in PACK_PRICE_CURRENCIES}
+    balances[price_currency] = remaining
     return {
         "seed": seed,
-        "credits_remaining": remaining_credits,
+        "credits_remaining": balances["credits"],
+        "bucks_remaining": balances["bucks"],
+        "medals_remaining": balances["medals"],
         "cards": [
             {**player_to_fields(c), "player_id": c.player_id, "doc_id": getattr(c, "doc_id", None)}
             for c in cards

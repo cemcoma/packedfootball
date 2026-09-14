@@ -1,9 +1,14 @@
 extends Control
 
-## Shop: two segments -- Packs (real, backend-driven) and Currency (its own
-## 3 sub-tabs -- Exchange/Bucks/Deals, see CurrencyPanel.gd -- instanced
+## Shop: two segments -- Packs (real, backend-driven, split by pack type via
+## a dropdown -- see _rebuild_pack_type_dropdown) and Currency (its own
+## sub-tabs -- Exchange/Cash/Deals/Free, see CurrencyPanel.gd -- instanced
 ## into the CurrencyPanel node below rather than built inline here, keeping
 ## this file focused on the pack catalog it already owned).
+##
+## The two segment buttons share a ButtonGroup (see Shop.tscn) so exactly
+## one ever reads as selected -- without it both stayed visibly toggled at
+## once, since a bare toggle_mode Button has no idea its sibling exists.
 ##
 ## Packs are fetched fresh from the backend's GET /pack/list every time
 ## this scene loads (and again after every purchase, so a limited pack's
@@ -15,45 +20,53 @@ extends Control
 
 const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
 
-@onready var _credits_label: Label = %CreditsLabel
-@onready var _bucks_label: Label = %BucksLabel
-@onready var _medals_label: Label = %MedalsLabel
+@onready var _credits_chip: CurrencyChip = %CreditsChip
+@onready var _bucks_chip: CurrencyChip = %BucksChip
+@onready var _medals_chip: CurrencyChip = %MedalsChip
 @onready var _currency_tabs: CurrencyPanel = %CurrencyTabs
 @onready var _packs_tab_button: Button = %PacksTabButton
 @onready var _currency_tab_button: Button = %CurrencyTabButton
 @onready var _status_label: Label = %StatusLabel
-@onready var _packs_scroll: ScrollContainer = %PacksScroll
+@onready var _packs_panel: VBoxContainer = %PacksPanel
+@onready var _pack_type_dropdown: OptionButton = %PackTypeDropdown
 @onready var _packs_grid: HBoxContainer = %PacksGrid
 @onready var _currency_panel: VBoxContainer = %CurrencyPanel
 @onready var _back_button: Button = %BackButton
 @onready var _info_popup: PackInfoPopup = %InfoPopup
+@onready var _opening_popup: Control = %PackOpeningPopup
 
-var _packs: Array = []  # PackData
+var _packs: Array = []  # PackData, every pack the backend returned
+var _pack_types: Array[String] = []  # dropdown item index -> pack type
 
 
 func _ready() -> void:
 	_packs_tab_button.pressed.connect(_on_packs_tab_pressed)
 	_currency_tab_button.pressed.connect(_on_currency_tab_pressed)
+	_pack_type_dropdown.item_selected.connect(_on_pack_type_selected)
 	_back_button.pressed.connect(_on_back_pressed)
 	_currency_tabs.currency_changed.connect(_refresh_currency_labels)
+
+	_credits_chip.set_currency("credits")
+	_bucks_chip.set_currency("bucks")
+	_medals_chip.set_currency("medals")
 
 	_refresh_currency_labels()
 	await _load_packs()
 
 
 func _refresh_currency_labels() -> void:
-	_credits_label.text = "%d %s" % [GameProfile.credits, CurrencyDisplay.lowercase_label_for("credits")]
-	_bucks_label.text = "%d %s" % [GameProfile.bucks, CurrencyDisplay.lowercase_label_for("bucks")]
-	_medals_label.text = "%d %s" % [GameProfile.medals, CurrencyDisplay.lowercase_label_for("medals")]
+	_credits_chip.set_amount(GameProfile.credits)
+	_bucks_chip.set_amount(GameProfile.bucks)
+	_medals_chip.set_amount(GameProfile.medals)
 
 
 func _on_packs_tab_pressed() -> void:
-	_packs_scroll.visible = true
+	_packs_panel.visible = true
 	_currency_panel.visible = false
 
 
 func _on_currency_tab_pressed() -> void:
-	_packs_scroll.visible = false
+	_packs_panel.visible = false
 	_currency_panel.visible = true
 
 
@@ -67,13 +80,63 @@ func _load_packs() -> void:
 	if not res.ok:
 		_status_label.text = "Could not load packs -- try again later."
 		return
-
+	print(res)
 	var pack_fields: Array = res.data.get("packs", [])
 	_packs = []
 	for fields in pack_fields:
 		_packs.append(PackData.from_fields(fields))
 
 	_status_label.text = ""
+	_rebuild_pack_type_dropdown()
+	_populate_packs_grid()
+
+
+## The dropdown's entries come from the types actually present in what the
+## backend returned, NOT a hardcoded list -- add a fourth pack type
+## server-side (packEngine.PACK_DATABASE's "type" is a free-form string, see
+## PackData.gd) and it shows up here on its own, no client change needed.
+## PackData.TYPE_COLORS' key order is used only as a display ORDER
+## preference, so the familiar types stay in a stable, sensible sequence;
+## anything it doesn't know about is appended alphabetically rather than
+## dropped.
+func _rebuild_pack_type_dropdown() -> void:
+	var previous_type := _selected_pack_type()
+
+	var present: Dictionary = {}
+	for pack in _packs:
+		present[(pack as PackData).type] = true
+
+	_pack_types = []
+	for known_type in PackData.TYPE_COLORS.keys():
+		if present.has(known_type):
+			_pack_types.append(known_type)
+	var extras: Array[String] = []
+	for pack_type in present.keys():
+		if not PackData.TYPE_COLORS.has(pack_type):
+			extras.append(pack_type)
+	extras.sort()
+	_pack_types.append_array(extras)
+
+	_pack_type_dropdown.clear()
+	for pack_type in _pack_types:
+		_pack_type_dropdown.add_item(pack_type.capitalize())
+	_pack_type_dropdown.disabled = _pack_types.size() <= 1
+
+	# Keep whatever type was being viewed selected across a refresh, so
+	# buying from the Timed tab doesn't silently bounce back to Standard.
+	var restored := _pack_types.find(previous_type)
+	if not _pack_types.is_empty():
+		_pack_type_dropdown.select(restored if restored != -1 else 0)
+
+
+func _selected_pack_type() -> String:
+	var index := _pack_type_dropdown.selected
+	if index < 0 or index >= _pack_types.size():
+		return ""
+	return _pack_types[index]
+
+
+func _on_pack_type_selected(_index: int) -> void:
 	_populate_packs_grid()
 
 
@@ -85,18 +148,27 @@ func _populate_packs_grid() -> void:
 		_packs_grid.remove_child(child)
 		child.queue_free()
 
-	if _packs.is_empty():
+	var selected_type := _selected_pack_type()
+	var visible_packs: Array = []
+	for pack in _packs:
+		if (pack as PackData).type == selected_type:
+			visible_packs.append(pack)
+
+	if visible_packs.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No packs available right now."
+		empty_label.text = (
+			"No packs available right now." if _packs.is_empty()
+			else "No %s packs available right now." % selected_type.capitalize()
+		)
 		_packs_grid.add_child(empty_label)
 		return
 
-	for pack in _packs:
+	for pack in visible_packs:
 		var typed_pack: PackData = pack
 		var view: PackView = PACK_VIEW_SCENE.instantiate()
 		_packs_grid.add_child(view)
 		view.set_pack(typed_pack)
-		view.set_affordable(GameProfile.credits >= typed_pack.price)
+		view.set_affordable(_balance_for(typed_pack.price_currency) >= typed_pack.price)
 		view.buy_pressed.connect(_on_buy_pressed.bind(typed_pack))
 		view.info_pressed.connect(_on_info_pressed.bind(typed_pack))
 
@@ -105,16 +177,46 @@ func _on_info_pressed(pack: PackData) -> void:
 	_info_popup.open_for(pack)
 
 
+## A pack is priced in exactly one currency (see PackData.price_currency) --
+## this is the local mirror of whichever balance that is. The server
+## re-checks it regardless; this only decides what the Buy button looks
+## like and what the error says.
+func _balance_for(currency_key: String) -> int:
+	match currency_key:
+		"bucks":
+			return GameProfile.bucks
+		"medals":
+			return GameProfile.medals
+		_:
+			return GameProfile.credits
+
+
 func _on_buy_pressed(pack: PackData) -> void:
-	if GameProfile.credits < pack.price:
-		_status_label.text = "Not enough credits for %s." % pack.pack_name
+	if _balance_for(pack.price_currency) < pack.price:
+		_status_label.text = "Not enough %s for %s." % [
+			CurrencyDisplay.lowercase_label_for(pack.price_currency), pack.pack_name
+		]
 		return
 
-	_status_label.text = "Opening %s..." % pack.pack_name
+	# The popup is a full-screen scrim, so putting it up BEFORE the request
+	# also stops a second Buy tap from firing a second /pack/open (which
+	# would charge for, and open, a second pack) while this one is in
+	# flight -- same reason Play.gd shows its matchmaking popup up front.
+	_status_label.text = ""
+	_opening_popup.set_status("Opening %s..." % pack.pack_name)
+	_opening_popup.visible = true
+
+	# Not awaited -- moves the status along on its own if the request is
+	# slow, and simply never fires visibly if it isn't. Same non-awaited
+	# staged-status trick as Play.gd's matchmaking midpoint; no artificial
+	# delay is added to a fast response.
+	get_tree().create_timer(0.6).timeout.connect(_on_pack_open_midpoint)
+
 	var res: Dictionary = await Backend.call_endpoint(
 		HTTPClient.METHOD_POST, "/pack/open", {"pack_id": pack.pack_id}
 	)
 	if not res.ok:
+		_opening_popup.visible = false
 		_status_label.text = "Could not open %s -- try again." % pack.pack_name
 		return
 
@@ -133,9 +235,15 @@ func _on_buy_pressed(pack: PackData) -> void:
 		card.doc_id = doc_id_raw if doc_id_raw is String else ""
 		cards.append(card)
 
-	var credits_raw = res.data.get("credits_remaining")
-	var credits_remaining: int = credits_raw if typeof(credits_raw) in [TYPE_INT, TYPE_FLOAT] else GameProfile.credits
-	GameProfile.add_purchased_cards(cards, credits_remaining)
+	# /pack/open returns every balance now, not just credits -- a pack can be
+	# priced in any one of them, and apply_currency_balances ignores whichever
+	# keys are absent, so this is safe against an older backend too.
+	GameProfile.add_purchased_cards(cards)
+	GameProfile.apply_currency_balances(
+		res.data.get("credits_remaining"),
+		res.data.get("bucks_remaining"),
+		res.data.get("medals_remaining"),
+	)
 
 	# The reveal screen is the actual "you got these" moment now -- see
 	# PackReveal.gd. No need to refresh credits/status/the pack grid here:
@@ -144,3 +252,11 @@ func _on_buy_pressed(pack: PackData) -> void:
 	# which is exactly when it'll matter again.
 	PackSession.set_pending(pack.pack_name, cards)
 	get_tree().change_scene_to_file("res://scenes/PackReveal.tscn")
+
+
+## Only meaningful while a pack request is actually still in flight -- the
+## popup being hidden means it already came back (or failed), so this does
+## nothing rather than overwriting a fresh status on a closed popup.
+func _on_pack_open_midpoint() -> void:
+	if _opening_popup.visible:
+		_opening_popup.set_status("Shuffling the pack...")

@@ -221,26 +221,29 @@ PACK_DATABASE = {
         "description": "A reliable pack of everyday talent. Mostly bronze and silver, with a shot at gold.",
         "price": 100,
         "cards_per_pack": 3,
-        "rates": {"bronze": 0.60, "silver": 0.30, "gold": 0.10, "platinum": 0.0, "diamond": 0.0, "special": 0.0},
-        "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25}
+        "rates": {"bronze": 0.60, "silver": 0.30, "gold": 0.075, "platinum": 0.025, "diamond": 0.0, "special": 0.0},
+        "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25},
+        "price_currency":"credits"
     },
     2: {
         "name": "Jumbo Player Pack",
         "type": "standard",
-        "description": "Ten cards in one pull. Same odds as a Standard Pack, just a lot more of them.",
+        "description": "Ten cards in one pull. Better odds than Standard Player Pack.",
         "price": 500,
         "cards_per_pack": 10,
         "rates": {"bronze": 0.40, "silver": 0.40, "gold": 0.15, "platinum": 0.05, "diamond": 0.0, "special": 0.0},
-        "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25}
+        "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25},
+        "price_currency":"credits"
     },
     3: {
         "name": "UCL Promo Pack",
         "type": "timed",
-        "description": "Champions League season odds -- guaranteed gold or better, with a real shot at diamond.",
+        "description": "Champions League season is here! Take your chances for a special UCL player now!",
         "price": 1000,
         "cards_per_pack": 5,
-        "rates": {"bronze": 0.0, "silver": 0.10, "gold": 0.40, "platinum": 0.30, "diamond": 0.15, "special": 0.05},
-        "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25}
+        "rates": {"bronze": 0.0, "silver": 0.18, "gold": 0.40, "platinum": 0.30, "diamond": 0.10, "special": 0.02},
+        "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25},
+        "price_currency":"credits"
     },
     4: {
         "name": "Icon Forward Pack",
@@ -249,8 +252,29 @@ PACK_DATABASE = {
         "price": 50000,
         "cards_per_pack": 1,
         "rates": {"icon":1.0},
-        "pos_rates": {"attacker":1}
-    }
+        "pos_rates": {"attacker":1},
+        "price_currency":"credits"
+    },
+    6: {
+            "name": "Small Tournament Player Pack",
+            "type": "standard",
+            "description": "One tournament ready player at your service.",
+            "price": 1,
+            "cards_per_pack": 1,
+            "rates": {"bronze": 0.0, "silver": 0.15, "gold": 0.45, "platinum": 0.35, "diamond": 0.05, "special": 0.00},
+            "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+            "price_currency":"medals"
+    },
+    7: {
+            "name": "Medium Tournament Player Pack",
+            "type": "standard",
+            "description": "Medium 3 player pack. Better odds than Small Tournament Winner Player Pack.",
+            "price": 3,
+            "cards_per_pack": 3,
+            "rates": {"bronze": 0.0, "silver": 0.12, "gold": 0.45, "platinum": 0.35, "diamond": 0.08, "special": 0.00},
+            "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+            "price_currency":"medals"
+    },
 }
 # Availability is a separate, orthogonal concern that
 # deliberately does NOT live here at all -- these only ever live on the

@@ -23,6 +23,7 @@ GameProfile="*res://scripts/autoload/GameProfile.gd"
 MatchSession="*res://scripts/autoload/MatchSession.gd"
 PackSession="*res://scripts/autoload/PackSession.gd"
 IapClient="*res://scripts/autoload/IapClient.gd"
+ThemeManager="*res://scripts/autoload/ThemeManager.gd"
 
 [display]
 

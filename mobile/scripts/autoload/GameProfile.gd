@@ -302,11 +302,13 @@ func reset() -> void:
 ## this runs (added to players/{id} + users/{uid}/inventory/{id}); this
 ## just makes them show up as bench cards immediately (e.g. back on the
 ## Team screen) without a full reload.
-func add_purchased_cards(cards: Array, credits_remaining: int) -> void:
+## Cards only -- the balance that paid for them comes back separately via
+## apply_currency_balances(), since a pack can now be priced in any one of
+## the three currencies rather than always credits.
+func add_purchased_cards(cards: Array) -> void:
 	for card in cards:
 		var typed_card: PlayerCard = card
 		all_cards[typed_card.player_id] = typed_card
-	credits = credits_remaining
 
 
 ## Folds an authoritative balance from a currency-affecting backend endpoint

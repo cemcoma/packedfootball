@@ -1,0 +1,36 @@
+[remap]
+
+importer="font_data_dynamic"
+type="FontFile"
+uid="uid://c5devhv8uhf53"
+path="res://.godot/imported/Arial Rounded Bold.ttf-6855ab13fd787d3e23a7c9f073055b72.fontdata"
+
+[deps]
+
+source_file="res://theme/fonts/Arial Rounded Bold.ttf"
+dest_files=["res://.godot/imported/Arial Rounded Bold.ttf-6855ab13fd787d3e23a7c9f073055b72.fontdata"]
+
+[params]
+
+Rendering=null
+antialiasing=1
+generate_mipmaps=false
+disable_embedded_bitmaps=true
+multichannel_signed_distance_field=false
+msdf_pixel_range=8
+msdf_size=48
+allow_system_fallback=true
+force_autohinter=false
+modulate_color_glyphs=false
+hinting=3
+subpixel_positioning=4
+keep_rounding_remainders=true
+oversampling=0.0
+Fallbacks=null
+fallbacks=[]
+Compress=null
+compress=true
+preload=[]
+language_support={}
+script_support={}
+opentype_features={}

@@ -2,46 +2,75 @@
 
 [ext_resource type="Script" path="res://scripts/components/CurrencyTileView.gd" id="1"]
 
-[node name="CurrencyTileView" type="Control"]
-custom_minimum_size = Vector2(160, 130)
+[node name="CurrencyTileView" type="PanelContainer"]
+custom_minimum_size = Vector2(150, 160)
 layout_mode = 2
 script = ExtResource("1")
 
-[node name="Background" type="ColorRect" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-color = Color(0.3, 0.45, 0.4, 1)
-
 [node name="Margin" type="MarginContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-theme_override_constants/margin_left = 10
-theme_override_constants/margin_top = 10
-theme_override_constants/margin_right = 10
-theme_override_constants/margin_bottom = 10
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
 
 [node name="VBox" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
 theme_override_constants/separation = 6
+alignment = 1
 
-[node name="GiveLabel" type="Label" parent="Margin/VBox"]
+[node name="RewardRow" type="HBoxContainer" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="RewardIcon" type="TextureRect" parent="Margin/VBox/RewardRow"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(34, 34)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="RewardAmount" type="Label" parent="Margin/VBox/RewardRow"]
 unique_name_in_owner = true
 layout_mode = 2
-horizontal_alignment = 1
-autowrap_mode = 2
-text = "10 cash"
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 22
+text = "0"
 
-[node name="GetLabel" type="Label" parent="Margin/VBox"]
+[node name="CostRow" type="HBoxContainer" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+alignment = 1
+
+[node name="CostPrefixLabel" type="Label" parent="Margin/VBox/CostRow"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 18
-horizontal_alignment = 1
-autowrap_mode = 2
-text = "1000 credits"
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 11
+text = "for"
+
+[node name="CostIcon" type="TextureRect" parent="Margin/VBox/CostRow"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(18, 18)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CostLabel" type="Label" parent="Margin/VBox/CostRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 13
+text = "0"
+
+[node name="Spacer" type="Control" parent="Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
 
 [node name="ActionButton" type="Button" parent="Margin/VBox"]
 unique_name_in_owner = true

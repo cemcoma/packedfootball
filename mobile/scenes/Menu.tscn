@@ -3,7 +3,8 @@
 [ext_resource type="Script" uid="uid://bvak6tvlws74j" path="res://scripts/screens/Menu.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="Texture2D" uid="uid://dqqqu4co1ircr" path="res://sprites/title.png" id="3_11y2r"]
-[ext_resource type="Texture2D" uid="uid://cyffgfu0c6x2j" path="res://sprites/backgrounds/general_background_dark.jpg" id="3_o0tnf"]
+[ext_resource type="Texture2D" uid="uid://ckueuenwg424p" path="res://sprites/backgrounds/general_background_light_medium.jpg" id="3_jmdev"]
+[ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="5"]
 
 [node name="Menu" type="Control" unique_id=2071876182]
 layout_mode = 3
@@ -16,7 +17,7 @@ script = ExtResource("1")
 
 [node name="Background" parent="." unique_id=1151852962 instance=ExtResource("2")]
 layout_mode = 1
-texture = ExtResource("3_o0tnf")
+texture = ExtResource("3_jmdev")
 
 [node name="CenterContainer" type="CenterContainer" parent="." unique_id=1563356626]
 layout_mode = 1
@@ -78,15 +79,17 @@ layout_mode = 0
 anchor_top = 0.5
 anchor_bottom = 0.5
 offset_left = 24.0
-offset_top = -100.0
+offset_top = -110.0
 offset_right = 264.0
-offset_bottom = 100.0
+offset_bottom = 190.0
 
 [node name="Margin" type="MarginContainer" parent="AccountPanel" unique_id=1572266967]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_top = -3.0
+offset_bottom = 3.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/margin_left = 14
@@ -103,6 +106,7 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Manager"
+horizontal_alignment = 1
 autowrap_mode = 2
 
 [node name="AccountDivider" type="HSeparator" parent="AccountPanel/Margin/VBox" unique_id=1731579856]
@@ -113,35 +117,43 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Squad Overall: 0"
+horizontal_alignment = 1
 
 [node name="AccountWinsLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=1780616385]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Wins: 0"
+horizontal_alignment = 1
 
 [node name="AccountDrawsLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=525650991]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Draws: 0"
+horizontal_alignment = 1
 
 [node name="AccountLossesLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=2042400648]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Losses: 0"
+horizontal_alignment = 1
 
-[node name="AccountCreditsLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=1450111887]
-unique_name_in_owner = true
+[node name="AccountCurrencyDivider" type="HSeparator" parent="AccountPanel/Margin/VBox" unique_id=1837256662]
 layout_mode = 2
 
-[node name="AccountBucksLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=1578472355]
+[node name="AccountCreditsChip" parent="AccountPanel/Margin/VBox" unique_id=477518366 instance=ExtResource("5")]
 unique_name_in_owner = true
-visible = false
 layout_mode = 2
+size_flags_horizontal = 5
 
-[node name="AccountMedalsLabel" type="Label" parent="AccountPanel/Margin/VBox" unique_id=569855796]
+[node name="AccountBucksChip" parent="AccountPanel/Margin/VBox" unique_id=906343529 instance=ExtResource("5")]
 unique_name_in_owner = true
-visible = false
 layout_mode = 2
+size_flags_horizontal = 5
+
+[node name="AccountMedalsChip" parent="AccountPanel/Margin/VBox" unique_id=478969367 instance=ExtResource("5")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 5

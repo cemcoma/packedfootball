@@ -583,10 +583,28 @@ roster at all until it also signed into the Python client once.
 
 ## Shop screen
 
-Two tabs: **Packs** (below) and **Currency** (its own 3 sub-tabs -- see
+Two tabs: **Packs** (below) and **Currency** (its own sub-tabs -- see
 "Currency tab" further down -- instanced into this scene rather than built
-inline here, now that pack mechanics have company). The pack catalog is
-fetched fresh from the backend's new
+inline here, now that pack mechanics have company). Both tab buttons share
+a `ButtonGroup`, which they originally didn't -- as bare `toggle_mode`
+Buttons neither knew the other existed, so both stayed visibly lit at once
+once you'd touched each of them.
+
+The header's three balances are `CurrencyChip` instances rather than plain
+Labels: a tinted pill per currency (accent color from
+`CurrencyDisplay.COLORS`, thousand-separated amount from
+`CurrencyDisplay.format_amount`), so `12,500` reads at a glance and each
+currency looks the same everywhere it appears.
+
+Packs are split by **type** via a dropdown above the grid (`standard`/
+`special`/`timed` today). The dropdown is built from the types actually
+present in what `/pack/list` returned, never a hardcoded list --
+`PackData.TYPE_COLORS`' key order is used only as a display-order
+preference, and any type it doesn't recognize is appended rather than
+dropped, so adding a fourth type server-side needs no client change. The
+selected type survives a catalog refresh, falling back to the first
+available type only if the one being viewed disappeared. The pack catalog
+is fetched fresh from the backend's new
 `GET /pack/list` every time the scene loads and again after every
 purchase, rather than cached on `GameProfile` like the squad is -- unlike
 your own roster, the catalog can change under you at any time (an admin
@@ -603,7 +621,14 @@ enforced **server-side** in `backend/main.py`'s new `_pack_unavailable_reason()`
 shared by `/pack/list` (to filter what's shown) and `/pack/open` (to
 reject a purchase) so the two can't disagree -- verified directly against
 8 cases (inactive, under/at/over cap, not-yet/already expired, malformed
-date, a pack with neither field at all) before wiring it in. Buying a pack
+date, a pack with neither field at all) before wiring it in. Buying a pack puts up the shared `LoadingPopup` ("Opening {pack}..." ->
+"Shuffling the pack..." if the request is slow enough to reach the second
+message) rather than just changing a small status line. Its scrim also
+does real work beyond looking better: it goes up *before* the request, so
+a second Buy tap can't fire a second `/pack/open` -- which would have
+charged for, and opened, a second pack. The staged status is a
+non-awaited timer (same trick `Play.gd` uses for matchmaking), so a fast
+response is never artificially delayed. Buying a pack
 calls `POST /pack/open`, folds the returned cards straight into
 `GameProfile.all_cards` (`add_purchased_cards()`) and updates the credit
 balance, then hands the opened cards off to the new **Pack reveal
@@ -696,6 +721,11 @@ pattern the Leaderboard screen established:
   10/55/125/300 bucks, `BUCKS_IAP_CATALOG` in `main.py`), via
   [RevenueCat](https://www.revenuecat.com) rather than a direct
   Apple/Google integration -- see "In-app purchases via RevenueCat" below.
+- **Free** -- rewarded ads. **Deliberately a stub**: the tab and its
+  placeholder exist so the shape is visible and the wiring point is
+  obvious, but nothing behind it is real. Doing it properly means an ad SDK,
+  a server-side grant endpoint with its own anti-abuse/cooldown rules, and
+  its own store-policy review -- its own pass, not this one.
 - **Deals** -- DB-based timed offers, direct structural cousin of packs:
   `deals/{deal_id}` Firestore docs with the same `active`/`expires_at`/
   `visible`/`available_at` convention (`packedfootball/deal_database.py` +
@@ -871,8 +901,7 @@ none was added here. Both are real future work, not oversights.
 
 ## Leaderboard screen
 
-`Leaderboard.gd`/`scenes/Leaderboard.tscn` -- replaces what used to be
-`Pvp.tscn` (a `StubScene.gd` placeholder, never anything real). Two tabs,
+`Leaderboard.gd`/`scenes/Leaderboard.tscn`. Two tabs,
 switched by a `toggle_mode` `Button` pair sharing a `ButtonGroup` (same
 mutual-exclusivity idea as `Team.tscn`'s formation row) rather than a
 `TabContainer`, matching `Shop.tscn`'s own Packs/Currency tab pattern:
@@ -1026,6 +1055,41 @@ lines, `project.godot`'s autoload paths, and the one `preload()` in
   "Currency tab" above).
 - `DealView.gd` / `scenes/components/DealView.tscn` -- the Deals sub-tab's
   visual, closely mirroring `PackView` (see "Currency tab" above).
+- `CurrencyChip.gd` / `scenes/components/CurrencyChip.tscn` -- one
+  currency's balance as a tinted pill (dot + amount + name) for the Shop
+  header. One scene, three looks: the panel `StyleBoxFlat` is built in code
+  from `CurrencyDisplay.color_for()`, since the tint depends on which
+  currency it's showing.
+
+## Theming (dark / light)
+
+Colors live in two places on purpose, because Godot splits the job:
+
+- **Widget chrome** (Button/Panel/Label styles, and the `Arial Rounded Bold`
+  font) lives in real Theme resources -- `theme/AppTheme.tres` (dark) and
+  `theme/AppThemeLight.tres` (light). `ThemeManager` swaps them wholesale on
+  the root Window, which restyles every existing Control for free.
+  **Keep the two structurally identical**: a key present in only one means a
+  widget silently changes in just that mode (the font is exactly that trap --
+  a light theme missing `Label/fonts/font` reverts the whole app to Godot's
+  default typeface).
+- **Everything a Theme can't express** -- per-currency accent colors, the
+  surface tints components build `StyleBoxFlat`s from at runtime -- lives in
+  `ThemeManager.PALETTES` and is read via `ThemeManager.color(key)`.
+
+Components that bake palette colors into a StyleBox (`CurrencyChip`,
+`CurrencyTileView`, `DealView`) rebuild themselves on
+`ThemeManager.theme_changed`; anything that only uses themed Button/Panel
+styles needs no code at all. The mode is chosen in **Settings -> Color
+Theme** (no longer a stub) and persists to `user://settings.cfg`.
+
+The screen backdrop swaps too: `BackgroundLayer` now carries a script that
+takes whichever image `ThemeManager.BACKGROUNDS` names for the current mode
+(`general_background_dark` / `general_background_light_medium`), so every
+screen instancing it follows along. A screen wanting a fixed backdrop
+regardless of mode unticks `follow_theme` on its own instance. **`Match.tscn`
+is excluded by construction** -- it doesn't instance `BackgroundLayer` at
+all, so the swap can't reach it.
 
 ### `autoload/` -- singletons (registered in `project.godot`)
 

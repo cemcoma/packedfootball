@@ -36,6 +36,13 @@ toggle_mode = true
 button_group = SubResource("ButtonGroup_currency_tabs")
 text = "Deals"
 
+[node name="AdsTabButton" type="Button" parent="TabRow"]
+unique_name_in_owner = true
+layout_mode = 2
+toggle_mode = true
+button_group = SubResource("ButtonGroup_currency_tabs")
+text = "Free"
+
 [node name="StatusLabel" type="Label" parent="."]
 unique_name_in_owner = true
 layout_mode = 2
@@ -81,3 +88,16 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 theme_override_constants/separation = 12
+
+[node name="AdsPanel" type="CenterContainer" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 10
+
+[node name="AdsPlaceholderLabel" type="Label" parent="AdsPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.75, 1)
+horizontal_alignment = 1
+autowrap_mode = 2
+text = "Watch an ad for free credits -- coming soon."

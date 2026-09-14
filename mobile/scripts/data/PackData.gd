@@ -69,6 +69,10 @@ var pack_name: String = ""
 var type: String = "standard"
 var description: String = ""
 var price: int = 0
+## Which balance this pack is bought with ("credits"/"bucks"/"medals") --
+## exactly one, never a combination. Absent means credits, matching the
+## backend default, so packs that predate per-pack pricing keep working.
+var price_currency: String = "credits"
 var cards_per_pack: int = 0
 var rates: Dictionary = {}  # tier -> probability (0..1), e.g. {"bronze": 0.6, ...} -- odds disclosure
 var pos_rates: Dictionary = {}  # position category -> probability (0..1), e.g. {"goalkeeper": 0.25, ...}
@@ -89,6 +93,7 @@ static func from_fields(fields: Dictionary) -> PackData:
 	pack.type = _str(fields, "type", "standard")
 	pack.description = _str(fields, "description")
 	pack.price = _int(fields, "price")
+	pack.price_currency = _str(fields, "price_currency", "credits")
 	pack.cards_per_pack = _int(fields, "cards_per_pack")
 	pack.rates = _dict(fields, "rates", {})
 	pack.pos_rates = _dict(fields, "pos_rates", {})

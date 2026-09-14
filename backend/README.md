@@ -205,6 +205,29 @@ field) -- deliberately minimal, proof-of-concept shaped for early testers
 per the mobile client's own docstring; expect more stats and filtering
 once there's real usage to design against.
 
+## Pack pricing currencies
+
+A pack is bought with **exactly one** currency, never a combination --
+that's what keeps this a single Firestore field rather than a cost map.
+`packs/{id}.price_currency` is `"credits"`, `"bucks"` or `"medals"`, and an
+absent value means credits, so every pack that predates the field keeps
+working with **no migration**. `PACK_PRICE_CURRENCIES` in `main.py` is the
+allow-list, and it's deliberately exactly the three balance fields on
+`users/{uid}`, since `/pack/open` both checks and deducts by indexing the
+profile with that name.
+
+`/pack/open` validates the currency (500 for a misconfigured pack), checks
+that specific balance (402 `"Not enough medals"`), deducts from it via
+`update_profile_fields`, and returns **all three** balances so the client
+doesn't have to guess which one moved. Add `price_currency` to a pack in
+`PACK_DATABASE` and `sync_pack_definitions.py` carries it across; omit it
+for ordinary credit-priced packs.
+
+**Nothing grants medals yet** -- Tournament mode is still a stub -- so a
+medals-priced pack is visible but unbuyable by everyone until that ships.
+The existing teased-pack fields (`visible`/`available_at`) are the natural
+way to show one as coming soon in the meantime.
+
 ## Currency endpoints
 
 Three currencies live on `users/{uid}`: `credits` (existing, soft), `bucks`
