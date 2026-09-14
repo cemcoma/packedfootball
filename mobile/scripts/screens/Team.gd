@@ -24,11 +24,39 @@ extends Control
 const PLAYER_CARD_SCENE := preload("res://scenes/components/PlayerCardView.tscn")
 
 const ATTR_ROWS := [
+	["Height", "height"],
 	["Stamina", "stamina"], ["Speed", "speed"], ["Agility", "agility"], ["Passing", "passing"],
 	["Ball Ctrl", "ballcontrol"], ["Defending", "defending"], ["Tackling", "tackling"], ["Dribbling", "dribbiling"],
 	["Shooting", "shooting"], ["Power", "power"], ["Accuracy", "accuracy"], ["Vision", "vision"],
 ]
 
+## Page 2 of the stats panel: career totals rather than attributes. Keys are
+## the ones player.py's DEFAULT_STATISTICS defines; "_pass_accuracy" is
+## derived. Keeper-only rows are filtered out for outfielders, whose zeroes
+## there are just noise.
+const STAT_ROWS := [
+	["Matches", "matches_played"],
+	["Goals", "goals"],
+	["Assists", "assists"],
+	["Shots", "shots"],
+	["On target", "shots_on_target"],
+	["Passes", "passes"],
+	["Completed", "passes_completed"],
+	["Pass acc.", "_pass_accuracy"],
+	["Tackles won", "tackles_won"],
+]
+
+const KEEPER_STAT_ROWS := [
+	["Saves", "saves"],
+	["Clean sheets", "clean_sheets"],
+	["Conceded", "goals_conceded"],
+]
+
+## Which page the stats panel is showing. Sticky across slot selections on
+## purpose -- comparing the same page between players is the normal use.
+enum StatsPage { ATTRIBUTES, STATISTICS }
+
+var stats_page: int = StatsPage.ATTRIBUTES
 var selected_slot: int = -1  # -1 = nothing focused
 var picker_mode: bool = false  # only meaningful when selected_slot != -1
 var status_text: String = ""
@@ -51,6 +79,8 @@ var _formation_buttons: Dictionary = {}  # name -> Button
 @onready var _stats_extra_country: Label = %StatsExtraCountry
 @onready var _stats_extra_gam: Label = %StatsExtraGam #goals assists matches
 @onready var _stats_attr_grid: GridContainer = %StatsAttrGrid
+@onready var _stats_page_label: Label = %StatsPageLabel
+@onready var _stats_page_button: Button = %StatsPageButton
 @onready var _replace_button: Button = %ReplaceButton
 @onready var _clear_button: Button = %ClearButton
 @onready var _close_button: Button = %CloseButton
@@ -75,6 +105,7 @@ func _ready() -> void:
 	_replace_button.pressed.connect(_on_replace_pressed)
 	_clear_button.pressed.connect(_on_clear_pressed)
 	_close_button.pressed.connect(_on_close_stats_pressed)
+	_stats_page_button.pressed.connect(_on_stats_page_pressed)
 	_save_button.pressed.connect(_on_save_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 
@@ -192,26 +223,82 @@ func _populate_stats_panel() -> void:
 	for child in _stats_attr_grid.get_children():
 		_stats_attr_grid.remove_child(child)
 		child.queue_free()
+
+	_stats_extra_country.text = "%s\n%s" % [
+		card.hometown, card.country
+	]
+
+	if stats_page == StatsPage.STATISTICS:
+		_populate_statistics_page(card)
+	else:
+		_populate_attributes_page(card)
+	_update_stats_page_button()
+
+
+func _populate_attributes_page(card: PlayerCard) -> void:
+	_stats_page_label.text = "Attributes"
 	for row in ATTR_ROWS:
-		var label_name: String = row[0]
 		var key: String = row[1]
 		var value: int = card.attributes.get(key, 0)
-		var name_label := Label.new()
-		name_label.text = label_name
-		_stats_attr_grid.add_child(name_label)
-		var value_label := Label.new()
-		value_label.text = str(value)
-		_stats_attr_grid.add_child(value_label)
+		# Height is centimetres, not a 0-100 skill (see player.py's
+		# PHYSICAL_FIELDS -- it's excluded from the overall for that reason).
+		_add_stat_row(row[0], "%d cm" % value if key == "height" else str(value))
 
 	var goals: int = card.statistics.get("goals", 0)
 	var assists: int = card.statistics.get("assists", 0)
 	var matches: int = card.statistics.get("matches_played", 0)
-	_stats_extra_country.text = "%s\n%s" % [
-		card.hometown, card.country 
-	]
 	_stats_extra_gam.text = "\nGoals: %d\nAssists: %d\nMatches: %d" % [
-		goals, assists, matches 
+		goals, assists, matches
 	]
+
+
+func _populate_statistics_page(card: PlayerCard) -> void:
+	_stats_page_label.text = "Career Statistics"
+	for row in STAT_ROWS:
+		_add_stat_row(row[0], _career_stat_text(card, row[1]))
+	if card.position == "GK":
+		for row in KEEPER_STAT_ROWS:
+			_add_stat_row(row[0], _career_stat_text(card, row[1]))
+
+	# rating_sum/rating_count are storage rather than a stat -- derive the
+	# average the same way player.py's average_rating() does.
+	var count: float = float(card.statistics.get("rating_count", 0))
+	if count > 0.0:
+		var avg: float = float(card.statistics.get("rating_sum", 0.0)) / count
+		_stats_extra_gam.text = "\nAvg rating\n%.2f" % avg
+	else:
+		_stats_extra_gam.text = "\nAvg rating\n-"
+
+
+func _career_stat_text(card: PlayerCard, key: String) -> String:
+	if key == "_pass_accuracy":
+		var passes: float = float(card.statistics.get("passes", 0))
+		if passes <= 0.0:
+			return "-"
+		return "%d%%" % int(round(100.0 * float(card.statistics.get("passes_completed", 0)) / passes))
+	return str(int(card.statistics.get(key, 0)))
+
+
+func _add_stat_row(label_text: String, value_text: String) -> void:
+	var name_label := Label.new()
+	name_label.text = label_text
+	_stats_attr_grid.add_child(name_label)
+	var value_label := Label.new()
+	value_label.text = value_text
+	_stats_attr_grid.add_child(value_label)
+
+
+func _update_stats_page_button() -> void:
+	_stats_page_button.text = (
+		"Show Attributes" if stats_page == StatsPage.STATISTICS else "Show Statistics"
+	)
+
+
+func _on_stats_page_pressed() -> void:
+	stats_page = (
+		StatsPage.ATTRIBUTES if stats_page == StatsPage.STATISTICS else StatsPage.STATISTICS
+	)
+	_populate_stats_panel()
 
 
 func _refresh_bottom() -> void:

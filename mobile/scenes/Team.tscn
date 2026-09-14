@@ -153,10 +153,18 @@ horizontal_alignment = 1
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="StatsPageLabel" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=1920000001]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.85, 1, 1)
+theme_override_font_sizes/font_size = 13
+text = "Attributes"
+
 [node name="StatsAttrGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=803471580]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 20
+theme_override_constants/v_separation = 2
 columns = 2
 
 [node name="StatsButtonRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel" unique_id=999269672]
@@ -172,6 +180,13 @@ text = "Replace"
 unique_name_in_owner = true
 layout_mode = 2
 text = "Clear Slot"
+
+[node name="StatsPageButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsButtonRow" unique_id=1920000003]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Show Statistics"
 
 [node name="CloseButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsButtonRow" unique_id=2088812848]
 unique_name_in_owner = true

@@ -146,14 +146,11 @@ layout_mode = 2
 [node name="AccountCreditsChip" parent="AccountPanel/Margin/VBox" unique_id=477518366 instance=ExtResource("5")]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 5
 
 [node name="AccountBucksChip" parent="AccountPanel/Margin/VBox" unique_id=906343529 instance=ExtResource("5")]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 5
 
 [node name="AccountMedalsChip" parent="AccountPanel/Margin/VBox" unique_id=478969367 instance=ExtResource("5")]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 5

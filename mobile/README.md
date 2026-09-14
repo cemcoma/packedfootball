@@ -326,7 +326,7 @@ scripts/
   autoload/    -- singletons registered in project.godot's [autoload]
   data/        -- pure data models / format readers -- no I/O, no UI
   config/      -- FirebaseConfig.gd + RevenueCatConfig.gd (both gitignored,
-                  each with a committed .example.gd)
+				  each with a committed .example.gd)
 scenes/
   *.tscn       -- the 11 top-level screens
   components/  -- mirrors scripts/components/

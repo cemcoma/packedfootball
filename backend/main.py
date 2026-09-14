@@ -664,8 +664,11 @@ def _run_match(caller_profile: dict, opponent_profile: dict, seed: int) -> dict:
         "score": [my_score, opp_score],
         "replay": replay_b64,
         "roster": roster_fields,
-        # Added time per half, in clock seconds, for the frontend to show
-        # as "+2" at the end of each half.
+        # THIS match's per-player numbers, same index order as "roster".
+        # "roster" carries career totals; the post-match screens want what
+        # happened in this game.
+        "player_match_stats": match.match_summary(),
+        # Added time per half, in clock seconds, for the frontend to show as "+x" at the end of each half.
         "added_time": [frames // 2 for frames in match.added_time_frames],
     }
 

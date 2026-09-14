@@ -52,8 +52,8 @@ _UNSET = object()
 # the `stamina` ATTRIBUTE is !resistance! to losing it, so two players doing
 # identical work tire at different rates.
 STAMINA_MAX: Final = 100.0
-STAMINA_DRAIN_PER_STEP: Final = 0.014    # full sprint, at reference stamina
-STAMINA_REFERENCE: Final = 60            # attribute that drains at exactly 1.0x
+STAMINA_DRAIN_PER_STEP: Final = 0.010    # full sprint, at reference stamina
+STAMINA_REFERENCE: Final = 50            # attribute that drains at exactly 1.0x
 STAMINA_RECOVERY_PER_STEP: Final = 0.010 # paid back only while barely moving
 # Effort below this counts as walking/standing and earns recovery. Set low on
 # purpose: at a generous threshold, recovery outpaced drain at ordinary match
@@ -701,6 +701,19 @@ class game:
             rating -= self.scores[1 - team] * 0.08
 
         return float(np.clip(round(rating, 2), 0.0, 10.0))
+
+    def match_summary(self) -> list[dict]:
+        """Per-player stats for the match just played, index-aligned with
+        all_players (team A 0-10, team B 11-21).
+        """
+        summary = []
+        for index in range(22):
+            entry = dict(self.match_stats[index])
+            entry["goals"] = self._match_goals[index]
+            entry["assists"] = self._match_assists[index]
+            entry["rating"] = self._match_rating(index)
+            summary.append(entry)
+        return summary
 
     def _finalize_match_stats(self) -> None:
         """Folds this match's counters and ratings into every card's career
@@ -1551,7 +1564,7 @@ class game:
                 ball_speed = np.linalg.norm(self.ball[2:4])
                 gk_attrs = self.all_players[index].attributes
                 
-                save_stat = (gk_attrs.agility * 0.6) + (gk_attrs.vision * 0.4) + (gk_attrs.ballcontroll)*0.3
+                save_stat = (gk_attrs.agility * 0.6) + (gk_attrs.vision * 0.4) + (gk_attrs.ballcontrol)*0.3
                 save_chance = float(np.clip((save_stat / 100.0) * 0.80, 0.10, 0.95))
                 
                 if self.rng.random() < save_chance:
