@@ -35,6 +35,7 @@ func _auth_headers() -> PackedStringArray:
 ## not a transport failure).
 func _request(method: HTTPClient.Method, url: String, body: String = "") -> Dictionary:
 	var http := HTTPRequest.new()
+	http.accept_gzip = false
 	add_child(http)
 	var err := http.request(url, _auth_headers(), method, body)
 	if err != OK:

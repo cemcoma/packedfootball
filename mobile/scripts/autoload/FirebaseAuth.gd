@@ -27,8 +27,18 @@ var is_signed_in: bool:
 		return id_token != ""
 
 
+## accept_gzip is disabled on every request in this file (and in Backend.gd /
+## Firestore.gd) on purpose. Google's endpoints answer with
+## "Content-Encoding: gzip", and in a web export the BROWSER has already
+## decompressed the body by the time Godot sees it -- but the header is
+## still there, so HTTPRequest tries to gunzip an already-plain body and
+## hands back bytes that aren't UTF-8 JSON. The status is still 2xx, so
+## _parse_response falls through to its "Unexpected response body" branch.
+## Turning gzip off costs a slightly larger transfer on these small JSON
+## payloads and nothing else.
 func _post_json(url: String, body: Dictionary) -> Dictionary:
 	var http := HTTPRequest.new()
+	http.accept_gzip = false
 	add_child(http)
 	var headers := PackedStringArray(["Content-Type: application/json"])
 	var err := http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
@@ -43,6 +53,7 @@ func _post_json(url: String, body: Dictionary) -> Dictionary:
 
 func _post_form(url: String, form_body: String) -> Dictionary:
 	var http := HTTPRequest.new()
+	http.accept_gzip = false
 	add_child(http)
 	var headers := PackedStringArray(["Content-Type: application/x-www-form-urlencoded"])
 	var err := http.request(url, headers, HTTPClient.METHOD_POST, form_body)
@@ -69,7 +80,12 @@ func _parse_response(result: Array) -> Dictionary:
 		return {"ok": false, "error": message}
 
 	if not (parsed is Dictionary):
-		return {"ok": false, "error": "Unexpected response body"}
+		# Include the status and a slice of what actually came back -- a bare
+		# "Unexpected response body" gives nothing to act on, and this branch
+		# only fires when the status WAS 2xx, so the body is the only clue
+		# there is.
+		push_warning("Auth response was HTTP %d but unparseable: %s" % [response_code, body_text.left(200)])
+		return {"ok": false, "error": "Unexpected response body (HTTP %d, %d bytes)" % [response_code, body_bytes.size()]}
 	return {"ok": true, "data": parsed}
 
 

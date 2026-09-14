@@ -19,6 +19,7 @@ func _auth_headers() -> PackedStringArray:
 ## parsed JSON response body on a 2xx status, {} otherwise.
 func call_endpoint(method: HTTPClient.Method, path: String, body: Dictionary = {}) -> Dictionary:
 	var http := HTTPRequest.new()
+	http.accept_gzip = false
 	add_child(http)
 	var url := FirebaseConfig.BACKEND_URL + path
 	# A method that conventionally carries a body (POST/PUT/PATCH) needs real

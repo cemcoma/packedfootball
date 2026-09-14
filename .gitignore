@@ -9,3 +9,6 @@ mobile/.godot
 mobile/test_data
 mobile/ios/
 mobile/android/
+
+# Godot web export output (see Makefile)
+mobile/build/

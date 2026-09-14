@@ -69,7 +69,11 @@ QUICK_MATCH_REWARD_CREDITS = {"loss":10,"draw":25,"win":100}
 app = FastAPI(title="Packed Football backend")
 
 #allowed websites to call this backend
-ALLOWED_ORIGINS = ["https://cemcoma.github.io"]
+ALLOWED_ORIGINS = [
+    "https://cemcoma.github.io",
+    "http://localhost:8060",
+    "http://127.0.0.1:8060",
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,

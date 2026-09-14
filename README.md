@@ -1,20 +1,55 @@
-Packed Football - WIP
+# Packed Football
 
-A PvP football manager game that is all about opening packs! Open packs to get stronger players, get better gear and upgrade them!
-Special players will be awarded at each footballing event (ie UCL, WC).
-And many more features that surely will be added if POC successful
+A PvP football manager game built around opening packs: open packs to get
+stronger players, build a squad, play matches. Special players are awarded
+around real footballing events (UCL, World Cup).
 
-POC goals:
-Play a game! (very fixed, only 442 and random players)
-Open a pack! (ts is easy af)
-Play a game with that player!
+Work in progress.
 
+| Area | Progress |
+| --- | --- |
+| Immersive gameplay (agents deciding in real time, tendencies, hidden stats) | 80% |
+| Pack mechanics | 90% |
+| Social mechanics | 10% |
+| PvP | 20% |
 
-Intended goals and completion rate:
-Immersive gameplay (not just a text based action, goal is to actually have agents take decision real time with tendencies and hidden stats) - 80%
-Pack mechanincs - 100%
-Social mechanics - 30% 
-PvP - 0%
+## Repo layout
 
-Setup:
-See mobile/README.md (Godot client) and backend/README.md (Cloud Run backend) for current setup instructions. packedfootball/ is now just the shared game-logic modules the backend reuses (gameEngine, packEngine, player/*, game_state, formations, replay) -- the original pygame/pygbag client that used to live there has been removed.
+- **`mobile/`** -- the Godot 4.7 client (landscape, iOS-first).
+  See [mobile/README.md](mobile/README.md).
+- **`backend/`** -- FastAPI service on Cloud Run: authoritative match
+  simulation, pack opening, currency, leaderboards.
+  See [backend/README.md](backend/README.md).
+- **`packedfootball/`** -- shared game logic the backend imports:
+  `gameEngine.py`, `packEngine.py`, `game_state.py`, `formations.py`,
+  `replay.py`, `deal_database.py`, plus `player/` and the `data/` name lists.
+- **`firestore.rules`** -- Firestore security rules.
+- **`cloudbuild.yaml`** -- container build for the backend (context is the
+  repo root, so it can copy both `backend/` and `packedfootball/`).
+
+## Running it
+
+Backend: see [backend/README.md](backend/README.md).
+Client: see [mobile/README.md](mobile/README.md).
+
+Deploy rules with:
+
+```sh
+firebase deploy --only firestore:rules
+```
+
+## Web test build
+
+The `Makefile` exports the Godot client to the web and publishes it to
+GitHub Pages. **Testing only** -- real-money purchases are absent on web
+(the Shop's Cash tab hides itself there), everything else works normally.
+
+```sh
+make web         # export to mobile/build/web/
+make serve-web   # export, then serve at http://localhost:8060
+make deploy-web  # export, then push to the gh-pages branch
+make clean-web   # remove mobile/build/
+```
+
+Needs the Godot editor binary and web export templates. Override the
+binary path with `make web GODOT=/path/to/Godot.app/Contents/MacOS/Godot`.
