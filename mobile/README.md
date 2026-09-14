@@ -387,7 +387,11 @@ present-but-null value still returns null, and assigning null to a typed
 - `Formations.gd` -- the 4 formations plus `POSITION_GROUPS` /
   `is_similar_position()`, mirroring `packedfootball/formations.py`.
 - `PlayerCard.gd` -- card fields, `overall()`, `tier_color()`,
-  `tier_rank()`.
+  `tier_rank()`. `overall()` reproduces `player.py`'s `_calculate_overall`,
+  so its `TENDENCY_FIELDS` **and** `PHYSICAL_FIELDS` exclusion lists must
+  match the Python ones exactly. `height` is in centimetres; averaging it in
+  with 0-100 skills would inflate every card and put this client permanently
+  out of step with the server's rating.
 - `PlayerAppearance.gd` -- the 5-slot/5-option layered appearance
   `PlayerModelView` renders (5^5 = 3125 looks from 25 stored choices), plus
   `mock_from_id()` as a fallback for cards predating real generation.

@@ -52,8 +52,9 @@ sys.path.insert(0, str(_PACKEDFOOTBALL_DIR))
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "packedfootball")
 
 from game_state import GameState, player_to_fields
-from gameEngine import game
+from gameEngine import ENGINE_VERSION, game
 from formations import FORMATIONS, get_formation, is_similar_position
+from replay import FORMAT_VERSION as REPLAY_FORMAT_VERSION
 from packEngine import PLAYER_CLASS_MAP, TIER_RANGES, PackManager, generate_starter_roster
 from player.classes.midfielder import Midfielder
 
@@ -651,13 +652,22 @@ def _run_match(caller_profile: dict, opponent_profile: dict, seed: int) -> dict:
         formation_home=caller_profile["formation"],
         formation_away=opponent_profile["formation"],
     )
-    match.run_match(max_steps=10800, render=False)  # 90 real-minute match, matching packedfootball/main.py's own loop
+    # 10800 frames is REGULATION (90:00); run_match plays stoppage time on
+    # top of that, so a real match finishes a few minutes later.
+    match.run_match(max_steps=10800, render=False)
     my_score, opp_score = match.scores
     replay_b64 = base64.b64encode(match.replay.encode()).decode()
     roster_fields = [player_to_fields(p) for p in caller_profile["roster"]] + [
         player_to_fields(p) for p in opponent_profile["roster"]
     ]
-    return {"score": [my_score, opp_score], "replay": replay_b64, "roster": roster_fields}
+    return {
+        "score": [my_score, opp_score],
+        "replay": replay_b64,
+        "roster": roster_fields,
+        # Added time per half, in clock seconds, for the frontend to show
+        # as "+2" at the end of each half.
+        "added_time": [frames // 2 for frames in match.added_time_frames],
+    }
 
 
 def _teams_snapshot(uid: str, caller_profile: dict, opponent_uid: str, opponent_profile: dict) -> dict:
@@ -796,6 +806,8 @@ async def quick_match(uid: str = Depends(verify_id_token)):
             "opponent_uid": opponent_uid,
             "opponent_is_bot": is_bot,
             "seed": seed,
+            "engine_version": ENGINE_VERSION,
+            "replay_format_version": REPLAY_FORMAT_VERSION,
             "teams": _teams_snapshot(uid, caller_profile, opponent_uid, opponent_profile),
             "created_at": firestore.SERVER_TIMESTAMP,
             "finished_at": None,
@@ -832,6 +844,8 @@ async def quick_match(uid: str = Depends(verify_id_token)):
 
     return {
         "seed": seed,
+        "engine_version": ENGINE_VERSION,
+        "replay_format_version": REPLAY_FORMAT_VERSION,
         "score": result["score"],
         "opponent_display_name": opponent_profile["display_name"],
         "opponent_is_bot": is_bot,
@@ -843,6 +857,7 @@ async def quick_match(uid: str = Depends(verify_id_token)):
         "game_id": game_id,
         "replay": result["replay"],
         "roster": result["roster"],
+        "added_time": result["added_time"],
     }
 
 
@@ -893,6 +908,8 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
         "initiator_uid": uid,
         "opponent_uid": req.opponent_uid,
         "seed": seed,
+        "engine_version": ENGINE_VERSION,
+        "replay_format_version": REPLAY_FORMAT_VERSION,
         "teams": _teams_snapshot(uid, caller_profile, req.opponent_uid, opponent_profile),
         "created_at": firestore.SERVER_TIMESTAMP,
         "finished_at": None,
@@ -918,9 +935,16 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
         losses += 1
 
     await caller_state.record_match_result(wins, losses, draws)
+    # Same as /match/quick: _run_match mutated the caller's players'
+    # statistics in place, and a Python mutation is not a Firestore write.
+    # This endpoint used to skip it entirely, so every ranked match's goals,
+    # assists and now shots/passes/saves/ratings were silently discarded.
+    await _persist_player_stats(caller_state, caller_profile)
 
     return {
         "seed": seed,
+        "engine_version": ENGINE_VERSION,
+        "replay_format_version": REPLAY_FORMAT_VERSION,
         "score": result["score"],
         "wins": wins,
         "losses": losses,
@@ -928,4 +952,5 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
         "game_id": game_id,
         "replay": result["replay"],
         "roster": result["roster"],
+        "added_time": result["added_time"],
     }

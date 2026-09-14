@@ -10,6 +10,18 @@ Imports `gameEngine.py`, `packEngine.py` and `game_state.py` from
 Auth is per-request: every endpoint except `/health` and the RevenueCat
 webhook takes a Firebase ID token (`verify_id_token`).
 
+## Tests
+
+```sh
+pip install -r backend/requirements.txt
+pytest                # ~2 min; several cases simulate full 90-minute matches
+```
+
+`tests/` covers the match engine: goal frame and posts, restarts, the match
+clock, statistics and ratings, the goalkeeper, stamina, height, and
+seed reproducibility. `packedfootball/scripts/dump_test_replay.py --seed N
+--out /tmp/x.bin` is the end-to-end smoke check (~9s for a full match).
+
 ## Running locally
 
 Copy `.env.example` to `.env` (gitignored, and excluded from the Docker
@@ -102,10 +114,10 @@ every slot, before writing anything.
 
 After simulating, both:
 
-- Persist the **caller's own** players' `goals`/`assists`/`matches_played`
-  back to `players/{id}` (`_persist_player_stats`). The opponent -- real or
-  bot -- never chose to play this match, so their cards and their
-  account-level wins/losses/draws stay untouched.
+- Persist the **caller's own** players' statistics back to `players/{id}`
+  (`_persist_player_stats`). The opponent -- real or bot -- never chose to
+  play this match, so their cards and their account-level wins/losses/draws
+  stay untouched.
 - Snapshot both sides' roster and formation into the `games/{id}` doc
   (`_teams_snapshot`), so a match can be audited later against exactly what
   was played, independent of what those cards look like by then.
@@ -113,6 +125,61 @@ After simulating, both:
 Quick Match grants a credit reward scaled by outcome
 (`QUICK_MATCH_REWARD_CREDITS = {"win": 100, "draw": 25, "loss": 10}`) and
 records wins/losses/draws.
+
+Both responses carry `engine_version`, `replay_format_version` and
+`added_time` (clock seconds per half), and both stamp the two versions onto
+the `games/{id}` doc alongside the seed -- see Engine versioning below.
+
+### Match statistics and ratings
+
+Cards track `goals`, `assists`, `matches_played`, `shots`,
+`shots_on_target`, `passes`, `passes_completed`, `tackles`, `tackles_won`,
+`saves`, `clean_sheets`, `goals_conceded`, plus `rating_sum`/`rating_count`
+backing `player.average_rating()`.
+
+The engine counts each match separately (`game.match_stats`) and folds the
+totals into the cards at full time, so a per-match **rating** can be
+computed from what happened in *that* match rather than from career totals.
+Rating starts at a 6.0 baseline; keepers are scored on saves, goals conceded
+and clean sheets rather than shots and passes.
+
+A shot counts as on target when it actually reaches the frame -- a goal, or
+a save -- not from where the shooter aimed. A pass counts as completed when
+a teammate brings it under control; a defender who merely deflects it gets
+nothing.
+
+**No backward compatibility with pre-statistics cards.** `fields_to_player`
+indexes `fields["statistics"]` directly, so a `players/{id}` doc written
+before these fields existed raises rather than loading half-populated. Those
+cards were deleted rather than migrated. Note `games/{id}.teams` still
+embeds whatever `player_to_fields` produced at the time -- it is written but
+never read back today, so a future admin panel reading historical snapshots
+has to tolerate the older shape itself.
+
+### Match length and stoppage time
+
+`max_steps` is **regulation** length in clock frames (10800 == 90:00), and
+added time is played on top of it. The loop advances on `match_clock_frames`
+rather than counting iterations, because the halftime pause deliberately
+does not advance the clock -- counting iterations is what made every match
+end at exactly 88:30.
+
+Added time is computed per half from that half's own stoppages (goals,
+throw-ins, corners, goal kicks, woodwork), with seeded jitter, and capped by
+`ADDED_TIME_MAX_FRAMES`. A typical match now runs to roughly 92-94 minutes.
+
+### Engine versioning
+
+`gameEngine.ENGINE_VERSION` is stamped onto every `games/{id}` document
+along with `replay.FORMAT_VERSION` and the existing `seed`. Bump it whenever
+match behaviour changes. Seed + engine version together reproduce a reported
+match exactly, which is what makes a bug report or a dispute investigable
+after the engine has moved on.
+
+**Pack generation is seed-reproducible across processes.** It briefly wasn't:
+`packEngine` rolled attributes by iterating a `set`, and Python randomises
+string hashing per process, so the same pack seed produced different cards on
+every run. `tests/test_determinism.py` pins this.
 
 ### Pack availability
 
@@ -245,6 +312,24 @@ any future subcollection starts denied.
 
 `packs`, `deals` and `iap_transactions` have no `match` block at all --
 Firestore's default-deny covers them, and only the Admin SDK touches them.
+
+## Waiting on a frontend pass
+
+The engine produces these; nothing displays them yet.
+
+- **Added time** -- `added_time` in both match responses, clock seconds per
+  half. Wants a "+3" at the end of each half.
+- **Post and crossbar rebounds** -- the ball now bounces off the frame and
+  stays live. No replay event is emitted for it (that would mean a new
+  `ActionType`, which has to be mirrored into `ReplayReader.gd`), so a
+  rebound currently plays back as ordinary ball movement.
+- **Match stats and ratings** -- every card carries shots, passes, tackles,
+  saves, clean sheets and an average rating. Only goals/assists/matches are
+  shown today.
+- **Stamina** -- live per-match, 0-100, and it already slows tired players.
+  Not surfaced anywhere.
+- **Height** -- generated and persisted, nothing reads it yet. It is the
+  foundation for headers, free kicks and shots over players.
 
 ## Not built yet
 

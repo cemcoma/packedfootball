@@ -34,6 +34,8 @@ const TENDENCY_FIELDS := [
 	"pass_tendency", "shoot_tendency", "drible_tendency", "aggression", "composure", "clear_tendency"
 ]
 
+const PHYSICAL_FIELDS := ["height"]
+
 ## Card-back color by tier -- used for pitch slot fill and bench row accents
 ## so tier reads at a glance without opening the stats panel.
 const TIER_COLORS := {
@@ -135,7 +137,7 @@ func overall() -> int:
 	var secondary_sum := 0.0
 	var secondary_count := 0
 	for key in attributes.keys():
-		if primary.has(key) or TENDENCY_FIELDS.has(key):
+		if primary.has(key) or TENDENCY_FIELDS.has(key) or PHYSICAL_FIELDS.has(key):
 			continue
 		var value: float = attributes[key]
 		secondary_sum += value

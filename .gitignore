@@ -4,7 +4,6 @@ __pycache__/
 mobile/scripts/config/FirebaseConfig.gd
 mobile/scripts/config/RevenueCatConfig.gd
 backend/.env
-google-cloud-sdk/
 mobile/.godot
 mobile/test_data
 mobile/ios/
@@ -12,3 +11,6 @@ mobile/android/
 
 # Godot web export output (see Makefile)
 mobile/build/
+
+#unrelated development tools
+google-cloud-sdk/

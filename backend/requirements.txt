@@ -4,3 +4,8 @@ firebase-admin>=6.5
 numpy
 requests
 python-dotenv>=1.0
+
+# Dev only -- the engine test suite in tests/. Not imported by the deployed
+# service; harmless in the image, and keeping it here means one install line
+# gets you a runnable test suite.
+pytest>=8.0

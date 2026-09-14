@@ -74,7 +74,11 @@ def fields_to_player(fields: dict, player_class_map: dict, default_class):
         hometown=fields.get("hometown"),
         appearance=fields.get("appearance"),
     )
-    p.statistics = dict(fields.get("statistics", p.statistics))
+    # Strict on purpose. Every players/{id} doc is written by the current
+    # code via player_to_fields, so a doc missing "statistics" is a genuine
+    # problem worth failing loudly on rather than papering over. Cards
+    # predating the extended statistics were deleted, not migrated.
+    p.statistics = dict(fields["statistics"])
     return p
 
 

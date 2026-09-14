@@ -1,6 +1,6 @@
 import os
 import random
-from player.player import Attributes, APPEARANCE_SLOTS, APPEARANCE_OPTION_COUNT, TENDENCY_FIELDS, player
+from player.player import Attributes, APPEARANCE_SLOTS, APPEARANCE_OPTION_COUNT, TENDENCY_FIELDS, PHYSICAL_FIELDS, player
 
 from player.classes.goalkeeper import Goalkeeper
 from player.classes.defender import CenterBack, Fullback, Wingback
@@ -55,13 +55,7 @@ TIER_RANGES = {
     "icon": (95,100)
 }
 
-# Tendencies are a *role* disposition, not a skill -- a bronze CDM and an
-# icon CDM should be similarly conservative in tendency, just different in
-# how well they execute, so these ranges are fixed and independent of tier
-# (unlike TIER_RANGES/skill attributes, which scale with card quality).
-# "composure" is a skill attribute despite living in player.py's
-# TENDENCY_FIELDS (see that set's own comment) -- it's tier-rolled below,
-# not one of these.
+
 TENDENCY_RANGES = {
     "pass_tendency": (30, 70),
     "shoot_tendency": (20, 70),
@@ -70,20 +64,46 @@ TENDENCY_RANGES = {
     "clear_tendency": (5, 45),
 }
 
-_TENDENCY_STAT_NAMES = TENDENCY_FIELDS - {"composure"}
-_SKILL_STAT_NAMES = tuple(f for f in Attributes.__dataclass_fields__ if f not in _TENDENCY_STAT_NAMES)
+_TENDENCY_STAT_NAMES = tuple(sorted(TENDENCY_FIELDS - {"composure"}))
+# PHYSICAL_FIELDS (height) is excluded here as well as from the tendency
+# list: _roll_skill_stat scales with card TIER, and an icon is not taller
+# than a bronze. Height is rolled separately by _roll_height.
+_SKILL_STAT_NAMES = tuple(
+    f
+    for f in Attributes.__dataclass_fields__
+    if f not in _TENDENCY_STAT_NAMES and f not in PHYSICAL_FIELDS
+)
 
-# Per-position stat tiers: "primary" (rolls in the top half of its range),
+# Height in cm: (mean, spread) per position. Keepers and centre-backs are
+# picked for being tall; wingers and full-backs tend not to be.
+HEIGHT_PROFILES = {
+    "GK": (180, 10),
+    "CB": (183, 10),
+    "ST": (180, 15),
+    "CDM": (182, 15),
+    "CM": (177, 10),
+    "CAM": (175, 8),
+    "LB": (177, 5),
+    "RB": (177, 5),
+    "WB": (176, 5),
+    "LM": (177, 6),
+    "RM": (177, 6),
+    "LW": (175, 6),
+    "RW": (175, 6),
+}
+HEIGHT_MIN, HEIGHT_MAX = 158, 205
+
+
+def _roll_height(rng: random.Random, position: str) -> int:
+    """Height for one card. Position-biased, tier-independent on purpose."""
+    mean, spread = HEIGHT_PROFILES.get(position, (180, 6))
+    return int(max(HEIGHT_MIN, min(HEIGHT_MAX, round(rng.gauss(mean, spread)))))
+
+# Per-position stat tiers:
+# "primary" (rolls in the top half of its range),
 # "secondary" (full range -- the default for anything not listed here),
 # "tertiary" (bottom half -- a real but secondary-to-that trait), or
-# "nerfed" (this position basically never grows this stat, regardless of
-# card tier -- see _roll_skill_stat). Loosely informed by real football/
-# EA FC-style attribute weighting per position, adapted to this project's
-# own stat vocabulary -- not a port of any specific game's exact numbers,
-# and very much a first pass: tweak freely, nothing else depends on the
-# exact values, only on primary/secondary/tertiary/nerfed being one of
-# those four strings.
-#
+# "nerfed" (this position basically never grows this stat)
 # LB/RB, LM/RM, and LW/RW are mirrored sides -- nothing here distinguishes
 # left from right, so each pair repeats the same profile.
 POSITION_STAT_TIERS = {
@@ -276,24 +296,6 @@ PACK_DATABASE = {
             "price_currency":"medals"
     },
 }
-# Availability is a separate, orthogonal concern that
-# deliberately does NOT live here at all -- these only ever live on the
-# Firestore packs/{id} doc itself, the same operational-not-definitional
-# treatment "active"/"times_opened" already get (see
-# sync_pack_definitions.py's own docstring):
-#   - "max_opens": a hard cap on total opens (e.g. the Icon pack selling
-#     out after 30) -- enforced by backend/main.py's _pack_unavailable_reason.
-#   - "expires_at": an ISO datetime after which it can no longer be opened
-#     (e.g. a "timed" pack) -- also _pack_unavailable_reason.
-#   - "visible" / "available_at": opts an otherwise-unavailable pack into
-#     still being shown (grayed out, tagged) instead of hidden outright --
-#     see backend/main.py's _pack_is_teased. Setting "available_at" alone
-#     is enough to imply it; it's purely a display hint ("Available Jan 15"),
-#     not something that auto-flips "active" once the date passes.
-# Set any of these directly on a pack's Firestore doc (no redeploy needed)
-# -- backend/main.py's /pack/open and /pack/list both already enforce/
-# reflect them when present and treat their absence as today's defaults
-# (unlimited, never expires, hidden-when-unavailable).
 
 class PackManager:
     def __init__(self, db: dict, seed=None):
@@ -377,6 +379,8 @@ class PackManager:
         for stat in _TENDENCY_STAT_NAMES:
             low, high = TENDENCY_RANGES[stat]
             generated_stats[stat] = _roll_tendency_stat(self.rng, position_profile.get(stat, "secondary"), low, high)
+
+        generated_stats["height"] = _roll_height(self.rng, position)
 
         return Attributes(**generated_stats)
 

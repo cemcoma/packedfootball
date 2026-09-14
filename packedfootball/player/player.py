@@ -23,6 +23,11 @@ class Attributes: #out of 100, can be over
     accuracy: int = 80
     vision:int = 60
 
+    # Centimetres, not a 0-100 skill. Nothing reads it yet -- it's here for
+    # headers, free kicks and shots over players. See PHYSICAL_FIELDS below
+    # for why it is kept out of the overall calculation.
+    height: int = 180
+
     #Tendencies
     pass_tendency: int = 50
     shoot_tendency: int = 50
@@ -35,6 +40,40 @@ TENDENCY_FIELDS = {
     "pass_tendency", "shoot_tendency", "drible_tendency",
     "aggression", "composure", "clear_tendency"
 }
+
+
+PHYSICAL_FIELDS = {"height"}
+
+
+DEFAULT_STATISTICS = {
+    "goals": 0,
+    "assists": 0,
+    "matches_played": 0,
+    "shots": 0,
+    "shots_on_target": 0,
+    "passes": 0,
+    "passes_completed": 0,
+    "tackles": 0,
+    "tackles_won": 0,
+    "saves": 0,
+    "clean_sheets": 0,
+    "goals_conceded": 0,
+    "rating_sum": 0.0,
+    "rating_count": 0,
+}
+
+
+MATCH_STAT_FIELDS = (
+    "shots",
+    "shots_on_target",
+    "passes",
+    "passes_completed",
+    "tackles",
+    "tackles_won",
+    "saves",
+    "goals_conceded",
+    "clean_sheets",
+)
 
 # Layered placeholder character portrait: 5 independent slots, each an index
 # into a fixed-size (5) option list. Mirrors mobile/scripts/data/
@@ -89,7 +128,7 @@ class player(ABC):
         self.country = country or "Unknown"
         self.hometown = hometown or "Unknown"
         self.appearance = appearance if appearance is not None else dict(DEFAULT_APPEARANCE)
-        self.statistics = {"goals": 0,"assists":0,"matches_played": 0}
+        self.statistics = dict(DEFAULT_STATISTICS)
         self.tier = tier
 
         #functional
@@ -146,7 +185,11 @@ class player(ABC):
         primary = set(self.primary_stats)
 
         primary_values = [attrs[stat] for stat in primary]
-        secondary_values = [val for key, val in attrs.items() if key not in primary and key not in TENDENCY_FIELDS]
+        secondary_values = [
+            val
+            for key, val in attrs.items()
+            if key not in primary and key not in TENDENCY_FIELDS and key not in PHYSICAL_FIELDS
+        ]
 
         primary_avg = sum(primary_values) / len(primary_values)
         secondary_avg = sum(secondary_values) / len(secondary_values) if secondary_values else primary_avg
@@ -376,6 +419,23 @@ class player(ABC):
     def scored(self): self.statistics["goals"] += 1
     def assisted(self): self.statistics["assists"] += 1
     def match_played(self): self.statistics["matches_played"] += 1
+
+    def record_match(self, match_stats: dict, rating: float) -> None:
+        """Folds one match's counters and rating into this card's career
+        totals. Called once per player at full time.
+        """
+        
+        for field in MATCH_STAT_FIELDS:
+            self.statistics[field] += int(match_stats[field])
+        self.statistics["rating_sum"] += float(rating)
+        self.statistics["rating_count"] += 1
+
+    def average_rating(self) -> float:
+        """Career average match rating, or 0.0 for a card that's never played."""
+        count = int(self.statistics["rating_count"])
+        if count <= 0:
+            return 0.0
+        return round(float(self.statistics["rating_sum"]) / count, 2)
 
     # --- Engine Step & Abstract Actions ---
     def step(self, state: dict) -> dict:

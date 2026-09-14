@@ -6,10 +6,61 @@ from typing import Final
 
 from replay import ActionType, ReplayRecorder
 
+# Bump whenever match behaviour changes. 
+# Stamped onto every games/{id} doc so a reported match can be read against the engine
+# that actually produced it -- seed + ENGINE_VERSION together reproduce a
+# game exactly. 
+# 
+# v2: goal frame with posts/crossbar, throw-ins from the real
+# out point, real stoppage time, match stats + ratings, keeper can leave its
+# line, stamina, height.
+ENGINE_VERSION: Final[int] = 2
+
 PITCH_WIDTH: Final[float] = 70.0
 PITCH_HEIGHT: Final[float] = 100.0
 GOAL_WIDTH: Final = 7.5
 GOAL_HEIGHT: Final = 2.5
+GOAL_POST_RADIUS: Final = 0.25
+POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
+THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
+
+FRAMES_PER_CLOCK_SECOND: Final = 2 # match_clock_frames / 2 = seconds, so 90:00 == 10800
+
+# Stoppage time, in frames. Weighted heavy per event on purpose: this engine
+# keeps the ball in play far more than real football (~5 restarts a match,
+# not ~60), so light weights would give every match a 0:10 of added time.
+ADDED_TIME_BASE_FRAMES: Final = 60   # 30s
+ADDED_TIME_PER_GOAL: Final = 60      # 30s, celebration + restart
+ADDED_TIME_PER_RESTART: Final = 20   # 10s per throw-in/corner/goal kick
+ADDED_TIME_PER_POST: Final = 10      # 5s scramble
+ADDED_TIME_MAX_FRAMES: Final = 840   # cap at 8:00
+# A half doesn't end while an attack is live (see _attack_is_live). This caps
+# how long the whistle can be held so a team knocking it around up there
+# can't stall the match. 200 frames == 1:40 of clock.
+MAX_WHISTLE_HOLD_FRAMES: Final = 200
+# How deep into the opponent's half counts as a live attack. The final third,
+# not the halfway line: measured over 30 matches, "past halfway" held the
+# whistle on 14 of 20 occasions and hit the cap in half of them (teams just
+# pass it around the opponent's half). The final third holds 5 of 20, averages
+# 40 seconds, and never hits the cap.
+DANGEROUS_ZONE_Y: Final = PITCH_HEIGHT * 2.0 / 3.0
+
+# Sentinel for "not latched yet", since None legitimately means "ball dead".
+_UNSET = object()
+
+# Stamina. Everyone starts a match on STAMINA_MAX regardless of their card;
+# the `stamina` ATTRIBUTE is !resistance! to losing it, so two players doing
+# identical work tire at different rates.
+STAMINA_MAX: Final = 100.0
+STAMINA_DRAIN_PER_STEP: Final = 0.014    # full sprint, at reference stamina
+STAMINA_REFERENCE: Final = 60            # attribute that drains at exactly 1.0x
+STAMINA_RECOVERY_PER_STEP: Final = 0.010 # paid back only while barely moving
+# Effort below this counts as walking/standing and earns recovery. Set low on
+# purpose: at a generous threshold, recovery outpaced drain at ordinary match
+# effort and nobody ever got tired.
+STAMINA_RECOVERY_EFFORT: Final = 0.25
+STAMINA_MIN_SPEED_FACTOR: Final = 0.65   # pace kept when completely empty
+
 base_kick_pow:Final = 20
 base_speed:Final = 10.0
 possession_radius: Final = 2.0
@@ -101,6 +152,29 @@ class game:
         self.ball = np.array([35.0, 50.0, 0.0, 0.0, 0.0,],float) # (x,y,vx,vy,vz)
         self.scores = [0, 0]
         self.last_goal_team = None
+        self.post_hits = 0      # woodwork strikes, feeds stoppage time
+        self.restart_count = 0  # throw-ins/corners/goal kicks, feeds stoppage time
+
+        # Added time actually played, per half, in frames. Set by run_match
+        # when each half's regulation time runs out; the frontend pass reads
+        # these to show "+3".
+        self.added_time_frames = [0, 0]
+        # Extra frames played past the announced added time because an attack
+        # was still live when the whistle was due, per half.
+        self.whistle_hold_frames = [0, 0]
+        self._half_stoppage_mark = {"goals": 0, "restarts": 0, "posts": 0}
+
+        from player.player import MATCH_STAT_FIELDS
+
+        self.match_stats = [
+            {field: 0 for field in MATCH_STAT_FIELDS} for _ in range(22)
+        ]
+
+        self.last_shot_player = -1
+        self.last_pass_player = -1
+        self._match_goals = [0] * 22
+        self._match_assists = [0] * 22
+        self.stamina = np.full(22, STAMINA_MAX, dtype=float)
        
         self.ball_controller = -1  # -1 indicates a loose ball. 0-21 corresponds to the player index currently in possession.
         self.ball_event = "neutral"
@@ -129,13 +203,13 @@ class game:
         self.restart_type = None
         self.restart_team = None
         self.restart_player = None
-        self.restart_timer = 0
+        self.restart_timer = 0  
+        self.pending_restart_pass_type = None # Outlives restart_type (which is cleared the moment restart_timer runs out) so the restart's first pass still knows it's a throw-in.
         self.camera_mode = "zoom" 
         self.visual_action = [""] * 22
         self.visual_action_timer = np.zeros(22, dtype=int)
         self.final_whistle_clock = 0
         self.halftime_pause_timer = 0
-        # self.camera_flipped = False TODO
         
         self.kickoff_team = 0
         self.kickoff_timer = 60
@@ -186,6 +260,59 @@ class game:
     def _kickoff_player_for_team(self, team: int | None = None) -> int:
         team_id = self.kickoff_team if team is None else team
         return self._pick_role_slot(team_id, ("ST", "CF"), 9)
+
+    def _pick_nearest_eligible(self, team: int, point: np.ndarray, preferred_roles: tuple) -> int:
+        """The player on `team` best placed to take a restart at `point`.
+
+        Falls back to any outfield player if the formation has none of the
+        preferred roles -- never the keeper.
+        """
+        base = 0 if team == 0 else 11
+        candidates = [
+            base + i for i in range(11) if self.formation[base + i]["role"] in preferred_roles
+        ]
+        if not candidates:
+            candidates = [base + i for i in range(1, 11)]  # skip the GK at local index 0
+        point = np.asarray(point, dtype=float)
+        return min(candidates, key=lambda idx: float(np.linalg.norm(self.positions[idx] - point)))
+
+    def _shift_shape_toward(self, point: np.ndarray, team: int) -> None:
+        """Pulls both teams toward a restart, so play doesn't resume with all
+        22 players standing in their static formation slots while the ball
+        sits on a touchline thirty metres away.
+
+        The shift is RELATIVE -- everyone keeps their shape and their relative
+        spacing, they just slide toward the action, with the nearest few
+        teammates committing hardest so the taker actually has someone to
+        throw to. Opponents shift less: they react to the restart rather than
+        organising it.
+        """
+        point = np.asarray(point, dtype=float)
+        base = 0 if team == 0 else 11
+        teammates = [base + i for i in range(1, 11)]  # keeper holds their line
+        opponents = [(11 if team == 0 else 0) + i for i in range(1, 11)]
+
+        # Closest three teammates commit; the rest drift across.
+        teammates.sort(key=lambda idx: float(np.linalg.norm(self.positions[idx] - point)))
+        for rank, idx in enumerate(teammates):
+            pull = 0.55 if rank < 3 else 0.2
+            self.positions[idx] += (point - self.positions[idx]) * pull
+
+        for idx in opponents:
+            self.positions[idx] += (point - self.positions[idx]) * 0.15
+
+        # Spread anyone who ended up stacked on the ball, and keep everyone on
+        # the pitch. _resolve_player_collisions handles overlap once play
+        # resumes, but a support player standing exactly on the thrower makes
+        # the throw itself impossible.
+        for idx in teammates + opponents:
+            offset = self.positions[idx] - point
+            distance = float(np.linalg.norm(offset))
+            if distance < 2.5:
+                direction = offset / distance if distance > 1e-8 else np.array([0.0, 1.0])
+                self.positions[idx] = point + direction * 2.5
+        self.positions[:, 0] = np.clip(self.positions[:, 0], 0.0, PITCH_WIDTH)
+        self.positions[:, 1] = np.clip(self.positions[:, 1], 0.0, PITCH_HEIGHT)
 
     def _set_must_pass_for_player(self, player_idx: int):
         self.must_pass_next = True
@@ -272,7 +399,18 @@ class game:
             self.ball_controller = -1
             return
 
-    def _begin_restart(self, restart_type: str, team: int | None = None, out_x: float = 35.0):
+    def _begin_restart(
+        self,
+        restart_type: str,
+        team: int | None = None,
+        out_x: float = 35.0,
+        out_y: float | None = None,
+    ):
+        """Sets up a restart. `out_x`/`out_y` are where the ball ACTUALLY left
+        the pitch -- a throw-in is taken from that point on the touchline, not
+        from wherever the taker's formation slot happens to sit (which is what
+        it used to do, putting every throw-in in the middle of the park).
+        """
         self.out_of_play = True
         self.restart_type = restart_type
         self.restart_team = team if team is not None else (0 if self.last_touch_team is None else 1 - self.last_touch_team)
@@ -280,6 +418,9 @@ class game:
         self.ball_controller = -1
         self.ball_release_player = -1
         self.ball_release_cooldown = 0
+        self.pending_restart_pass_type = None
+        if restart_type in ("throw_in", "corner", "goal_kick"):
+            self.restart_count += 1
         self.reset_positions(restart_type=restart_type, team=self.restart_team)
 
         if restart_type == "kickoff":
@@ -310,11 +451,26 @@ class game:
             self.ball_controller = keeper
             self._set_must_pass_for_player(keeper)
         elif restart_type == "throw_in":
-            throw_player = self._pick_role_slot(self.restart_team, ("LM", "RM", "LW", "RW", "WB", "CDM"), 5)
+            throw_x = 0.0 if out_x < PITCH_WIDTH / 2.0 else PITCH_WIDTH
+            throw_y = float(np.clip(35.0 if out_y is None else out_y, 1.0, PITCH_HEIGHT - 1.0))
+            throw_point = np.array([throw_x, throw_y], dtype=float)
+
+            # Full-backs and wide players take throw-ins, nearest one first --
+            # see _pick_nearest_eligible for why proximity matters here.
+            throw_player = self._pick_nearest_eligible(
+                self.restart_team, throw_point, ("LB", "RB", "WB", "LM", "RM", "LW", "RW")
+            )
             self.restart_player = throw_player
-            self.ball[:] = [self.positions[throw_player][0], self.positions[throw_player][1], 0.0, 0.0, 0.0]
+
+            self._shift_shape_toward(throw_point, self.restart_team)
+            self.positions[throw_player] = throw_point.copy()
+            self.ball[:] = [throw_x, throw_y, 0.0, 0.0, 0.0]
             self.ball_controller = throw_player
             self._set_must_pass_for_player(throw_player)
+            # Survives restart_timer expiring (which clears restart_type), so
+            # the throw itself is still thrown rather than kicked -- see
+            # _resolve_action's pass branch.
+            self.pending_restart_pass_type = "throw_in"
 
         if self.replay:
             restart_event = {
@@ -481,7 +637,151 @@ class game:
             screen.blit(popup, popup_rect)
         
 
+    def _fatigue_factor(self, index: int) -> float:
+        """Speed multiplier from current stamina: 1.0 when fresh, down to
+        STAMINA_MIN_SPEED_FACTOR when empty."""
+        fraction = float(self.stamina[index]) / STAMINA_MAX
+        return STAMINA_MIN_SPEED_FACTOR + (1.0 - STAMINA_MIN_SPEED_FACTOR) * fraction
+
+    def _drain_stamina(self) -> None:
+        """Charges every player for the work they did this step.
+
+        Cost scales with how fast they're actually moving, and is divided by their stamina ATTRIBUTE relative to STAMINA_REFERENCE
+        Players barely moving get a little back.
+        """
+        speeds = np.linalg.norm(self.velocity, axis=1)
+        effort = np.clip(speeds / base_speed, 0.0, 1.5)
+
+        resistance = np.array(
+            [max(20.0, float(getattr(p.attributes, "stamina", STAMINA_REFERENCE))) for p in self.all_players],
+            dtype=float,
+        )
+        drain = STAMINA_DRAIN_PER_STEP * effort * (STAMINA_REFERENCE / resistance)
+        # Only a player who has genuinely stopped gets anything back. Scaling
+        # recovery by (1 - effort) across the whole range meant a player
+        # jogging at half pace recovered faster than they drained.
+        idle = np.clip((STAMINA_RECOVERY_EFFORT - effort) / STAMINA_RECOVERY_EFFORT, 0.0, 1.0)
+        recovery = STAMINA_RECOVERY_PER_STEP * idle
+
+        self.stamina = np.clip(self.stamina - drain + recovery, 0.0, STAMINA_MAX)
+
+    def _match_rating(self, index: int) -> float:
+        """This player's rating for the match just played, 0.0-10.0.
+
+        Starts from a 6.0 "did their job" baseline and moves on what the
+        player actually did. Keepers are scored on a different axis --
+        saves and goals conceded rather than shots and passes -- since a
+        keeper who never touches the ball has had a fine game.
+        """
+        stats = self.match_stats[index]
+        team = 0 if index < 11 else 1
+        is_keeper = index in (0, 11)
+
+        # Deliberately NOT read off player.statistics: those are career
+        # totals loaded from Firestore, so a veteran would start every match
+        # on a 10.0.
+        rating = 6.0
+        rating += self._match_goals[index] * 1.2
+        rating += self._match_assists[index] * 0.8
+
+        if is_keeper:
+            rating += stats["saves"] * 0.45
+            rating -= stats["goals_conceded"] * 0.55
+            if stats["goals_conceded"] == 0:
+                rating += 0.6
+        else:
+            rating += stats["shots_on_target"] * 0.25
+            rating += stats["tackles_won"] * 0.2
+            rating -= (stats["tackles"] - stats["tackles_won"]) * 0.1
+            passes = stats["passes"]
+            if passes >= 5:
+                accuracy = stats["passes_completed"] / passes
+                rating += (accuracy - 0.6) * 2.0
+            # Conceding as an outfielder still stings, just far less.
+            rating -= self.scores[1 - team] * 0.08
+
+        return float(np.clip(round(rating, 2), 0.0, 10.0))
+
+    def _finalize_match_stats(self) -> None:
+        """Folds this match's counters and ratings into every card's career
+        totals. Called once, at full time."""
+        for index in range(22):
+            if index in (0, 11) and self.match_stats[index]["goals_conceded"] == 0:
+                self.match_stats[index]["clean_sheets"] = 1
+            self.all_players[index].record_match(self.match_stats[index], self._match_rating(index))
+
+    def _attacking_team_now(self) -> int | None:
+        """Which side is attacking right now, or None if the ball is dead."""
+        if self.out_of_play or self.restart_type is not None:
+            return None
+        if self.ball_controller != -1:
+            return 0 if self.ball_controller < 11 else 1
+        # Nobody has it -- whoever touched it last is still the side attacking.
+        return self.last_touch_team
+
+    def _attack_is_live(self, attacker: int | None) -> bool:
+        """True while `attacker`'s attack is still going.
+
+        A referee doesn't end a half with the ball in the box. The attacking
+        side is LATCHED when the whistle first comes due, rather than
+        re-derived each frame -- otherwise possession simply ping-pongs
+        between two teams who are each "attacking" in turn and the half never
+        ends.
+
+        The attack is over once the ball goes dead, the other team takes
+        control, or it is cleared back out of the final third.
+        """
+        if attacker is None:
+            return False
+
+        current = self._attacking_team_now()
+        if current is None:          # out of play
+            return False
+        if current != attacker:      # other team controls it
+            return False
+
+        ball_y = float(self.ball[1])
+        # Team 0 attacks y=PITCH_HEIGHT, team 1 attacks y=0.
+        if attacker == 0:
+            return ball_y > DANGEROUS_ZONE_Y
+        return ball_y < PITCH_HEIGHT - DANGEROUS_ZONE_Y
+
+    def _compute_added_time(self) -> int:
+        """Added time for the half that just ran out, in frames.
+
+        Counts only what happened since the last call, so the second half is
+        scored on its own stoppages rather than the whole match's. Jitter is
+        drawn from self.rng, so a given seed always produces the same added
+        time.
+        """
+        goals = sum(self.scores) - self._half_stoppage_mark["goals"]
+        restarts = self.restart_count - self._half_stoppage_mark["restarts"]
+        posts = self.post_hits - self._half_stoppage_mark["posts"]
+
+        raw = (
+            ADDED_TIME_BASE_FRAMES
+            + goals * ADDED_TIME_PER_GOAL
+            + restarts * ADDED_TIME_PER_RESTART
+            + posts * ADDED_TIME_PER_POST
+        )
+        frames = int(raw * float(self.rng.uniform(0.8, 1.3)))
+
+        self._half_stoppage_mark = {
+            "goals": sum(self.scores),
+            "restarts": self.restart_count,
+            "posts": self.post_hits,
+        }
+        return max(0, min(ADDED_TIME_MAX_FRAMES, frames))
+
     def run_match(self, max_steps: int = 10800, fps: int = 60, render: bool = False, window_size=(700, 1000), title: str = "Packed Football"):
+        """Plays a full match. `max_steps` is REGULATION length in clock
+        frames (10800 == 90:00); added time is played on top of it.
+
+        The loop is driven by match_clock_frames rather than by a raw
+        iteration count. That is the fix for matches ending at 88:30: the
+        180-frame halftime pause deliberately doesn't advance the clock, so
+        counting iterations meant the pause ate 1:30 of football.
+        """
         dt = 1.0 / fps
 
         if render:
@@ -499,17 +799,71 @@ class game:
             screen = None
             running = True
 
-        steps = 0
-        while running and steps < max_steps:
-            # --- Trigger Halftime ---
-            if steps == max_steps // 2:
-                self.goal_popup = {"text": "HALF TIME", "timer": 180, "team": None}
-                self.halftime_pause_timer = 180
-                self.reset_positions(restart_type="kickoff", team=1)
-                if self.replay:
-                    self.replay.event(self.match_clock_frames, ActionType.HALFTIME)
-                    self.replay.event(self.match_clock_frames, ActionType.KICKOFF, team=1)
-                # self.camera_flipped = True TODO
+        regulation_half = max_steps // 2
+        first_half_end = None   # regulation + added time for the 1st half
+        second_half_end = None  # ditto for the 2nd
+        halftime_done = False
+
+        # Who was attacking when each whistle came due, latched once (None is
+        # a real value here -- "ball was dead" -- hence the sentinel).
+        halftime_attacker = _UNSET
+        fulltime_attacker = _UNSET
+
+        # The loop below advances on match_clock_frames, which stalls while
+        # the game is paused -- so it needs its own escape hatch rather than
+        # trusting the clock to always move.
+        iterations = 0
+        iteration_limit = max_steps * 3
+
+        while running:
+            iterations += 1
+            if iterations > iteration_limit:
+                break
+
+            # --- First half's regulation time is up: how long do we add?
+            if first_half_end is None and self.match_clock_frames >= regulation_half:
+                self.added_time_frames[0] = self._compute_added_time()
+                first_half_end = regulation_half + self.added_time_frames[0]
+
+            # --- Trigger Halftime (after the first half's added time)
+            if not halftime_done and first_half_end is not None and self.match_clock_frames >= first_half_end:
+                if halftime_attacker is _UNSET:
+                    halftime_attacker = self._attacking_team_now()
+                if (
+                    self._attack_is_live(halftime_attacker)
+                    and self.whistle_hold_frames[0] < MAX_WHISTLE_HOLD_FRAMES
+                ):
+                    self.whistle_hold_frames[0] += 1
+                else:
+                    self.goal_popup = {"text": "HALF TIME", "timer": 180, "team": None}
+                    self.halftime_pause_timer = 180
+                    self.reset_positions(restart_type="kickoff", team=1)
+                    if self.replay:
+                        self.replay.event(self.match_clock_frames, ActionType.HALFTIME)
+                        self.replay.event(self.match_clock_frames, ActionType.KICKOFF, team=1)
+                    halftime_done = True
+
+            # --- Second half's regulation time is up
+            if (
+                halftime_done
+                and second_half_end is None
+                and self.match_clock_frames >= max_steps + self.added_time_frames[0]
+            ):
+                self.added_time_frames[1] = self._compute_added_time()
+                second_half_end = max_steps + self.added_time_frames[0] + self.added_time_frames[1]
+
+            if second_half_end is not None and self.match_clock_frames >= second_half_end:
+                # Same at full time: let a live attack finish rather than
+                # blowing up with the ball in the box.
+                if fulltime_attacker is _UNSET:
+                    fulltime_attacker = self._attacking_team_now()
+                if (
+                    self._attack_is_live(fulltime_attacker)
+                    and self.whistle_hold_frames[1] < MAX_WHISTLE_HOLD_FRAMES
+                ):
+                    self.whistle_hold_frames[1] += 1
+                else:
+                    break
 
             if render:
                 for event in pygame.event.get():
@@ -533,9 +887,19 @@ class game:
                 pygame.display.flip()
                 clock.tick(fps)
 
-            steps += 1
-
         if self.replay:
+            # Force a final snapshot on the exact tick FULLTIME lands on.
+            #
+            # Playback clamps its cursor to the last sample's tick and only
+            # fires events at or before it (MatchPlayback.gd), so an event
+            # past the final sample is simply never processed -- the replay
+            # would sit on its last frame forever and never leave the match
+            # screen. Samples are normally only written every
+            # sample_interval_ticks, and added time means the whistle no
+            # longer falls on a multiple of that.
+            self.replay.snapshot(
+                self.match_clock_frames, self.positions, self.velocity, self.ball, self.ball_controller
+            )
             self.replay.event(self.match_clock_frames, ActionType.FULLTIME)
 
         # --- Final Whistle Render Loop ---
@@ -560,6 +924,7 @@ class game:
 
         for i in range(22):
             self.all_players[i].match_played()
+        self._finalize_match_stats()
         return self
 
     def tick(self, dt:float = 1/60):
@@ -591,6 +956,9 @@ class game:
         self.positions += self.velocity * dt
         self._resolve_player_collisions()
 
+        prev_ball_xy = np.array(self.ball[0:2], dtype=float)
+        prev_ball_height = float(self.ball[4])
+
         if self.ball_controller == -1:
             self.ball[0] += self.ball[2] * dt
             self.ball[1] += self.ball[3] * dt
@@ -607,43 +975,61 @@ class game:
             self.ball[2:4] = self.velocity[self.ball_controller]
             self.ball[4] = 0.0 
 
-        if self.ball[0] < 0.0 or self.ball[0] > PITCH_WIDTH or self.ball[1] < 0.0 or self.ball[1] > PITCH_HEIGHT:
+        # Goal frame FIRST. A ball crossing the goal plane is a goal or a
+        # rebound off the woodwork; either way the out-of-bounds branch below
+        # must not get to claim it. This ordering is the fix for balls
+        # disappearing into a scoreless kickoff.
+        frame_result = self._resolve_goal_frame(prev_ball_xy, prev_ball_height)
+        if frame_result == "goal":
+            return
+        if frame_result == "rebound":
+            # Ball is back in play just inside the line; skip the
+            # out-of-bounds check this tick and let it run on.
+            frame_rebounded = True
+        else:
+            frame_rebounded = False
+
+        if not frame_rebounded and (
+            self.ball[0] < 0.0 or self.ball[0] > PITCH_WIDTH or self.ball[1] < 0.0 or self.ball[1] > PITCH_HEIGHT
+        ):
             out_x = self.ball[0]  # Store out-of-bounds X coordinate to determine which corner flag to use
-            
+
             if self.ball[1] < 0.0 or self.ball[1] > PITCH_HEIGHT:
-                # Goal bounds check
-                if 35.0 - GOAL_WIDTH / 2.0 <= self.ball[0] <= 35.0 + GOAL_WIDTH / 2.0:
-                    restart_type = "kickoff"
-                    restart_team = 1 - (self.last_touch_team if self.last_touch_team is not None else 0)
-                else:
-                    # Endline bounds check (Corner vs Goal Kick based on last touch)
-                    if self.ball[1] < 0.0:  # Team A's endline (Y = 0)
-                        if self.last_touch_team == 0:
-                            restart_type = "corner"
-                            restart_team = 1  # Team B attacks
-                        else:
-                            restart_type = "goal_kick"
-                            restart_team = 0  # Team A restarts
-                    else:  # Team B's endline (Y = PITCH_HEIGHT)
-                        if self.last_touch_team == 1:
-                            restart_type = "corner"
-                            restart_team = 0  # Team A attacks
-                        else:
-                            restart_type = "goal_kick"
-                            restart_team = 1  # Team B restarts
+                # Anything reaching here crossed the endline WITHOUT being a
+                # goal or hitting the frame (_resolve_goal_frame already
+                # consumed those) -- so it is always a corner or a goal kick,
+                # decided by who touched it last. There used to be a
+                # "restart as a kickoff if it went through the goal mouth"
+                # branch here; that was the scoreless-kickoff bug, and a ball
+                # over the crossbar now correctly becomes a goal kick.
+                if self.ball[1] < 0.0:  # Team A's endline (Y = 0)
+                    if self.last_touch_team == 0:
+                        restart_type = "corner"
+                        restart_team = 1  # Team B attacks
+                    else:
+                        restart_type = "goal_kick"
+                        restart_team = 0  # Team A restarts
+                else:  # Team B's endline (Y = PITCH_HEIGHT)
+                    if self.last_touch_team == 1:
+                        restart_type = "corner"
+                        restart_team = 0  # Team A attacks
+                    else:
+                        restart_type = "goal_kick"
+                        restart_team = 1  # Team B restarts
             else:
                 # Sideline out of bounds
                 restart_type = "throw_in"
                 restart_team = 1 - (self.last_touch_team if self.last_touch_team is not None else 0)
 
-            # Pass out_x to the restart method
-            self._begin_restart(restart_type, restart_team, out_x)
+            # Pass the real out-of-play point to the restart method
+            self._begin_restart(restart_type, restart_team, out_x, float(self.ball[1]))
             return
 
         self.ball[0] = np.clip(self.ball[0], 0.0, PITCH_WIDTH)
         self.ball[1] = np.clip(self.ball[1], 0.0, PITCH_HEIGHT)
 
-        self._check_goal()
+        # Goal detection already happened above, before the out-of-bounds
+        # branch -- see _resolve_goal_frame.
 
         if self.replay and self.match_clock_frames % self.replay.sample_interval_ticks == 0:
             self.replay.snapshot(self.match_clock_frames, self.positions, self.velocity, self.ball, self.ball_controller)
@@ -705,6 +1091,11 @@ class game:
                 + max(0.0, 1.0 - ball_speed / 18.0) * 0.15
             )
             if self.rng.random() < float(np.clip(control_chance, 0.60, 0.99)):
+                passer = self.last_pass_player
+                if passer >= 0 and passer != index and (passer < 11) == (index < 11):
+                    self.match_stats[passer]["passes_completed"] += 1
+                self.last_pass_player = -1
+
                 self.ball_controller = index
                 self.ball_capture_player = index
                 self.ball_event = "neutral"
@@ -794,54 +1185,123 @@ class game:
     def _goal_for_player(self, player_index: int) -> np.ndarray:
         return np.array([PITCH_WIDTH/2, 100.0]) if player_index < 11 else np.array([PITCH_WIDTH/2, 0.0])
 
-    def _check_goal(self):
-        goal_top_y = 0.0
-        goal_bottom_y = PITCH_HEIGHT
-        goal_x_min = PITCH_WIDTH/2 - GOAL_WIDTH / 2.0
-        goal_x_max = PITCH_WIDTH/2 + GOAL_WIDTH / 2.0
-        ball_x = self.ball[0]
-        ball_y = self.ball[1]
+    def _resolve_goal_frame(self, prev_xy: np.ndarray, prev_height: float) -> str | None:
+        """Resolves a ball that crossed a goal plane this tick.
 
-        if ball_x >= goal_x_min and ball_x <= goal_x_max:
-            if ball_y <= goal_top_y + 0.8:
-                scoring_team = 1 
-            elif ball_y >= goal_bottom_y - 0.8:
-                scoring_team = 0 
+        Returns "goal", "rebound", or None (didn't reach the frame -- the
+        caller's normal out-of-bounds handling takes it from here).
+
+        Height matters too: the crossing z is interpolated the same way, so a
+        ball travelling over the bar is no longer a goal.
+        """
+        cur_x, cur_y = float(self.ball[0]), float(self.ball[1])
+        prev_x, prev_y = float(prev_xy[0]), float(prev_xy[1])
+
+        # Which plane, if either, did we pass through this tick?
+        if prev_y > 0.0 >= cur_y:
+            plane_y, scoring_team, inward = 0.0, 1, 1.0
+        elif prev_y < PITCH_HEIGHT <= cur_y:
+            plane_y, scoring_team, inward = PITCH_HEIGHT, 0, -1.0
+        else:
+            return None
+
+        span = cur_y - prev_y
+        t = 0.0 if abs(span) < 1e-9 else (plane_y - prev_y) / span
+        t = min(1.0, max(0.0, t))
+        cross_x = prev_x + t * (cur_x - prev_x)
+        cross_z = max(0.0, prev_height + t * (float(self.ball[4]) - prev_height))
+
+        post_centres = (PITCH_WIDTH / 2 - GOAL_WIDTH / 2.0, PITCH_WIDTH / 2 + GOAL_WIDTH / 2.0)
+        inner_min = post_centres[0] + GOAL_POST_RADIUS
+        inner_max = post_centres[1] - GOAL_POST_RADIUS
+
+        if inner_min <= cross_x <= inner_max and cross_z < GOAL_HEIGHT:
+            self._award_goal(scoring_team)
+            return "goal"
+
+        # Crossbar: inside the posts but at bar height. Comes down off the
+        # frame rather than sailing on through.
+        if inner_min <= cross_x <= inner_max and cross_z < GOAL_HEIGHT + GOAL_POST_RADIUS * 2.0:
+            self._rebound_off_frame(np.array([cross_x, plane_y]), np.array([0.0, inward]))
+            return "rebound"
+
+        # Either post. Reflect about the outward normal from the post centre,
+        # so a ball clipping the inside face deflects goalward and one
+        # clipping the outside face deflects away -- both are then re-tested
+        # next tick by this same function, which is how "in off the post"
+        # works without being special-cased.
+        for post_x in post_centres:
+            if abs(cross_x - post_x) <= GOAL_POST_RADIUS and cross_z < GOAL_HEIGHT:
+                normal = np.array([cross_x - post_x, 0.0], dtype=float)
+                if np.linalg.norm(normal) < 1e-8:
+                    normal = np.array([0.0, inward], dtype=float)
+                self._rebound_off_frame(np.array([cross_x, plane_y]), normal)
+                return "rebound"
+
+        return None
+
+    def _rebound_off_frame(self, contact: np.ndarray, normal: np.ndarray) -> None:
+        """Bounces the ball off the woodwork and leaves it in play."""
+        normal = np.asarray(normal, dtype=float)
+        norm = np.linalg.norm(normal)
+        normal = normal / norm if norm > 1e-8 else np.array([0.0, 1.0])
+
+        velocity = np.array(self.ball[2:4], dtype=float)
+        reflected = velocity - 2.0 * float(np.dot(velocity, normal)) * normal
+        self.ball[2:4] = reflected * POST_REBOUND_DAMPING
+
+        # Nudge the ball back inside along the pitch's long axis so the next
+        # tick doesn't immediately re-detect the same crossing.
+        inset = 0.35
+        contact_y = float(contact[1])
+        self.ball[0] = float(np.clip(contact[0], 0.0, PITCH_WIDTH))
+        self.ball[1] = inset if contact_y <= 0.0 else PITCH_HEIGHT - inset
+
+        self.post_hits += 1
+        # The ball is loose and nobody has touched it since the shot -- leave
+        # last_touch_* alone so a rebound that goes out still awards the right
+        # corner/goal kick, exactly as a deflection would.
+        self.ball_controller = -1
+
+    def _award_goal(self, scoring_team: int) -> None:
+        self.scores[scoring_team] += 1
+        self.last_goal_team = scoring_team
+        self.ball_controller = -1
+
+        # A goal is by definition on target, for whoever shot it.
+        if self.last_shot_player >= 0:
+            self.match_stats[self.last_shot_player]["shots_on_target"] += 1
+            self.last_shot_player = -1
+        # Charged to the beaten keeper -- index 0 / 11 by formation contract.
+        conceding_keeper = 11 if scoring_team == 0 else 0
+        self.match_stats[conceding_keeper]["goals_conceded"] += 1
+
+        # --- Evaluate Goal & Assist Statistics ---
+        scorer_name = "Own Goal"
+        if self.last_touch_player != -1:
+            touch_team = 0 if self.last_touch_player < 11 else 1
+            if touch_team == scoring_team:
+                scorer = self.all_players[self.last_touch_player]
+                scorer.scored()
+                self._match_goals[self.last_touch_player] += 1
+                scorer_name = scorer.lname
+
+                if self.assist_candidate != -1:
+                    assister = self.all_players[self.assist_candidate]
+                    assister.assisted()
+                    self._match_assists[self.assist_candidate] += 1
             else:
-                return False
+                self.assist_candidate = -1
 
-            self.scores[scoring_team] += 1
-            self.last_goal_team = scoring_team
-            self.ball_controller = -1
-            
-            # --- Evaluate Goal & Assist Statistics ---
-            scorer_name = "Own Goal"
-            if self.last_touch_player != -1:
-                touch_team = 0 if self.last_touch_player < 11 else 1
-                if touch_team == scoring_team:
-                    scorer = self.all_players[self.last_touch_player]
-                    scorer.scored()
-                    scorer_name = scorer.lname
-                    
-                    if self.assist_candidate != -1:
-                        assister = self.all_players[self.assist_candidate]
-                        assister.assisted()
-                else:
-                    self.assist_candidate = -1
+        team_label = "A" if scoring_team == 0 else "B"
+        self._trigger_goal_popup(f"{team_label}: {scorer_name}")
 
-            team_label = "A" if scoring_team == 0 else "B"
-            self._trigger_goal_popup(f"{team_label}: {scorer_name}")
-            
-            self.goal_pause_timer = 90
-            self.kickoff_team = 1 - scoring_team
-            if self.replay:
-                self.replay.event(self.match_clock_frames, ActionType.GOAL, player_idx=self.last_touch_player, team=scoring_team)
-            self.last_touch_player = -1
-            self.assist_candidate = -1
-
-            return True
-            
-        return False
+        self.goal_pause_timer = 90
+        self.kickoff_team = 1 - scoring_team
+        if self.replay:
+            self.replay.event(self.match_clock_frames, ActionType.GOAL, player_idx=self.last_touch_player, team=scoring_team)
+        self.last_touch_player = -1
+        self.assist_candidate = -1
 
     def _turn_heading_toward(self, index: int, target_dir: np.ndarray) -> np.ndarray:
         target_dir = np.asarray(target_dir, dtype=float)
@@ -889,6 +1349,7 @@ class game:
         self.ball_event = event_type
         self.ball_controller = -1
         self.ball_release_player = owner_index
+        self.last_pass_player = owner_index if event_type in ("pass", "throw_in") else -1
         self._register_touch(owner_index)
         
         if aerial:
@@ -925,7 +1386,12 @@ class game:
             if dist > 0.1:
                 unit_vec = vec / dist
                 self.heading[index] = self._turn_heading_toward(index, unit_vec)
-                self.velocity[index] = self.heading[index] * (base_speed * action["speed_mod"])
+                # A tired player is a slower player -- this is the only place
+                # fatigue actually bites, so stamina changes how a match ends
+                # rather than just being a number on a card.
+                self.velocity[index] = self.heading[index] * (
+                    base_speed * action["speed_mod"] * self._fatigue_factor(index)
+                )
             else:
                 self.velocity[index] = np.zeros(2, dtype=float)
 
@@ -945,13 +1411,23 @@ class game:
                 unit_vec = vec / dist
                 pass_type = action.get("pass_type", "normal")
 
-                if self.kickoff_pass_player == index:
+                # A throw-in is thrown, not kicked. The taker's own class has
+                # no idea it's taking one (nothing ever emitted
+                # pass_type="throw_in", which is why that branch below was
+                # dead code), so the engine forces it here -- the same way a
+                # restart taken from a pitch corner is forced into a cross
+                # just below.
+                if self.pending_restart_pass_type == "throw_in" and self.restart_player == index:
+                    pass_type = "throw_in"
+                    self.pending_restart_pass_type = None
+                elif self.kickoff_pass_player == index:
                     px, py = self.positions[index]
                     if (px <= 5.0 or px >= PITCH_WIDTH - 5.0) and (py <= 5.0 or py >= PITCH_HEIGHT - 5.0):
                         pass_type = "cross"
 
                 power = base_kick_pow * action["power"]
                 aerial = False
+                event_type = "pass"
                 if pass_type == "clearance":
                     aerial = True
                     power *= 1.2
@@ -959,17 +1435,29 @@ class game:
                     aerial = True
                     power *= 1.15
                 elif pass_type == "throw_in":
+                    # Two thirds of the player's normal passing power -- an
+                    # arm throw, not a leg. Grounded, so a teammate can
+                    # actually control it.
                     aerial = False
-                    power *= 0.8
+                    power *= THROW_IN_POWER_FACTOR
+                    event_type = "throw_in"
+
+                self.match_stats[index]["passes"] += 1
 
                 self.visual_action[index] = pass_type
                 self.visual_action_timer[index] = 15
                 if self.replay:
-                    pass_event = {"normal": ActionType.PASS, "clearance": ActionType.CLEARANCE, "cross": ActionType.CROSS}.get(
-                        pass_type, ActionType.PASS
-                    )
+                    pass_event = {
+                        "normal": ActionType.PASS,
+                        "clearance": ActionType.CLEARANCE,
+                        "cross": ActionType.CROSS,
+                        "throw_in": ActionType.THROW_IN,
+                    }.get(pass_type, ActionType.PASS)
                     self.replay.event(self.match_clock_frames, pass_event, player_idx=index, team=0 if index < 11 else 1)
-                self._release_ball(index, unit_vec, power, aerial=aerial, event_type="pass")
+                # event_type (not pass_type) is what _capture_success_probability
+                # and _attempt_capture branch on -- both already special-case
+                # "throw_in" alongside pass/cross/clearance.
+                self._release_ball(index, unit_vec, power, aerial=aerial, event_type=event_type)
 
         elif action_type == "shoot":
             if self.ball_controller == index:
@@ -983,6 +1471,13 @@ class game:
                 unit_vec_3d = vec_3d / dist_3d
                 shot_speed = base_kick_pow * action["power"]
                 aerial = bool(np.abs(unit_vec_3d[2]) > 0.1 or target_3d[2] > 0.2)
+
+                self.match_stats[index]["shots"] += 1
+                # On-target is credited later, when the ball actually reaches
+                # the frame (a goal) or is saved -- the real definition, and
+                # better than trusting where the shooter aimed.
+                self.last_shot_player = index
+
                 self.visual_action[index] = "shoot"
                 self.visual_action_timer[index] = 15
                 if self.replay:
@@ -1002,11 +1497,14 @@ class game:
             if dist <= 2.0:
                 defender_stat = action["stat"]
                 attacker_stat = self.all_players[holder_idx].attributes.ballcontrol
-                
+
                 stat_diff = defender_stat - attacker_stat
                 steal_chance = float(np.clip(0.40 + (stat_diff / 100.0), 0.10, 0.90))
 
+                self.match_stats[index]["tackles"] += 1
+
                 if self.rng.random() < steal_chance:
+                    self.match_stats[index]["tackles_won"] += 1
                     self.visual_action[index] = "tackle"
                     self.visual_action_timer[index] = 15
                     if self.replay:
@@ -1053,10 +1551,17 @@ class game:
                 ball_speed = np.linalg.norm(self.ball[2:4])
                 gk_attrs = self.all_players[index].attributes
                 
-                save_stat = (gk_attrs.agility * 0.6) + (gk_attrs.vision * 0.4)
-                save_chance = float(np.clip(0.20 + (save_stat / 100.0) * 0.60, 0.10, 0.95))
+                save_stat = (gk_attrs.agility * 0.6) + (gk_attrs.vision * 0.4) + (gk_attrs.ballcontroll)*0.3
+                save_chance = float(np.clip((save_stat / 100.0) * 0.80, 0.10, 0.95))
                 
                 if self.rng.random() < save_chance:
+                    self.match_stats[index]["saves"] += 1
+                    # A shot that had to be saved was on target. Credited to
+                    # whoever struck it, not to the keeper.
+                    if self.last_shot_player >= 0:
+                        self.match_stats[self.last_shot_player]["shots_on_target"] += 1
+                        self.last_shot_player = -1
+
                     self.visual_action[index] = "save"
                     self.visual_action_timer[index] = 20
                     if self.replay:
@@ -1234,6 +1739,10 @@ class game:
                 "own_goal": np.array([35.0, 0.0]) if i < 11 else np.array([35.0, 100.0]),
                 "must_pass_next": self.must_pass_next and self.must_pass_player == i and self.ball_controller == i,
                 "is_loose": (self.ball_controller == -1),
+                # 0-100. Available for player classes that want to pace
+                # themselves; fatigue already slows movement regardless (see
+                # _fatigue_factor).
+                "stamina": float(self.stamina[i]),
                 "rng": self.rng,
             }
             intended_action = self.all_players[i].step(state)
@@ -1243,6 +1752,10 @@ class game:
 
         for i in resolve_order:
             self._resolve_action(int(i), actions[int(i)])
+
+        # Charged after the actions land, so this step's cost reflects the
+        # velocities those actions just set.
+        self._drain_stamina()
 
 
 def run_match(teamA, teamB, max_steps: int = 10800, fps: int = 60, render: bool = False, window_size=(1280, 800), title: str = "Packed Football", formation_home="4-4-2", formation_away="4-4-2"):
