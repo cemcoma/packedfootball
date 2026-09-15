@@ -31,7 +31,8 @@ PlayerSession="*res://scripts/autoload/PlayerSession.gd"
 window/size/viewport_width=960
 window/size/viewport_height=540
 window/stretch/mode="canvas_items"
-window/handheld/orientation="landscape"
+window/stretch/aspect="expand"
+window/handheld/orientation=4
 
 [editor_plugins]
 
