@@ -110,14 +110,14 @@ text = "Bench"
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
-mouse_filter = 0
 horizontal_scroll_mode = 0
+vertical_scroll_mode = 3
 
 [node name="BenchGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/BenchScroll" unique_id=921892683]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-mouse_filter = 0
+mouse_filter = 2
 theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 10
 columns = 4
