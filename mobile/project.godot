@@ -22,9 +22,9 @@ Backend="*res://scripts/autoload/Backend.gd"
 GameProfile="*res://scripts/autoload/GameProfile.gd"
 MatchSession="*res://scripts/autoload/MatchSession.gd"
 PackSession="*res://scripts/autoload/PackSession.gd"
-PlayerSession="*res://scripts/autoload/PlayerSession.gd"
 IapClient="*res://scripts/autoload/IapClient.gd"
 ThemeManager="*res://scripts/autoload/ThemeManager.gd"
+PlayerSession="*res://scripts/autoload/PlayerSession.gd"
 
 [display]
 
@@ -40,6 +40,10 @@ enabled=PackedStringArray("res://addons/godotx_revenue_cat/plugin.cfg")
 [gui]
 
 theme/custom="res://theme/AppTheme.tres"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
 
 [rendering]
 

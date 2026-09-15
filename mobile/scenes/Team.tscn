@@ -69,18 +69,17 @@ toggle_mode = true
 button_group = SubResource("ButtonGroup_formations")
 text = "4-2-3-1"
 
-[node name="FormationSpacer" type="Control" parent="Margin/RootVBox/FormationRow"]
+[node name="FormationSpacer" type="Control" parent="Margin/RootVBox/FormationRow" unique_id=1011731955]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="OverallLabel" type="Label" parent="Margin/RootVBox/FormationRow"]
+[node name="OverallLabel" type="Label" parent="Margin/RootVBox/FormationRow" unique_id=1591920888]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 18
 text = "Overall --"
 
-[node name="AutoButton" type="Button" parent="Margin/RootVBox/FormationRow"]
+[node name="AutoButton" type="Button" parent="Margin/RootVBox/FormationRow" unique_id=176537209]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Fill every slot with the strongest eligible player you own."
@@ -111,12 +110,14 @@ text = "Bench"
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
+mouse_filter = 0
 horizontal_scroll_mode = 0
 
 [node name="BenchGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/BenchScroll" unique_id=921892683]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+mouse_filter = 0
 theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 10
 columns = 4

@@ -1,11 +1,11 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://bp4g8hkmqipxc"]
 
-[ext_resource type="Script" path="res://scripts/screens/DailyTournament.gd" id="1"]
+[ext_resource type="Script" uid="uid://cor3d48luf4r1" path="res://scripts/screens/DailyTournament.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
-[ext_resource type="PackedScene" path="res://scenes/components/CurrencyChip.tscn" id="3"]
-[ext_resource type="PackedScene" path="res://scenes/components/EnergyBar.tscn" id="4"]
+[ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="3"]
+[ext_resource type="PackedScene" uid="uid://d3yxqql70v6n8" path="res://scenes/components/EnergyBar.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="5"]
-[ext_resource type="Script" path="res://scripts/components/StandingsTable.gd" id="6"]
+[ext_resource type="Script" uid="uid://l3fnvnqxw6uh" path="res://scripts/components/StandingsTable.gd" id="6"]
 
 [node name="DailyTournament" type="Control" unique_id=1999000001]
 layout_mode = 3
@@ -18,8 +18,6 @@ script = ExtResource("1")
 
 [node name="Background" parent="." unique_id=1999000002 instance=ExtResource("2")]
 layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
 
 [node name="Margin" type="MarginContainer" parent="." unique_id=1999000003]
 layout_mode = 1
@@ -44,7 +42,6 @@ theme_override_constants/separation = 14
 [node name="TierLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1999000006]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 22
 text = "Tournament"
 
@@ -52,7 +49,6 @@ text = "Tournament"
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 13
 text = "Ends in --"
 
@@ -123,7 +119,6 @@ theme_override_constants/separation = 12
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 2
 
@@ -135,9 +130,9 @@ text = "Enter today's tournament"
 
 [node name="PlayButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1999000022]
 unique_name_in_owner = true
+visible = false
 custom_minimum_size = Vector2(200, 40)
 layout_mode = 2
-visible = false
 text = "Play match"
 
 [node name="BackButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1999000023]
@@ -148,18 +143,18 @@ text = "Back"
 [node name="BusyPopup" parent="." unique_id=1999000024 instance=ExtResource("5")]
 unique_name_in_owner = true
 layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 
 [node name="ResultBanner" type="Control" parent="." unique_id=1999000025]
 unique_name_in_owner = true
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-visible = false
 
 [node name="Scrim" type="ColorRect" parent="ResultBanner" unique_id=1999000026]
 layout_mode = 1

@@ -49,7 +49,7 @@ TIER_RANGES = {
     "bronze": (45, 53),
     "silver": (55, 60),
     "gold": (62, 70),
-    "platinum": (72, 87),
+    "platinum": (72, 77),
     "diamond": (80, 85),
     "special": (85, 90),
     "icon": (95,100)
@@ -79,9 +79,9 @@ _SKILL_STAT_NAMES = tuple(
 HEIGHT_PROFILES = {
     "GK": (180, 6),
     "CB": (183, 8),
-    "ST": (180, 13),
-    "CDM": (182, 10),
-    "CM": (177, 10),
+    "ST": (180, 10),
+    "CDM": (182, 8),
+    "CM": (177, 7),
     "CAM": (175, 8),
     "LB": (177, 5),
     "RB": (177, 5),
