@@ -8,10 +8,10 @@ Work in progress.
 
 | Area | Progress |
 | --- | --- |
-| Immersive gameplay (agents deciding in real time, tendencies, hidden stats) | 80% |
+| Immersive gameplay (agents deciding in real time, tendencies, hidden stats) | 90% |
 | Pack mechanics | 90% |
-| Social mechanics | 10% |
-| PvP | 20% |
+| Social mechanics | 5% |
+| PvP | 95% |
 
 ## Repo layout
 
