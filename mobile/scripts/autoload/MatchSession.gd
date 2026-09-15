@@ -17,6 +17,15 @@ extends Node
 ## per-match aggregation lives here rather than in any one screen, since two
 ## of them need the same numbers.
 
+## Where the post-match screens go when the player is done. Quick Match
+## leaves it alone; a tournament match sets it so Continue returns to the
+## tournament instead of dumping the player on the Menu mid-run.
+##
+## Same indirection PlayerSession.return_scene already uses. NOTE for
+## callers: clear() resets this, and both exit paths call clear() BEFORE
+## navigating -- so read it into a local first.
+const DEFAULT_RETURN_SCENE := "res://scenes/Menu.tscn"
+
 const TEAM_HOME := 0
 const TEAM_AWAY := 1
 const PLAYERS_PER_TEAM := 11
@@ -32,6 +41,9 @@ var credits_earned: int = 0
 ## `statistics`, which are career totals. Empty for the bundled demo replay
 ## and for any response from a backend older than this field.
 var player_match_stats: Array = []
+
+var return_scene: String = DEFAULT_RETURN_SCENE
+var tournament: Dictionary = {}
 
 
 func has_pending() -> bool:
@@ -98,6 +110,9 @@ func set_from_match_response(data: Dictionary) -> void:
 
 	var stats_raw = data.get("player_match_stats")
 	player_match_stats = stats_raw if stats_raw is Array else []
+
+	var tournament_raw = data.get("tournament")
+	tournament = tournament_raw if tournament_raw is Dictionary else {}
 
 
 # ------------------------------------------------------------- lookups
@@ -225,3 +240,7 @@ func clear() -> void:
 	opponent_is_bot = false
 	credits_earned = 0
 	player_match_stats = []
+	tournament = {}
+	# Back to the default, or a tournament return would leak into the next
+	# Quick Match and send it somewhere it never came from.
+	return_scene = DEFAULT_RETURN_SCENE

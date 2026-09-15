@@ -1,15 +1,79 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/screens/StubScene.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/screens/TournamentHub.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 
-[node name="Tournament" type="Node2D"]
+[node name="Tournament" type="Control" unique_id=1998000001]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1")
-title = "Tournament"
-back_scene = "res://scenes/Play.tscn"
 
-[node name="Background" parent="." instance=ExtResource("2")]
-show_behind_parent = true
+[node name="Background" parent="." unique_id=1998000002 instance=ExtResource("2")]
 layout_mode = 1
 anchor_right = 1.0
 anchor_bottom = 1.0
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=1998000003]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1998000004]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TitleLabel" type="Label" parent="Margin/RootVBox" unique_id=1998000005]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "TOURNAMENTS"
+
+[node name="Spacer" type="Control" parent="Margin/RootVBox" unique_id=1998000006]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="DailyRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1998000007]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="DailyButton" type="Button" parent="Margin/RootVBox/DailyRow" unique_id=1998000008]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 50)
+layout_mode = 2
+size_flags_horizontal = 0
+theme_override_font_sizes/font_size = 18
+text = "Daily Tournament"
+
+[node name="DailyHint" type="Label" parent="Margin/RootVBox/DailyRow" unique_id=1998000009]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 11
+text = "Ten matches a day against your own league. Finish top to go up, bottom to go down. Medals and cash for the best finishes."
+autowrap_mode = 2
+
+[node name="ComingSoonBox" type="VBoxContainer" parent="Margin/RootVBox" unique_id=1998000010]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Spacer2" type="Control" parent="Margin/RootVBox" unique_id=1998000011]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="BackButton" type="Button" parent="Margin/RootVBox" unique_id=1998000012]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Back to Play"

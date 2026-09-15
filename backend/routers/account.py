@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 from config import INVENTORY_CAP, STARTER_FORMATION, STARTER_TIER
 from deps import game_state_for, verify_id_token
 from engine import generate_starter_roster
+from services import energy as energy_service
 
 router = APIRouter(tags=["account"])
 
@@ -30,20 +31,34 @@ async def bootstrap_account(uid: str = Depends(verify_id_token)):
     (see mobile/scripts/GameProfile.gd's load_all()), which never had an
     equivalent local-squad fallback -- without this, a brand new account
     created straight through Godot had no cards and no roster at all.
+
+    Also carries the two numbers every screen needs but nothing else hands
+    over: the inventory cap, and the energy bar. Both ride along here because
+    this already runs on every login -- a separate GET for each would be two
+    more round trips before the Menu can draw itself.
     """
     state = game_state_for(uid)
     existing = await state.client.get_document(f"users/{uid}")
     if existing is not None:
-        return {"created": False, "inventory_cap": INVENTORY_CAP}
+        current, anchor = energy_service.from_profile(existing)
+        return {
+            "created": False,
+            "inventory_cap": INVENTORY_CAP,
+            "energy": energy_service.describe(current, anchor),
+        }
 
     seed = secrets.randbits(63)
     roster = generate_starter_roster(STARTER_FORMATION, STARTER_TIER, seed=seed)
     profile = await state.load_or_create_profile(
         default_roster=roster, default_display_name=uid[:8], default_formation=STARTER_FORMATION
     )
+    # A brand new account has no energy fields yet, which from_profile reads
+    # as a full bar -- exactly right, and the reason no migration is needed.
+    current, anchor = energy_service.from_profile(None)
     return {
         "created": True,
         "formation": profile["formation"],
         "roster_size": len(profile["roster"]),
         "inventory_cap": INVENTORY_CAP,
+        "energy": energy_service.describe(current, anchor),
     }

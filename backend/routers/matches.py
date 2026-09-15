@@ -14,10 +14,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from firebase_admin import firestore
 from pydantic import BaseModel
 
-from config import QUICK_MATCH_REWARD_CREDITS
+from config import QUICK_MATCH_ENERGY_COST, QUICK_MATCH_REWARD_CREDITS
 from admin_firestore_client import AdminFirestoreClient
 from deps import game_state_for, verify_id_token
 from engine import ENGINE_VERSION, GameState, Midfielder, PLAYER_CLASS_MAP, REPLAY_FORMAT_VERSION
+from services import energy as energy_service
 from services.match import (
     persist_player_stats,
     pick_opponent_profile,
@@ -32,15 +33,25 @@ router = APIRouter(tags=["matches"])
 @router.post("/match/quick")
 async def quick_match(uid: str = Depends(verify_id_token)):
     """Quick Match: always-available, casual match against a randomly
-    picked opponent (see _pick_opponent_profile) for a small credit reward
+    picked opponent (see pick_opponent_profile) for a small credit reward
     (see QUICK_MATCH_REWARD_CREDITS). Records wins/losses/draws like
     /match/simulate does.
+
+    Setting the cost to 0 in config turns the gate off without touching this code 
     """
     caller_state = game_state_for(uid)
     caller_profile = await caller_state.load_or_create_profile(default_roster=[], default_display_name=uid[:8])
     if len(caller_profile["roster"]) != 11:
         raise HTTPException(400, "Your roster must have exactly 11 players")
     validate_formation_positions(caller_profile)
+
+    try:
+        energy_after = await energy_service.spend(caller_state.client, uid, QUICK_MATCH_ENERGY_COST)
+    except energy_service.NotEnoughEnergy as exc:
+        # 402 rather than 403: the client distinguishes "you can't afford this"
+        # from every other failure and shows the refill offer instead of
+        # "try again", which would be advice that cannot work.
+        raise HTTPException(402, str(exc)) from exc
 
     opponent_uid, opponent_profile = await pick_opponent_profile(uid)
     is_bot = opponent_uid.startswith("bot_")
@@ -109,6 +120,7 @@ async def quick_match(uid: str = Depends(verify_id_token)):
         "opponent_is_bot": is_bot,
         "credits_earned": credits_earned,
         "credits_remaining": new_credits,
+        "energy": energy_after, #so the client knows energy without making a seperate req.uest
         "wins": wins,
         "losses": losses,
         "draws": draws,

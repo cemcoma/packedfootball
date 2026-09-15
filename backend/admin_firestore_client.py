@@ -8,13 +8,95 @@ token -- the CLIENT-TRUSTED path (see game_state.py's own module docstring).
 Here it's this class instead, backed by the Admin SDK (a service account),
 so GameState's exact same persistence logic can run as the authoritative
 side behind the backend without being duplicated.
+
+Two things here are NOT part of that five-method protocol and exist only for
+the backend: `query_top` (leaderboards) and `run_transaction` (anything that
+moves a balance). GameState never calls either.
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
+from typing import Any, Callable
 
 from firebase_admin import firestore
+
+# Taken straight from google-cloud-firestore rather than through
+# firebase_admin's re-export of it. firebase-admin depends on that package, so
+# it is always installed, and this is the import its own documentation uses --
+# which makes it the one that can't stop resolving because a firebase-admin
+# release changed what it re-exports.
+from google.cloud import firestore as google_firestore
+
+
+class TransactionScope:
+    """The read/write surface available INSIDE a transaction.
+
+    BY PATH ONLY. There is deliberately no list/query method: Firestore
+    transactions lock everything they read, so listing a collection inside one
+    locks every document in it. Gather the ids you need OUTSIDE the
+    transaction and address them by path in here.
+
+    Two rules the API enforces and this class cannot hide:
+
+      1. EVERY READ BEFORE EVERY WRITE. get() raises the moment a write has
+         been issued, rather than letting Firestore reject the whole
+         transaction later with a message that doesn't say which read did it.
+      2. THE BODY MAY RUN MORE THAN ONCE. On contention Firestore aborts and
+         retries it, so it has to be a pure function of what it reads -- no
+         counters, no appending to a list from an enclosing scope, no side
+         effects other than the writes below.
+
+    Writes are buffered by Firestore and applied on commit, so a get() after a
+    set() would read the OLD value even if the ordering were allowed. Read
+    everything, compute, then write.
+    """
+
+    def __init__(self, client: "AdminFirestoreClient", transaction):
+        self._client = client
+        self._transaction = transaction
+        self._has_written = False
+        self.uid = client.uid
+
+    def _guard_read(self) -> None:
+        if self._has_written:
+            raise RuntimeError(
+                "TransactionScope: every read must come before every write. "
+                "Move this get()/get_all() above the first set()/delete()."
+            )
+
+    def get(self, path: str) -> dict | None:
+        self._guard_read()
+        snap = self._client._ref(path).get(transaction=self._transaction)
+        return snap.to_dict() if snap.exists else None
+
+    def get_all(self, paths: list[str]) -> dict[str, dict | None]:
+        """Every path in ONE round trip, keyed by the path asked for.
+
+        Settlement reads a group, its six entries and their six user documents;
+        one round trip instead of thirteen is the difference between a
+        comfortable transaction and one that keeps losing its retry race.
+        """
+        self._guard_read()
+        if not paths:
+            return {}
+        refs = [self._client._ref(p) for p in paths]
+        by_ref_path = {ref.path: p for ref, p in zip(refs, paths)}
+        found: dict[str, dict | None] = {p: None for p in paths}
+        for snap in self._client._db.get_all(refs, transaction=self._transaction):
+            if snap.exists:
+                found[by_ref_path[snap.reference.path]] = snap.to_dict()
+        return found
+
+    def set(self, path: str, data: dict, merge: bool = True) -> None:
+        self._has_written = True
+        self._transaction.set(self._client._ref(path), data, merge=merge)
+
+    def delete(self, path: str) -> None:
+        # Deleting a path that doesn't exist is a no-op, not an error.
+        self._has_written = True
+        self._transaction.delete(self._client._ref(path))
 
 
 class AdminFirestoreClient:
@@ -50,6 +132,44 @@ class AdminFirestoreClient:
 
     async def delete_document(self, path: str) -> None:
         await asyncio.to_thread(self._ref(path).delete)
+
+    async def run_transaction(self, body: Callable[[TransactionScope], Any]) -> Any:
+        """Runs `body(scope)` atomically and returns whatever it returns.
+
+        Everything the body reads is locked for the duration, so a concurrent
+        transaction touching the same documents either waits or is retried.
+        The classic read-then-write race -- two requests both seeing 500
+        credits and both paying out -- cannot happen across the boundary.
+
+        Raising from inside `body` rolls the whole thing back and propagates:
+        nothing it wrote is applied. That is how an endpoint refuses
+        (HTTPException) after a read it could only do transactionally, e.g.
+        "that card is already gone".
+
+        `body` is a PLAIN def, not async. It runs on a worker thread, because
+        the SDK's transaction API is synchronous and the retry loop blocks --
+        the same way every other method here bridges the blocking client into
+        async. Every other function in this backend is async, so this is the
+        one place the reflex is wrong; passing a coroutine function raises
+        immediately rather than silently committing an empty transaction.
+
+        See TransactionScope for the two rules the body has to follow.
+        """
+        if inspect.iscoroutinefunction(body):
+            raise TypeError(
+                "run_transaction body must be a plain def, not async def -- it "
+                "runs on a worker thread and cannot be awaited. Do any awaiting "
+                "before or after the transaction, never inside it."
+            )
+
+        def _run():
+            @google_firestore.transactional
+            def _txn(transaction):
+                return body(TransactionScope(self, transaction))
+
+            return _txn(self._db.transaction())
+
+        return await asyncio.to_thread(_run)
 
     async def query_top(self, collection: str, order_by: str, limit: int, descending: bool = True) -> list[dict]:
         """Top `limit` docs in `collection` ordered by `order_by` (dotted paths

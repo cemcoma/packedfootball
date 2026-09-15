@@ -199,10 +199,12 @@ func _apply_theme_colors() -> void:
 	_tendencies_heading.add_theme_color_override("font_color", heading)
 	_career_heading.add_theme_color_override("font_color", heading)
 	_origin_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
-	# On a dark scrim in both themes, so these hardcode white rather than
-	# reading the palette -- see ThemeManager's note.
-	_confirm_label.add_theme_color_override("font_color", Color.WHITE)
-	_confirm_footnote.add_theme_color_override("font_color", Color.WHITE)
+	# The confirm text sits inside a themed PanelContainer -- which has its own
+	# background in both modes -- so it takes the Theme's Label colour and
+	# needs no override at all. It used to hardcode white, from back when
+	# PanelContainer was unthemed and fell through to Godot's dark default;
+	# that white is now invisible on the light theme's near-white panel.
+	# Only the reward amount is coloured, and that's the currency's accent.
 	_confirm_reward_label.add_theme_color_override(
 		"font_color", CurrencyDisplay.color_for("credits")
 	)

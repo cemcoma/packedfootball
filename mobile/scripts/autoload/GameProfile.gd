@@ -23,16 +23,16 @@ extends Node
 
 const DEFAULT_FORMATION := "4-4-2"
 
-## Fallback bench limit, used only until the first backend response arrives
-## with the real one. backend/main.py's INVENTORY_CAP is the authority and
-## the only copy worth editing -- it rides in on /account/bootstrap (which
-## load_all() calls on every login), so this is what's on screen for the few
-## hundred milliseconds before that lands, and after a failed bootstrap.
 const DEFAULT_INVENTORY_CAP := 100
 
 ## The live limit: DEFAULT_INVENTORY_CAP until the server says otherwise.
 ## Read this, never the constant.
 var inventory_cap: int = DEFAULT_INVENTORY_CAP
+
+## The energy bar, exactly as the server describes it -- amount, max, and the
+## SECONDS until the next point. Cached here because four screens show it and
+## none of them should have to fetch it for themselves.
+var energy: Dictionary = {}
 
 var is_loaded: bool = false
 
@@ -110,6 +110,7 @@ func load_all() -> void:
 	var bootstrap: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_POST, "/account/bootstrap")
 	if bootstrap.ok:
 		apply_inventory_cap(bootstrap.data.get("inventory_cap"))
+		apply_energy(bootstrap.data.get("energy"))
 
 	var doc = await Firestore.get_document(_user_doc_path())
 	var ids: Array = []
@@ -122,8 +123,6 @@ func load_all() -> void:
 		losses = _int(doc, "losses")
 		draws = _int(doc, "draws")
 		formation = _str(doc, "formation", DEFAULT_FORMATION)
-		# Absent on every account created before kits existed -- an empty
-		# string parses to the default kit, so nothing needs migrating.
 		kit = _str(doc, "kit", "")
 		ids = _array(doc, "roster_player_ids", [])
 
@@ -157,8 +156,6 @@ func refresh_currencies() -> bool:
 	medals = _int(doc, "medals", medals)
 	return true
 
-
-## Returns benched cards, each tagged with a .doc_id for later updates.
 func load_inventory() -> Array:
 	var pointers: Array = await Firestore.list_collection("users/%s/inventory" % FirebaseAuth.uid)
 	var cards: Array = []
@@ -174,7 +171,6 @@ func load_inventory() -> Array:
 		cards.append(card)
 	return cards
 
-
 func _load_cards(ids: Array) -> Array:
 	var cards: Array = []
 	for id in ids:
@@ -184,13 +180,6 @@ func _load_cards(ids: Array) -> Array:
 		cards.append(PlayerCard.from_fields(fields, id))
 	return cards
 
-
-## Switches the LIVE (possibly unsaved) formation, carrying a card over to a
-## new slot with the same role it was already playing (e.g. a CB stays a CB
-## moving 4-4-2 -> 3-5-2). A slot whose role doesn't exist in the new
-## formation (or that was empty already) ends up unassigned, and its old
-## card (if any) simply falls back into the bench pool -- bench membership
-## is always derived (see bench_ids()), never tracked separately.
 func switch_formation(new_name: String) -> void:
 	var old_slots: Array = Formations.get_formation(formation)
 	var new_slots: Array = Formations.get_formation(new_name)
@@ -216,25 +205,10 @@ func switch_formation(new_name: String) -> void:
 	formation = new_name
 	slot_assignment = new_assignment
 
-
-## Reverts the live formation/slot_assignment back to the last-saved
-## snapshot, discarding any in-progress edits -- used when leaving Team
-## without saving (see Team.gd's back-button handler). A no-op when nothing
-## is dirty.
 func discard_changes() -> void:
 	formation = saved_formation
 	slot_assignment = saved_slot_assignment.duplicate()
 
-
-## How many cards hold a users/{uid}/inventory pointer document -- which is
-## exactly what the backend counts against INVENTORY_CAP.
-##
-## Deliberately NOT bench_ids().size(): that's derived from the LIVE
-## slot_assignment, so pulling a player out of the XI without saving would
-## make the Shop think a slot had opened up when Firestore still disagrees.
-## .doc_id is the saved truth (load_all sets it, save_team keeps it honest
-## in both directions, /pack/open returns it for new cards), so this only
-## moves when the server's count does.
 func inventory_count() -> int:
 	var count := 0
 	for player_id in all_cards.keys():
@@ -243,42 +217,41 @@ func inventory_count() -> int:
 			count += 1
 	return count
 
-
 func inventory_space() -> int:
 	return maxi(0, inventory_cap - inventory_count())
 
-
-## Takes the authoritative cap from any endpoint that returns one
-## (/account/bootstrap, /pack/open, /player/release). Ignores a missing or
-## nonsensical value rather than trusting it blindly -- a null would be a
-## hard type error assigned into an int, and a zero would silently lock the
-## Shop for everyone.
 func apply_inventory_cap(value) -> void:
 	if typeof(value) in [TYPE_INT, TYPE_FLOAT] and int(value) > 0:
 		inventory_cap = int(value)
 
 
-## Drops a released card out of the cache. Clears any slot still holding it
-## as a last resort -- the backend refuses to release an XI player, so this
-## should never fire, but a half-cleared cache would show a card that no
-## longer exists on the pitch.
+## Folds an energy block in from any response that carries one --
+## /account/bootstrap, /match/quick, /tournament/match, /energy/refill. Every
+## endpoint that SPENDS energy returns the bar afterwards, so the common case
+## needs no extra request at all.
+func apply_energy(block) -> void:
+	if block is Dictionary and block.has("energy"):
+		energy = block
+
+func refresh_energy() -> bool:
+	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/energy")
+	if not res.ok:
+		return false
+	apply_energy(res.data)
+	return true
+
 func release_card(player_id: String) -> void:
 	all_cards.erase(player_id)
 	for i in range(slot_assignment.size()):
 		if slot_assignment[i] == player_id:
 			slot_assignment[i] = ""
 
-
-## Folds a just-saved restyle back into the cached card, so every screen
-## showing it redraws with the new look without a reload.
 func set_card_appearance(player_id: String, appearance: Dictionary) -> void:
 	if not all_cards.has(player_id):
 		return
 	var card: PlayerCard = all_cards[player_id]
 	card.appearance = appearance
 
-
-## Every id in all_cards not currently occupying a slot.
 func bench_ids() -> Array:
 	var assigned: Dictionary = {}
 	for player_id in slot_assignment:
@@ -290,15 +263,6 @@ func bench_ids() -> Array:
 			ids.append(player_id)
 	return ids
 
-
-## Persists the current live formation/slot_assignment to Firestore (mirrors
-## game_state.py's save_team): a roster card that still carries a .doc_id
-## just moved bench->roster, so its stale bench pointer document gets
-## deleted; a bench card with no .doc_id just moved roster->bench, so it
-## gets a fresh one created. On success, refreshes saved_formation/
-## saved_slot_assignment so is_dirty() goes false again. Returns false
-## (writing nothing) if any slot is still empty -- callers should already
-## be blocking that in their own UI, this is just a last-resort guard.
 func save_team() -> bool:
 	for player_id in slot_assignment:
 		if player_id == "":
@@ -335,12 +299,6 @@ func _roster_cards() -> Array:
 			cards.append(all_cards[player_id])
 	return cards
 
-
-## Average overall of the currently-assigned starting XI (mirrors
-## packedfootball/main.py's Profile screen: avg_overall = round(sum(p.overall
-## for p in user_starting_xi) / len(user_starting_xi))). 0 if no slot is
-## filled yet -- the Python original never had this case since it always had
-## exactly 11 real players, but Godot's roster can be partially assigned.
 func average_overall() -> int:
 	var cards := _roster_cards()
 	if cards.is_empty():
@@ -351,27 +309,15 @@ func average_overall() -> int:
 		total += typed_card.overall()
 	return int(round(float(total) / float(cards.size())))
 
-
-## Renames the profile and updates the local cache immediately so the UI
-## reflects it without a reload. Mirrors game_state.py's set_display_name.
 func set_display_name(new_name: String) -> bool:
 	var ok := await Firestore.set_document(_user_doc_path(), {"display_name": new_name}, true)
 	if ok:
 		display_name = new_name
 	return ok
 
-
-## The manager's shirt, parsed. Always returns a usable design: an account
-## that has never opened Customize Kit, or one holding a string this build
-## can't make sense of, gets KitDesign's default rather than null.
 func kit_design() -> KitDesign:
 	return KitDesign.parse(kit)
 
-
-## Saves a shirt to users/{uid}.kit and updates the local cache on success.
-## Mirrors set_display_name -- a direct client write, which firestore.rules
-## allows for exactly this field set (`kit` is cosmetic; nothing in the sim
-## or the economy reads it).
 func set_kit(design: KitDesign) -> bool:
 	var encoded := design.serialize()
 	var ok := await Firestore.set_document(_user_doc_path(), {"kit": encoded}, true)
@@ -395,35 +341,18 @@ func reset() -> void:
 	draws = 0
 	kit = ""
 	inventory_cap = DEFAULT_INVENTORY_CAP
+	energy = {}
 	formation = DEFAULT_FORMATION
 	slot_assignment = []
 	all_cards = {}
 	saved_formation = DEFAULT_FORMATION
 	saved_slot_assignment = []
 
-
-## Folds newly-bought cards (and the post-purchase credit balance) into the
-## live cache after a successful POST /pack/open -- called from Shop.gd.
-## The cards are already real Firestore documents server-side by the time
-## this runs (added to players/{id} + users/{uid}/inventory/{id}); this
-## just makes them show up as bench cards immediately (e.g. back on the
-## Team screen) without a full reload.
-## Cards only -- the balance that paid for them comes back separately via
-## apply_currency_balances(), since a pack can now be priced in any one of
-## the three currencies rather than always credits.
 func add_purchased_cards(cards: Array) -> void:
 	for card in cards:
 		var typed_card: PlayerCard = card
 		all_cards[typed_card.player_id] = typed_card
 
-
-## Folds an authoritative balance from a currency-affecting backend endpoint
-## (POST /currency/exchange/redeem, /deals/redeem) into the live cache. Pass
-## null (the default) for whichever balance a given endpoint's response
-## doesn't carry, so a caller can't accidentally zero out a currency that
-## endpoint never touched. NOT used for bucks bought via the Bucks tab --
-## RevenueCat's webhook grants those independently of this client, so
-## CurrencyPanel.gd just calls load_all() again after a purchase instead.
 func apply_currency_balances(new_credits = null, new_bucks = null, new_medals = null) -> void:
 	if typeof(new_credits) in [TYPE_INT, TYPE_FLOAT]:
 		credits = new_credits

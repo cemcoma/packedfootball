@@ -28,6 +28,7 @@ extends Control
 @onready var _account_credits_chip: CurrencyChip = %AccountCreditsChip
 @onready var _account_bucks_chip: CurrencyChip = %AccountBucksChip
 @onready var _account_medals_chip: CurrencyChip = %AccountMedalsChip
+@onready var _account_energy_bar: EnergyBar = %AccountEnergyBar
 
 
 func _ready() -> void:
@@ -53,6 +54,13 @@ func _refresh_account_panel() -> void:
 	_account_credits_chip.set_amount(GameProfile.credits)
 	_account_bucks_chip.set_amount(GameProfile.bucks)
 	_account_medals_chip.set_amount(GameProfile.medals)
+	# Energy sits with the balances because that is what it is now: a thing
+	# you spend and run out of. load_all() already fetched it at sign-in, so
+	# this costs no request -- it is only re-read if that somehow missed.
+	_account_energy_bar.set_energy(GameProfile.energy)
+	if GameProfile.energy.is_empty():
+		await GameProfile.refresh_energy()
+		_account_energy_bar.set_energy(GameProfile.energy)
 
 
 func _on_play_pressed() -> void:

@@ -24,6 +24,7 @@ const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
 @onready var _bucks_chip: CurrencyChip = %BucksChip
 @onready var _medals_chip: CurrencyChip = %MedalsChip
 @onready var _inventory_label: Label = %InventoryLabel
+@onready var _energy_bar: EnergyBar = %EnergyBar
 @onready var _currency_tabs: CurrencyPanel = %CurrencyTabs
 @onready var _packs_tab_button: Button = %PacksTabButton
 @onready var _currency_tab_button: Button = %CurrencyTabButton
@@ -82,6 +83,7 @@ func _refresh_currency_labels() -> void:
 	_credits_chip.set_amount(GameProfile.credits)
 	_bucks_chip.set_amount(GameProfile.bucks)
 	_medals_chip.set_amount(GameProfile.medals)
+	_energy_bar.set_energy(GameProfile.energy)
 	_refresh_inventory_label()
 
 func _refresh_inventory_label() -> void:
@@ -142,6 +144,7 @@ func _refresh_and_load() -> void:
 	_busy_popup.visible = true
 
 	var ok: bool = await GameProfile.refresh_currencies()
+	await GameProfile.refresh_energy()
 	_refresh_currency_labels()
 
 	_busy_popup.set_status("Loading packs...")

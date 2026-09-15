@@ -5,6 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://dqqqu4co1ircr" path="res://sprites/title.png" id="3_11y2r"]
 [ext_resource type="Texture2D" uid="uid://ckueuenwg424p" path="res://sprites/backgrounds/general_background_light_medium.jpg" id="3_jmdev"]
 [ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://scenes/components/EnergyBar.tscn" id="energybar"]
 
 [node name="Menu" type="Control" unique_id=2071876182]
 layout_mode = 3
@@ -74,24 +75,17 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Settings"
 
-[node name="AccountPanel" type="Panel" parent="." unique_id=575644052]
-layout_mode = 0
+[node name="AccountPanel" type="PanelContainer" parent="." unique_id=575644052]
+layout_mode = 1
+anchors_preset = 4
 anchor_top = 0.5
 anchor_bottom = 0.5
 offset_left = 24.0
-offset_top = -110.0
 offset_right = 264.0
-offset_bottom = 190.0
+grow_vertical = 2
 
 [node name="Margin" type="MarginContainer" parent="AccountPanel" unique_id=1572266967]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_top = -3.0
-offset_bottom = 3.0
-grow_horizontal = 2
-grow_vertical = 2
+layout_mode = 2
 theme_override_constants/margin_left = 14
 theme_override_constants/margin_top = 14
 theme_override_constants/margin_right = 14
@@ -152,5 +146,9 @@ unique_name_in_owner = true
 layout_mode = 2
 
 [node name="AccountMedalsChip" parent="AccountPanel/Margin/VBox" unique_id=478969367 instance=ExtResource("5")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="AccountEnergyBar" parent="AccountPanel/Margin/VBox" unique_id=478969368 instance=ExtResource("energybar")]
 unique_name_in_owner = true
 layout_mode = 2

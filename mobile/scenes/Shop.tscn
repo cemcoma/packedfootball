@@ -6,6 +6,7 @@
 [ext_resource type="PackedScene" path="res://scenes/components/CurrencyPanel.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://scenes/components/CurrencyChip.tscn" id="5"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="6"]
+[ext_resource type="PackedScene" path="res://scenes/components/EnergyBar.tscn" id="energybar"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_shop_tabs"]
 
@@ -52,6 +53,11 @@ layout_mode = 2
 size_flags_vertical = 4
 theme_override_font_sizes/font_size = 13
 text = "Bench 0 / 50"
+
+[node name="EnergyBar" parent="Margin/RootVBox/HeaderRow" unique_id=1227408415 instance=ExtResource("energybar")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
 
 [node name="CreditsChip" parent="Margin/RootVBox/HeaderRow" instance=ExtResource("5")]
 unique_name_in_owner = true

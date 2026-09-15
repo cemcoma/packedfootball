@@ -425,8 +425,10 @@ func _on_exit_pressed() -> void:
 		_loading_popup.set_status("Loading players...")
 		_loading_popup.visible = true
 		await GameProfile.load_all()
+	# Before clear(), which resets it -- see MatchSession.return_scene.
+	var destination := MatchSession.return_scene
 	MatchSession.clear()
-	get_tree().change_scene_to_file("res://scenes/Menu.tscn")
+	get_tree().change_scene_to_file(destination)
 
 
 func _on_camera_toggle_pressed() -> void:

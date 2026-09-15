@@ -1,0 +1,209 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/screens/DailyTournament.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/components/CurrencyChip.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/components/EnergyBar.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="5"]
+[ext_resource type="Script" path="res://scripts/components/StandingsTable.gd" id="6"]
+
+[node name="DailyTournament" type="Control" unique_id=1999000001]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" parent="." unique_id=1999000002 instance=ExtResource("2")]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=1999000003]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1999000004]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HeaderRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1999000005]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="TierLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1999000006]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 22
+text = "Tournament"
+
+[node name="CountdownLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1999000007]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 13
+text = "Ends in --"
+
+[node name="EnergyBar" parent="Margin/RootVBox/HeaderRow" unique_id=1999000008 instance=ExtResource("4")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="CreditsChip" parent="Margin/RootVBox/HeaderRow" unique_id=1999000009 instance=ExtResource("3")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="ProgressLabel" type="Label" parent="Margin/RootVBox" unique_id=1999000010]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Not entered yet."
+
+[node name="Body" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1999000011]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 18
+
+[node name="TableColumn" type="VBoxContainer" parent="Margin/RootVBox/Body" unique_id=1999000012]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="StandingsScroll" type="ScrollContainer" parent="Margin/RootVBox/Body/TableColumn" unique_id=1999000013]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Standings" type="VBoxContainer" parent="Margin/RootVBox/Body/TableColumn/StandingsScroll" unique_id=1999000014]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("6")
+
+[node name="RulesLabel" type="Label" parent="Margin/RootVBox/Body/TableColumn" unique_id=1999000015]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+autowrap_mode = 2
+
+[node name="RewardsColumn" type="VBoxContainer" parent="Margin/RootVBox/Body" unique_id=1999000016]
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="RewardsHeading" type="Label" parent="Margin/RootVBox/Body/RewardsColumn" unique_id=1999000017]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Rewards"
+
+[node name="RewardsBox" type="VBoxContainer" parent="Margin/RootVBox/Body/RewardsColumn" unique_id=1999000018]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="BottomRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1999000019]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="StatusLabel" type="Label" parent="Margin/RootVBox/BottomRow" unique_id=1999000020]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 12
+autowrap_mode = 2
+
+[node name="JoinButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1999000021]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 40)
+layout_mode = 2
+text = "Enter today's tournament"
+
+[node name="PlayButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1999000022]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 40)
+layout_mode = 2
+visible = false
+text = "Play match"
+
+[node name="BackButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1999000023]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Back"
+
+[node name="BusyPopup" parent="." unique_id=1999000024 instance=ExtResource("5")]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="ResultBanner" type="Control" parent="." unique_id=1999000025]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+visible = false
+
+[node name="Scrim" type="ColorRect" parent="ResultBanner" unique_id=1999000026]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.7)
+
+[node name="Center" type="CenterContainer" parent="ResultBanner" unique_id=1999000027]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="ResultBanner/Center" unique_id=1999000028]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+
+[node name="PanelMargin" type="MarginContainer" parent="ResultBanner/Center/Panel" unique_id=1999000029]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
+
+[node name="BannerVBox" type="VBoxContainer" parent="ResultBanner/Center/Panel/PanelMargin" unique_id=1999000030]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="BannerLabel" type="Label" parent="ResultBanner/Center/Panel/PanelMargin/BannerVBox" unique_id=1999000031]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Yesterday's result"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="BannerButton" type="Button" parent="ResultBanner/Center/Panel/PanelMargin/BannerVBox" unique_id=1999000032]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 40)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Continue"

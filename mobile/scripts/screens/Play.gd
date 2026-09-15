@@ -20,8 +20,14 @@ extends Control
 ## it's a scripted status narrative shown while that one request is still
 ## in flight, so the wait doesn't read as a stuck/frozen button.
 ##
-## Tournament is a stub for now (Tournament.tscn) -- 1-day, 10-match
-## brackets across 4 skill categories (promotion by winning), not built yet.
+## Tournament leads to the tournament hub (Tournament.tscn), which offers the
+## daily league -- ten matches a day in a group of six, drawn from your own
+## tier, with promotion and relegation settled overnight.
+##
+## Both modes cost energy now (see backend config's QUICK_MATCH_ENERGY_COST),
+## which is why the failure branch below has to tell 402 apart from everything
+## else: "try again" is the one piece of advice that cannot work when the bar
+## is empty.
 
 @onready var _status_label: Label = %StatusLabel
 @onready var _quick_match_button: Button = %QuickMatchButton
@@ -31,6 +37,7 @@ extends Control
 @onready var _quick_match_hint: Label = %QuickMatchHint
 @onready var _tournament_hint: Label = %TournamentHint
 
+@onready var _energy_bar: EnergyBar = %EnergyBar
 @onready var _matchmaking_popup: Control = %MatchmakingPopup
 
 var _matchmaking_active: bool = false
@@ -43,6 +50,14 @@ func _ready() -> void:
 
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
 	_apply_theme_colors()
+	_refresh_energy()
+
+
+func _refresh_energy() -> void:
+	_energy_bar.set_energy(GameProfile.energy)
+	if GameProfile.energy.is_empty():
+		await GameProfile.refresh_energy()
+		_energy_bar.set_energy(GameProfile.energy)
 
 
 ## The two hints sit straight on the screen background with no panel behind
@@ -86,10 +101,17 @@ func _on_quick_match_pressed() -> void:
 
 	if not res.ok:
 		_hide_matchmaking_popup()
-		_status_label.text = "Could not start a match -- try again."
+		_status_label.text = ( # 402 is "out of energy"
+			"You're out of energy -- it refills over time, or top up in the Shop."
+			if res.status == 402
+			else "Could not start a match -- try again."
+		)
 		_quick_match_button.disabled = false
 		_tournament_button.disabled = false
 		return
+
+	GameProfile.apply_energy(res.data.get("energy"))
+	_energy_bar.set_energy(GameProfile.energy)
 
 	MatchSession.set_from_match_response(res.data)
 	if not MatchSession.has_pending():

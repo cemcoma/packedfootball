@@ -308,6 +308,7 @@ python3 backend/scripts/<script>.py [--dry-run]
 | `list_packs.py` | Read-only dump of live `packs/{id}` docs. `--pack-id N` for one. |
 | `list_deals.py` | Read-only dump of live `deals/{id}` docs. |
 | `list_accounts.py` | Read-only. Lists every `users/{uid}` and whether its roster is Quick-Match complete (`roster_player_ids` length == 11). |
+| `settle_tournaments.py`| Settles tournaments by hand, only should be used when an error happens. --dry-run to check why it failed (or why it will work) |
 
 A synced deal left `active: false` won't appear in `GET /deals/list` until
 you flip it, in the Firestore console or via `--activate-new` on first sync.

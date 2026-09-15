@@ -154,14 +154,19 @@ async def persist_player_stats(caller_state: GameState, caller_profile: dict) ->
     await caller_state.save_roster(caller_profile["roster"])
 
 
-def _generate_bot_opponent() -> tuple[str, dict]:
-    """A freshly-rolled bot squad -- random formation AND random tier (the
-    full TIER_RANGES spread, bronze through icon) so a Quick Match bot can
-    plausibly be "the best or worst player" too, not always a bronze
-    pushover. Never persisted anywhere; exists only for this one match.
+def _generate_bot_opponent(card_tier_pool=None) -> tuple[str, dict]:
+    """A freshly-rolled bot squad -- random formation AND random card tier so
+    a Quick Match bot can plausibly be "the best or worst player" too, not
+    always a bronze pushover. Never persisted anywhere; exists only for this
+    one match.
+
+    `card_tier_pool` narrows which card tiers it can roll. Quick Match passes
+    nothing and keeps the full TIER_RANGES spread; a tournament passes a
+    tier-appropriate pool, because an icon bot in the bronze league is not a
+    match, it is a guaranteed loss.
     """
     formation = random.choice(list(FORMATIONS.keys()))
-    tier = random.choice(list(TIER_RANGES.keys()))
+    tier = random.choice(list(card_tier_pool or TIER_RANGES.keys()))
     roster = generate_starter_roster(formation, tier, seed=secrets.randbits(63))
     bot_uid = f"bot_{secrets.token_hex(6)}"  # never collides with a real Firebase uid's shape
     profile = {
@@ -192,18 +197,68 @@ async def pick_opponent_profile(uid: str) -> tuple[str, dict]:
     candidate_uids = [
         c["id"] for c in candidates if c["id"] != uid and len(c.get("roster_player_ids", [])) == 11
     ]
+    return await pick_opponent_from_candidates(uid, candidate_uids)
+
+
+async def pick_opponent_from_candidates(
+    uid: str,
+    candidate_uids: list[str],
+    *,
+    max_attempts: int | None = None,
+    card_tier_pool=None,
+) -> tuple[str, dict]:
+    """The shared "find a playable opponent among these uids" loop.
+
+    TWO STAGES, and the split is the whole point. Hydrating a profile reads
+    users/{uid} PLUS all eleven players/{id} documents (see
+    game_state._load_players), so validating a candidate the naive way costs
+    ~12 reads EACH. Most rejections don't need the roster at all, so the
+    cheap checks -- does this account have exactly 11 roster ids, is its
+    formation one we know -- run against the user document alone, and only a
+    candidate that survives is worth 11 more reads.
+
+        best case   1 + 11 = 12 reads      (first candidate is fine)
+        worst case  a few 1-read rejections, then 12
+
+    `validate_formation_positions` genuinely needs each player's position, so
+    it stays in the second stage, as does the dangling-player-doc check.
+
+    The user document is read with get_document rather than
+    load_or_create_profile, which would CREATE a profile for a uid that
+    doesn't have one -- the same trap /match/simulate guards against.
+
+    `max_attempts` bounds the worst case; None means "try them all", which is
+    what Quick Match wants since its candidate list is already filtered.
+    Falls back to a bot when nobody is playable, so a match always happens.
+    """
+    candidate_uids = [c for c in candidate_uids if c != uid]
     random.shuffle(candidate_uids)
+    if max_attempts is not None:
+        candidate_uids = candidate_uids[:max_attempts]
 
     for candidate_uid in candidate_uids:
-        state = GameState(AdminFirestoreClient(candidate_uid), PLAYER_CLASS_MAP, Midfielder)
-        profile = await state.load_or_create_profile(default_roster=[], default_display_name=candidate_uid[:8])
-        print(profile["display_name"])
+        client = AdminFirestoreClient(candidate_uid)
+
+        # Stage one: one read, no roster.
+        doc = await client.get_document(f"users/{candidate_uid}")
+        if doc is None:
+            continue
+        if len(doc.get("roster_player_ids") or []) != 11:
+            continue
+        if doc.get("formation") not in FORMATIONS:
+            continue
+
+        # Stage two: now pay for the eleven player documents.
+        state = GameState(client, PLAYER_CLASS_MAP, Midfielder)
+        profile = await state.load_or_create_profile(
+            default_roster=[], default_display_name=doc.get("display_name", candidate_uid[:8])
+        )
         if len(profile["roster"]) != 11:
             continue  # roster_player_ids pointed at a players/{id} doc that's since been deleted
         try:
             validate_formation_positions(profile)
         except HTTPException:
-            continue  # this candidate's own saved data is invalid -- try another, or fall back to a bot below
+            continue  # this candidate's own saved data is invalid -- try another, or fall back to a bot
         return candidate_uid, profile
 
-    return _generate_bot_opponent()
+    return _generate_bot_opponent(card_tier_pool)

@@ -83,7 +83,7 @@ corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
-bg_color = Color(0.26218942, 0.48644036, 0.19598725, 1)
+bg_color = Color(0, 0, 0, 0.627451)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
@@ -127,3 +127,4 @@ Label/constants/shadow_offset_y = 1
 Label/constants/shadow_outline_size = 1
 Label/fonts/font = ExtResource("1_b06mf")
 Panel/styles/panel = SubResource("StyleBoxFlat_panel")
+PanelContainer/styles/panel = SubResource("StyleBoxFlat_panel")

@@ -29,7 +29,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import ALLOWED_ORIGINS
-from routers import account, currency, deals, leaderboard, matches, packs, players
+from routers import (
+    account,
+    currency,
+    deals,
+    energy,
+    leaderboard,
+    matches,
+    packs,
+    players,
+    tournaments,
+)
 
 app = FastAPI(title="Packed Football backend")
 
@@ -45,8 +55,10 @@ for _router in (
     packs.router,
     players.router,
     currency.router,
+    energy.router,
     deals.router,
     leaderboard.router,
     matches.router,
+    tournaments.router,
 ):
     app.include_router(_router)

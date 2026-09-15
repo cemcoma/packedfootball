@@ -198,6 +198,9 @@ func _on_continue_pressed() -> void:
 	_details_button.disabled = true
 	_loading_popup.set_status("Loading players...")
 	_loading_popup.visible = true
+	# Read the destination BEFORE clear(), which resets it -- otherwise a
+	# tournament match silently lands back on the Menu mid-run.
+	var destination := MatchSession.return_scene
 	MatchSession.clear()
 	await GameProfile.load_all()
-	get_tree().change_scene_to_file("res://scenes/Menu.tscn")
+	get_tree().change_scene_to_file(destination)
