@@ -121,6 +121,9 @@ static func _cell_text(row: Dictionary, key: String) -> String:
 			var diff := int(row.get("goal_diff", 0))
 			return "+%d" % diff if diff > 0 else str(diff)
 	var value = row.get(key, "")
+	if value is float:
+		return str(int(value))
+		
 	return str(value) if not (value is String) else value
 
 

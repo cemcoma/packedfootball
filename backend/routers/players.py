@@ -10,7 +10,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from config import CUSTOMIZE_CREDITS_PER_SLOT, INVENTORY_CAP, RELEASE_CREDITS_BY_TIER, RELEASE_CREDITS_DEFAULT
+from config import (
+    CUSTOMIZE_CREDITS_PER_SLOT,
+    INVENTORY_CAP,
+    RELEASE_BATCH_MAX,
+    RELEASE_CREDITS_BY_TIER,
+    RELEASE_CREDITS_DEFAULT,
+)
 from admin_firestore_client import AdminFirestoreClient
 from deps import verify_id_token
 from engine import APPEARANCE_OPTION_COUNTS, APPEARANCE_SLOTS, DEFAULT_APPEARANCE
@@ -51,47 +57,130 @@ async def release_player(req: ReleasePlayerRequest, uid: str = Depends(verify_id
     card), so the pre-read cannot go stale in a way that matters -- and
     deleting a path that isn't there is a no-op regardless.
     """
+    result = await _release_cards(uid, [req.player_id])
+    per_card = result["released"][0]
+
+    return {
+        "player_id": per_card["player_id"],
+        "credits_awarded": per_card["credits_awarded"],
+        "credits_remaining": result["credits_remaining"],
+        "inventory_count": result["inventory_count"],
+        "inventory_cap": INVENTORY_CAP,
+    }
+
+
+class ReleasePlayersRequest(BaseModel):
+    player_ids: list[str]
+
+
+@router.post("/player/release/batch")
+async def release_players(req: ReleasePlayersRequest, uid: str = Depends(verify_id_token)):
+    """Releases several benched cards at once -- the Inventory screen's
+    multi-select "quick sell".
+
+    ALL OR NOTHING, in a single transaction. Selling 30 cards through 30
+    calls to /player/release would be 30 chances to half-succeed: a dropped
+    connection or a mid-run 409 leaves the player looking at a bench that is
+    partly gone and a balance they can't reconcile, with nothing to retry
+    safely (the succeeded half would be charged twice). One transaction
+    means the answer is always "all of them, for this much" or "none of
+    them, because of this" -- and the client's confirm dialog quoted a total
+    that is still the total when it lands.
+
+    A player in the XI aborts the WHOLE batch rather than being skipped.
+    Silently dropping one card from a 30-card sale, after showing a total
+    that included it, is worse than refusing and saying which one -- and the
+    client filters XI cards out of selection anyway, so reaching this means
+    the two disagree and proceeding would be guessing.
+    """
+    # Order-preserving dedupe: the same id twice must not pay twice, and a
+    # set() would make the error messages below non-deterministic.
+    player_ids = list(dict.fromkeys(req.player_ids))
+
+    if not player_ids:
+        raise HTTPException(400, "No players selected")
+    if len(player_ids) > RELEASE_BATCH_MAX:
+        raise HTTPException(
+            400, f"Too many players at once -- {RELEASE_BATCH_MAX} is the limit"
+        )
+
+    return {**await _release_cards(uid, player_ids), "inventory_cap": INVENTORY_CAP}
+
+
+async def _release_cards(uid: str, player_ids: list[str]) -> dict:
+    """The one implementation of releasing cards, shared by both endpoints
+    above so the rules can never drift apart between them.
+
+    `player_ids` must already be deduped and non-empty.
+    """
     client = AdminFirestoreClient(uid)
 
+    # One read of the inventory collection for the whole batch, mapping every
+    # card to its pointer docs -- see the single-release docstring for why
+    # this sits outside the transaction.
     inventory = await client.list_collection(f"users/{uid}/inventory")
-    pointer_ids = [doc["id"] for doc in inventory if doc.get("player_id") == req.player_id]
+    wanted = set(player_ids)
+    pointers_by_player: dict[str, list[str]] = {pid: [] for pid in player_ids}
+    for doc in inventory:
+        pid = doc.get("player_id")
+        if pid in wanted:
+            pointers_by_player[pid].append(doc["id"])
 
-    card_path = f"players/{req.player_id}"
+    card_paths = [f"players/{pid}" for pid in player_ids]
     user_path = f"users/{uid}"
 
     def _release(tx):
         # Every read first -- Firestore rejects a read after a write, and
         # TransactionScope.get raises locally if this is ever reordered.
-        docs = tx.get_all([card_path, user_path])
-        card, profile_doc = docs[card_path], docs[user_path]
-
-        if card is None or card.get("owner_uid") != uid:
-            # Same 404 for "no such card" and "not yours" -- a different
-            # message for the second would confirm someone else's card exists.
-            raise HTTPException(404, "You don't own that player")
+        docs = tx.get_all([*card_paths, user_path])
+        profile_doc = docs[user_path]
         if profile_doc is None:
             raise HTTPException(404, "No profile for this account")
-        if req.player_id in (profile_doc.get("roster_player_ids") or []):
-            raise HTTPException(409, "That player is in your starting XI -- replace them first")
+        roster = set(profile_doc.get("roster_player_ids") or [])
 
-        reward = RELEASE_CREDITS_BY_TIER.get(card.get("tier", ""), RELEASE_CREDITS_DEFAULT)
-        remaining = profile_doc.get("credits", 0) + reward
+        # Validate the entire batch BEFORE writing anything, so a bad id in
+        # the middle of the list can't leave earlier deletes staged.
+        released = []
+        for pid in player_ids:
+            card = docs[f"players/{pid}"]
+            if card is None or card.get("owner_uid") != uid:
+                # Same 404 for "no such card" and "not yours" -- a different
+                # message for the second would confirm someone else's card
+                # exists.
+                raise HTTPException(404, f"You don't own player {pid}")
+            if pid in roster:
+                raise HTTPException(
+                    409, f"Player {pid} is in your starting XI -- replace them first"
+                )
+            released.append(
+                {
+                    "player_id": pid,
+                    "credits_awarded": RELEASE_CREDITS_BY_TIER.get(
+                        card.get("tier", ""), RELEASE_CREDITS_DEFAULT
+                    ),
+                }
+            )
 
-        for pointer_id in pointer_ids:
-            tx.delete(f"users/{uid}/inventory/{pointer_id}")
-        tx.delete(card_path)
+        total = sum(entry["credits_awarded"] for entry in released)
+        remaining = profile_doc.get("credits", 0) + total
+
+        deleted_pointers = 0
+        for pid in player_ids:
+            for pointer_id in pointers_by_player[pid]:
+                tx.delete(f"users/{uid}/inventory/{pointer_id}")
+                deleted_pointers += 1
+            tx.delete(f"players/{pid}")
         tx.set(user_path, {"credits": remaining}, merge=True)
 
-        return reward, remaining
+        return released, total, remaining, deleted_pointers
 
-    reward, remaining = await client.run_transaction(_release)
+    released, total, remaining, deleted_pointers = await client.run_transaction(_release)
 
     return {
-        "player_id": req.player_id,
-        "credits_awarded": reward,
+        "released": released,
+        "credits_awarded": total,
         "credits_remaining": remaining,
-        "inventory_count": len(inventory) - len(pointer_ids),
-        "inventory_cap": INVENTORY_CAP,
+        "inventory_count": len(inventory) - deleted_pointers,
     }
 
 

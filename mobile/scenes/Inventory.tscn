@@ -1,8 +1,8 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://b2ebageslbr77"]
 
-[ext_resource type="Script" path="res://scripts/screens/Inventory.gd" id="1"]
+[ext_resource type="Script" uid="uid://dm3nvhbtob4ti" path="res://scripts/screens/Inventory.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
-[ext_resource type="PackedScene" path="res://scenes/components/CurrencyChip.tscn" id="3"]
+[ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="3"]
 
 [node name="Inventory" type="Control" unique_id=1960000001]
 layout_mode = 3
@@ -15,8 +15,6 @@ script = ExtResource("1")
 
 [node name="Background" parent="." unique_id=1960000002 instance=ExtResource("2")]
 layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
 
 [node name="Margin" type="MarginContainer" parent="." unique_id=1960000003]
 layout_mode = 1
@@ -40,7 +38,6 @@ theme_override_constants/separation = 16
 
 [node name="TitleLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1960000006]
 layout_mode = 2
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 24
 text = "INVENTORY"
 
@@ -48,7 +45,6 @@ text = "INVENTORY"
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 14
 text = "0 owned"
 
@@ -90,8 +86,130 @@ theme_override_constants/h_separation = 8
 theme_override_constants/v_separation = 8
 columns = 7
 
-[node name="BackButton" type="Button" parent="Margin/RootVBox" unique_id=1960000015]
+[node name="HBoxContainer" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1895494021]
+layout_mode = 2
+
+[node name="BackButton" type="Button" parent="Margin/RootVBox/HBoxContainer" unique_id=1960000015]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 0
 text = "Back to Team"
+
+[node name="Control" type="Control" parent="Margin/RootVBox/HBoxContainer" unique_id=1143007081]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BatchActionRow" type="HBoxContainer" parent="Margin/RootVBox/HBoxContainer" unique_id=1397476845]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="ExecuteBatchButton" type="Button" parent="Margin/RootVBox/HBoxContainer/BatchActionRow" unique_id=1843647321]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CancelBatchButton" type="Button" parent="Margin/RootVBox/HBoxContainer/BatchActionRow" unique_id=135487982]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cancel"
+
+[node name="ToggleBatchButton" type="Button" parent="Margin/RootVBox/HBoxContainer" unique_id=1585880084]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Quicksell"
+
+[node name="BatchConfirmOverlay" type="Control" parent="." unique_id=1227384755]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="BatchConfirmOverlay" unique_id=1558217524]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.7)
+
+[node name="Center" type="CenterContainer" parent="BatchConfirmOverlay" unique_id=712140922]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="BatchConfirmOverlay/Center" unique_id=394720973]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+
+[node name="PanelMargin" type="MarginContainer" parent="BatchConfirmOverlay/Center/Panel" unique_id=212396833]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
+
+[node name="ConfirmVBox" type="VBoxContainer" parent="BatchConfirmOverlay/Center/Panel/PanelMargin" unique_id=1350120530]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="BatchConfirmLabel" type="Label" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox" unique_id=627027442]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Release these players?
+
+You get"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="RewardRow" type="HBoxContainer" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox" unique_id=2129984531]
+layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="BatchConfirmRewardLabel" type="Label" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox/RewardRow" unique_id=1678622269]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "+0"
+
+[node name="BatchConfirmRewardIcon" type="TextureRect" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox/RewardRow" unique_id=1917383686]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(30, 30)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ConfirmFootnote" type="Label" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox" unique_id=1386595644]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "These cards are gone for good."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ConfirmButtons" type="HBoxContainer" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox" unique_id=102358040]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="ConfirmCancelButton" type="Button" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox/ConfirmButtons" unique_id=1329607759]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Keep"
+
+[node name="ConfirmExecuteButton" type="Button" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox/ConfirmButtons" unique_id=723566093]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Release"

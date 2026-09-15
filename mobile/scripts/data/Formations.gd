@@ -90,6 +90,8 @@ const POSITION_GROUPS: Array = [
 	["LB", "WB", "LM", "LW"],
 	["RB", "WB", "RM", "RW"],
 	["LW", "RW", "ST"],
+	["RM", "CM"],
+	["LM", "CM"],
 ]
 
 

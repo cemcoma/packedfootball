@@ -67,6 +67,8 @@ var _formation_buttons: Dictionary = {}  # name -> Button
 @onready var _formation_button_433: Button = %FormationButton433
 @onready var _formation_button_352: Button = %FormationButton352
 @onready var _formation_button_4231: Button = %FormationButton4231
+@onready var _overall_label: Label = %OverallLabel
+@onready var _auto_button: Button = %AutoButton
 
 @onready var _pitch_view: PitchView = %Pitch
 @onready var _panel_header: Label = %PanelHeader
@@ -101,6 +103,7 @@ func _ready() -> void:
 		var button: Button = _formation_buttons[formation_name]
 		button.pressed.connect(_on_formation_button_pressed.bind(formation_name))
 
+	_auto_button.pressed.connect(_on_auto_pressed)
 	_pitch_view.slot_pressed.connect(_on_slot_tapped)
 	_cancel_button.pressed.connect(_on_cancel_picker_pressed)
 	_replace_button.pressed.connect(_on_replace_pressed)
@@ -127,6 +130,7 @@ func _apply_theme_colors() -> void:
 	_stats_page_label.add_theme_color_override("font_color", ThemeManager.color("heading"))
 	_stats_extra_country.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 	_out_of_position_label.add_theme_color_override("font_color", ThemeManager.color("warning"))
+	_refresh_overall()
 	_refresh_bottom()
 
 
@@ -135,9 +139,40 @@ func _apply_theme_colors() -> void:
 
 func _refresh_all() -> void:
 	_refresh_formation_buttons()
+	_refresh_overall()
 	_refresh_pitch()
 	_refresh_right_panel()
 	_refresh_bottom()
+
+
+## Squad Overall, live -- it moves as slots are filled, so the effect of a
+## swap is visible before saving rather than only back on the Menu.
+##
+## This is the penalty-aware number (see GameProfile.average_overall), which
+## is what makes it honest here specifically: this is the one screen where
+## you can put a winger at right back, and the number has to notice.
+##
+## Greyed out while the lineup is incomplete, because an average over 8
+## players isn't comparable to one over 11 and shouldn't look like it is.
+func _refresh_overall() -> void:
+	var filled := 0
+	for player_id in GameProfile.slot_assignment:
+		if player_id != "":
+			filled += 1
+	var complete: bool = filled == GameProfile.slot_assignment.size()
+
+	if filled == 0:
+		_overall_label.text = "Overall --"
+	elif complete:
+		_overall_label.text = "Overall %d" % GameProfile.average_overall()
+	else:
+		_overall_label.text = "Overall %d  (%d/%d)" % [
+			GameProfile.average_overall(), filled, GameProfile.slot_assignment.size()
+		]
+	_overall_label.add_theme_color_override(
+		"font_color",
+		ThemeManager.color("heading") if complete else ThemeManager.color("text_hint")
+	)
 
 
 func _refresh_formation_buttons() -> void:
@@ -342,6 +377,56 @@ func _on_formation_button_pressed(formation_name: String) -> void:
 	selected_slot = -1
 	picker_mode = false
 	status_text = ""
+	_refresh_all()
+
+
+## Auto Pick: rebuild the whole XI as the strongest legal lineup for the
+## formation currently selected.
+##
+## Deliberately reassigns EVERY slot rather than only filling the empty
+## ones. "Give me the best team" is the ask, and the best team routinely
+## needs someone already on the pitch to move -- a keeper aside, almost
+## every improvement is a chain of swaps, not an insertion. Nothing is
+## written until Save, and Back still discards, so an unwanted result costs
+## one tap to undo.
+##
+## The pool is every card owned, XI included (see GameProfile.all_cards),
+## which is the only way a player already in the lineup can be moved to a
+## slot that suits them better.
+func _on_auto_pressed() -> void:
+	if GameProfile.all_cards.is_empty():
+		status_text = "You don't own any players yet."
+		_refresh_bottom()
+		return
+
+	var before := GameProfile.average_overall()
+	GameProfile.slot_assignment = SquadOptimizer.best_assignment(
+		GameProfile.formation, GameProfile.all_cards.keys(), GameProfile.all_cards
+	)
+
+	# Any slot left empty means the squad genuinely has nobody eligible for
+	# it -- no keeper, say -- and Save will refuse until that is fixed. Name
+	# the roles rather than just the count, since "no GK" is actionable and
+	# "10/11" is not.
+	var slots := Formations.get_formation(GameProfile.formation)
+	var missing: Array[String] = []
+	for i in range(GameProfile.slot_assignment.size()):
+		if GameProfile.slot_assignment[i] == "":
+			var role: String = slots[i]["role"]
+			if not missing.has(role):
+				missing.append(role)
+
+	if not missing.is_empty():
+		status_text = "No eligible player for: %s" % ", ".join(missing)
+	else:
+		var after := GameProfile.average_overall()
+		if after > before:
+			status_text = "Best XI picked -- overall %d to %d." % [before, after]
+		else:
+			status_text = "Already the best XI available."
+
+	selected_slot = -1
+	picker_mode = false
 	_refresh_all()
 
 

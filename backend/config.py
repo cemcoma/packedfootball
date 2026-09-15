@@ -74,6 +74,15 @@ RELEASE_CREDITS_BY_TIER = {
 # bad payout, not a broken button.
 RELEASE_CREDITS_DEFAULT = 10
 
+# How many cards one /player/release/batch call may release at once.
+#
+# The whole batch is ONE Firestore transaction, so this is really a cap on
+# that transaction's size: each card costs a read plus two writes (the card
+# and its inventory pointer), against Firestore's 500-write ceiling. 50 is
+# comfortably inside it and still clears a full bench in two taps, and it
+# bounds what a single request can cost if the id list is ever hostile.
+RELEASE_BATCH_MAX = 50
+
 # Charged per CHANGED appearance slot, not per save: swapping a hairstyle
 # and its colour in one visit costs 200. Mirrored in the client's
 # CustomizePlayer.gd purely for the running total it shows before saving.

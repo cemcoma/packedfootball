@@ -69,6 +69,23 @@ toggle_mode = true
 button_group = SubResource("ButtonGroup_formations")
 text = "4-2-3-1"
 
+[node name="FormationSpacer" type="Control" parent="Margin/RootVBox/FormationRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="OverallLabel" type="Label" parent="Margin/RootVBox/FormationRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 18
+text = "Overall --"
+
+[node name="AutoButton" type="Button" parent="Margin/RootVBox/FormationRow"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Fill every slot with the strongest eligible player you own."
+text = "Auto Pick"
+
 [node name="MainRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1850911673]
 layout_mode = 2
 size_flags_vertical = 3

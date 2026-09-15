@@ -292,22 +292,21 @@ func save_team() -> bool:
 	return true
 
 
-func _roster_cards() -> Array:
-	var cards: Array = []
-	for player_id in slot_assignment:
-		if player_id != "":
-			cards.append(all_cards[player_id])
-	return cards
-
+## Squad Overall: the average of what the XI is worth IN THE SLOTS THEY ARE
+## STANDING IN, not the average of their cards.
+##
+## Those differ whenever someone is played out of position, and the
+## difference is real -- the match engine drops their attributes 10% (see
+## SquadOptimizer.OUT_OF_POSITION_FACTOR), so a squad full of square pegs is
+## genuinely weaker than the sum of its cards. Counting the cards instead
+## would overstate it, and would also mean the Squad screen's Auto button
+## could rearrange the team into something stronger and show a LOWER number,
+## which is the kind of thing that reads as a bug.
+##
+## Empty slots are skipped rather than counted as zero, so a part-built
+## lineup shows the strength of what's in it.
 func average_overall() -> int:
-	var cards := _roster_cards()
-	if cards.is_empty():
-		return 0
-	var total := 0
-	for card in cards:
-		var typed_card: PlayerCard = card
-		total += typed_card.overall()
-	return int(round(float(total) / float(cards.size())))
+	return SquadOptimizer.squad_overall(formation, slot_assignment, all_cards)
 
 func set_display_name(new_name: String) -> bool:
 	var ok := await Firestore.set_document(_user_doc_path(), {"display_name": new_name}, true)
