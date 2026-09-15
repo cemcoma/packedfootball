@@ -15,8 +15,8 @@ from replay import ActionType, ReplayRecorder
 #   MAJOR -- the sim was reshaped. An old seed no longer replays into
 #            anything like the same match; old results aren't comparable.
 #   MINOR -- balance or a new mechanic. An old seed replays differently,
-#            but the match still means the same thing (same stats, same
-#            wire format).
+#            but the match still means the same thing (can have differing 
+#            stats and behaviour, just not major change).
 #   PATCH -- a fix that doesn't change how a match is meant to play out.
 #            Seeds may still diverge if the bug was in the sim itself.
 #

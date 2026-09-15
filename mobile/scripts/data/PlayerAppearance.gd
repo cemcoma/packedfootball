@@ -1,25 +1,28 @@
 class_name PlayerAppearance
 extends RefCounted
 
-## Layered "pixelated character" appearance: 5 independent slots, 5 options
-## each -- skin tone, hair style (shape), hair color (tint), face (mouth
-## shape), shoe color. 5^5 = 3125 distinct-looking combinations from just
-## 25 stored choices. Rendered by PlayerModelView.gd's _draw(); that's the
-## only place that needs to change once real per-option art exists (each
-## slot would pick a texture instead of a shape/color).
+## Every option a player's look can be built from. THE place to add one.
 ##
-## mock_from_id() is a TEMPORARY stand-in: it derives all 5 indices
-## deterministically from a player_id alone (same player always looks the
-## same during this preview), without storing or changing anything. The
-## point right now is to see the layered look in the Team screen before
-## committing to real data. Once that's approved, the real version stores
-## these 5 indices on players/{id} (rolled once at pack-open time, same as
-## tier/attributes/name already are) and PlayerCard.gd reads them back
-## like every other field -- this function goes away, and its one call
-## site in PlayerModelView.set_card() switches to reading card.appearance
-## directly.
+## Five independent slots -- skin tone, hair style, hair colour, face, boot
+## colour -- each stored on players/{id} as a plain INDEX into one of the
+## lists below. 5x5x5x5x5 = 3125 combinations today.
+##
+## Colours are a list of Colors; SHAPES (hair, face) are a list of
+## rectangles. Both are data: PlayerFigure.gd renders whatever is here and
+## knows nothing about any individual style, so adding a hairstyle is an
+## entry in HAIR_STYLES and nothing else -- no drawing code, no new file.
+##
+## APPEND ONLY.
+## An index is stored on every card doc forever, so inserting an option in
+## the middle, or reordering, silently restyles every card already out
+## there. New options go on the END.
+##
+## Two ends have to agree on how many options exist, because the CLIENT
+## draws them but the SERVER rolls them: raise the matching entry in
+## packedfootball/player/player.py's APPEARANCE_OPTION_COUNTS and redeploy,
+## or newly generated cards will never be given the new option.
 
-const OPTION_COUNT := 5
+# --------------------------------------------------------------- colours
 
 const SKIN_TONES := [
 	Color(0.96, 0.80, 0.65),
@@ -45,19 +48,150 @@ const SHOE_COLORS := [
 	Color(0.944, 0.489, 0.878, 1.0),
 ]
 
+# ---------------------------------------------------------------- shapes
+#
+# A shape is a list of `parts`, each [x, y, w, h] in HEAD-BOX FRACTIONS:
+#
+#     x  0.0 = left edge of the head,   1.0 = right edge
+#     y  0.0 = bottom of the head,      1.0 = top
+#
+# Values OUTSIDE 0..1 are legal and useful -- that is how a mohawk sticks up
+# past the skull (y + h > 1) and an afro bulges past its sides (x < 0,
+# w > 1). Parts draw in order, so later ones sit on top.
+#
+#          1.0  +---------+
+#               |  hair   |   roughly 0.66 and up
+#          0.42 |  eyes   |   fixed, PlayerFigure.EYE_Y
+#          0.20 |  mouth  |   FACE_STYLES live here
+#          0.0  +---------+
 
+## `covers_back` is what a style does when the player is running AWAY: most
+## hair fills the whole back of the head (you'd see hair, not a bald patch),
+## but a mohawk or a bald head obviously does not.
+const HAIR_STYLES := [
+	{
+		"name": "Bald",
+		"parts": [],
+		"covers_back": false,
+	},
+	{
+		"name": "Short",
+		"parts": [[0.00, 0.66, 1.00, 0.34]],
+	},
+	{
+		"name": "Long",
+		"parts": [
+			[-0.11, 0.66, 1.22, 0.34],   # cap, hanging past head
+			[-0.11, 0.11, 0.11, 0.55],   # left side, hanging past the head
+			[ 1.00, 0.11, 0.11, 0.55],   # right side
+		],
+	},
+	{
+		"name": "Mohawk",
+		"parts": [[0.30, 0.66, 0.40, 0.612]],   # h > the cap, so it stands up
+		"covers_back": false,
+	},
+	{
+		"name": "Afro",
+		"parts": [[-0.10, 0.66, 1.20, 0.442]],  # bulges past both sides
+	},
+]
+
+## Mouths, same [x, y, w, h] parts as hair. Drawn only when the player is
+## facing the viewer, below the eyes.
+##
+## A curve is faked from offset bars, and the one thing to watch is that
+## `x` is the bar's LEFT EDGE, not its centre -- so shrinking `w` shrinks
+## the bar RIGHTWARD and can open a hole before the next part. Adjacent
+## bars must OVERLAP or the mouth renders in pieces:
+##
+##    good   [0.30 .. 0.42][0.40 .. 0.60][0.58 .. 0.70]   ends overlap
+##    bad    [0.28 .. 0.38] [0.40 .. 0.60]                 gap at 0.38-0.40
+##
+## Keep them symmetric about x = 0.50 unless the style is lopsided on
+## purpose, like Smirk.
+const FACE_STYLES := [
+	{
+		"name": "Neutral",
+		"parts": [[0.30, 0.20, 0.40, 0.06]],
+	},
+	{
+		"name": "Smile",
+		"parts": [
+			[0.30, 0.24, 0.12, 0.06],
+			[0.40, 0.18, 0.20, 0.06],
+			[0.58, 0.24, 0.12, 0.06],
+		],
+	},
+	{
+		"name": "Extra Happy",
+		"parts": [
+			[0.35, 0.18, 0.08, 0.20],
+			[0.40, 0.18, 0.20, 0.06],
+			[0.53, 0.18, 0.08, 0.20],
+		],
+	},
+	{
+		"name": "Surprised",
+		"parts": [[0.42, 0.16, 0.16, 0.18]],
+	},
+	{
+		"name": "Smirk",
+		"parts": [
+			[0.30, 0.24, 0.16, 0.06],
+			[0.44, 0.18, 0.26, 0.06],
+		],
+	},
+]
+
+const MOUTH_COLOR := Color(0.25, 0.15, 0.12)
+
+
+## How many options a slot has. Derived from the lists above rather than
+## written out, so it can never drift from the data -- unlike the server's
+## copy, which has to be kept in step by hand.
+static func option_count(slot: String) -> int:
+	match slot:
+		"skin_tone":
+			return SKIN_TONES.size()
+		"hair_color":
+			return HAIR_COLORS.size()
+		"shoe_color":
+			return SHOE_COLORS.size()
+		"hair_style":
+			return HAIR_STYLES.size()
+		"face":
+			return FACE_STYLES.size()
+	return 1
+
+
+## One hair style by index, clamped. A card generated by a NEWER build than
+## this one can carry an index this build has no option for; it falls back
+## to a plain short cap rather than rendering a bald head or erroring.
+static func hair_style(index: int) -> Dictionary:
+	if index < 0 or index >= HAIR_STYLES.size():
+		return HAIR_STYLES[1]
+	return HAIR_STYLES[index]
+
+
+static func face_style(index: int) -> Dictionary:
+	if index < 0 or index >= FACE_STYLES.size():
+		return FACE_STYLES[0]
+	return FACE_STYLES[index]
+
+
+## A deterministic look derived from a player_id alone, for a card whose doc
+## predates the appearance field. Real cards carry their own rolled one --
+## run backend/scripts/sync_player_appearance.py to backfill the old ones.
 static func mock_from_id(player_id: String) -> Dictionary:
-	return {
-		"skin_tone": _mock_index(player_id, "skin_tone"),
-		"hair_style": _mock_index(player_id, "hair_style"),
-		"hair_color": _mock_index(player_id, "hair_color"),
-		"face": _mock_index(player_id, "face"),
-		"shoe_color": _mock_index(player_id, "shoe_color"),
-	}
+	var appearance := {}
+	for slot in ["skin_tone", "hair_style", "hair_color", "face", "shoe_color"]:
+		appearance[slot] = _mock_index(player_id, slot)
+	return appearance
 
 
 ## Each slot hashes the id with its own salt rather than splitting one hash
 ## into 5 pieces (e.g. via division/modulo) -- independent hashes avoid any
 ## risk of the 5 slots correlating with each other for a given id.
-static func _mock_index(player_id: String, salt: String) -> int:
-	return abs((player_id + "_" + salt).hash()) % OPTION_COUNT
+static func _mock_index(player_id: String, slot: String) -> int:
+	return abs((player_id + "_" + slot).hash()) % option_count(slot)

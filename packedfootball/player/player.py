@@ -75,16 +75,32 @@ MATCH_STAT_FIELDS = (
     "clean_sheets",
 )
 
-# Layered placeholder character portrait: 5 independent slots, each an index
-# into a fixed-size (5) option list. Mirrors mobile/scripts/data/
-# PlayerAppearance.gd's own APPEARANCE_SLOTS/OPTION_COUNT exactly -- keep the
-# two in lockstep if either changes (same convention as PLAYER_CLASS_MAP /
-# PlayerCard.gd's PRIMARY_STATS_BY_POSITION). Real players always get one
-# randomly rolled by packEngine.PackManager; DEFAULT_APPEARANCE only backstops
-# a player object built without going through that (e.g. reconstructing a
-# player doc saved before this field existed).
+# Layered character appearance: 5 independent slots, each an INDEX into an
+# option list that lives client-side in mobile/scripts/data/
+# PlayerAppearance.gd. This end only rolls the indices -- it has no idea what
+# a hairstyle looks like, and doesn't need to.
+#
+# The counts below must not exceed what the client actually has options for,
+# or a card gets an index that renders as a fallback. They are per-slot (not
+# one shared number) precisely so a slot can grow on its own: ship N new
+# hairstyles in PlayerAppearance.HAIR_STYLES, raise "hair_style" here, deploy.
+#
+# APPEND ONLY. An index is stored on every players/{id} doc forever, so
+# inserting or reordering options silently restyles every card already out
+# there. New options go on the end of the client's array, and the count here
+# goes up to match.
+#
+# Real players always get one rolled by packEngine.PackManager;
+# DEFAULT_APPEARANCE only backstops a player object built without going
+# through that (e.g. reconstructing a doc saved before this field existed).
 APPEARANCE_SLOTS = ("skin_tone", "hair_style", "hair_color", "face", "shoe_color")
-APPEARANCE_OPTION_COUNT = 5
+APPEARANCE_OPTION_COUNTS = {
+    "skin_tone": 5,   # PlayerAppearance.SKIN_TONES
+    "hair_style": 5,  # PlayerAppearance.HAIR_STYLES
+    "hair_color": 5,  # PlayerAppearance.HAIR_COLORS
+    "face": 5,        # PlayerAppearance.FACE_STYLES
+    "shoe_color": 5,  # PlayerAppearance.SHOE_COLORS
+}
 DEFAULT_APPEARANCE = {slot: 0 for slot in APPEARANCE_SLOTS}
 
 DEFAULT_ACTIONS = {

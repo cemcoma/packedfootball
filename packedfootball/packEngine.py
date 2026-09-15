@@ -1,6 +1,6 @@
 import os
 import random
-from player.player import Attributes, APPEARANCE_SLOTS, APPEARANCE_OPTION_COUNT, TENDENCY_FIELDS, PHYSICAL_FIELDS, player
+from player.player import Attributes, APPEARANCE_SLOTS, APPEARANCE_OPTION_COUNTS, TENDENCY_FIELDS, PHYSICAL_FIELDS, player
 
 from player.classes.goalkeeper import Goalkeeper
 from player.classes.defender import CenterBack, Fullback, Wingback
@@ -385,13 +385,21 @@ class PackManager:
         return Attributes(**generated_stats)
 
     def _generate_appearance(self) -> dict:
-        """Rolls a random index (0..APPEARANCE_OPTION_COUNT-1) per slot for
-        the placeholder layered character portrait -- see player.py's
-        APPEARANCE_SLOTS comment for the mirrored Godot-side constants.
+        """Rolls one option index per appearance slot.
+
+        Each slot has its OWN count (see player.py's
+        APPEARANCE_OPTION_COUNTS) so that adding, say, four new hairstyles
+        client-side only needs that one number raised here -- the other
+        slots keep rolling over their own ranges and every existing card
+        keeps the look it was generated with.
+
         Uses self.rng like every other roll in this class, so a pack open
         stays fully reproducible from its seed, appearance included.
         """
-        return {slot: self.rng.randint(0, APPEARANCE_OPTION_COUNT - 1) for slot in APPEARANCE_SLOTS}
+        return {
+            slot: self.rng.randint(0, APPEARANCE_OPTION_COUNTS.get(slot, 1) - 1)
+            for slot in APPEARANCE_SLOTS
+        }
 
 
 def generate_starter_roster(formation_name: str = "4-4-2", tier: str = "bronze", seed=None) -> list:
