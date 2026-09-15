@@ -22,6 +22,7 @@ Backend="*res://scripts/autoload/Backend.gd"
 GameProfile="*res://scripts/autoload/GameProfile.gd"
 MatchSession="*res://scripts/autoload/MatchSession.gd"
 PackSession="*res://scripts/autoload/PackSession.gd"
+PlayerSession="*res://scripts/autoload/PlayerSession.gd"
 IapClient="*res://scripts/autoload/IapClient.gd"
 ThemeManager="*res://scripts/autoload/ThemeManager.gd"
 

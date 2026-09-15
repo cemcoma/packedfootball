@@ -23,6 +23,7 @@ const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
 @onready var _credits_chip: CurrencyChip = %CreditsChip
 @onready var _bucks_chip: CurrencyChip = %BucksChip
 @onready var _medals_chip: CurrencyChip = %MedalsChip
+@onready var _inventory_label: Label = %InventoryLabel
 @onready var _currency_tabs: CurrencyPanel = %CurrencyTabs
 @onready var _packs_tab_button: Button = %PacksTabButton
 @onready var _currency_tab_button: Button = %CurrencyTabButton
@@ -58,6 +59,16 @@ func _refresh_currency_labels() -> void:
 	_credits_chip.set_amount(GameProfile.credits)
 	_bucks_chip.set_amount(GameProfile.bucks)
 	_medals_chip.set_amount(GameProfile.medals)
+	_refresh_inventory_label()
+
+func _refresh_inventory_label() -> void:
+	var count := GameProfile.inventory_count()
+	var full: bool = GameProfile.inventory_space() <= 0
+	_inventory_label.text = "Bench %d / %d" % [count, GameProfile.inventory_cap]
+	_inventory_label.add_theme_color_override(
+		"font_color",
+		ThemeManager.color("warning") if full else ThemeManager.color("text_hint")
+	)
 
 
 func _on_packs_tab_pressed() -> void:
@@ -168,7 +179,9 @@ func _populate_packs_grid() -> void:
 		var view: PackView = PACK_VIEW_SCENE.instantiate()
 		_packs_grid.add_child(view)
 		view.set_pack(typed_pack)
-		view.set_affordable(_balance_for(typed_pack.price_currency) >= typed_pack.price)
+		view.set_affordable(
+			_balance_for(typed_pack.price_currency) >= typed_pack.price and _has_room_for(typed_pack)
+		)
 		view.buy_pressed.connect(_on_buy_pressed.bind(typed_pack))
 		view.info_pressed.connect(_on_info_pressed.bind(typed_pack))
 
@@ -191,7 +204,23 @@ func _balance_for(currency_key: String) -> int:
 			return GameProfile.credits
 
 
+## Whether the WHOLE pack fits on the bench. Deliberately not "are we under
+## the cap right now": a 5-card pack opened at 48/50 would put the club over
+## it, so the backend refuses that outright (see its INVENTORY_CAP) and this
+## greys the button out to match rather than letting the user find out after
+## they commit.
+func _has_room_for(pack: PackData) -> bool:
+	return GameProfile.inventory_space() >= maxi(1, pack.cards_per_pack)
+
+
 func _on_buy_pressed(pack: PackData) -> void:
+	if not _has_room_for(pack):
+		_status_label.text = (
+			"Your inventory is full (%d / %d) -- release players from the Team screen to make room for %s."
+			% [GameProfile.inventory_count(), GameProfile.inventory_cap, pack.pack_name]
+		)
+		return
+
 	if _balance_for(pack.price_currency) < pack.price:
 		_status_label.text = "Not enough %s for %s." % [
 			CurrencyDisplay.lowercase_label_for(pack.price_currency), pack.pack_name
@@ -217,7 +246,15 @@ func _on_buy_pressed(pack: PackData) -> void:
 	)
 	if not res.ok:
 		_opening_popup.visible = false
-		_status_label.text = "Could not open %s -- try again." % pack.pack_name
+		# 409 is the backend's inventory cap. _has_room_for above should have
+		# caught it, so reaching here means the local card cache disagrees
+		# with Firestore -- say what's actually wrong rather than "try again",
+		# which would be advice that can't work.
+		_status_label.text = (
+			"Your inventory is full -- release players from the Team screen first."
+			if res.status == 409
+			else "Could not open %s -- try again." % pack.pack_name
+		)
 		return
 
 	# .get(key, default) only falls back to `default` when the key is
@@ -239,6 +276,7 @@ func _on_buy_pressed(pack: PackData) -> void:
 	# priced in any one of them, and apply_currency_balances ignores whichever
 	# keys are absent, so this is safe against an older backend too.
 	GameProfile.add_purchased_cards(cards)
+	GameProfile.apply_inventory_cap(res.data.get("inventory_cap"))
 	GameProfile.apply_currency_balances(
 		res.data.get("credits_remaining"),
 		res.data.get("bucks_remaining"),

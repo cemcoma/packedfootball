@@ -46,6 +46,13 @@ text = "SHOP"
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="InventoryLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1227408414]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 13
+text = "Bench 0 / 50"
+
 [node name="CreditsChip" parent="Margin/RootVBox/HeaderRow" instance=ExtResource("5")]
 unique_name_in_owner = true
 layout_mode = 2

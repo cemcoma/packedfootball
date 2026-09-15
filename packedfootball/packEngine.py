@@ -77,10 +77,10 @@ _SKILL_STAT_NAMES = tuple(
 # Height in cm: (mean, spread) per position. Keepers and centre-backs are
 # picked for being tall; wingers and full-backs tend not to be.
 HEIGHT_PROFILES = {
-    "GK": (180, 10),
-    "CB": (183, 10),
-    "ST": (180, 15),
-    "CDM": (182, 15),
+    "GK": (180, 6),
+    "CB": (183, 8),
+    "ST": (180, 13),
+    "CDM": (182, 10),
     "CM": (177, 10),
     "CAM": (175, 8),
     "LB": (177, 5),

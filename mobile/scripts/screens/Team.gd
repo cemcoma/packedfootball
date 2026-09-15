@@ -425,4 +425,4 @@ func _on_kit_pressed() -> void:
 func _on_back_pressed() -> void:
 	if GameProfile.is_dirty():
 		GameProfile.discard_changes()
-	get_tree().change_scene_to_file("res://scenes/Menu.tscn")
+	get_tree().change_scene_to_file("res://scenes/TeamHub.tscn")

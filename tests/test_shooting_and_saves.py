@@ -10,7 +10,7 @@ problems rather than one:
      go in".
   3. The save roll ignored the shot completely: a full-stretch dive at a
      screamer was exactly as likely to succeed as a tame roller.
-  4. The save was re-rolled every step while the ball was near, so 61 shots
+  4. The save was re-rolled every step while the ball was near, so 111 shots
      produced 74 save rolls.
 
 Everything here tests the fix for one of those. The numbers are anchored to

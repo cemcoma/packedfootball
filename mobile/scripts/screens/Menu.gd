@@ -63,8 +63,10 @@ func _on_shop_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/Shop.tscn")
 
 
+## Lands on the Team hub (Squad or Inventory), not straight on the squad
+## editor the way it used to -- see TeamHub.gd.
 func _on_team_pressed() -> void:
-	get_tree().change_scene_to_file("res://scenes/Team.tscn")
+	get_tree().change_scene_to_file("res://scenes/TeamHub.tscn")
 
 
 func _on_leaderboard_pressed() -> void:

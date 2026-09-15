@@ -215,4 +215,4 @@ text = "Save Team"
 [node name="BackButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=55272562]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Back to Menu"
+text = "Back to Team"

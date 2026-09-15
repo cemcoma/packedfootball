@@ -1,0 +1,97 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/screens/Inventory.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/components/CurrencyChip.tscn" id="3"]
+
+[node name="Inventory" type="Control" unique_id=1960000001]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" parent="." unique_id=1960000002 instance=ExtResource("2")]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=1960000003]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1960000004]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HeaderRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1960000005]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TitleLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1960000006]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 24
+text = "INVENTORY"
+
+[node name="CountLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1960000007]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 14
+text = "0 owned"
+
+[node name="FilterDropdown" type="OptionButton" parent="Margin/RootVBox/HeaderRow" unique_id=1960000008]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="CreditsChip" parent="Margin/RootVBox/HeaderRow" unique_id=1960000009 instance=ExtResource("3")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="HintLabel" type="Label" parent="Margin/RootVBox" unique_id=1960000010]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Tap a player for their full details, to release them, or to restyle them. Highlighted cards are in your starting XI."
+
+[node name="GridScroll" type="ScrollContainer" parent="Margin/RootVBox" unique_id=1960000011]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="GridWrap" type="VBoxContainer" parent="Margin/RootVBox/GridScroll" unique_id=1960000012]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="EmptyLabel" type="Label" parent="Margin/RootVBox/GridScroll/GridWrap" unique_id=1960000013]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "No players."
+
+[node name="InventoryGrid" type="GridContainer" parent="Margin/RootVBox/GridScroll/GridWrap" unique_id=1960000014]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 7
+
+[node name="BackButton" type="Button" parent="Margin/RootVBox" unique_id=1960000015]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Back to Team"

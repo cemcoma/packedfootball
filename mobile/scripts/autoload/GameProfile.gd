@@ -23,6 +23,17 @@ extends Node
 
 const DEFAULT_FORMATION := "4-4-2"
 
+## Fallback bench limit, used only until the first backend response arrives
+## with the real one. backend/main.py's INVENTORY_CAP is the authority and
+## the only copy worth editing -- it rides in on /account/bootstrap (which
+## load_all() calls on every login), so this is what's on screen for the few
+## hundred milliseconds before that lands, and after a failed bootstrap.
+const DEFAULT_INVENTORY_CAP := 100
+
+## The live limit: DEFAULT_INVENTORY_CAP until the server says otherwise.
+## Read this, never the constant.
+var inventory_cap: int = DEFAULT_INVENTORY_CAP
+
 var is_loaded: bool = false
 
 # Profile fields (mirrors game_state.py's load_or_create_profile shape).
@@ -96,7 +107,9 @@ static func _array(doc: Dictionary, key: String, default: Array) -> Array:
 ## builds its own local starter squad instead of needing this, which is why
 ## this gap only ever existed on the Godot side).
 func load_all() -> void:
-	await Backend.call_endpoint(HTTPClient.METHOD_POST, "/account/bootstrap")
+	var bootstrap: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_POST, "/account/bootstrap")
+	if bootstrap.ok:
+		apply_inventory_cap(bootstrap.data.get("inventory_cap"))
 
 	var doc = await Firestore.get_document(_user_doc_path())
 	var ids: Array = []
@@ -201,6 +214,58 @@ func switch_formation(new_name: String) -> void:
 func discard_changes() -> void:
 	formation = saved_formation
 	slot_assignment = saved_slot_assignment.duplicate()
+
+
+## How many cards hold a users/{uid}/inventory pointer document -- which is
+## exactly what the backend counts against INVENTORY_CAP.
+##
+## Deliberately NOT bench_ids().size(): that's derived from the LIVE
+## slot_assignment, so pulling a player out of the XI without saving would
+## make the Shop think a slot had opened up when Firestore still disagrees.
+## .doc_id is the saved truth (load_all sets it, save_team keeps it honest
+## in both directions, /pack/open returns it for new cards), so this only
+## moves when the server's count does.
+func inventory_count() -> int:
+	var count := 0
+	for player_id in all_cards.keys():
+		var card: PlayerCard = all_cards[player_id]
+		if card.doc_id != "":
+			count += 1
+	return count
+
+
+func inventory_space() -> int:
+	return maxi(0, inventory_cap - inventory_count())
+
+
+## Takes the authoritative cap from any endpoint that returns one
+## (/account/bootstrap, /pack/open, /player/release). Ignores a missing or
+## nonsensical value rather than trusting it blindly -- a null would be a
+## hard type error assigned into an int, and a zero would silently lock the
+## Shop for everyone.
+func apply_inventory_cap(value) -> void:
+	if typeof(value) in [TYPE_INT, TYPE_FLOAT] and int(value) > 0:
+		inventory_cap = int(value)
+
+
+## Drops a released card out of the cache. Clears any slot still holding it
+## as a last resort -- the backend refuses to release an XI player, so this
+## should never fire, but a half-cleared cache would show a card that no
+## longer exists on the pitch.
+func release_card(player_id: String) -> void:
+	all_cards.erase(player_id)
+	for i in range(slot_assignment.size()):
+		if slot_assignment[i] == player_id:
+			slot_assignment[i] = ""
+
+
+## Folds a just-saved restyle back into the cached card, so every screen
+## showing it redraws with the new look without a reload.
+func set_card_appearance(player_id: String, appearance: Dictionary) -> void:
+	if not all_cards.has(player_id):
+		return
+	var card: PlayerCard = all_cards[player_id]
+	card.appearance = appearance
 
 
 ## Every id in all_cards not currently occupying a slot.
@@ -319,6 +384,7 @@ func reset() -> void:
 	losses = 0
 	draws = 0
 	kit = ""
+	inventory_cap = DEFAULT_INVENTORY_CAP
 	formation = DEFAULT_FORMATION
 	slot_assignment = []
 	all_cards = {}

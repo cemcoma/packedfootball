@@ -146,6 +146,61 @@ const FACE_STYLES := [
 
 const MOUTH_COLOR := Color(0.25, 0.15, 0.12)
 
+# ------------------------------------------------------------ slot index
+#
+# The five slots, in the order a customization screen should present them:
+# top of the body down. Mirrors player.py's APPEARANCE_SLOTS (which is the
+# order the SERVER rolls them in, and irrelevant to display).
+
+const SLOTS := ["skin_tone", "hair_style", "hair_color", "face", "shoe_color"]
+
+const SLOT_LABELS := {
+	"skin_tone": "Skin tone",
+	"hair_style": "Hair",
+	"hair_color": "Hair colour",
+	"face": "Face",
+	"shoe_color": "Boots",
+}
+
+
+## The palette a colour slot picks from, or [] for a slot that picks a SHAPE
+## instead. This is what lets CustomizePlayer.gd build its whole UI from this
+## file -- swatches where there are colours, named buttons where there
+## aren't -- so a sixth slot is an entry here and nothing else.
+static func colors_for(slot: String) -> Array:
+	match slot:
+		"skin_tone":
+			return SKIN_TONES
+		"hair_color":
+			return HAIR_COLORS
+		"shoe_color":
+			return SHOE_COLORS
+	return []
+
+
+## A human name for one option, for a button label or a summary line. Shape
+## slots carry their own "name"; colour slots have none, so they're numbered.
+static func option_name(slot: String, index: int) -> String:
+	match slot:
+		"hair_style":
+			return hair_style(index).get("name", "Hair %d" % (index + 1))
+		"face":
+			return face_style(index).get("name", "Face %d" % (index + 1))
+	return "%s %d" % [SLOT_LABELS.get(slot, slot.capitalize()), index + 1]
+
+
+## Every slot present and in range. A card doc can be missing a slot (it
+## predates it) or carry one rolled by a newer build than this one; both
+## would otherwise read as "changed" the moment a customize screen wrote the
+## look back, and get charged for.
+static func normalize(appearance: Dictionary) -> Dictionary:
+	var result := {}
+	for slot in SLOTS:
+		var value = appearance.get(slot)
+		var index: int = value if typeof(value) in [TYPE_INT, TYPE_FLOAT] else 0
+		result[slot] = clampi(index, 0, option_count(slot) - 1)
+	return result
+
 
 ## How many options a slot has. Derived from the lists above rather than
 ## written out, so it can never drift from the data -- unlike the server's
@@ -185,7 +240,7 @@ static func face_style(index: int) -> Dictionary:
 ## run backend/scripts/sync_player_appearance.py to backfill the old ones.
 static func mock_from_id(player_id: String) -> Dictionary:
 	var appearance := {}
-	for slot in ["skin_tone", "hair_style", "hair_color", "face", "shoe_color"]:
+	for slot in SLOTS:
 		appearance[slot] = _mock_index(player_id, slot)
 	return appearance
 

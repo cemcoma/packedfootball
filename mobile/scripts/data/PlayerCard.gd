@@ -52,6 +52,24 @@ static func tier_color(tier: String) -> Color:
 	return TIER_COLORS.get(tier, Color(0.5, 0.5, 0.5))
 
 
+## What releasing a card pays out. Shown on the Release button before the
+## request; backend/main.py's RELEASE_CREDITS_BY_TIER is what actually pays,
+## so the two tables have to be kept in step by hand. An unknown tier falls
+## back to the floor, exactly as that end does.
+const RELEASE_CREDITS := {
+	"bronze": 10,
+	"silver": 20,
+	"gold": 50,
+	"platinum": 100,
+	"diamond": 250,
+	"special": 500,
+	"icon": 1000,
+}
+
+static func release_credits(tier: String) -> int:
+	return RELEASE_CREDITS.get(tier, 10)
+
+
 ## Rarity ordering (bronze=0 ... icon=6), for anything that needs to know
 ## which of two cards is the bigger pull -- e.g. PackReveal.gd sorting a
 ## just-opened pack so the best card lands last. TIER_COLORS.keys() is
@@ -118,6 +136,21 @@ static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
 
 func display_name() -> String:
 	return lname if lname != "" else fname
+
+
+func full_name() -> String:
+	return ("%s %s" % [fname, lname]).strip_edges()
+
+
+## The look to draw, with every slot present and in range -- the rolled one
+## where there is one, the id-derived mock otherwise (see `appearance`).
+## PlayerModelView does this fallback internally for drawing; this is for
+## the screens that need the actual INDICES, i.e. Customize Player, which
+## has to know what it's changing from.
+func resolved_appearance() -> Dictionary:
+	return PlayerAppearance.normalize(
+		appearance if not appearance.is_empty() else PlayerAppearance.mock_from_id(player_id)
+	)
 
 
 ## Reproduces player.py's player._calculate_overall(): primary stats (by
