@@ -70,4 +70,4 @@ func set_out_of_position(is_out_of_position: bool) -> void:
 
 
 func set_highlighted(is_highlighted: bool) -> void:
-	modulate = Color(1.15, 1.15, 0.85) if is_highlighted else Color.WHITE
+	modulate = Color(1.4, 1.4, 0.9) if is_highlighted else Color.WHITE
