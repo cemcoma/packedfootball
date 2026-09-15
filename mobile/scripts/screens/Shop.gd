@@ -34,10 +34,28 @@ const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
 @onready var _currency_panel: VBoxContainer = %CurrencyPanel
 @onready var _back_button: Button = %BackButton
 @onready var _info_popup: PackInfoPopup = %InfoPopup
-@onready var _opening_popup: Control = %PackOpeningPopup
+@onready var _busy_popup: Control = %BusyPopup
 
 var _packs: Array = []  # PackData, every pack the backend returned
 var _pack_types: Array[String] = []  # dropdown item index -> pack type
+
+## The pack type last looked at, remembered ACROSS scene loads.
+##
+## static so it outlives this scene instance: buying a pack leaves for
+## PackReveal.tscn and comes back to a brand NEW Shop, whose dropdown starts
+## empty -- so the "keep the selection across a refresh" logic below had
+## nothing to keep, and every purchase dumped you back on the first type.
+##
+## Kept here rather than on PackSession (which carries the just-opened
+## cards between the two screens) because this isn't about the pack: it's
+## the Shop's own view state, and it should hold however you arrive --
+## from the Menu just as much as from a reveal.
+##
+## Never cleared on sign-out, deliberately: it's a UI preference, not
+## account data, and a type that no longer exists falls back to the first
+## one on its own (see the find() below).
+static var _last_pack_type: String = ""
+var _busy: bool = false
 
 
 func _ready() -> void:
@@ -51,8 +69,13 @@ func _ready() -> void:
 	_bucks_chip.set_currency("bucks")
 	_medals_chip.set_currency("medals")
 
+	# Entering the Shop refreshes the balances before showing anything
+	# priced: bucks bought through RevenueCat are granted by a webhook
+	# rather than by this client (see CurrencyPanel), so the cached numbers
+	# can be behind by a whole purchase, and this is the one screen where
+	# being wrong about them actually costs the player something.
 	_refresh_currency_labels()
-	await _load_packs()
+	await _refresh_and_load()
 
 
 func _refresh_currency_labels() -> void:
@@ -79,6 +102,55 @@ func _on_packs_tab_pressed() -> void:
 func _on_currency_tab_pressed() -> void:
 	_packs_panel.visible = false
 	_currency_panel.visible = true
+	await _refresh_currencies("Updating your balance...")
+
+
+# -- fetching ------------------------------------------------------------------
+
+
+## Shows the wait popup, re-reads the balances, updates the header. Returns
+## once the balances on screen are the server's.
+##
+## Failure is deliberately quiet: the cached numbers are still the last ones
+## the server gave us, so the screen stays usable and priced correctly in
+## almost every case -- and the two things that actually spend money
+## (/pack/open, the redeem endpoints) re-check the real balance server-side
+## regardless of what was on screen.
+func _refresh_currencies(status: String) -> bool:
+	if _busy:
+		return false
+	_busy = true
+	_busy_popup.set_status(status)
+	_busy_popup.visible = true
+
+	var ok: bool = await GameProfile.refresh_currencies()
+	_refresh_currency_labels()
+
+	_busy_popup.visible = false
+	_busy = false
+	if not ok:
+		_status_label.text = "Could not refresh your balance -- showing the last known one."
+	return ok
+
+
+## Balances first, then the catalog, under one popup -- both are real
+## awaits, so the status text moving is the request actually progressing
+## rather than a timer pretending it is.
+func _refresh_and_load() -> void:
+	_busy = true
+	_busy_popup.set_status("Updating your balance...")
+	_busy_popup.visible = true
+
+	var ok: bool = await GameProfile.refresh_currencies()
+	_refresh_currency_labels()
+
+	_busy_popup.set_status("Loading packs...")
+	await _load_packs()
+
+	_busy_popup.visible = false
+	_busy = false
+	if not ok and _status_label.text == "":
+		_status_label.text = "Could not refresh your balance -- showing the last known one."
 
 
 func _on_back_pressed() -> void:
@@ -86,7 +158,6 @@ func _on_back_pressed() -> void:
 
 
 func _load_packs() -> void:
-	_status_label.text = "Loading packs..."
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/pack/list")
 	if not res.ok:
 		_status_label.text = "Could not load packs -- try again later."
@@ -111,7 +182,12 @@ func _load_packs() -> void:
 ## anything it doesn't know about is appended alphabetically rather than
 ## dropped.
 func _rebuild_pack_type_dropdown() -> void:
+	# Whatever is on screen right now if this is a refresh; the type from
+	# before we navigated away if this is a freshly-loaded Shop, where the
+	# dropdown is still empty and _selected_pack_type() has nothing to read.
 	var previous_type := _selected_pack_type()
+	if previous_type == "":
+		previous_type = _last_pack_type
 
 	var present: Dictionary = {}
 	for pack in _packs:
@@ -138,6 +214,11 @@ func _rebuild_pack_type_dropdown() -> void:
 	var restored := _pack_types.find(previous_type)
 	if not _pack_types.is_empty():
 		_pack_type_dropdown.select(restored if restored != -1 else 0)
+		# Record what we actually landed on, not what we hoped for -- a
+		# remembered type the backend has since stopped returning falls back
+		# to the first one, and remembering the dead one would mean fighting
+		# that fallback on every visit.
+		_last_pack_type = _selected_pack_type()
 
 
 func _selected_pack_type() -> String:
@@ -148,6 +229,7 @@ func _selected_pack_type() -> String:
 
 
 func _on_pack_type_selected(_index: int) -> void:
+	_last_pack_type = _selected_pack_type()
 	_populate_packs_grid()
 
 
@@ -233,8 +315,8 @@ func _on_buy_pressed(pack: PackData) -> void:
 	# would charge for, and open, a second pack) while this one is in
 	# flight -- same reason Play.gd shows its matchmaking popup up front.
 	_status_label.text = ""
-	_opening_popup.set_status("Opening %s..." % pack.pack_name)
-	_opening_popup.visible = true
+	_busy_popup.set_status("Opening %s..." % pack.pack_name)
+	_busy_popup.visible = true
 
 	# Not awaited -- moves the status along on its own if the request is
 	# slow, and simply never fires visibly if it isn't. Same non-awaited
@@ -246,7 +328,7 @@ func _on_buy_pressed(pack: PackData) -> void:
 		HTTPClient.METHOD_POST, "/pack/open", {"pack_id": pack.pack_id}
 	)
 	if not res.ok:
-		_opening_popup.visible = false
+		_busy_popup.visible = false
 		# 409 is the backend's inventory cap. _has_room_for above should have
 		# caught it, so reaching here means the local card cache disagrees
 		# with Firestore -- say what's actually wrong rather than "try again",
@@ -297,5 +379,5 @@ func _on_buy_pressed(pack: PackData) -> void:
 ## popup being hidden means it already came back (or failed), so this does
 ## nothing rather than overwriting a fresh status on a closed popup.
 func _on_pack_open_midpoint() -> void:
-	if _opening_popup.visible:
-		_opening_popup.set_status("Shuffling the pack...")
+	if _busy_popup.visible:
+		_busy_popup.set_status("Shuffling the pack...")

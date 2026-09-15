@@ -7,8 +7,8 @@ extends Control
 ## "Inventory" means two slightly different things and both are on screen at
 ## once, so the header spells both out: the SCREEN shows every card owned,
 ## while the CAP counts only the benched ones (the XI sits outside it -- see
-## GameProfile.inventory_cap). A player in the XI is tinted and can't be
-## released, which is the one place the distinction actually bites.
+## GameProfile.inventory_cap). A player in the XI wears an "XI" badge and
+## can't be released, which is the one place the distinction actually bites.
 ##
 ## Cards come straight off the already-loaded GameProfile cache, not a fresh
 ## fetch -- same as the Squad screen's bench grid. Releasing or restyling
@@ -135,7 +135,7 @@ func _populate_grid() -> void:
 		view.set_card(card)
 		# The only visual difference between an XI card and a bench one, and
 		# the reason Player Details will refuse to release this one.
-		view.set_highlighted(starting.has(player_id))
+		view.set_badge("XI" if starting.has(player_id) else "")
 		view.pressed.connect(_on_card_pressed.bind(player_id))
 
 

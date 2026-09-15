@@ -66,7 +66,7 @@ size_flags_vertical = 4
 [node name="HintLabel" type="Label" parent="Margin/RootVBox" unique_id=1960000010]
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
-text = "Tap a player for their full details, to release them, or to restyle them. Highlighted cards are in your starting XI."
+text = "Tap a player for their full details, to release them, or to restyle them. Cards badged XI are in your starting lineup."
 
 [node name="GridScroll" type="ScrollContainer" parent="Margin/RootVBox" unique_id=1960000011]
 layout_mode = 2

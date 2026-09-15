@@ -148,6 +148,16 @@ func load_all() -> void:
 	is_loaded = true
 
 
+func refresh_currencies() -> bool:
+	var doc = await Firestore.get_document(_user_doc_path())
+	if doc == null:
+		return false
+	credits = _int(doc, "credits", credits)
+	bucks = _int(doc, "bucks", bucks)
+	medals = _int(doc, "medals", medals)
+	return true
+
+
 ## Returns benched cards, each tagged with a .doc_id for later updates.
 func load_inventory() -> Array:
 	var pointers: Array = await Firestore.list_collection("users/%s/inventory" % FirebaseAuth.uid)

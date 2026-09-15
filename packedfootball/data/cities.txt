@@ -15,3 +15,10 @@ Nigeria: Lagos, Abuja, Kano, Ibadan, Port Harcourt, Benin City, Kaduna, Jos, Ilo
 Japan: Tokyo, Osaka, Yokohama, Nagoya, Sapporo, Fukuoka, Kobe, Kyoto, Kawasaki, Saitama
 USA: New York, Los Angeles, Chicago, Miami, Dallas, Seattle, Atlanta, Houston, Philadelphia, Boston
 Turkey: İzmir, Ankara, Gümüldür, Istanbul, Bursa, Antalya, Adana, Trabzon, Gaziantep, Konya, Eskişehir, Samsun
+Belgium: Brussels, Antwerp, Ghent, Charleroi, Liege, Bruges, Namur, Leuven, Mons, Aalst, Mechelen, Ostend
+Croatia: Zagreb, Split, Rijeka, Osijek, Zadar, Slavonski Brod, Pula, Karlovac, Sibenik, Dubrovnik, Varazdin, Sisak
+Morocco: Casablanca, Rabat, Fes, Marrakech, Tangier, Agadir, Meknes, Oujda, Kenitra, Tetouan, Safi, Essaouira
+Colombia: Bogota, Medellin, Cali, Barranquilla, Cartagena, Cucuta, Bucaramanga, Pereira, Santa Marta, Ibague, Manizales, Pasto
+Mexico: Mexico City, Guadalajara, Monterrey, Puebla, Tijuana, Leon, Juarez, Zapopan, Merida, San Luis Potosi, Queretaro, Cancun
+South Korea: Seoul, Busan, Incheon, Daegu, Daejeon, Gwangju, Suwon, Ulsan, Changwon, Seongnam, Goyang, Yongin
+Sweden: Stockholm, Gothenburg, Malmo, Uppsala, Vasteras, Orebro, Linkoping, Helsingborg, Jonkoping, Norrkoping, Lund, Umea

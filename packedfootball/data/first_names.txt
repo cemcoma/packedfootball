@@ -2,16 +2,23 @@
 # One line per country. Add/remove countries and names freely.
 # Parse with: line.split(":", 1) -> [country, "name1, name2, ..."]
 
-England: James, Harry, Jack, George, Oliver, Jordan, Marcus, Callum, Declan, Bukayo, Jude, Phil, Trent, Raheem, Mason, Charlie, Thomas, William, Arthur, Henry
-Spain: Pablo, Alejandro, Sergio, Alvaro, Pedro, Gabriel, Rodrigo, Nacho, Marco, Ferran, Gavi, Pedri, Lamine, Pau, Dani, David, Javier, Carlos, Jose, Antonio
-France: Kylian, Antoine, Paul, Ousmane, Aurelien, Theo, Adrien, Raphael, William, Eduardo, N'Golo, Olivier, Hugo, Jules, Bradley, Jean, Pierre, Louis, Lucas, Michel
-Germany: Leon, Joshua, Ilkay, Thomas, Manuel, Timo, Kai, Jonas, Niklas, Serge, Jamal, Florian, Toni, Antonio, Leroy, Lukas, Felix, Maximilian, Paul, Stefan
-Italy: Marco, Lorenzo, Federico, Nicolo, Ciro, Giovanni, Alessandro, Leonardo, Matteo, Francesco, Gianluigi, Sandro, Giorgio, Domenico, Davide, Giuseppe, Antonio, Luca, Andrea, Roberto
-Portugal: Joao, Bruno, Bernardo, Diogo, Rafael, Goncalo, Pedro, Ruben, Vitor, Nuno, Cristiano, Pepe, Rui, Francisco, Antonio, Manuel, Jose, Luis, Carlos, Miguel
-Brazil: Gabriel, Lucas, Matheus, Rodrigo, Vinicius, Neymar, Thiago, Fabinho, Marquinhos, Raphinha, Alisson, Ederson, Casemiro, Antony, Richarlison, Joao, Pedro, Marcelo, Luiz, Carlos
-Argentina: Lionel, Angel, Rodrigo, Emiliano, Nicolas, Lautaro, Julian, Enzo, Alexis, Leandro, Paulo, Alejandro, Lisandro, Cristian, Nahuel, Juan, Carlos, Diego, Martin, Fernando
-Netherlands: Virgil, Memphis, Frenkie, Matthijs, Denzel, Cody, Georginio, Nathan, Steven, Donyell, Xavi, Teun, Jeremie, Tijjani, Bart, Johannes, Willem, Hendrik, Pieter, Cornelis
-Nigeria: Victor, Wilfred, Ademola, Alex, Kelechi, Samuel, Moses, Joe, Taiwo, Chidozie, Stanley, Frank, Calvin, Bright, Terem, Emmanuel, John, David, Michael, Peter
-Japan: Takefusa, Kaoru, Ritsu, Wataru, Daichi, Junya, Ao, Hidemasa, Yuki, Takehiro, Zion, Ko, Takumi, Hiroki, Koki, Kenji, Takashi, Makoto, Satoshi, Ryota
-USA: Christian, Weston, Tyler, Gio, Sergino, Ricardo, Timothy, Brenden, Folarin, Yunus, Matt, Antonee, Chris, Josh, Miles, John, Michael, David, James, Robert
-Turkey: Cem, Can, Bora, Ege, Rodi, Erfan, Özmer, Tunay, Taylan, Kerem, Eray, Onur, Arda, Hakan, Kenan, Barış, Ferdi, İsmail, Çağlar, Mert
+England: James, Harry, Jack, George, Oliver, Charlie, Thomas, William, Arthur, Henry, Joshua, Samuel, Daniel, Alexander, Edward, Joseph, Ethan, Benjamin, David, Ryan
+Spain: Pablo, Alejandro, Sergio, Alvaro, Pedro, Gabriel, Rodrigo, Marco, Dani, David, Javier, Carlos, Jose, Antonio, Manuel, Lucas, Mateo, Hugo, Adrian, Diego
+France: Louis, Lucas, Jules, Gabriel, Leo, Raphael, Arthur, Hugo, Paul, Maxime, Antoine, Thomas, Alexandre, Theo, Clement, Nathan, Nicolas, Julien, Pierre, Mathis
+Germany: Lukas, Felix, Maximilian, Paul, Stefan, Jonas, Niklas, Leon, Finn, Elias, Ben, Luca, Noah, Julian, Tim, Philipp, Moritz, Jan, Alexander, David
+Italy: Marco, Lorenzo, Leonardo, Matteo, Francesco, Alessandro, Giovanni, Davide, Giuseppe, Antonio, Luca, Andrea, Roberto, Federico, Gabriele, Riccardo, Tommaso, Mattia, Simone, Edoardo
+Portugal: Joao, Bruno, Bernardo, Diogo, Rafael, Goncalo, Pedro, Ruben, Rui, Francisco, Antonio, Manuel, Jose, Luis, Carlos, Miguel, Afonso, Duarte, Tiago, Martim
+Brazil: Gabriel, Lucas, Matheus, Rodrigo, Thiago, Felipe, Bruno, Gustavo, Leonardo, Eduardo, Rafael, Andre, Guilherme, Caio, Henrique, Joao, Pedro, Marcelo, Luiz, Carlos
+Argentina: Juan, Carlos, Diego, Martin, Fernando, Nicolas, Lucas, Joaquin, Bautista, Benjamin, Tomas, Facundo, Agustin, Santiago, Lautaro, Julian, Enzo, Leandro, Ignacio, Franco
+Netherlands: Daan, Sem, Lucas, Milan, Levi, Finn, Jesse, Bram, Luuk, Lars, Johannes, Willem, Hendrik, Pieter, Cornelis, Thijs, Ruben, Tim, Stijn, Jasper
+Nigeria: Emmanuel, John, David, Michael, Peter, Samuel, Daniel, Joseph, Gabriel, Chukwu, Chinedu, Olumide, Babatunde, Kelechi, Femi, Tunde, Ibrahim, Musa, Segun, Chioma
+Japan: Kenji, Takashi, Makoto, Satoshi, Ryota, Daiki, Ren, Haruto, Yuto, Sota, Kento, Kazuki, Shota, Takuya, Koki, Hiroshi, Naoki, Shin, Riku, Hayato
+USA: John, Michael, David, James, Robert, William, Joseph, Charles, Christopher, Daniel, Matthew, Anthony, Mark, Donald, Steven, Paul, Andrew, Joshua, Brian, Kevin
+Turkey: Cem, Can, Bora, Ege, Rodi, Erfan, Özmer, Tunay, Taylan, Kerem, Eray, Onur, Arda, Hakan, Kenan, Barış, Ferdi, İsmail, Çağlar, Mert, Mehmet, Burak, Emre, Yusuf
+Belgium: Lucas, Louis, Noah, Arthur, Liam, Adam, Jules, Victor, Gabriel, Mathis, Milan, Hugo, Maxime, Finn, Thomas, Vince, Robin, Elias, Alexander, Felix
+Croatia: Luka, Ivan, Marko, David, Filip, Petar, Josip, Jakov, Mateo, Fran, Mihael, Leon, Borna, Roko, Ante, Dino, Karlo, Marin, Tin, Lovro
+Morocco: Mohamed, Youssef, Hamza, Mehdi, Omar, Amine, Ayoub, Anas, Saad, Adam, Rayan, Othmane, Reda, Walid, Bilal, Zakaria, Soufiane, Karim, Nabil, Tarik
+Colombia: Santiago, Mateo, Sebastian, Matias, Samuel, Emiliano, Alejandro, Nicolas, Daniel, Jeronimo, Gabriel, Emmanuel, Andres, Felipe, David, Lucas, Juan, Diego, Carlos, Camilo
+Mexico: Santiago, Mateo, Leonardo, Matias, Emiliano, Diego, Daniel, Miguel, Alexander, Sebastian, Angel, Gael, David, Fernando, Jesus, Carlos, Gabriel, Alejandro, Javier, Sofia
+South Korea: Min-jun, Seo-jun, Ha-joon, Do-yun, Eun-woo, Si-woo, Ji-ho, Ye-jun, Yu-jun, Ju-won, Hyun-woo, Jun-seo, Geon-woo, Woo-jin, Dong-hyun, Min-jae, Jae-won, Seung-woo, Ji-hoon, Sung-min
+Sweden: William, Lucas, Liam, Noah, Elias, Oliver, Hugo, Leo, Oscar, Adam, Alexander, Filip, Viktor, Emil, Anton, Axel, Isak, Ludvig, Nils, Theo

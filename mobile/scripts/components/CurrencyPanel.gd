@@ -217,7 +217,7 @@ func _on_bucks_tile_pressed(product: BucksProductData) -> void:
 func _on_iap_purchase_completed(product_id: String) -> void:
 	_status_label.text = "Purchase successful! Updating your balance..."
 	await get_tree().create_timer(2.0).timeout  # give the webhook a moment to land before refetching
-	await GameProfile.load_all()
+	await GameProfile.refresh_currencies()
 	_status_label.text = "Purchase successful!"
 	currency_changed.emit()
 

@@ -169,7 +169,7 @@ func _play_reveal_sequence() -> void:
 			break
 
 		if is_hero:
-			view.set_highlighted(true)  # a subtle golden-white pulse, PlayerCardView's own existing hook
+			view.set_celebrating(true)  # a glow that breathes until the card is put away
 			if _hero_sound.stream != null:
 				_hero_sound.play()
 			_skip_hint_label.text = "Tap to continue"
@@ -216,7 +216,7 @@ func _show_browse_state() -> void:
 		view.scale = Vector2.ONE
 		view.modulate = Color.WHITE
 		view.pivot_offset = Vector2.ZERO
-		view.set_highlighted(false)
+		view.set_celebrating(false)
 		_cards_grid.add_child(view)
 		# set_card() reaches into %Background/%OverallLabel/etc., which stay
 		# null until this node is actually in the tree -- must come after

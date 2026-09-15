@@ -2,16 +2,23 @@
 # One line per country. Add/remove countries and names freely.
 # Parse with: line.split(":", 1) -> [country, "name1, name2, ..."]
 
-England: Smith, Johnson, Williams, Kane, Rice, Foden, Sterling, Walker, Maguire, Saka, Bellingham, Alexander-Arnold, Mount, Rashford, Taylor, Brown, Davies, Evans, Wilson, Thomas
-Spain: Garcia, Fernandez, Rodriguez, Martinez, Lopez, Gonzalez, Torres, Ramos, Alba, Silva, Yamal, Cubarsi, Olmo, Carvajal, Perez, Sanchez, Romero, Navarro, Ruiz, Diaz
-France: Martin, Bernard, Dubois, Thomas, Robert, Petit, Moreau, Simon, Mbappe, Tchouameni, Kante, Griezmann, Giroud, Saliba, Lloris, Laurent, Michel, Garcia, David, Richard
-Germany: Muller, Schmidt, Schneider, Fischer, Weber, Meyer, Wagner, Becker, Hoffmann, Neuer, Musiala, Wirtz, Kroos, Rudiger, Sane, Schulz, Koch, Richter, Klein, Wolf
-Italy: Rossi, Russo, Ferrari, Esposito, Bianchi, Romano, Colombo, Ricci, Marchisio, Chiellini, Donnarumma, Tonali, Barella, Bastoni, Chiesa, Marino, Greco, Bruno, Gallo, Conti
-Portugal: Quaresma, Silva, Santos, Ferreira, Pereira, Oliveira, Costa, Rodrigues, Martins, Carvalho, Fernandes, Ronaldo, Neves, Jota, Cancelo, Dias, Sousa, Pinto, Marques, Gomes, Lopes
-Brazil: Silva, Santos, Oliveira, Souza, Pereira, Costa, Almeida, Carvalho, Rodrigues, Gomes, Junior, Alves, Ribeiro, Lima, Pinto, Faria, Rocha, Moura, Cavalcanti, Dias
-Argentina: Gonzalez, Rodriguez, Fernandez, Lopez, Martinez, Diaz, Perez, Sanchez, Romero, Alvarez, Messi, Di Maria, Mac Allister, De Paul, Otamendi, Gomez, Ruiz, Alonso, Torres, Dominguez
-Netherlands: de Jong, Jansen, de Vries, van den Berg, van Dijk, Bakker, Visser, Smit, Bos, Peters, Simons, Koopmeiners, Frimpong, Reijnders, Verbruggen, Meijer, Mulder, Dekker, Brouwer, de Boer
-Nigeria: Osimhen, Ndidi, Lookman, Iwobi, Chukwueze, Aina, Awoniyi, Onyeka, Bassey, Ekong, Nwabali, Onyedika, Basiru, Moffi, Uzoho, Ibrahim, Musa, Abdullahi, Abubakar, Umar
-Japan: Kubo, Mitoma, Doan, Endo, Tanaka, Ito, Morita, Yamada, Suzuki, Tomiyasu, Itakura, Minamino, Machida, Ogawa, Sato, Takahashi, Watanabe, Kobayashi, Nakamura
-USA: Pulisic, McKennie, Adams, Reyna, Dest, Pepi, Weah, Musah, Balogun, Aaronson, Turner, Robinson, Richards, Sargent, Zimmerman, Smith, Johnson, Williams, Brown, Jones
-Turkey: Tekcan, Kütükoğlu, Akoğuz, Ertem, Aydoğdu, Isci, Yılmaz, Kaya, Demir, Çelik, Şahin, Yıldız, Yıldırım, Öztürk, Aydın, Özdemir, Arslan, Doğan, Kılıç, Aslan, Sargın
+England: Smith, Jones, Taylor, Brown, Williams, Wilson, Johnson, Davies, Robinson, Wright, Thompson, Evans, Walker, White, Roberts, Green, Hall, Wood, Jackson, Clarke
+Spain: Garcia, Rodriguez, Gonzalez, Fernandez, Lopez, Martinez, Sanchez, Perez, Gomez, Martin, Jimenez, Ruiz, Hernandez, Diaz, Moreno, Alvarez, Romero, Alonso, Gutierrez, Navarro
+France: Martin, Bernard, Thomas, Petit, Robert, Richard, Durand, Dubois, Moreau, Laurent, Simon, Michel, Lefebvre, Leroy, Roux, David, Bertrand, Morel, Fournier, Girard
+Germany: Muller, Schmidt, Schneider, Fischer, Weber, Meyer, Wagner, Becker, Schulz, Hoffmann, Schafer, Koch, Bauer, Richter, Klein, Wolf, Schroder, Neumann, Schwarz, Zimmermann
+Italy: Rossi, Russo, Ferrari, Esposito, Bianchi, Romano, Colombo, Ricci, Marino, Greco, Bruno, Gallo, Conti, De Luca, Mancini, Costa, Giordano, Rizzo, Lombardi, Moretti
+Portugal: Silva, Santos, Ferreira, Pereira, Oliveira, Costa, Rodrigues, Martins, Jesus, Sousa, Fernandes, Goncalves, Gomes, Lopes, Marques, Alves, Ribeiro, Pinto, Carvalho, Teixeira
+Brazil: Silva, Santos, Oliveira, Souza, Rodrigues, Ferreira, Alves, Pereira, Lima, Gomes, Costa, Ribeiro, Martins, Carvalho, Almeida, Lopes, Soares, Fernandes, Vieira, Barbosa
+Argentina: Gonzalez, Rodriguez, Gomez, Fernandez, Lopez, Diaz, Martinez, Perez, Garcia, Sanchez, Romero, Sosa, Alvarez, Torres, Ruiz, Ramirez, Flores, Benitez, Acosta, Medina
+Netherlands: de Jong, Jansen, de Vries, van den Berg, van Dijk, Bakker, Janssen, Visser, Smit, Meijer, de Boer, Mulder, de Groot, Bos, Vos, Peters, Hendriks, van Leeuwen, Dekker, Brouwer
+Nigeria: Adeyemi, Ibrahim, Musa, Balogun, Abdullahi, Babatunde, Okafor, Okonkwo, Danjuma, Eze, Mohammed, Alabi, Lawal, Oladipo, Bello, Garba, Nnamdi, Chukwu, Okeke, Adeleke
+Japan: Sato, Suzuki, Takahashi, Tanaka, Watanabe, Ito, Yamamoto, Nakamura, Kobayashi, Kato, Yoshida, Yamada, Sasaki, Yamaguchi, Saito, Matsumoto, Inoue, Kimura, Hayashi, Shimizu
+USA: Smith, Johnson, Williams, Brown, Jones, Garcia, Miller, Davis, Rodriguez, Martinez, Hernandez, Lopez, Gonzalez, Wilson, Anderson, Thomas, Taylor, Moore, Jackson, Martin
+Turkey: Tekcan, Kütükoğlu, Akoğuz, Ertem, Aydoğdu, Isci, Yılmaz, Kaya, Demir, Çelik, Şahin, Yıldız, Yıldırım, Öztürk, Aydın, Özdemir, Arslan, Doğan, Kılıç, Aslan, Sargın, Özgür, Turan, Demirören, Karagöz, Erşahince
+Belgium: Peeters, Janssens, Maes, Jacobs, Mertens, Willems, Claes, Goossens, Wouters, De Smet, Dubois, Lambert, Martin, Dupont, Dumont, Leclercq, Simon, Laurent, Renard, Denis
+Croatia: Horvat, Kovacevic, Babic, Maric, Juric, Novak, Kovacic, Vukovic, Knezevic, Markovic, Petrovic, Maticevic, Tomic, Radic, Pavlovic, Blazevic, Bozic, Lovric, Grgic, Peric
+Morocco: Alaoui, Idrissi, Tazi, Berrada, Chraibi, El Amrani, Bennani, Filali, Mansouri, El Fassi, Saidi, Tahiri, Daoudi, Amrani, Bouazza, Cherkaoui, Naciri, Bennis, Touzani
+Colombia: Rodriguez, Gomez, Gonzalez, Martinez, Garcia, Lopez, Hernandez, Sanchez, Ramirez, Perez, Diaz, Torres, Castro, Morales, Ortiz, Gutierrez, Restrepo, Vargas, Rojas, Jimenez
+Mexico: Hernandez, Garcia, Martinez, Lopez, Gonzalez, Perez, Rodriguez, Sanchez, Ramirez, Cruz, Gomez, Flores, Morales, Vazquez, Reyes, Jimenez, Torres, Diaz, Gutierrez, Mendoza
+South Korea: Kim, Lee, Park, Jeong, Choi, Cho, Kang, Yoon, Jang, Lim, Han, Oh, Seo, Shin, Kwon, Hwang, Ahn, Song, Ryu, Hong
+Sweden: Andersson, Johansson, Karlsson, Nilsson, Eriksson, Larsson, Olsson, Persson, Svensson, Gustafsson, Pettersson, Jonsson, Jansson, Hansson, Bengtsson, Lindberg, Magnusson, Lindqvist, Lindgren, Berg
