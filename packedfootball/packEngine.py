@@ -242,7 +242,7 @@ PACK_DATABASE = {
         "price": 100,
         "cards_per_pack": 3,
         "rates": {"bronze": 0.60, "silver": 0.30, "gold": 0.075, "platinum": 0.025, "diamond": 0.0, "special": 0.0},
-        "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits"
     },
     2: {
@@ -252,7 +252,7 @@ PACK_DATABASE = {
         "price": 500,
         "cards_per_pack": 10,
         "rates": {"bronze": 0.40, "silver": 0.40, "gold": 0.15, "platinum": 0.05, "diamond": 0.0, "special": 0.0},
-        "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits"
     },
     3: {
@@ -262,7 +262,7 @@ PACK_DATABASE = {
         "price": 1000,
         "cards_per_pack": 5,
         "rates": {"bronze": 0.0, "silver": 0.18, "gold": 0.40, "platinum": 0.30, "diamond": 0.10, "special": 0.02},
-        "pos_rates": {"goalkeeper":0.25,"defender":0.25,"midfielder":0.25,"attacker":0.25},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits"
     },
     4: {
@@ -303,7 +303,6 @@ class PackManager:
         self.rng = random.Random(seed)
 
     def get_all_packs(self) -> list:
-        # like an api call, will be one TODO
         packs = []
         for pack_id, data in self.db.items():
             pack_row = {"pack_id": pack_id}

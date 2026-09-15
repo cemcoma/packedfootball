@@ -2,7 +2,7 @@ extends Control
 
 ## Shop: two segments -- Packs (real, backend-driven, split by pack type via
 ## a dropdown -- see _rebuild_pack_type_dropdown) and Currency (its own
-## sub-tabs -- Exchange/Cash/Deals/Free, see CurrencyPanel.gd -- instanced
+## sub-tabs -- Exchange/Cash/Deals/Energy/Free, see CurrencyPanel.gd -- instanced
 ## into the CurrencyPanel node below rather than built inline here, keeping
 ## this file focused on the pack catalog it already owned).
 ##

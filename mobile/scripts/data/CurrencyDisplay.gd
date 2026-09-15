@@ -15,10 +15,17 @@ extends RefCounted
 ## Nothing server-side, no Firestore field, no API field name, and no
 ## product id changed -- this is a display-only rename.
 
+## "energy" is in here despite not being a balance the way the other three
+## are -- it's a bar with a cap that refills on its own, not something you
+## accumulate. It's listed because the Shop sells it, and a thing on sale
+## needs a name, a color and (eventually) a logo like everything else on a
+## tile. Nothing reads a GameProfile.energy_* property from these keys;
+## GameProfile.energy stays the server's opaque block.
 const LABELS := {
 	"credits": "Credits",
 	"bucks": "Cash",
 	"medals": "Medals",
+	"energy": "Energy",
 }
 
 ## Accent color per currency -- same "one color per category" idea
@@ -28,14 +35,21 @@ const COLORS := {
 	"credits": Color(0.95, 0.75, 0.25),  # warm gold -- the everyday soft currency
 	"bucks": Color(0.35, 0.8, 0.55),  # green -- the bought-with-real-money one
 	"medals": Color(0.65, 0.7, 0.95),  # cool platinum -- tournament prestige
+	"energy": Color(1.0, 0.55, 0.25),  # orange -- warm like credits, but clearly not gold
 }
 
 const FALLBACK_COLOR := Color(0.7, 0.7, 0.75)
 
+## An entry here is a PROMISE of art, not proof of it -- icon_for() checks
+## the file exists and quietly returns null when it doesn't, and every caller
+## has a name-the-currency-in-text fallback. energy.png isn't drawn yet, so
+## its tiles read "10 Energy" until it lands, at which point they pick up the
+## logo with no code change.
 const ICONS := {
 	"credits": "res://sprites/currencies/credits.png",
 	"bucks": "res://sprites/currencies/bucks.png",
 	"medals": "res://sprites/currencies/medals.png",
+	"energy": "res://sprites/currencies/energy.png",
 }
 
 

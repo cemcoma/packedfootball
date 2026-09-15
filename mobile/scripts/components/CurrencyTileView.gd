@@ -35,8 +35,17 @@ func _ready() -> void:
 
 
 func set_reward(currency_key: String, amount: int) -> void:
+	set_reward_text(currency_key, _amount_with_name(currency_key, amount))
+
+
+## Same tile, with the reward spelled out instead of counted -- the energy
+## refill that fills the bar is "Full", not a fixed number, because how much
+## it actually grants depends on where the bar is when it's bought. The
+## cost side has had set_cost_text() for the same reason (real money isn't
+## a currency amount either); this is its mirror.
+func set_reward_text(currency_key: String, text: String) -> void:
 	_reward_currency = currency_key
-	_reward_amount.text = _amount_with_name(currency_key, amount)
+	_reward_amount.text = text
 	_apply_icon(_reward_icon, currency_key)
 	_restyle()
 
