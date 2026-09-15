@@ -93,15 +93,29 @@ theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 3
 columns = 3
 
-[node name="CreditsLabel" type="Label" parent="CenterContainer/Contraster/Margin/VBoxContainer" unique_id=614011115]
+[node name="CreditsRow" type="HBoxContainer" parent="CenterContainer/Contraster/Margin/VBoxContainer" unique_id=614011116]
+layout_mode = 2
+theme_override_constants/separation = 5
+alignment = 1
+
+[node name="CreditsLabel" type="Label" parent="CenterContainer/Contraster/Margin/VBoxContainer/CreditsRow" unique_id=614011115]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_vertical = 4
 theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
 theme_override_font_sizes/font_size = 16
-text = "+0 credits"
+text = "+0"
 horizontal_alignment = 1
+
+[node name="CreditsIcon" type="TextureRect" parent="CenterContainer/Contraster/Margin/VBoxContainer/CreditsRow" unique_id=614011117]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
 
 [node name="ButtonRow" type="HBoxContainer" parent="CenterContainer/Contraster/Margin/VBoxContainer" unique_id=1900000007]
 layout_mode = 2

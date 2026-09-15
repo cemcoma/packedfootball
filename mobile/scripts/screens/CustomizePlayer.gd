@@ -37,6 +37,7 @@ const UNSELECTED_BORDER := 1
 @onready var _preview_caption: Label = %PreviewCaption
 @onready var _options_box: VBoxContainer = %OptionsBox
 @onready var _cost_label: Label = %CostLabel
+@onready var _credits_texture: TextureRect = %Creditstexture
 @onready var _status_label: Label = %StatusLabel
 @onready var _save_button: Button = %SaveButton
 @onready var _back_button: Button = %BackButton
@@ -57,6 +58,9 @@ func _ready() -> void:
 	_save_button.pressed.connect(_on_save_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 	_credits_chip.set_currency("credits")
+	# Sourced from CurrencyDisplay rather than left to the .tscn, so the one
+	# ICONS table stays the only place a logo path lives.
+	_credits_texture.texture = CurrencyDisplay.icon_for("credits")
 
 	# _refresh rather than just _apply_theme_colors: the swatch borders are
 	# painted from the palette too, not only the labels.
@@ -163,20 +167,26 @@ func _refresh_cost() -> void:
 
 	_preview_caption.text = "%s  ·  %s" % [_card.position, _card.tier.capitalize()]
 
+	# Every one of these ends ON THE NUMBER, because the logo sits directly
+	# after this label and is what gives that number its unit -- so the
+	# currency never has to be named. Nothing is appended after the amount
+	# for the same reason; how much the manager actually has is the chip in
+	# the header, which carries its own logo.
 	if changed.is_empty():
-		_cost_label.text = "No changes yet  ·  %d credits per change" % CREDITS_PER_CHANGE
+		_cost_label.text = "Each change costs %s" % CurrencyDisplay.format_amount(CREDITS_PER_CHANGE)
 	else:
 		var names: Array = []
 		for slot in changed:
 			names.append(PlayerAppearance.SLOT_LABELS.get(slot, slot))
-		_cost_label.text = "%s  ·  %d credit%s" % [
-			", ".join(names), cost, "" if cost == 1 else "s"
+		_cost_label.text = "%s%s  ·  %s" % [
+			"" if affordable else "Not enough for ",
+			", ".join(names),
+			CurrencyDisplay.format_amount(cost),
 		]
-		if not affordable:
-			_cost_label.text += "  --  you have %d" % GameProfile.credits
 
 	_save_button.disabled = _saving or changed.is_empty() or not affordable
-	_save_button.text = "Save Player" if changed.is_empty() else "Save Player  -%d" % cost
+	# Negative: this one is money going OUT, where Release's is money coming in.
+	CurrencyDisplay.set_button_price(_save_button, "Save Player", -cost)
 
 
 ## Labels here sit on the plain screen background rather than inside a themed
@@ -242,7 +252,7 @@ func _on_save_pressed() -> void:
 
 	if not res.ok:
 		_set_status(
-			"Not enough credits for these changes." if res.status == 402
+			"Not enough for these changes." if res.status == 402
 			else "Could not save this look -- try again."
 		)
 		_refresh()

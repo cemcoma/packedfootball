@@ -87,3 +87,38 @@ static func format_amount(value: int) -> String:
 ## "500 credits", matching how every such label in this project already reads.
 static func lowercase_label_for(currency_key: String) -> String:
 	return label_for(currency_key).to_lower()
+
+
+## How wide a currency logo is allowed to be inside a Button. The source art
+## is 1024px square, and a Button draws its icon at the texture's natural
+## size unless told otherwise, so without this the logo is the whole screen.
+const BUTTON_ICON_PX := 20
+
+
+## Writes a price INTO a button -- "Release   +250 [logo]" -- instead of
+## spelling the currency out next to it.
+##
+## The currency is never NAMED here, only shown: the logo is the whole
+## label, which is the point (a player should recognise the coin, not learn
+## a word for it). The sign is carried in the text because a logo can't say
+## whether the amount is coming in or going out, and that's the half of a
+## price that actually matters.
+##
+## An amount of 0 drops the icon and the number entirely, leaving the plain
+## label -- a button that costs nothing shouldn't display a price of nothing.
+static func set_button_price(
+	button: Button, label: String, amount: int, currency_key: String = "credits"
+) -> void:
+	if amount == 0:
+		button.text = label
+		button.icon = null
+		return
+
+	button.text = "%s   %s%s" % [
+		label, "+" if amount > 0 else "-", format_amount(absi(amount))
+	]
+	button.icon = icon_for(currency_key)
+	# Icon AFTER the number, so it reads as a unit rather than a bullet.
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	button.expand_icon = false
+	button.add_theme_constant_override("icon_max_width", BUTTON_ICON_PX)

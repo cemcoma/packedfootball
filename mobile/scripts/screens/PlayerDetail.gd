@@ -63,6 +63,9 @@ const KEEPER_STAT_ROWS := [
 
 @onready var _confirm_overlay: Control = %ConfirmOverlay
 @onready var _confirm_label: Label = %ConfirmLabel
+@onready var _confirm_reward_label: Label = %ConfirmRewardLabel
+@onready var _confirm_reward_icon: TextureRect = %ConfirmRewardIcon
+@onready var _confirm_footnote: Label = %ConfirmFootnote
 @onready var _confirm_button: Button = %ConfirmButton
 @onready var _cancel_button: Button = %CancelButton
 
@@ -170,15 +173,20 @@ func _is_starting() -> bool:
 	return GameProfile.slot_assignment.has(_card.player_id)
 
 
+## The payout rides INSIDE the Release button, as a signed amount and the
+## credits logo -- see CurrencyDisplay.set_button_price. An XI player can't
+## be released at all, so that button carries no price: showing one for a
+## thing you can't do is worse than showing nothing.
 func _refresh_buttons() -> void:
-	var reward := PlayerCard.release_credits(_card.tier)
 	_customize_button.text = "Customize"
 	if _is_starting():
 		_release_button.disabled = true
-		_release_button.text = "Release (in XI)"
+		CurrencyDisplay.set_button_price(_release_button, "Release (in XI)", 0)
 	else:
 		_release_button.disabled = _releasing
-		_release_button.text = "Release  +%d" % reward
+		CurrencyDisplay.set_button_price(
+			_release_button, "Release", PlayerCard.release_credits(_card.tier)
+		)
 
 
 ## Everything on this screen sits on the plain screen background rather than
@@ -191,7 +199,13 @@ func _apply_theme_colors() -> void:
 	_tendencies_heading.add_theme_color_override("font_color", heading)
 	_career_heading.add_theme_color_override("font_color", heading)
 	_origin_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
-	_confirm_label.add_theme_color_override("font_color", Color.WHITE)  # on a dark scrim in both themes
+	# On a dark scrim in both themes, so these hardcode white rather than
+	# reading the palette -- see ThemeManager's note.
+	_confirm_label.add_theme_color_override("font_color", Color.WHITE)
+	_confirm_footnote.add_theme_color_override("font_color", Color.WHITE)
+	_confirm_reward_label.add_theme_color_override(
+		"font_color", CurrencyDisplay.color_for("credits")
+	)
 
 
 func _set_status(text: String, positive: bool = false) -> void:
@@ -212,13 +226,16 @@ func _on_customize_pressed() -> void:
 func _on_release_pressed() -> void:
 	if _releasing or _is_starting():
 		return
-	_confirm_label.text = (
-		"Release %s?\n\n%s %s, overall %d.\n\nYou get %d credits. The card is gone for good."
-		% [
-			_card.full_name(), _card.tier.capitalize(), _card.position, _card.overall(),
-			PlayerCard.release_credits(_card.tier),
-		]
+	_confirm_label.text = "Release %s?\n\n%s %s, overall %d.\n\nYou get" % [
+		_card.full_name(), _card.tier.capitalize(), _card.position, _card.overall()
+	]
+	# The reward is its own row rather than part of the sentence above,
+	# because it needs the logo beside it -- a Label can't carry an inline
+	# texture, and naming the currency is exactly what we're avoiding.
+	_confirm_reward_label.text = "+%s" % CurrencyDisplay.format_amount(
+		PlayerCard.release_credits(_card.tier)
 	)
+	_confirm_reward_icon.texture = CurrencyDisplay.icon_for("credits")
 	_confirm_overlay.visible = true
 
 

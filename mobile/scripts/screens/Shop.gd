@@ -222,9 +222,10 @@ func _on_buy_pressed(pack: PackData) -> void:
 		return
 
 	if _balance_for(pack.price_currency) < pack.price:
-		_status_label.text = "Not enough %s for %s." % [
-			CurrencyDisplay.lowercase_label_for(pack.price_currency), pack.pack_name
-		]
+		# Deliberately doesn't name the currency: the pack box right there
+		# shows its price with that currency's logo (see PackView's
+		# CurrencyAmount), which is the only place it needs saying.
+		_status_label.text = "You can't afford %s." % pack.pack_name
 		return
 
 	# The popup is a full-screen scrim, so putting it up BEFORE the request

@@ -228,7 +228,35 @@ theme_override_constants/separation = 16
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 15
-text = "Release this player?"
+text = "Release this player?\n\nYou get"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="RewardRow" type="HBoxContainer" parent="ConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox" unique_id=1970000040]
+layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="ConfirmRewardLabel" type="Label" parent="ConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox/RewardRow" unique_id=1970000041]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 26
+text = "+0"
+
+[node name="ConfirmRewardIcon" type="TextureRect" parent="ConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox/RewardRow" unique_id=1970000042]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(30, 30)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ConfirmFootnote" type="Label" parent="ConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox" unique_id=1970000043]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "The card is gone for good."
 horizontal_alignment = 1
 autowrap_mode = 2
 

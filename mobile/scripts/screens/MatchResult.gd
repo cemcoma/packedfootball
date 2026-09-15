@@ -30,6 +30,7 @@ const SUMMARY_ROWS := [
 @onready var _outcome_label: Label = %OutcomeLabel
 @onready var _score_label: Label = %ScoreLabel
 @onready var _credits_label: Label = %CreditsLabel
+@onready var _credits_icon: TextureRect = %CreditsIcon
 @onready var _home_scorers: VBoxContainer = %HomeScorers
 @onready var _away_scorers: VBoxContainer = %AwayScorers
 @onready var _stats_grid: GridContainer = %StatsGrid
@@ -60,7 +61,11 @@ func _ready() -> void:
 		_outcome_label.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
 
 	_score_label.text = "You %d - %d %s" % [my_score, opp_score, opponent_name]
-	_credits_label.text = "+%d credits" % MatchSession.credits_earned
+	# The logo beside it is what says which currency this is -- the name
+	# never appears on screen. Texture set here rather than in the scene
+	# so CurrencyDisplay.ICONS stays the only place a logo path lives.
+	_credits_label.text = "+%s" % CurrencyDisplay.format_amount(MatchSession.credits_earned)
+	_credits_icon.texture = CurrencyDisplay.icon_for("credits")
 
 	_populate_scorers("You", MatchSession.TEAM_HOME, _home_scorers)
 	_populate_scorers(opponent_name, MatchSession.TEAM_AWAY, _away_scorers)

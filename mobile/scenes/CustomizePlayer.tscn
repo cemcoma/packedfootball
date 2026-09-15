@@ -1,9 +1,10 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://bx5q4acrsffjy"]
 
-[ext_resource type="Script" path="res://scripts/screens/CustomizePlayer.gd" id="1"]
+[ext_resource type="Script" uid="uid://cvri2ag81amxe" path="res://scripts/screens/CustomizePlayer.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
-[ext_resource type="PackedScene" path="res://scenes/components/CurrencyChip.tscn" id="3"]
+[ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/components/PlayerModelView.tscn" id="4"]
+[ext_resource type="Texture2D" uid="uid://ca85eqqjqsjn3" path="res://sprites/currencies/credits.png" id="5_tay06"]
 
 [node name="CustomizePlayer" type="Control" unique_id=1980000001]
 layout_mode = 3
@@ -16,8 +17,6 @@ script = ExtResource("1")
 
 [node name="Background" parent="." unique_id=1980000002 instance=ExtResource("2")]
 layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
 
 [node name="Margin" type="MarginContainer" parent="." unique_id=1980000003]
 layout_mode = 1
@@ -43,7 +42,6 @@ theme_override_constants/separation = 16
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 22
 text = "Customize Player"
 
@@ -91,18 +89,32 @@ theme_override_constants/separation = 6
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="CostLabel" type="Label" parent="Margin/RootVBox/BottomRow" unique_id=1980000015]
-unique_name_in_owner = true
+[node name="CostGroup" type="HBoxContainer" parent="Margin/RootVBox/BottomRow" unique_id=1980000019]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
+theme_override_constants/separation = 6
+
+[node name="CostLabel" type="Label" parent="Margin/RootVBox/BottomRow/CostGroup" unique_id=1980000015]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 4
 theme_override_font_sizes/font_size = 13
-autowrap_mode = 2
+
+[node name="Creditstexture" type="TextureRect" parent="Margin/RootVBox/BottomRow/CostGroup" unique_id=558828302]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(18, 18)
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 4
+texture = ExtResource("5_tay06")
+expand_mode = 1
+stretch_mode = 5
 
 [node name="StatusLabel" type="Label" parent="Margin/RootVBox/BottomRow" unique_id=1980000016]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 13
 
 [node name="SaveButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1980000017]
