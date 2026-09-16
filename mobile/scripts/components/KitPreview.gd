@@ -25,6 +25,9 @@ const PREVIEW_APPEARANCE := {
 	"shoe_color": 0,
 }
 
+var top_player: PlayerCard = GameProfile.get_best_player()
+var top_player_appearance: Dictionary = {}
+
 var design: KitDesign = KitDesign.new()
 
 var _outline: Color = Color(0.5, 0.5, 0.55)
@@ -32,6 +35,7 @@ var _outline: Color = Color(0.5, 0.5, 0.55)
 
 func _ready() -> void:
 	ThemeManager.theme_changed.connect(_refresh_outline)
+	top_player_appearance = top_player.appearance
 	_refresh_outline()
 
 
@@ -53,14 +57,14 @@ func _draw() -> void:
 		return
 
 	# Leave room under the feet for the ground shadow PlayerFigure draws.
-	var height: float = minf(size.y * 0.92, size.x / PlayerFigure.ASPECT)
+	var height: float = minf(size.y * 0.75, size.x / PlayerFigure.ASPECT)
 	var feet := Vector2(size.x / 2.0, (size.y + height) / 2.0)
 
 	PlayerFigure.draw_into(
 		self,
 		feet,
 		height,
-		PREVIEW_APPEARANCE,
+		top_player_appearance,
 		design,
 		PlayerFigure.FACING_S,
 		PlayerFigure.POSE_IDLE,

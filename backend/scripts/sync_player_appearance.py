@@ -35,7 +35,7 @@ import firebase_admin
 from firebase_admin import firestore
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "packedfootball"))
-from player.player import DEFAULT_APPEARANCE  # fallback for an unrecognized/missing tier
+from packedfootball.player import DEFAULT_APPEARANCE  # fallback for an unrecognized/missing tier
 
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "packedfootball")
 

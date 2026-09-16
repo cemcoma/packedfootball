@@ -1,5 +1,6 @@
 import os
 import random
+import datetime
 from player.player import Attributes, APPEARANCE_SLOTS, APPEARANCE_OPTION_COUNTS, TENDENCY_FIELDS, PHYSICAL_FIELDS, player
 
 from player.classes.goalkeeper import Goalkeeper
@@ -46,13 +47,15 @@ PLAYER_CLASS_MAP = {
 }
 
 TIER_RANGES = {
-    "bronze": (45, 53),
+    "bronze": (45, 54),
     "silver": (55, 60),
     "gold": (62, 70),
     "platinum": (72, 77),
-    "diamond": (80, 85),
-    "special": (85, 90),
-    "icon": (95,100)
+    "diamond": (78, 83),
+    "special_conf": (85, 88),
+    "special_uel": (86, 90),
+    "special_ucl": (87, 92),
+    "icon": (95,99)
 }
 
 
@@ -79,7 +82,7 @@ _SKILL_STAT_NAMES = tuple(
 HEIGHT_PROFILES = {
     "GK": (180, 6),
     "CB": (183, 8),
-    "ST": (180, 10),
+    "ST": (180, 9),
     "CDM": (182, 8),
     "CM": (177, 7),
     "CAM": (175, 8),
@@ -236,39 +239,31 @@ def _roll_tendency_stat(rng: random.Random, stat_type: str, low: int, high: int)
 
 PACK_DATABASE = {
     1: {
+        "active": True,
         "name": "Standard Player Pack",
         "type": "standard",
         "description": "A reliable pack of everyday talent. Mostly bronze and silver, with a shot at gold.",
         "price": 100,
         "cards_per_pack": 3,
-        "rates": {"bronze": 0.60, "silver": 0.30, "gold": 0.075, "platinum": 0.025, "diamond": 0.0, "special": 0.0},
+        "rates": {"bronze": 0.60, "silver": 0.30, "gold": 0.075, "platinum": 0.025, "diamond": 0.0},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits",
         "sprite_key":"StandardPack1"
     },
     2: {
+        "active": True,
         "name": "Jumbo Player Pack",
         "type": "standard",
         "description": "Ten cards in one pull. Better odds than Standard Player Pack.",
         "price": 500,
         "cards_per_pack": 10,
-        "rates": {"bronze": 0.40, "silver": 0.40, "gold": 0.15, "platinum": 0.05, "diamond": 0.0, "special": 0.0},
+        "rates": {"bronze": 0.40, "silver": 0.40, "gold": 0.15, "platinum": 0.05, "diamond": 0.0},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits",
         "sprite_key":"StandardPack1"
     },
     3: {
-        "name": "UCL Promo Pack",
-        "type": "timed",
-        "description": "Champions League season is here! Take your chances for a special UCL player now!",
-        "price": 1000,
-        "cards_per_pack": 5,
-        "rates": {"bronze": 0.0, "silver": 0.18, "gold": 0.40, "platinum": 0.30, "diamond": 0.10, "special": 0.02},
-        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "price_currency":"credits",
-        "sprite_key":"UCLPack"
-    },
-    4: {
+        "active": True,
         "name": "Icon Forward Pack",
         "type": "special",
         "description": "One guaranteed icon-tier forward. Extremely limited -- once they're gone, they're gone.",
@@ -277,29 +272,85 @@ PACK_DATABASE = {
         "rates": {"icon":1.0},
         "pos_rates": {"attacker":1},
         "price_currency":"credits",
-        "sprite_key":"StandardPack1"
+        "sprite_key":"StandardPack1",
+        "visible":True
     },
-    6: {
+    4: {
+        "active": True,
         "name": "Small Tournament Player Pack",
         "type": "standard",
         "description": "One tournament ready player at your service.",
         "price": 1,
         "cards_per_pack": 1,
-        "rates": {"bronze": 0.0, "silver": 0.15, "gold": 0.45, "platinum": 0.35, "diamond": 0.05, "special": 0.00},
+        "rates": {"bronze": 0.0, "silver": 0.15, "gold": 0.45, "platinum": 0.35, "diamond": 0.05},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"medals",
         "sprite_key":"StandardPack2"
     },
-    7: {
+     # 5 is missing due to it being done at firebase and it takes too long to put here.
+    6: {
+        "active": True,
         "name": "Medium Tournament Player Pack",
         "type": "standard",
         "description": "Medium 3 player pack. Better odds than Small Tournament Winner Player Pack.",
         "price": 3,
         "cards_per_pack": 3,
-        "rates": {"bronze": 0.0, "silver": 0.12, "gold": 0.45, "platinum": 0.35, "diamond": 0.08, "special": 0.00},
+        "rates": {"bronze": 0.0, "silver": 0.12, "gold": 0.45, "platinum": 0.35, "diamond": 0.08},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"medals",
         "sprite_key":"StandardPack2"
+    },
+    7: {
+        "active": True,
+        "name": "Premium Tournament Player Pack",
+        "type": "standard",
+        "description": "Premium 3 player pack. Only for the real tournament grinders. Chance to get an icon card!",
+        "price": 5,
+        "cards_per_pack": 3,
+        "rates": {"bronze": 0.0, "silver": 0.145, "gold": 0.35, "platinum": 0.4, "diamond": 0.10, "icon":0.05},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"medals",
+        "sprite_key":"StandardPack3"
+    },
+    8: {
+        "active": False,
+        "name": "UCL Promo Pack",
+        "type": "timed",
+        "description": "Champions League season is here! Take your chances for a special UCL player now!",
+        "price": 3000,
+        "cards_per_pack": 5,
+        "rates": {"silver": 0.15, "gold": 0.40, "platinum": 0.30, "diamond": 0.13, "special_ucl": 0.02},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"credits",
+        "sprite_key":"UCLPack",
+        "available_at": datetime.datetime(2026, 10, 10, 15, 0, tzinfo=datetime.timezone.utc)
+    },
+
+    9: {
+        "active": True,
+        "name": "UEL Promo Pack",
+        "type": "timed",
+        "description": "Europa League  is here! Take your chances for a special UEL player now!",
+        "price": 1500,
+        "cards_per_pack": 5,
+        "rates": {"silver": 0.2, "gold": 0.40, "platinum": 0.30, "diamond": 0.08, "special_uel": 0.02},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"credits",
+        "sprite_key":"UELPack",
+        "expires_at":datetime.datetime(2026, 9, 18, 15, 0, tzinfo=datetime.timezone.utc)
+    },
+    10: {
+        "active": False,
+        "name": "Conference League Promo Pack",
+        "type": "timed",
+        "description": "Conference League is here! Take your chances for a special Conference Lague player now!",
+        "price": 1000,
+        "cards_per_pack": 3,
+        "rates": {"silver": 0.25, "gold": 0.42, "platinum": 0.25, "diamond": 0.06, "special_conf": 0.02},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"credits",
+        "sprite_key":"CONFPack",
+        "available_at": datetime.datetime(2026, 10, 15, 15, 0, tzinfo=datetime.timezone.utc)
     },
 }
 

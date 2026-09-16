@@ -212,7 +212,7 @@ that live **only** in Firestore and are never written by a deploy:
   false.**
 - `max_opens` / `times_opened` -- a hard cap on total opens.
 - `expires_at` -- ISO datetime after which it can't be opened.
-- `visible` / `available_at` -- opt an unavailable pack into still being
+- `available_at` -- opt an unavailable pack into still being
   *shown*, grayed out with a tag, instead of hidden. A display hint only;
   neither auto-flips `active`.
 

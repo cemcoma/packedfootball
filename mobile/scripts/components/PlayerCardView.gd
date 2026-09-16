@@ -11,10 +11,8 @@ extends Control
 ## portrait exists, instead of every screen that shows a card needing its
 ## own update.
 ##
-## Styling today is just PlayerCard.tier_color() as a flat background (the
-## scene's "Background" ColorRect) -- see that function's own doc comment
-## for the natural upgrade path (a per-tier Resource carrying a texture/
-## shader instead of a plain Color) once real art exists.
+## Styling today is handled by applying a pre-loaded texture to the 
+## BackgroundTexture node based on the player's tier.
 ##
 ## The "Model" child (see PlayerModelView.gd) is the placeholder layered
 ## character portrait -- a real appearance rolled server-side per card (see
@@ -60,7 +58,7 @@ const GLOW_MAX_ALPHA := 0.9
 const GLOW_MAX_SCALE := 1.05
 const GLOW_PERIOD := 1.2
 
-@onready var _background: Panel = %Background
+@onready var _background_texture: TextureRect = %BackgroundTexture
 @onready var _overall_label: Label = %OverallLabel
 @onready var _position_label: Label = %PositionLabel
 @onready var _name_label: Label = %NameLabel
@@ -97,7 +95,13 @@ func _on_tap_button_pressed() -> void:
 
 func set_card(card: PlayerCard) -> void:
 	_card = card
-	_background.add_theme_stylebox_override("panel", _card_style(PlayerCard.tier_color(card.tier)))
+	
+	if card.background_texture:
+		_background_texture.texture = card.background_texture
+	else:
+		print("No background... %s" % _card.tier)
+		_background_texture.texture = null
+		
 	_overall_label.text = str(card.overall())
 	_position_label.text = card.position
 	_name_label.text = card.display_name()
@@ -212,15 +216,6 @@ func _restyle_highlight() -> void:
 	_badge_label.add_theme_color_override(
 		"font_color", Color.BLACK if accent.get_luminance() > 0.5 else Color.WHITE
 	)
-
-
-## The card's own face: a flat tier colour with the corners taken off.
-## Rebuilt per card rather than themed, because the colour IS the tier.
-static func _card_style(color: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = color
-	style.set_corner_radius_all(CARD_CORNER)
-	return style
 
 
 ## A border with no fill -- the shape both rings and the glow are made of.

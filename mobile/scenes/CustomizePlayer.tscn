@@ -61,6 +61,10 @@ theme_override_constants/separation = 24
 layout_mode = 2
 theme_override_constants/separation = 8
 
+[node name="Control" type="Control" parent="Margin/RootVBox/Body/PreviewColumn" unique_id=777682750]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+
 [node name="Preview" parent="Margin/RootVBox/Body/PreviewColumn" unique_id=1980000010 instance=ExtResource("4")]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 300)

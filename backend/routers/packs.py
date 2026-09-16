@@ -42,9 +42,19 @@ def _pack_unavailable_reason(config: dict) -> Optional[str]:
     expires_at = config.get("expires_at")
     if expires_at:
         try:
-            if datetime.now(timezone.utc) > datetime.fromisoformat(expires_at):
+            # Handle cases where Firestore already returns a datetime object
+            if isinstance(expires_at, datetime):
+                pack_expiry = expires_at
+            else:
+                pack_expiry = datetime.fromisoformat(expires_at)
+            
+            # If the resulting datetime is naive, assume UTC to prevent TypeError
+            if pack_expiry.tzinfo is None:
+                pack_expiry = pack_expiry.replace(tzinfo=timezone.utc)
+
+            if datetime.now(timezone.utc) > pack_expiry:
                 return "This pack has expired"
-        except ValueError:
+        except (ValueError, TypeError):
             pass  # malformed expires_at shouldn't block opening -- fail open, not closed
 
     return None

@@ -36,8 +36,8 @@ const TENDENCY_FIELDS := [
 
 const PHYSICAL_FIELDS := ["height"]
 
-## Card-back color by tier -- used for pitch slot fill and bench row accents
-## so tier reads at a glance without opening the stats panel.
+### SUPER IMPORTANT ###
+## Card-back color by tier -- used for ranking tiers!
 const TIER_COLORS := {
 	"bronze": Color(0.72, 0.45, 0.2),
 	"silver": Color(0.75, 0.75, 0.78),
@@ -49,8 +49,9 @@ const TIER_COLORS := {
 }
 
 static func tier_color(tier: String) -> Color:
+	if tier.begins_with("special"):
+		tier = "special"
 	return TIER_COLORS.get(tier, Color(0.5, 0.5, 0.5))
-
 
 ## What releasing a card pays out. Shown on the Release button before the
 ## request; backend/main.py's RELEASE_CREDITS_BY_TIER is what actually pays,
@@ -70,14 +71,16 @@ static func release_credits(tier: String) -> int:
 	return RELEASE_CREDITS.get(tier, 10)
 
 
-## Rarity ordering (bronze=0 ... icon=6), for anything that needs to know
-## which of two cards is the bigger pull -- e.g. PackReveal.gd sorting a
+## Rarity ordering for anything that needs to know
+## which of two cards is the bigger pull (bronze = 0, silver= 1, ... special_* = 5, icon=6)-- e.g. PackReveal.gd sorting a
 ## just-opened pack so the best card lands last. TIER_COLORS.keys() is
 ## already this project's established source of truth for tier order
 ## elsewhere (PackInfoPopup.gd's own odds rows use it the same way,
 ## deliberately not raw dict iteration order, since a Firestore/JSON map
 ## field's key order isn't guaranteed to survive the round trip).
 static func tier_rank(tier: String) -> int:
+	if tier.begins_with("special"):
+		tier = "special"
 	var rank := TIER_COLORS.keys().find(tier)
 	return rank if rank != -1 else 0
 
@@ -117,6 +120,8 @@ var statistics: Dictionary = {"goals": 0, "assists": 0, "matches_played": 0}
 ## PlayerModelView.gd falls back to a mock look derived from player_id in
 ## that case rather than rendering nothing.
 var appearance: Dictionary = {}
+# Holds the custom background texture based on the player's tier
+var background_texture: Texture2D = null
 
 
 static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
@@ -131,6 +136,15 @@ static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
 	card.attributes = _dict(fields, "attributes", {})
 	card.statistics = _dict(fields, "statistics", {"goals": 0, "assists": 0, "matches_played": 0})
 	card.appearance = _dict(fields, "appearance", {})
+	
+	# Load the corresponding background sprite
+	var sprite_path = "res://sprites/player_cards/%s.png" % card.tier
+	if ResourceLoader.exists(sprite_path):
+		
+		card.background_texture = load(sprite_path)
+	else:
+		push_warning("Missing background sprite for tier: " + card.tier)
+		
 	return card
 
 

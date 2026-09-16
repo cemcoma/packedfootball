@@ -303,6 +303,20 @@ func save_team() -> bool:
 	return true
 
 
+### PLACEHOLDER FOR CustomizeKit.gd
+### In the future, it will be captain, not the top player...
+func get_best_player() -> PlayerCard:
+	var max_ovr = 0
+	var max_id = 0
+	
+	for i in range(mini(slot_assignment.size(), slot_assignment.size())):
+		var player_id: String = slot_assignment[i]
+		if all_cards[player_id].overall() > max_ovr:
+			max_ovr = all_cards[player_id].overall()
+			max_id = player_id
+			
+	return all_cards[max_id]
+
 ## Squad Overall: the average of what the XI is worth IN THE SLOTS THEY ARE
 ## STANDING IN, not the average of their cards.
 ##

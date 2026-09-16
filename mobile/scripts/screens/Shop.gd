@@ -163,6 +163,7 @@ func _on_back_pressed() -> void:
 func _load_packs() -> void:
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/pack/list")
 	if not res.ok:
+		print(res)
 		_status_label.text = "Could not load packs -- try again later."
 		return
 	var pack_fields: Array = res.data.get("packs", [])
