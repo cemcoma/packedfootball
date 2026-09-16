@@ -135,8 +135,9 @@ const NUMBER_MIN_PX := 7.0
 
 # -- ground shadow ----------------------------------------------------------
 const SHADOW_W := 0.80
-const SHADOW_W_FLASH := 0.95      # wider when an action colour is on it
 const SHADOW_H := 0.10
+const SHADOW_W_FLASH := 1.6      # wider when an action colour is on it
+const SHADOW_H_FLASH := 0.3      # wider when an action colour is on it
 const SHADOW_COLOR := Color(0, 0, 0, 0.20)
 
 # -- motion -----------------------------------------------------------------
@@ -334,7 +335,9 @@ static func draw_into(
 	# Ground marker first -- everything else sits on top of it.
 	var marker := flash if flash.a > 0.0 else SHADOW_COLOR
 	var marker_w := w * (SHADOW_W_FLASH if flash.a > 0.0 else SHADOW_W)
-	_ellipse(canvas, feet, marker_w, h * SHADOW_H, marker)
+	var marker_h := h * (SHADOW_H_FLASH if flash.a > 0.0 else SHADOW_H)
+
+	_ellipse(canvas, feet, marker_w, marker_h , marker)
 
 	# 3/4 lean: shift the upper body toward where they're looking, which is
 	# most of what sells a direction on a figure this blocky.

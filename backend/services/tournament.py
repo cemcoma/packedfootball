@@ -135,11 +135,9 @@ def blank_entry(uid: str, display_name: str, tier: int, group_id: str, now: date
         "goals_for": 0,
         "goals_against": 0,
         "game_ids": [],
-        # A SERVER_TIMESTAMP is a write-time sentinel and reads back as None
-        # in the same request, so it cannot be the tiebreak sort key. This
-        # string is what rank_rows actually orders on.
         "joined_at_iso": now.isoformat(),
         "settled": False,
+        "is_shown": False,
     }
 
 
@@ -375,6 +373,7 @@ async def settle_group(client, day_id: str, group_id: str) -> str:
                     "outcome": row["outcome"],
                     "to_tier": row["to_tier"],
                     "rewards": rewards,
+                    "is_shown": False,
                 },
                 merge=True,
             )

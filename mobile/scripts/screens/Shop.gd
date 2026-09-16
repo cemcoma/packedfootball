@@ -165,7 +165,6 @@ func _load_packs() -> void:
 	if not res.ok:
 		_status_label.text = "Could not load packs -- try again later."
 		return
-	print(res)
 	var pack_fields: Array = res.data.get("packs", [])
 	_packs = []
 	for fields in pack_fields:

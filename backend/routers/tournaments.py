@@ -157,13 +157,21 @@ async def _pending_results(client, uid: str, profile_doc: dict | None, today: st
     group_id = (profile_doc or {}).get("tournament_last_group_id")
     if not group_id:
         return None
+
+    e_path = tournament_service.entry_path(last_day, group_id, uid)
+    entry = await client.get_document(e_path)
+    if (entry or {}).get("is_shown"):
+        return None
+
     group = await client.get_document(tournament_service.group_path(last_day, group_id))
     rows = ((group or {}).get("settlement") or {}).get("rows") or []
     mine = next((r for r in rows if r.get("uid") == uid), None)
     if mine is None:
         return None
-    return {"day_id": last_day, "group_id": group_id, "me": mine, "rows": rows}
 
+    await client.set_document(e_path, {"is_shown": True}, merge=True)
+
+    return {"day_id": last_day, "group_id": group_id, "me": mine, "rows": rows}
 
 @router.post("/tournament/join")
 async def join_tournament(uid: str = Depends(verify_id_token)):

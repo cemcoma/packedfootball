@@ -1,7 +1,6 @@
 [gd_scene format=3 uid="uid://b82yjwhx7x5sg"]
 
 [ext_resource type="Script" uid="uid://b38lnsyksyii6" path="res://scripts/screens/MatchPlayback.gd" id="1"]
-[ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="2_d2rnv"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="3"]
 
 [node name="Match" type="Control" unique_id=2007280519]
@@ -42,7 +41,6 @@ offset_left = 12.0
 offset_top = 12.0
 offset_right = 232.0
 offset_bottom = 86.0
-script = ExtResource("2_d2rnv")
 
 [node name="Margin" type="MarginContainer" parent="ScoreboardPanel" unique_id=86366777]
 layout_mode = 1
@@ -55,7 +53,6 @@ theme_override_constants/margin_left = 8
 theme_override_constants/margin_top = 6
 theme_override_constants/margin_right = 8
 theme_override_constants/margin_bottom = 6
-script = ExtResource("2_d2rnv")
 
 [node name="VBox" type="VBoxContainer" parent="ScoreboardPanel/Margin" unique_id=288160547]
 layout_mode = 2
@@ -230,7 +227,6 @@ offset_right = -12.0
 offset_bottom = 52.0
 grow_horizontal = 0
 text = "Pause"
-script = ExtResource("2_d2rnv")
 
 [node name="PreMatchOverlay" type="Control" parent="." unique_id=87841212]
 unique_name_in_owner = true

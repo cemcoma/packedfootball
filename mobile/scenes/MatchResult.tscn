@@ -3,7 +3,6 @@
 [ext_resource type="Script" uid="uid://ccsquwgnbwnr" path="res://scripts/screens/MatchResult.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="3"]
-[ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_gkeq7"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_poyf0"]
 bg_color = Color(0.11764706, 0.11764706, 0.11764706, 0.75686276)
@@ -31,7 +30,6 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("3_gkeq7")
 
 [node name="Contraster" type="PanelContainer" parent="CenterContainer" unique_id=1467795868]
 unique_name_in_owner = true

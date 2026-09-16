@@ -21,6 +21,8 @@ extends Node
 ## Formations.FORMATION_NAMES, defaulting to DEFAULT_FORMATION when absent
 ## so older profile documents keep working unchanged.
 
+### SUPER IMPORTANT ###
+
 const DEFAULT_FORMATION := "4-4-2"
 
 const DEFAULT_INVENTORY_CAP := 100
@@ -62,6 +64,12 @@ var all_cards: Dictionary = {}  # player_id -> PlayerCard, every owned card (ros
 # how is_dirty() tells the Team scene "you have unsaved changes".
 var saved_formation: String = DEFAULT_FORMATION
 var saved_slot_assignment: Array = []
+
+# Ad tracking state
+var reward_ads_watched: int = 0
+var reward_ads_max: int = 3
+var energy_ads_watched: int = 0
+var energy_ads_max: int = 3
 
 
 func is_dirty() -> bool:
@@ -145,6 +153,9 @@ func load_all() -> void:
 	saved_formation = formation
 	saved_slot_assignment = slot_assignment.duplicate()
 	is_loaded = true
+	
+	reward_ads_watched = _int(doc,"reward_ads_watched")
+	energy_ads_watched = _int(doc,"energy_ads_watched")
 
 
 func refresh_currencies() -> bool:
@@ -346,6 +357,10 @@ func reset() -> void:
 	all_cards = {}
 	saved_formation = DEFAULT_FORMATION
 	saved_slot_assignment = []
+	reward_ads_watched = 0
+	reward_ads_max = 3
+	energy_ads_watched = 0
+	energy_ads_max = 3
 
 func add_purchased_cards(cards: Array) -> void:
 	for card in cards:
@@ -359,3 +374,28 @@ func apply_currency_balances(new_credits = null, new_bucks = null, new_medals = 
 		bucks = new_bucks
 	if typeof(new_medals) in [TYPE_INT, TYPE_FLOAT]:
 		medals = new_medals
+
+## Submits an ad completion to the backend and syncs the local state.
+## `track` must be "reward" or "energy".
+func claim_ad_reward(track: String) -> Dictionary:
+	var res: Dictionary = await Backend.call_endpoint(
+		HTTPClient.METHOD_POST, "/ads/reward", {"track": track}
+	)
+	
+	if res.ok:
+		if track == "reward":
+			reward_ads_watched = _int(res.data, "reward_ads_watched", reward_ads_watched)
+			reward_ads_max = _int(res.data, "reward_ads_max", reward_ads_max)
+			# apply_currency_balances ignores absent keys automatically
+			apply_currency_balances(
+				res.data.get("credits_remaining"),
+				res.data.get("bucks_remaining")
+			)
+		elif track == "energy":
+			energy_ads_watched = _int(res.data, "energy_ads_watched", energy_ads_watched)
+			energy_ads_max = _int(res.data, "energy_ads_max", energy_ads_max)
+			# The backend handles the complex timestamp/anchor logic securely. 
+			# We just trigger a clean re-fetch of the bar to stay perfectly in sync.
+			await refresh_energy()
+			
+	return res

@@ -278,3 +278,19 @@ TOURNAMENT_BOT_CARD_TIERS = {
     2: ("gold", "platinum"),
     3: ("silver", "gold"),
 }
+
+# -- ads ----------------------------------------------------------------------
+
+# The progressive reward path for standard ads. 
+# Step 0 (1st ad): 50 credits
+# Step 1 (2nd ad): 100 credits
+# Step 2 (3rd ad): 150 credits + 1 buck
+AD_REWARD_PATH = [
+    {"credits": 50, "bucks": 0},
+    {"credits": 100, "bucks": 0},
+    {"credits": 150, "bucks": 1},
+]
+
+# The separate track for energy ads
+AD_ENERGY_MAX = 3
+AD_ENERGY_REWARD = 1

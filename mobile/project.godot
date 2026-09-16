@@ -8,6 +8,10 @@
 
 config_version=5
 
+[admob]
+
+general/ios/app_id="ca-app-pub-1704438625576029~3392195452"
+
 [application]
 
 config/name="Packed Football Mobile"
@@ -25,6 +29,7 @@ PackSession="*res://scripts/autoload/PackSession.gd"
 IapClient="*res://scripts/autoload/IapClient.gd"
 ThemeManager="*res://scripts/autoload/ThemeManager.gd"
 PlayerSession="*res://scripts/autoload/PlayerSession.gd"
+AdManager="*uid://d1x5ac4vymns1"
 
 [display]
 
@@ -36,7 +41,7 @@ window/handheld/orientation=4
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godotx_revenue_cat/plugin.cfg")
+enabled=PackedStringArray("res://addons/admob/plugin.cfg", "res://addons/godotx_revenue_cat/plugin.cfg")
 
 [gui]
 

@@ -39,6 +39,7 @@ from routers import (
     packs,
     players,
     tournaments,
+    ads
 )
 
 app = FastAPI(title="Packed Football backend")
@@ -60,5 +61,6 @@ for _router in (
     leaderboard.router,
     matches.router,
     tournaments.router,
+    ads.router,
 ):
     app.include_router(_router)

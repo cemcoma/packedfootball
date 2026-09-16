@@ -25,6 +25,7 @@ signal currency_changed
 
 const CURRENCY_TILE_SCENE := preload("res://scenes/components/CurrencyTileView.tscn")
 const DEAL_VIEW_SCENE := preload("res://scenes/components/DealView.tscn")
+const AD_VIEW_SCENE := preload("res://scenes/components/AdView.tscn")
 
 @onready var _exchange_tab_button: Button = %ExchangeTabButton
 @onready var _bucks_tab_button: Button = %BucksTabButton
@@ -42,7 +43,8 @@ const DEAL_VIEW_SCENE := preload("res://scenes/components/DealView.tscn")
 @onready var _deals_grid: HBoxContainer = %DealsGrid
 @onready var _energy_scroll: ScrollContainer = %EnergyScroll
 @onready var _energy_grid: HBoxContainer = %EnergyGrid
-@onready var _ads_panel: CenterContainer = %AdsPanel
+@onready var _ads_scroll: ScrollContainer = %AdsScroll
+@onready var _ads_grid: HBoxContainer = %AdsGrid
 
 var _exchange_loaded: bool = false
 var _bucks_loaded: bool = false
@@ -52,6 +54,7 @@ var _exchange_rates: Array = []  # ExchangeRateData
 var _bucks_products: Array = []  # BucksProductData
 var _deals: Array = []  # DealData
 var _energy_products: Array = []  # EnergyProductData
+var _ads_deals: Array = [] #AdData
 
 ## The cap the refill catalog was priced against. Comes from
 ## /energy/refill/list rather than being hardcoded, so raising ENERGY_MAX
@@ -69,13 +72,14 @@ func _ready() -> void:
 	IapClient.purchase_failed.connect(_on_iap_purchase_failed)
 
 	await _load_exchange()
-
+	if Engine.has_singleton("AdManager") or has_node("/root/AdManager"):
+		AdManager.ad_reward_completed.connect(_on_ad_completed)
 
 ## One list to extend when a tab is added, rather than every handler having
 ## to remember to hide every sibling (which is exactly how a tab gets left
 ## visible underneath another one).
 func _show_only(panel: Control) -> void:
-	for candidate in [_exchange_scroll, _bucks_scroll, _deals_scroll, _energy_scroll, _ads_panel]:
+	for candidate in [_exchange_scroll, _bucks_scroll, _deals_scroll, _energy_scroll, _ads_scroll]:
 		candidate.visible = candidate == panel
 
 
@@ -106,15 +110,9 @@ func _on_energy_tab_pressed() -> void:
 	_show_only(_energy_scroll)
 	await _load_energy()
 
-
-## Rewarded ads -- deliberately a stub for now (the real thing means an ad
-## SDK, a server-side grant endpoint with its own anti-abuse/cooldown
-## rules, and its own store-policy review, all of which is its own pass).
-## The tab exists so the shape is visible and the wiring point is obvious;
-## nothing behind it is real yet.
 func _on_ads_tab_pressed() -> void:
-	_show_only(_ads_panel)
-	_status_label.text = ""
+	_show_only(_ads_scroll)
+	await _load_ads()
 
 
 # ============================================================ Exchange tab
@@ -406,3 +404,52 @@ func _on_energy_tile_pressed(product: EnergyProductData) -> void:
 	GameProfile.apply_currency_balances(null, res.data.get("bucks_remaining"))
 	currency_changed.emit()
 	_populate_energy_grid()
+	
+
+# ============================================================ Ads tab
+
+func _load_ads() -> void:
+	_status_label.text = "Loading..."
+	await GameProfile.refresh_energy()
+	
+	_ads_deals = AdManager.get_ad_deals()
+	_status_label.text = ""
+	_populate_ads_grid()
+
+func _populate_ads_grid() -> void:
+	for child in _ads_grid.get_children():
+		_ads_grid.remove_child(child)
+		child.queue_free()
+
+	if _ads_deals.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "No ads available right now."
+		_ads_grid.add_child(empty_label)
+		return
+
+	for ad in _ads_deals:
+		var typed_ad: AdData = ad
+		var view: ShopAdView = AD_VIEW_SCENE.instantiate()
+		_ads_grid.add_child(view)
+		view.set_ad_data(typed_ad)
+		view.watch_pressed.connect(_on_watch_ad_pressed.bind(typed_ad))
+
+
+func _on_watch_ad_pressed(ad: AdData) -> void:
+	if not ad.available:
+		_status_label.text = ad.unavailable_reason
+		return
+		
+	_status_label.text = ""
+	if not AdManager.show_ad_for_track(ad.track):
+		_status_label.text = "Ad not ready -- try again in a moment."
+
+
+func _on_ad_completed(_track: String, success: bool) -> void:
+	if success:
+		_status_label.text = "Reward claimed!"
+		await _load_ads()
+		currency_changed.emit()
+	else:
+		_status_label.text = "Ad was closed early or failed to verify."
+		await _load_ads()

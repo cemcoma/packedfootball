@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 mobile/scripts/config/FirebaseConfig.gd
 mobile/scripts/config/RevenueCatConfig.gd
+mobile/addons/
 backend/.env
 mobile/.godot
 mobile/test_data

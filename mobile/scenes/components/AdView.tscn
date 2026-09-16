@@ -1,0 +1,50 @@
+[gd_scene format=3 uid="uid://j4worspvjbf4"]
+
+[ext_resource type="Script" uid="uid://vpy7m2iarapn" path="res://scripts/components/AdView.gd" id="1"]
+
+[node name="AdView" type="PanelContainer" unique_id=1627181040]
+custom_minimum_size = Vector2(200, 250)
+script = ExtResource("1")
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=1236107930]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="VBox" type="VBoxContainer" parent="Margin" unique_id=585219356]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="NameLabel" type="Label" parent="Margin/VBox" unique_id=732565913]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 2
+
+[node name="DescriptionLabel" type="Label" parent="Margin/VBox" unique_id=1295456170]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+autowrap_mode = 2
+
+[node name="RewardRow" type="HBoxContainer" parent="Margin/VBox" unique_id=1701255253]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Spacer" type="Control" parent="Margin/VBox" unique_id=1601458444]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="TagLabel" type="Label" parent="Margin/VBox" unique_id=918982821]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 2
+
+[node name="WatchButton" type="Button" parent="Margin/VBox" unique_id=1908397306]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Watch Ad"

@@ -49,7 +49,6 @@ var available_at: String = ""  # e.g. a not-yet-active deal's planned on-sale da
 
 static func from_fields(fields: Dictionary) -> DealData:
 	var deal := DealData.new()
-	print(fields)
 	deal.deal_id = _str(fields, "deal_id")
 	deal.deal_name = _str(fields, "name")
 	deal.description = _str(fields, "description")

@@ -1,20 +1,19 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://4v5328a5h2ap"]
 
-[ext_resource type="Script" path="res://scripts/components/CurrencyPanel.gd" id="1"]
+[ext_resource type="Script" uid="uid://u868qao72k3w" path="res://scripts/components/CurrencyPanel.gd" id="1"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_currency_tabs"]
 
-[node name="CurrencyPanel" type="VBoxContainer"]
-layout_mode = 2
+[node name="CurrencyPanel" type="VBoxContainer" unique_id=846353448]
 size_flags_vertical = 3
 theme_override_constants/separation = 10
 script = ExtResource("1")
 
-[node name="TabRow" type="HBoxContainer" parent="."]
+[node name="TabRow" type="HBoxContainer" parent="." unique_id=1031193054]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="ExchangeTabButton" type="Button" parent="TabRow"]
+[node name="ExchangeTabButton" type="Button" parent="TabRow" unique_id=554838095]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
@@ -22,103 +21,103 @@ button_pressed = true
 button_group = SubResource("ButtonGroup_currency_tabs")
 text = "Exchange"
 
-[node name="BucksTabButton" type="Button" parent="TabRow"]
+[node name="BucksTabButton" type="Button" parent="TabRow" unique_id=130669766]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 button_group = SubResource("ButtonGroup_currency_tabs")
 text = "Cash"
 
-[node name="DealsTabButton" type="Button" parent="TabRow"]
+[node name="DealsTabButton" type="Button" parent="TabRow" unique_id=1388514022]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 button_group = SubResource("ButtonGroup_currency_tabs")
 text = "Deals"
 
-[node name="EnergyTabButton" type="Button" parent="TabRow"]
+[node name="EnergyTabButton" type="Button" parent="TabRow" unique_id=1878162606]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 button_group = SubResource("ButtonGroup_currency_tabs")
 text = "Energy"
 
-[node name="AdsTabButton" type="Button" parent="TabRow"]
+[node name="AdsTabButton" type="Button" parent="TabRow" unique_id=560389464]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 button_group = SubResource("ButtonGroup_currency_tabs")
 text = "Free"
 
-[node name="StatusLabel" type="Label" parent="."]
+[node name="StatusLabel" type="Label" parent="." unique_id=1189062204]
 unique_name_in_owner = true
 layout_mode = 2
-text = ""
 
-[node name="ExchangeScroll" type="ScrollContainer" parent="."]
+[node name="ExchangeScroll" type="ScrollContainer" parent="." unique_id=807694278]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 10
 vertical_scroll_mode = 0
 
-[node name="ExchangeGrid" type="HBoxContainer" parent="ExchangeScroll"]
+[node name="ExchangeGrid" type="HBoxContainer" parent="ExchangeScroll" unique_id=452513128]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 theme_override_constants/separation = 12
 
-[node name="BucksScroll" type="ScrollContainer" parent="."]
+[node name="BucksScroll" type="ScrollContainer" parent="." unique_id=911559106]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_vertical = 10
 vertical_scroll_mode = 0
 
-[node name="BucksGrid" type="HBoxContainer" parent="BucksScroll"]
+[node name="BucksGrid" type="HBoxContainer" parent="BucksScroll" unique_id=875014801]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 theme_override_constants/separation = 12
 
-[node name="DealsScroll" type="ScrollContainer" parent="."]
+[node name="DealsScroll" type="ScrollContainer" parent="." unique_id=1634368538]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_vertical = 10
 vertical_scroll_mode = 0
 
-[node name="DealsGrid" type="HBoxContainer" parent="DealsScroll"]
+[node name="DealsGrid" type="HBoxContainer" parent="DealsScroll" unique_id=1884858458]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 theme_override_constants/separation = 12
 
-[node name="EnergyScroll" type="ScrollContainer" parent="."]
+[node name="EnergyScroll" type="ScrollContainer" parent="." unique_id=1960207859]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_vertical = 10
 vertical_scroll_mode = 0
 
-[node name="EnergyGrid" type="HBoxContainer" parent="EnergyScroll"]
+[node name="EnergyGrid" type="HBoxContainer" parent="EnergyScroll" unique_id=1261893269]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 theme_override_constants/separation = 12
 
-[node name="AdsPanel" type="CenterContainer" parent="."]
+[node name="AdsScroll" type="ScrollContainer" parent="." unique_id=488212270]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_vertical = 10
+vertical_scroll_mode = 0
 
-[node name="AdsPlaceholderLabel" type="Label" parent="AdsPanel"]
+[node name="AdsGrid" type="HBoxContainer" parent="AdsScroll" unique_id=124687014]
+unique_name_in_owner = true
 layout_mode = 2
-theme_override_colors/font_color = Color(0.7, 0.7, 0.75, 1)
-horizontal_alignment = 1
-autowrap_mode = 2
-text = "Watch an ad for free credits -- coming soon."
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_constants/separation = 12
