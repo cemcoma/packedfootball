@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://cvri2ag81amxe" path="res://scripts/screens/CustomizePlayer.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="3"]
+[ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_echs8"]
 [ext_resource type="PackedScene" path="res://scenes/components/PlayerModelView.tscn" id="4"]
 [ext_resource type="Texture2D" uid="uid://ca85eqqjqsjn3" path="res://sprites/currencies/credits.png" id="5_tay06"]
 
@@ -29,6 +30,7 @@ theme_override_constants/margin_left = 24
 theme_override_constants/margin_top = 16
 theme_override_constants/margin_right = 24
 theme_override_constants/margin_bottom = 16
+script = ExtResource("3_echs8")
 
 [node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1980000004]
 layout_mode = 2
@@ -99,7 +101,6 @@ theme_override_constants/separation = 6
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 0
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 13
 
 [node name="Creditstexture" type="TextureRect" parent="Margin/RootVBox/BottomRow/CostGroup" unique_id=558828302]

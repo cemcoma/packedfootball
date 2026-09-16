@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" uid="uid://ulrndvhqpktd" path="res://scenes/components/PlayerCardView.tscn" id="3"]
 [ext_resource type="Texture2D" uid="uid://cyffgfu0c6x2j" path="res://sprites/backgrounds/general_background_dark.jpg" id="3_plir7"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="4"]
+[ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="4_0j84m"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_formations"]
 
@@ -32,6 +33,7 @@ theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 12
+script = ExtResource("4_0j84m")
 
 [node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1268554773]
 layout_mode = 2
@@ -215,6 +217,16 @@ text = "Close"
 layout_mode = 2
 theme_override_constants/separation = 12
 
+[node name="BackButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=55272562]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Back to Team"
+
+[node name="SaveButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1496998827]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save Team"
+
 [node name="StatusLabel" type="Label" parent="Margin/RootVBox/BottomRow" unique_id=1627214472]
 unique_name_in_owner = true
 layout_mode = 2
@@ -224,13 +236,3 @@ size_flags_horizontal = 3
 unique_name_in_owner = true
 layout_mode = 2
 text = "Customize Kit"
-
-[node name="SaveButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1496998827]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Save Team"
-
-[node name="BackButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=55272562]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Back to Team"

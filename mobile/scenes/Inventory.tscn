@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://dm3nvhbtob4ti" path="res://scripts/screens/Inventory.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="3"]
+[ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_njucy"]
 
 [node name="Inventory" type="Control" unique_id=1960000001]
 layout_mode = 3
@@ -27,6 +28,7 @@ theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 12
+script = ExtResource("3_njucy")
 
 [node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1960000004]
 layout_mode = 2

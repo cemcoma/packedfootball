@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://cor3d48luf4r1" path="res://scripts/screens/DailyTournament.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="3"]
+[ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_vojua"]
 [ext_resource type="PackedScene" uid="uid://d3yxqql70v6n8" path="res://scenes/components/EnergyBar.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="5"]
 [ext_resource type="Script" uid="uid://l3fnvnqxw6uh" path="res://scripts/components/StandingsTable.gd" id="6"]
@@ -30,6 +31,7 @@ theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 12
+script = ExtResource("3_vojua")
 
 [node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1999000004]
 layout_mode = 2

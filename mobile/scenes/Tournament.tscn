@@ -1,7 +1,8 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://8qv1pjikgfc6"]
 
-[ext_resource type="Script" path="res://scripts/screens/TournamentHub.gd" id="1"]
+[ext_resource type="Script" uid="uid://igulq75x7wce" path="res://scripts/screens/TournamentHub.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
+[ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_snc3w"]
 
 [node name="Tournament" type="Control" unique_id=1998000001]
 layout_mode = 3
@@ -14,8 +15,6 @@ script = ExtResource("1")
 
 [node name="Background" parent="." unique_id=1998000002 instance=ExtResource("2")]
 layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
 
 [node name="Margin" type="MarginContainer" parent="." unique_id=1998000003]
 layout_mode = 1
@@ -28,6 +27,7 @@ theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 12
+script = ExtResource("3_snc3w")
 
 [node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1998000004]
 layout_mode = 2
@@ -58,7 +58,6 @@ text = "Daily Tournament"
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 11
 text = "Ten matches a day against your own league. Finish top to go up, bottom to go down. Medals and cash for the best finishes."
 autowrap_mode = 2

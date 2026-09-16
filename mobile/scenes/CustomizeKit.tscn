@@ -1,9 +1,10 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://t1kahu7yjvuf"]
 
-[ext_resource type="Script" path="res://scripts/screens/CustomizeKit.gd" id="1"]
+[ext_resource type="Script" uid="uid://12mxmxqh13c4" path="res://scripts/screens/CustomizeKit.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="Texture2D" uid="uid://cyffgfu0c6x2j" path="res://sprites/backgrounds/general_background_dark.jpg" id="3"]
-[ext_resource type="Script" path="res://scripts/components/KitPreview.gd" id="4"]
+[ext_resource type="Script" uid="uid://cp67wpy7erat5" path="res://scripts/components/KitPreview.gd" id="4"]
+[ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="4_esbim"]
 
 [node name="CustomizeKit" type="Control" unique_id=1940000001]
 layout_mode = 3
@@ -29,6 +30,7 @@ theme_override_constants/margin_left = 24
 theme_override_constants/margin_top = 16
 theme_override_constants/margin_right = 24
 theme_override_constants/margin_bottom = 16
+script = ExtResource("4_esbim")
 
 [node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1940000004]
 layout_mode = 2

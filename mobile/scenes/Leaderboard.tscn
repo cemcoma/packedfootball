@@ -1,46 +1,50 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3 uid="uid://bh18cq1ilex3f"]
 
-[ext_resource type="Script" path="res://scripts/screens/Leaderboard.gd" id="1"]
+[ext_resource type="Script" uid="uid://cebgg5vg4pq7s" path="res://scripts/screens/Leaderboard.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
+[ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_cnd66"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_leaderboard_tabs"]
 
-[node name="Leaderboard" type="Control"]
+[node name="Leaderboard" type="Control" unique_id=62964195]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1")
 
-[node name="Background" parent="." instance=ExtResource("2")]
+[node name="Background" parent="." unique_id=73959171 instance=ExtResource("2")]
 layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
 
-[node name="Margin" type="MarginContainer" parent="."]
+[node name="Margin" type="MarginContainer" parent="." unique_id=1824872432]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 12
+script = ExtResource("3_cnd66")
 
-[node name="RootVBox" type="VBoxContainer" parent="Margin"]
+[node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=550953442]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="TitleLabel" type="Label" parent="Margin/RootVBox"]
+[node name="TitleLabel" type="Label" parent="Margin/RootVBox" unique_id=582632043]
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "LEADERBOARD"
 
-[node name="TabRow" type="HBoxContainer" parent="Margin/RootVBox"]
+[node name="TabRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=293315331]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="UsersTabButton" type="Button" parent="Margin/RootVBox/TabRow"]
+[node name="UsersTabButton" type="Button" parent="Margin/RootVBox/TabRow" unique_id=1794285886]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
@@ -48,44 +52,43 @@ button_pressed = true
 button_group = SubResource("ButtonGroup_leaderboard_tabs")
 text = "Users"
 
-[node name="PlayersTabButton" type="Button" parent="Margin/RootVBox/TabRow"]
+[node name="PlayersTabButton" type="Button" parent="Margin/RootVBox/TabRow" unique_id=1395513169]
 unique_name_in_owner = true
 layout_mode = 2
 toggle_mode = true
 button_group = SubResource("ButtonGroup_leaderboard_tabs")
 text = "Players"
 
-[node name="StatusLabel" type="Label" parent="Margin/RootVBox"]
+[node name="StatusLabel" type="Label" parent="Margin/RootVBox" unique_id=1140258818]
 unique_name_in_owner = true
 layout_mode = 2
-text = ""
 
-[node name="UsersScroll" type="ScrollContainer" parent="Margin/RootVBox"]
+[node name="UsersScroll" type="ScrollContainer" parent="Margin/RootVBox" unique_id=1671539840]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="UsersList" type="VBoxContainer" parent="Margin/RootVBox/UsersScroll"]
+[node name="UsersList" type="VBoxContainer" parent="Margin/RootVBox/UsersScroll" unique_id=1274833684]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="PlayersScroll" type="ScrollContainer" parent="Margin/RootVBox"]
+[node name="PlayersScroll" type="ScrollContainer" parent="Margin/RootVBox" unique_id=542621335]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="PlayersList" type="VBoxContainer" parent="Margin/RootVBox/PlayersScroll"]
+[node name="PlayersList" type="VBoxContainer" parent="Margin/RootVBox/PlayersScroll" unique_id=640344121]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="BackButton" type="Button" parent="Margin/RootVBox"]
+[node name="BackButton" type="Button" parent="Margin/RootVBox" unique_id=146410908]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 0

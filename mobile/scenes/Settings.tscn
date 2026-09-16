@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://cdjyo6pxrvvix" path="res://scripts/screens/Settings.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="Texture2D" uid="uid://cyffgfu0c6x2j" path="res://sprites/backgrounds/general_background_dark.jpg" id="3_46duy"]
+[ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="4_1dggd"]
 
 [node name="Settings" type="Control" unique_id=16252790]
 layout_mode = 3
@@ -28,6 +29,7 @@ theme_override_constants/margin_left = 24
 theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 24
 theme_override_constants/margin_bottom = 20
+script = ExtResource("4_1dggd")
 
 [node name="CenterContainer" type="CenterContainer" parent="Margin" unique_id=651017994]
 layout_mode = 2

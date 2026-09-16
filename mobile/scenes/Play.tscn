@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://ce0gqgfdbq3ou" path="res://scripts/screens/Play.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="3"]
+[ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_7a5gm"]
 [ext_resource type="PackedScene" uid="uid://d3yxqql70v6n8" path="res://scenes/components/EnergyBar.tscn" id="energybar"]
 
 [node name="Play" type="Control" unique_id=1553461410]
@@ -28,6 +29,7 @@ theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 16
 theme_override_constants/margin_bottom = 12
+script = ExtResource("3_7a5gm")
 
 [node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1969284064]
 layout_mode = 2
