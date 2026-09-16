@@ -77,7 +77,7 @@ func _odds_rows(rates: Dictionary, order: Array) -> Array:
 	for key in order:
 		var rate: float = rates.get(key, 0.0)
 		if rate > 0.0:
-			rows.append([String(key).capitalize(), int(round(rate * 100.0))])
+			rows.append([String(key).capitalize(), float(rate * 100.0)])
 	return rows
 
 
@@ -93,7 +93,7 @@ func _populate_grid(grid: GridContainer, empty_label: Label, rows: Array) -> voi
 		name_label.text = row[0]
 		grid.add_child(name_label)
 		var value_label := Label.new()
-		value_label.text = "%d%%" % row[1]
+		value_label.text = "%.2f%%" % row[1]
 		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		grid.add_child(value_label)
 
