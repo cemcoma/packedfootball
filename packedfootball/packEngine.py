@@ -243,7 +243,8 @@ PACK_DATABASE = {
         "cards_per_pack": 3,
         "rates": {"bronze": 0.60, "silver": 0.30, "gold": 0.075, "platinum": 0.025, "diamond": 0.0, "special": 0.0},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "price_currency":"credits"
+        "price_currency":"credits",
+        "sprite_key":"StandardPack1"
     },
     2: {
         "name": "Jumbo Player Pack",
@@ -253,7 +254,8 @@ PACK_DATABASE = {
         "cards_per_pack": 10,
         "rates": {"bronze": 0.40, "silver": 0.40, "gold": 0.15, "platinum": 0.05, "diamond": 0.0, "special": 0.0},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "price_currency":"credits"
+        "price_currency":"credits",
+        "sprite_key":"StandardPack1"
     },
     3: {
         "name": "UCL Promo Pack",
@@ -263,7 +265,8 @@ PACK_DATABASE = {
         "cards_per_pack": 5,
         "rates": {"bronze": 0.0, "silver": 0.18, "gold": 0.40, "platinum": 0.30, "diamond": 0.10, "special": 0.02},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "price_currency":"credits"
+        "price_currency":"credits",
+        "sprite_key":"UCLPack"
     },
     4: {
         "name": "Icon Forward Pack",
@@ -273,27 +276,30 @@ PACK_DATABASE = {
         "cards_per_pack": 1,
         "rates": {"icon":1.0},
         "pos_rates": {"attacker":1},
-        "price_currency":"credits"
+        "price_currency":"credits",
+        "sprite_key":"StandardPack1"
     },
     6: {
-            "name": "Small Tournament Player Pack",
-            "type": "standard",
-            "description": "One tournament ready player at your service.",
-            "price": 1,
-            "cards_per_pack": 1,
-            "rates": {"bronze": 0.0, "silver": 0.15, "gold": 0.45, "platinum": 0.35, "diamond": 0.05, "special": 0.00},
-            "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-            "price_currency":"medals"
+        "name": "Small Tournament Player Pack",
+        "type": "standard",
+        "description": "One tournament ready player at your service.",
+        "price": 1,
+        "cards_per_pack": 1,
+        "rates": {"bronze": 0.0, "silver": 0.15, "gold": 0.45, "platinum": 0.35, "diamond": 0.05, "special": 0.00},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"medals",
+        "sprite_key":"StandardPack2"
     },
     7: {
-            "name": "Medium Tournament Player Pack",
-            "type": "standard",
-            "description": "Medium 3 player pack. Better odds than Small Tournament Winner Player Pack.",
-            "price": 3,
-            "cards_per_pack": 3,
-            "rates": {"bronze": 0.0, "silver": 0.12, "gold": 0.45, "platinum": 0.35, "diamond": 0.08, "special": 0.00},
-            "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-            "price_currency":"medals"
+        "name": "Medium Tournament Player Pack",
+        "type": "standard",
+        "description": "Medium 3 player pack. Better odds than Small Tournament Winner Player Pack.",
+        "price": 3,
+        "cards_per_pack": 3,
+        "rates": {"bronze": 0.0, "silver": 0.12, "gold": 0.45, "platinum": 0.35, "diamond": 0.08, "special": 0.00},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"medals",
+        "sprite_key":"StandardPack2"
     },
 }
 

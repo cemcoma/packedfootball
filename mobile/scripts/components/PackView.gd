@@ -12,11 +12,11 @@ extends Control
 ## stakes, reversible action), this uses a real labeled "Buy" button --
 ## spending credits deserves a deliberate tap, not "anywhere on the box".
 
+## 600 width 800 height px
+
 signal buy_pressed
 signal info_pressed  ## "i" button tapped -- see Shop.gd, which opens PackInfoPopup for this pack.
 
-@onready var _background: ColorRect = %Background
-@onready var _type_label: Label = %TypeLabel
 @onready var _name_label: Label = %NameLabel
 @onready var _cards_label: Label = %CardsLabel
 @onready var _limited_label: Label = %LimitedLabel
@@ -24,6 +24,7 @@ signal info_pressed  ## "i" button tapped -- see Shop.gd, which opens PackInfoPo
 @onready var _tag_label: Label = %TagLabel
 @onready var _buy_button: Button = %BuyButton
 @onready var _info_button: Button = %InfoButton
+@onready var _pack_texture: TextureRect = %PackTexture
 
 var _pack: PackData = null
 var _affordable: bool = true
@@ -44,8 +45,6 @@ func _on_info_button_pressed() -> void:
 
 func set_pack(pack: PackData) -> void:
 	_pack = pack
-	_background.color = PackData.type_color(pack.type)
-	_type_label.text = pack.type.capitalize()
 	_name_label.text = pack.pack_name
 	_cards_label.text = "%d cards" % pack.cards_per_pack
 	_limited_label.text = pack.limited_label()
@@ -53,6 +52,7 @@ func set_pack(pack: PackData) -> void:
 	_price_amount.set_amount(pack.price_currency, pack.price)
 	_price_amount.set_sizes(20, 18)
 	_refresh_buy_button()
+	_pack_texture.texture = pack.get_texture()
 
 
 func set_affordable(can_afford: bool) -> void:
@@ -71,7 +71,7 @@ func _refresh_buy_button() -> void:
 	if not _pack.available:
 		_tag_label.text = _pack.tag_text()
 		_tag_label.visible = true
-		_buy_button.visible = false
+		_buy_button.disabled = true
 		return
 	_tag_label.visible = false
 	_buy_button.visible = true

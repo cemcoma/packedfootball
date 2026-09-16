@@ -177,16 +177,8 @@ func _load_packs() -> void:
 
 ## The dropdown's entries come from the types actually present in what the
 ## backend returned, NOT a hardcoded list -- add a fourth pack type
-## server-side (packEngine.PACK_DATABASE's "type" is a free-form string, see
-## PackData.gd) and it shows up here on its own, no client change needed.
-## PackData.TYPE_COLORS' key order is used only as a display ORDER
-## preference, so the familiar types stay in a stable, sensible sequence;
-## anything it doesn't know about is appended alphabetically rather than
-## dropped.
+## server-side
 func _rebuild_pack_type_dropdown() -> void:
-	# Whatever is on screen right now if this is a refresh; the type from
-	# before we navigated away if this is a freshly-loaded Shop, where the
-	# dropdown is still empty and _selected_pack_type() has nothing to read.
 	var previous_type := _selected_pack_type()
 	if previous_type == "":
 		previous_type = _last_pack_type
@@ -195,31 +187,20 @@ func _rebuild_pack_type_dropdown() -> void:
 	for pack in _packs:
 		present[(pack as PackData).type] = true
 
-	_pack_types = []
-	for known_type in PackData.TYPE_COLORS.keys():
-		if present.has(known_type):
-			_pack_types.append(known_type)
-	var extras: Array[String] = []
+	var unique_types: Array[String] = []
 	for pack_type in present.keys():
-		if not PackData.TYPE_COLORS.has(pack_type):
-			extras.append(pack_type)
-	extras.sort()
-	_pack_types.append_array(extras)
+		unique_types.append(pack_type)
+				
+	_pack_types = unique_types
 
 	_pack_type_dropdown.clear()
 	for pack_type in _pack_types:
 		_pack_type_dropdown.add_item(pack_type.capitalize())
 	_pack_type_dropdown.disabled = _pack_types.size() <= 1
 
-	# Keep whatever type was being viewed selected across a refresh, so
-	# buying from the Timed tab doesn't silently bounce back to Standard.
 	var restored := _pack_types.find(previous_type)
 	if not _pack_types.is_empty():
 		_pack_type_dropdown.select(restored if restored != -1 else 0)
-		# Record what we actually landed on, not what we hoped for -- a
-		# remembered type the backend has since stopped returning falls back
-		# to the first one, and remembering the dead one would mean fighting
-		# that fallback on every visit.
 		_last_pack_type = _selected_pack_type()
 
 
@@ -242,7 +223,6 @@ func _populate_packs_grid() -> void:
 	for child in _packs_grid.get_children():
 		_packs_grid.remove_child(child)
 		child.queue_free()
-
 	var selected_type := _selected_pack_type()
 	var visible_packs: Array = []
 	for pack in _packs:

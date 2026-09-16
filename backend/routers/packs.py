@@ -102,6 +102,7 @@ async def list_packs(uid: str = Depends(verify_id_token)):
                 "available": is_available,
                 "unavailable_reason": unavailable_reason,
                 "available_at": doc.get("available_at"),
+                "sprite_key":doc.get("sprite_key"),
             }
         )
     packs.sort(key=lambda p: p["pack_id"])

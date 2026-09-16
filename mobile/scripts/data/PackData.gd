@@ -28,15 +28,7 @@ extends RefCounted
 ## backend hides completely (the ordinary case for an inactive pack) never
 ## reaches here at all.
 
-const TYPE_COLORS := {
-	"standard": Color(0.35, 0.55, 0.85),
-	"special": Color(0.65, 0.3, 0.85),
-	"timed": Color(0.85, 0.55, 0.2),
-}
-
-static func type_color(pack_type: String) -> Color:
-	return TYPE_COLORS.get(pack_type, Color(0.5, 0.5, 0.5))
-
+var sprite_key: String = ""
 
 ## Dictionary.get(key, default) only falls back to `default` when the key
 ## is entirely absent -- a present key holding JSON null (which is exactly
@@ -101,7 +93,8 @@ static func from_fields(fields: Dictionary) -> PackData:
 	pack.times_opened = _int(fields, "times_opened")
 	pack.remaining_opens = fields.get("remaining_opens")
 	pack.expires_at = _str(fields, "expires_at")
-
+	pack.sprite_key = _str(fields, "sprite_key", "")
+	
 	pack.available = _bool(fields, "available", true)
 	pack.unavailable_reason = _str(fields, "unavailable_reason")
 	pack.available_at = _str(fields, "available_at")
@@ -131,3 +124,15 @@ func tag_text() -> String:
 	if unavailable_reason != "":
 		return unavailable_reason
 	return "Not available"
+
+func get_texture() -> Texture2D:
+	if sprite_key != "":
+		var specific_path := "res://sprites/packs/%s.png" % sprite_key
+		if ResourceLoader.exists(specific_path):
+			return load(specific_path)
+
+	var type_path := "res://sprites/packs/%s.png" % type.to_lower()
+	if ResourceLoader.exists(type_path):
+		return load(type_path)
+
+	return load("res://sprites/packs/StandardPack1.png")

@@ -15,7 +15,7 @@ general/ios/app_id="ca-app-pub-1704438625576029~3392195452"
 [application]
 
 config/name="Packed Football Mobile"
-run/main_scene="res://scenes/Auth.tscn"
+run/main_scene="uid://couux5m12in61"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [autoload]
