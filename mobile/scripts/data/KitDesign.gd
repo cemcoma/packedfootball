@@ -1,6 +1,8 @@
 class_name KitDesign
 extends RefCounted
 
+### SUPER IMPORTANT ###
+##
 ## A manager's shirt: a pattern plus two colors.
 ##
 ## Stored as ONE STRING on users/{uid}.kit, deliberately, so the shape can
@@ -139,7 +141,7 @@ func matches(other: KitDesign) -> bool:
 
 
 func pattern_name() -> String:
-	return PATTERN_NAMES.get(pattern, pattern.capitalize())
+	return TranslationServer.translate(PATTERN_NAMES.get(pattern, pattern.capitalize()))
 
 
 ## Display name for a hex if it's in the palette, else the hex itself -- a
@@ -148,7 +150,7 @@ static func color_name(hex: String) -> String:
 	var cleaned := _clean_hex(hex, "")
 	for entry in AVAILABLE_COLORS:
 		if entry["hex"] == cleaned:
-			return entry["name"]
+			return TranslationServer.translate(entry["name"])
 	return "#" + cleaned.to_upper() if cleaned != "" else "Unknown"
 
 

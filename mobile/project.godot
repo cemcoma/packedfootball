@@ -28,6 +28,7 @@ MatchSession="*res://scripts/autoload/MatchSession.gd"
 PackSession="*res://scripts/autoload/PackSession.gd"
 IapClient="*res://scripts/autoload/IapClient.gd"
 ThemeManager="*res://scripts/autoload/ThemeManager.gd"
+LocaleManager="*res://scripts/autoload/LocaleManager.gd"
 PlayerSession="*res://scripts/autoload/PlayerSession.gd"
 AdManager="*uid://d1x5ac4vymns1"
 
@@ -54,3 +55,8 @@ pointing/emulate_touch_from_mouse=true
 [rendering]
 
 textures/vram_compression/import_etc2_astc=true
+
+[internationalization]
+
+locale/translations=PackedStringArray("res://translations/tr.po")
+locale/fallback="en"

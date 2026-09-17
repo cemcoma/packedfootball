@@ -87,9 +87,9 @@ func _ready() -> void:
 	var score: Array = MatchSession.score
 	var my_score: int = score[0] if score.size() == 2 else 0
 	var opp_score: int = score[1] if score.size() == 2 else 0
-	var opponent_name: String = MatchSession.opponent_display_name if MatchSession.opponent_display_name != "" else "Opponent"
-	_title_label.text = "Match Statistics   %d - %d" % [my_score, opp_score]
-	_home_header.text = "You"
+	var opponent_name: String = MatchSession.opponent_display_name if MatchSession.opponent_display_name != "" else tr("Opponent")
+	_title_label.text = tr("Match Statistics   %d - %d") % [my_score, opp_score]
+	_home_header.text = tr("You")
 	_away_header.text = opponent_name
 
 	_populate_list(MatchSession.TEAM_HOME, _home_list)
@@ -161,7 +161,7 @@ func _refresh_detail() -> void:
 		child.queue_free()
 
 	if _selected_index < 0:
-		_detail_name.text = "Select a player"
+		_detail_name.text = tr("Select a player")
 		_detail_sub.text = ""
 		return
 
@@ -172,8 +172,8 @@ func _refresh_detail() -> void:
 	var tier: String = tier_raw if tier_raw is String else ""
 
 	_detail_name.text = MatchSession.player_name(_selected_index)
-	var side := "You" if _selected_index < MatchSession.PLAYERS_PER_TEAM else _away_header.text
-	_detail_sub.text = "%s  -  %s  -  %s" % [position, tier.capitalize(), side]
+	var side := tr("You") if _selected_index < MatchSession.PLAYERS_PER_TEAM else _away_header.text
+	_detail_sub.text = "%s  -  %s  -  %s" % [position, tr(tier.capitalize()), side]
 
 	if _show_career:
 		_build_career_rows(fields, position)
@@ -184,45 +184,45 @@ func _refresh_detail() -> void:
 func _build_match_rows(position: String) -> void:
 	var stats: Dictionary = MatchSession.match_stats_for(_selected_index)
 	if stats.is_empty():
-		_add_note("No match stats for this player.")
+		_add_note(tr("No match stats for this player."))
 		return
 
-	_add_section("This Match")
+	_add_section(tr("This Match"))
 	for row in MATCH_ROWS:
-		_add_row(row[0], _stat_text(stats, row[1], row[2]))
+		_add_row(tr(row[0]), _stat_text(stats, row[1], row[2]))
 	if position == "GK":
 		for row in MATCH_KEEPER_ROWS:
-			_add_row(row[0], _stat_text(stats, row[1], row[2]))
+			_add_row(tr(row[0]), _stat_text(stats, row[1], row[2]))
 
 
 func _build_career_rows(fields: Dictionary, position: String) -> void:
 	var stats_raw = fields.get("statistics")
 	var stats: Dictionary = stats_raw if stats_raw is Dictionary else {}
 
-	_add_section("Career")
+	_add_section(tr("Career"))
 	if stats.is_empty():
-		_add_note("No career stats recorded.")
+		_add_note(tr("No career stats recorded."))
 	else:
 		# rating_sum/rating_count are storage, not a stat -- show the average
 		# the same way player.py's average_rating() derives it.
 		var count: float = float(stats.get("rating_count", 0))
 		var avg: float = (float(stats.get("rating_sum", 0.0)) / count) if count > 0 else 0.0
-		_add_row("Avg rating", "%.2f" % avg if count > 0 else "-")
+		_add_row(tr("Avg rating"), "%.2f" % avg if count > 0 else "-")
 		for row in CAREER_ROWS:
 			if row[1] in ["saves", "clean_sheets"] and position != "GK":
 				continue
-			_add_row(row[0], str(int(stats.get(row[1], 0))))
+			_add_row(tr(row[0]), str(int(stats.get(row[1], 0))))
 
 	var attributes_raw = fields.get("attributes")
 	var attributes: Dictionary = attributes_raw if attributes_raw is Dictionary else {}
-	_add_section("Attributes")
+	_add_section(tr("Attributes"))
 	if attributes.is_empty():
-		_add_note("No attributes recorded.")
+		_add_note(tr("No attributes recorded."))
 		return
 	for row in ATTR_ROWS:
 		var value: int = int(attributes.get(row[1], 0))
 		var text := "%d cm" % value if row[1] == "height" else str(value)
-		_add_row(row[0], text)
+		_add_row(tr(row[0]), text)
 
 
 func _stat_text(stats: Dictionary, key: String, kind: String) -> String:
@@ -237,7 +237,7 @@ func _stat_text(stats: Dictionary, key: String, kind: String) -> String:
 		"rating":
 			return "%.1f" % float(value)
 		"bool":
-			return "Yes" if int(value) > 0 else "No"
+			return tr("Yes") if int(value) > 0 else tr("No")
 		_:
 			return str(int(value))
 
@@ -295,7 +295,7 @@ func _on_mode_pressed() -> void:
 
 
 func _update_mode_button() -> void:
-	_mode_button.text = "Show Match Statistics" if _show_career else "Show All Statistics"
+	_mode_button.text = tr("Show Match Statistics") if _show_career else tr("Show All Statistics")
 
 
 func _on_back_pressed() -> void:

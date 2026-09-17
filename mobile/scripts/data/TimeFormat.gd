@@ -25,10 +25,10 @@ static func duration(seconds: int) -> String:
 	var secs := seconds % 60
 
 	if hours > 0:
-		return "%dh %02dm" % [hours, minutes]
+		return TranslationServer.translate("%dh %02dm") % [hours, minutes]
 	if minutes > 0:
-		return "%dm %02ds" % [minutes, secs]
-	return "%ds" % secs
+		return TranslationServer.translate("%dm %02ds") % [minutes, secs]
+	return TranslationServer.translate("%ds") % secs
 
 
 ## "4h 12m" with no seconds -- for anything measured in hours, where a
@@ -38,21 +38,21 @@ static func coarse_duration(seconds: int) -> String:
 	var hours := seconds / 3600
 	var minutes := (seconds % 3600) / 60
 	if hours > 0:
-		return "%dh %02dm" % [hours, minutes]
+		return TranslationServer.translate("%dh %02dm") % [hours, minutes]
 	if minutes > 0:
-		return "%dm" % minutes
-	return "under a minute"
+		return TranslationServer.translate("%dm") % minutes
+	return TranslationServer.translate("under a minute")
 
 
 ## "Ends in 4h 12m" / "Ended". The phrase a tournament header wants.
 static func ends_in(seconds: int) -> String:
 	if seconds <= 0:
-		return "Ended"
-	return "Ends in %s" % coarse_duration(seconds)
+		return TranslationServer.translate("Ended")
+	return TranslationServer.translate("Ends in %s") % coarse_duration(seconds)
 
 
 ## "+1 in 12m 30s" / "Full". What sits under an energy bar.
 static func next_energy_in(seconds: int, is_full: bool) -> String:
 	if is_full:
-		return "Full"
-	return "+1 in %s" % duration(seconds)
+		return TranslationServer.translate("Full")
+	return TranslationServer.translate("+1 in %s") % duration(seconds)

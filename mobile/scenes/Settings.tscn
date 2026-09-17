@@ -61,58 +61,36 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Save Name"
 
-[node name="LanguageRow" type="HBoxContainer" parent="Margin/CenterContainer/RootVBox" unique_id=396134971]
+[node name="OptionsRow" type="HBoxContainer" parent="Margin/CenterContainer/RootVBox" unique_id=396134971]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="LanguageLabel" type="Label" parent="Margin/CenterContainer/RootVBox/LanguageRow" unique_id=1688813741]
+[node name="LanguageOption" type="OptionButton" parent="Margin/CenterContainer/RootVBox/OptionsRow" unique_id=565509366]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Language"
 
-[node name="LanguageOption" type="OptionButton" parent="Margin/CenterContainer/RootVBox/LanguageRow" unique_id=565509366]
+[node name="ThemeOption" type="OptionButton" parent="Margin/CenterContainer/RootVBox/OptionsRow" unique_id=2039548150]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 0)
-layout_mode = 2
-
-[node name="LanguageHint" type="Label" parent="Margin/CenterContainer/RootVBox" unique_id=1765921253]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-theme_override_font_sizes/font_size = 11
-text = "Coming soon."
-
-[node name="ThemeRow" type="HBoxContainer" parent="Margin/CenterContainer/RootVBox" unique_id=812077745]
-layout_mode = 2
-theme_override_constants/separation = 10
-
-[node name="ThemeLabel" type="Label" parent="Margin/CenterContainer/RootVBox/ThemeRow" unique_id=1854356658]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Color Theme"
-
-[node name="ThemeOption" type="OptionButton" parent="Margin/CenterContainer/RootVBox/ThemeRow" unique_id=2039548150]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 0)
-layout_mode = 2
-
-[node name="ThemeHint" type="Label" parent="Margin/CenterContainer/RootVBox" unique_id=123617072]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-theme_override_font_sizes/font_size = 11
-text = "Coming soon."
 
 [node name="Spacer" type="Control" parent="Margin/CenterContainer/RootVBox" unique_id=689277706]
 custom_minimum_size = Vector2(0, 12)
 layout_mode = 2
 
-[node name="BackButton" type="Button" parent="Margin/CenterContainer/RootVBox" unique_id=1809327123]
+[node name="ButtonRow" type="HBoxContainer" parent="Margin/CenterContainer/RootVBox" unique_id=1940000200]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="BackButton" type="Button" parent="Margin/CenterContainer/RootVBox/ButtonRow" unique_id=1809327123]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 text = "Back to Menu"
 
-[node name="LogoutButton" type="Button" parent="Margin/CenterContainer/RootVBox" unique_id=1658000256]
+[node name="LogoutButton" type="Button" parent="Margin/CenterContainer/RootVBox/ButtonRow" unique_id=1658000256]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 text = "Log Out / Switch Account"

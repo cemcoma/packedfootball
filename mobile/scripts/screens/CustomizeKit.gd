@@ -71,7 +71,7 @@ func _build_color_grid(grid: GridContainer, is_primary: bool) -> void:
 		var hex: String = entry["hex"]
 		var button := Button.new()
 		button.custom_minimum_size = SWATCH_SIZE
-		button.tooltip_text = entry["name"]
+		button.tooltip_text = tr(entry["name"])
 		button.pressed.connect(_on_color_pressed.bind(hex, is_primary))
 		grid.add_child(button)
 
@@ -97,7 +97,7 @@ func _refresh() -> void:
 	_refresh_pattern_buttons()
 	_refresh_color_grid(_primary_grid, _design.primary)
 	_refresh_color_grid(_secondary_grid, _design.secondary)
-	_summary_label.text = "%s  ·  %s and %s" % [
+	_summary_label.text = tr("%s  ·  %s and %s") % [
 		_design.pattern_name(),
 		KitDesign.color_name(_design.primary),
 		KitDesign.color_name(_design.secondary),
@@ -150,13 +150,13 @@ func _on_save_pressed() -> void:
 		return
 	_saving = true
 	_save_button.disabled = true
-	_set_status("Saving...")
+	_set_status(tr("Saving..."))
 
 	var ok := await GameProfile.set_kit(_design)
 
 	_saving = false
 	_save_button.disabled = false
-	_set_status("Kit saved." if ok else "Could not save your kit -- try again.")
+	_set_status(tr("Kit saved.") if ok else tr("Could not save your kit -- try again."))
 
 
 func _on_back_pressed() -> void:

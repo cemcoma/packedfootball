@@ -89,7 +89,7 @@ func _refresh_currency_labels() -> void:
 func _refresh_inventory_label() -> void:
 	var count := GameProfile.inventory_count()
 	var full: bool = GameProfile.inventory_space() <= 0
-	_inventory_label.text = "Bench %d / %d" % [count, GameProfile.inventory_cap]
+	_inventory_label.text = tr("Bench %d / %d") % [count, GameProfile.inventory_cap]
 	_inventory_label.add_theme_color_override(
 		"font_color",
 		ThemeManager.color("warning") if full else ThemeManager.color("text_hint")
@@ -104,7 +104,7 @@ func _on_packs_tab_pressed() -> void:
 func _on_currency_tab_pressed() -> void:
 	_packs_panel.visible = false
 	_currency_panel.visible = true
-	await _refresh_currencies("Updating your balance...")
+	await _refresh_currencies(tr("Updating your balance..."))
 
 
 # -- fetching ------------------------------------------------------------------
@@ -131,7 +131,7 @@ func _refresh_currencies(status: String) -> bool:
 	_busy_popup.visible = false
 	_busy = false
 	if not ok:
-		_status_label.text = "Could not refresh your balance -- showing the last known one."
+		_status_label.text = tr("Could not refresh your balance -- showing the last known one.")
 	return ok
 
 
@@ -140,20 +140,20 @@ func _refresh_currencies(status: String) -> bool:
 ## rather than a timer pretending it is.
 func _refresh_and_load() -> void:
 	_busy = true
-	_busy_popup.set_status("Updating your balance...")
+	_busy_popup.set_status(tr("Updating your balance..."))
 	_busy_popup.visible = true
 
 	var ok: bool = await GameProfile.refresh_currencies()
 	await GameProfile.refresh_energy()
 	_refresh_currency_labels()
 
-	_busy_popup.set_status("Loading packs...")
+	_busy_popup.set_status(tr("Loading packs..."))
 	await _load_packs()
 
 	_busy_popup.visible = false
 	_busy = false
 	if not ok and _status_label.text == "":
-		_status_label.text = "Could not refresh your balance -- showing the last known one."
+		_status_label.text = tr("Could not refresh your balance -- showing the last known one.")
 
 
 func _on_back_pressed() -> void:
@@ -164,7 +164,7 @@ func _load_packs() -> void:
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/pack/list")
 	if not res.ok:
 		print(res)
-		_status_label.text = "Could not load packs -- try again later."
+		_status_label.text = tr("Could not load packs -- try again later.")
 		return
 	var pack_fields: Array = res.data.get("packs", [])
 	_packs = []
@@ -196,7 +196,7 @@ func _rebuild_pack_type_dropdown() -> void:
 
 	_pack_type_dropdown.clear()
 	for pack_type in _pack_types:
-		_pack_type_dropdown.add_item(pack_type.capitalize())
+		_pack_type_dropdown.add_item(tr(pack_type.capitalize()))
 	_pack_type_dropdown.disabled = _pack_types.size() <= 1
 
 	var restored := _pack_types.find(previous_type)
@@ -233,8 +233,8 @@ func _populate_packs_grid() -> void:
 	if visible_packs.is_empty():
 		var empty_label := Label.new()
 		empty_label.text = (
-			"No packs available right now." if _packs.is_empty()
-			else "No %s packs available right now." % selected_type.capitalize()
+			tr("No packs available right now.") if _packs.is_empty()
+			else tr("No %s packs available right now.") % tr(selected_type.capitalize())
 		)
 		_packs_grid.add_child(empty_label)
 		return
@@ -281,7 +281,7 @@ func _has_room_for(pack: PackData) -> bool:
 func _on_buy_pressed(pack: PackData) -> void:
 	if not _has_room_for(pack):
 		_status_label.text = (
-			"Your inventory is full (%d / %d) -- release players from the Team screen to make room for %s."
+			tr("Your inventory is full (%d / %d) -- release players from the Team screen to make room for %s.")
 			% [GameProfile.inventory_count(), GameProfile.inventory_cap, pack.pack_name]
 		)
 		return
@@ -290,7 +290,7 @@ func _on_buy_pressed(pack: PackData) -> void:
 		# Deliberately doesn't name the currency: the pack box right there
 		# shows its price with that currency's logo (see PackView's
 		# CurrencyAmount), which is the only place it needs saying.
-		_status_label.text = "You can't afford %s." % pack.pack_name
+		_status_label.text = tr("You can't afford %s.") % pack.pack_name
 		return
 
 	# The popup is a full-screen scrim, so putting it up BEFORE the request
@@ -298,7 +298,7 @@ func _on_buy_pressed(pack: PackData) -> void:
 	# would charge for, and open, a second pack) while this one is in
 	# flight -- same reason Play.gd shows its matchmaking popup up front.
 	_status_label.text = ""
-	_busy_popup.set_status("Opening %s..." % pack.pack_name)
+	_busy_popup.set_status(tr("Opening %s...") % pack.pack_name)
 	_busy_popup.visible = true
 
 	# Not awaited -- moves the status along on its own if the request is
@@ -317,9 +317,9 @@ func _on_buy_pressed(pack: PackData) -> void:
 		# with Firestore -- say what's actually wrong rather than "try again",
 		# which would be advice that can't work.
 		_status_label.text = (
-			"Your inventory is full -- release players from the Team screen first."
+			tr("Your inventory is full -- release players from the Team screen first.")
 			if res.status == 409
-			else "Could not open %s -- try again." % pack.pack_name
+			else tr("Could not open %s -- try again.") % pack.pack_name
 		)
 		return
 
@@ -363,4 +363,4 @@ func _on_buy_pressed(pack: PackData) -> void:
 ## nothing rather than overwriting a fresh status on a closed popup.
 func _on_pack_open_midpoint() -> void:
 	if _busy_popup.visible:
-		_busy_popup.set_status("Shuffling the pack...")
+		_busy_popup.set_status(tr("Shuffling the pack..."))

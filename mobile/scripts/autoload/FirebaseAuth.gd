@@ -40,7 +40,7 @@ const ERROR_MESSAGES := {
 	"INVALID_EMAIL": "That email address isn't valid.",
 	"MISSING_EMAIL": "Please enter your email.",
 	"MISSING_PASSWORD": "Please enter your password.",
-	"WEAK_PASSWORD": "Password must be at least %d characters." % MIN_PASSWORD_LENGTH,
+	"WEAK_PASSWORD": "Password must be at least %d characters.",  # formatted with MIN_PASSWORD_LENGTH
 	"EMAIL_EXISTS": "An account with that email already exists.",
 	"USER_DISABLED": "This account has been disabled.",
 	"TOO_MANY_ATTEMPTS_TRY_LATER": "Too many attempts -- please wait a bit and try again.",
@@ -74,7 +74,7 @@ func _post_json(url: String, body: Dictionary) -> Dictionary:
 	var err := http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
 	if err != OK:
 		http.queue_free()
-		return {"ok": false, "error": "Could not start request (error %s)" % err}
+		return {"ok": false, "error": tr("Could not start request (error %s)") % err}
 
 	var result: Array = await http.request_completed
 	http.queue_free()
@@ -89,7 +89,7 @@ func _post_form(url: String, form_body: String) -> Dictionary:
 	var err := http.request(url, headers, HTTPClient.METHOD_POST, form_body)
 	if err != OK:
 		http.queue_free()
-		return {"ok": false, "error": "Could not start request (error %s)" % err}
+		return {"ok": false, "error": tr("Could not start request (error %s)") % err}
 
 	var result: Array = await http.request_completed
 	http.queue_free()
@@ -123,7 +123,11 @@ func _parse_response(result: Array) -> Dictionary:
 ## ERROR_MESSAGES), or the code itself when there isn't one.
 static func _friendly_error(raw: String) -> String:
 	var code := raw.get_slice(" : ", 0).strip_edges()
-	return ERROR_MESSAGES.get(code, raw)
+	if not ERROR_MESSAGES.has(code):
+		return raw
+	# Translated here rather than in the table: a const can't call tr().
+	var message := TranslationServer.translate(ERROR_MESSAGES[code])
+	return message % MIN_PASSWORD_LENGTH if code == "WEAK_PASSWORD" else message
 
 
 func _apply_auth_payload(data: Dictionary) -> void:

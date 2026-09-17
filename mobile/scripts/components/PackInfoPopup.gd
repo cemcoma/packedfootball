@@ -56,14 +56,14 @@ func _ready() -> void:
 
 func open_for(pack: PackData) -> void:
 	_panel_title.text = pack.pack_name
-	_type_label.text = pack.type.capitalize()
-	_description_label.text = pack.description if pack.description != "" else "No description available."
+	_type_label.text = tr(pack.type.capitalize())
+	_description_label.text = pack.description if pack.description != "" else tr("No description available.")
 	_populate_grid(_rates_grid, _rates_empty_label, _odds_rows(pack.rates, PlayerCard.TIER_COLORS.keys()))
 	_populate_grid(_position_rates_grid, _position_rates_empty_label, _odds_rows(pack.pos_rates, POSITION_CATEGORY_ORDER))
 	if pack.remaining_opens != null or pack.expires_at != "":
 		_availability_text(pack.remaining_opens,pack.expires_at)
 	else:
-		_availability_label.text = "Always available (Admin decision)"
+		_availability_label.text = tr("Always available")
 	_page = 0
 	_refresh_page()
 	visible = true
@@ -77,7 +77,7 @@ func _odds_rows(rates: Dictionary, order: Array) -> Array:
 	for key in order:
 		var rate: float = rates.get(key, 0.0)
 		if rate > 0.0:
-			rows.append([String(key).capitalize(), float(rate * 100.0)])
+			rows.append([tr(String(key).capitalize()), float(rate * 100.0)])
 	return rows
 
 
@@ -101,9 +101,9 @@ func _availability_text(remaining_opens,expires_at:String) -> void:
 	var remaining_opens_text :=  ""
 	var expires_at_text :=  ""
 	if remaining_opens != null:
-		remaining_opens_text = "Remaning opens: %d" % remaining_opens
+		remaining_opens_text = tr("Remaining opens: %d") % remaining_opens
 	if expires_at != "":
-		expires_at_text = "Expires at: %s" % expires_at
+		expires_at_text = tr("Expires at: %s") % expires_at
 		
 	_availability_label.text = "%s\n%s" % [remaining_opens_text,expires_at_text]
 

@@ -45,15 +45,15 @@ func _apply_theme_colors() -> void:
 func _refresh_hints() -> void:
 	var count := GameProfile.inventory_count()
 	var owned: int = GameProfile.all_cards.size()
-	_squad_hint.text = "Pick your formation, choose who starts, and design your kit."
+	_squad_hint.text = tr("Pick your formation, choose who starts, and design your kit.")
 	if count >= GameProfile.inventory_cap:
 		_inventory_hint.text = (
-			"Full: %d / %d. Release players here to open packs again. %d owned in total."
+			tr("Full: %d / %d. Release players here to open packs again. %d owned in total.")
 			% [count, GameProfile.inventory_cap, owned]
 		)
 	else:
 		_inventory_hint.text = (
-			"Every player you own -- %d of them. Release or restyle any of them. Bench space %d / %d."
+			tr("Every player you own -- %d of them. Release or restyle any of them. Bench space %d / %d.")
 			% [owned, count, GameProfile.inventory_cap]
 		)
 	_apply_theme_colors()

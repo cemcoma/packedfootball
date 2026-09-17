@@ -172,7 +172,7 @@ func _play_reveal_sequence() -> void:
 			view.set_celebrating(true)  # a glow that breathes until the card is put away
 			if _hero_sound.stream != null:
 				_hero_sound.play()
-			_skip_hint_label.text = "Tap to continue"
+			_skip_hint_label.text = tr("Tap to continue")
 			await _wait_for_tap()
 		else:
 			await _hold(CARD_HOLD_SECONDS)
@@ -246,7 +246,7 @@ func _on_card_pressed(player_id: String) -> void:
 		_stats_attr_grid.remove_child(child)
 		child.queue_free()
 	for row in ATTR_ROWS:
-		var label_name: String = row[0]
+		var label_name: String = tr(row[0])
 		var key: String = row[1]
 		var value: int = card.attributes.get(key, 0)
 		var name_label := Label.new()
@@ -259,7 +259,7 @@ func _on_card_pressed(player_id: String) -> void:
 	var goals: int = card.statistics.get("goals", 0)
 	var assists: int = card.statistics.get("assists", 0)
 	var matches: int = card.statistics.get("matches_played", 0)
-	_stats_extra_gam.text = "\nGoals: %d\nAssists: %d\nMatches: %d" % [goals, assists, matches]
+	_stats_extra_gam.text = tr("\nGoals: %d\nAssists: %d\nMatches: %d") % [goals, assists, matches]
 
 	_stats_popup.visible = true
 

@@ -72,7 +72,7 @@ func _ready() -> void:
 	_batch_confirm_overlay.visible = false
 
 	for entry in FILTERS:
-		_filter_dropdown.add_item(entry[0])
+		_filter_dropdown.add_item(tr(entry[0]))
 	_filter_dropdown.select(0)
 
 
@@ -89,7 +89,7 @@ func _refresh() -> void:
 
 func _refresh_count() -> void:
 	var benched := GameProfile.inventory_count()
-	_count_label.text = "%d owned  ·  bench %d / %d" % [
+	_count_label.text = tr("%d owned  ·  bench %d / %d") % [
 		GameProfile.all_cards.size(), benched, GameProfile.inventory_cap
 	]
 
@@ -146,9 +146,9 @@ func _populate_grid() -> void:
 	_empty_label.visible = ids.is_empty()
 	if ids.is_empty():
 		_empty_label.text = (
-			"You don't own any players yet -- open a pack in the Shop."
+			tr("You don't own any players yet -- open a pack in the Shop.")
 			if GameProfile.all_cards.is_empty()
-			else "No players match this filter."
+			else tr("No players match this filter.")
 		)
 		return
 
@@ -224,7 +224,7 @@ func _update_batch_ui() -> void:
 		total_credits += PlayerCard.release_credits(card.tier)
 		
 	_execute_batch_button.disabled = _selected_ids.is_empty()
-	CurrencyDisplay.set_button_price(_execute_batch_button, "Release", total_credits)
+	CurrencyDisplay.set_button_price(_execute_batch_button, tr("Release"), total_credits)
 
 func _on_execute_batch_pressed() -> void:
 	if _selected_ids.is_empty():
@@ -234,7 +234,7 @@ func _on_execute_batch_pressed() -> void:
 	for pid in _selected_ids:
 		total_credits += PlayerCard.release_credits(GameProfile.all_cards[pid].tier)
 		
-	_batch_confirm_label.text = "Release %d selected players?\n\nYou get" % _selected_ids.size()
+	_batch_confirm_label.text = tr("Release %d selected players?\n\nYou get") % _selected_ids.size()
 	_batch_confirm_reward_label.text = "+%s" % CurrencyDisplay.format_amount(total_credits)
 	_batch_confirm_reward_icon.texture = CurrencyDisplay.icon_for("credits")
 	_batch_confirm_reward_label.add_theme_color_override(

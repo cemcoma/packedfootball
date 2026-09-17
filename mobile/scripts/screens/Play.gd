@@ -91,7 +91,7 @@ func _on_quick_match_pressed() -> void:
 	_quick_match_button.disabled = true
 	_tournament_button.disabled = true
 	_status_label.text = ""
-	_show_matchmaking_popup("Finding an opponent...")
+	_show_matchmaking_popup(tr("Finding an opponent..."))
 
 	# Not awaited -- fires on its own while the request below is in flight,
 	# purely to move the status text along; see class docstring.
@@ -102,9 +102,9 @@ func _on_quick_match_pressed() -> void:
 	if not res.ok:
 		_hide_matchmaking_popup()
 		_status_label.text = ( # 402 is "out of energy"
-			"You're out of energy -- it refills over time, or top up in the Shop."
+			tr("You're out of energy -- it refills over time, or top up in the Shop.")
 			if res.status == 402
-			else "Could not start a match -- try again."
+			else tr("Could not start a match -- try again.")
 		)
 		_quick_match_button.disabled = false
 		_tournament_button.disabled = false
@@ -116,7 +116,7 @@ func _on_quick_match_pressed() -> void:
 	MatchSession.set_from_match_response(res.data)
 	if not MatchSession.has_pending():
 		_hide_matchmaking_popup()
-		_status_label.text = "Match finished, but the replay couldn't be loaded -- try again."
+		_status_label.text = tr("Match finished, but the replay couldn't be loaded -- try again.")
 		_quick_match_button.disabled = false
 		_tournament_button.disabled = false
 		return
@@ -132,14 +132,14 @@ func _on_quick_match_pressed() -> void:
 	GameProfile.losses = _int(res.data, "losses", GameProfile.losses)
 	GameProfile.draws = _int(res.data, "draws", GameProfile.draws)
 
-	_set_matchmaking_status("Match found!")
+	_set_matchmaking_status(tr("Match found!"))
 	await get_tree().create_timer(0.4).timeout
 	_hide_matchmaking_popup()
 	get_tree().change_scene_to_file("res://scenes/Match.tscn")
 
 
 func _on_matchmaking_midpoint() -> void:
-	_set_matchmaking_status("Simulating match...")
+	_set_matchmaking_status(tr("Simulating match..."))
 
 
 static func _int(data: Dictionary, key: String, default: int) -> int:

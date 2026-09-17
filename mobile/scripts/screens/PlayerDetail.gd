@@ -100,8 +100,8 @@ func _ready() -> void:
 func _refresh() -> void:
 	_credits_chip.set_amount(GameProfile.credits)
 	_name_label.text = _card.full_name()
-	_subtitle_label.text = "%s  ·  %s  ·  Overall %d" % [
-		_card.position, _card.tier.capitalize(), _card.overall()
+	_subtitle_label.text = tr("%s  ·  %s  ·  Overall %d") % [
+		_card.position, tr(_card.tier.capitalize()), _card.overall()
 	]
 	_origin_label.text = "%s\n%s\n%d cm" % [
 		_card.hometown, _card.country, int(_card.attributes.get("height", 0))
@@ -120,7 +120,7 @@ func _populate(grid: GridContainer, rows: Array, value_for: Callable) -> void:
 		grid.remove_child(child)
 		child.queue_free()
 	for row in rows:
-		_add_row(grid, row[0], value_for.call(row[1]))
+		_add_row(grid, tr(row[0]), value_for.call(row[1]))
 
 
 func _populate_career() -> void:
@@ -178,14 +178,14 @@ func _is_starting() -> bool:
 ## be released at all, so that button carries no price: showing one for a
 ## thing you can't do is worse than showing nothing.
 func _refresh_buttons() -> void:
-	_customize_button.text = "Customize"
+	_customize_button.text = tr("Customize")
 	if _is_starting():
 		_release_button.disabled = true
-		CurrencyDisplay.set_button_price(_release_button, "Release (in XI)", 0)
+		CurrencyDisplay.set_button_price(_release_button, tr("Release (in XI)"), 0)
 	else:
 		_release_button.disabled = _releasing
 		CurrencyDisplay.set_button_price(
-			_release_button, "Release", PlayerCard.release_credits(_card.tier)
+			_release_button, tr("Release"), PlayerCard.release_credits(_card.tier)
 		)
 
 
@@ -228,8 +228,8 @@ func _on_customize_pressed() -> void:
 func _on_release_pressed() -> void:
 	if _releasing or _is_starting():
 		return
-	_confirm_label.text = "Release %s?\n\n%s %s, overall %d.\n\nYou get" % [
-		_card.full_name(), _card.tier.capitalize(), _card.position, _card.overall()
+	_confirm_label.text = tr("Release %s?\n\n%s %s, overall %d.\n\nYou get") % [
+		_card.full_name(), tr(_card.tier.capitalize()), _card.position, _card.overall()
 	]
 	# The reward is its own row rather than part of the sentence above,
 	# because it needs the logo beside it -- a Label can't carry an inline
@@ -251,7 +251,7 @@ func _on_confirm_release_pressed() -> void:
 	_releasing = true
 	_confirm_button.disabled = true
 	_cancel_button.disabled = true
-	_set_status("Releasing...")
+	_set_status(tr("Releasing..."))
 
 	var res: Dictionary = await Backend.call_endpoint(
 		HTTPClient.METHOD_POST, "/player/release", {"player_id": _card.player_id}
@@ -267,9 +267,9 @@ func _on_confirm_release_pressed() -> void:
 		# this screen already blocks -- so seeing it means the cached lineup
 		# disagrees with Firestore, not that the user did something wrong.
 		_set_status(
-			"That player is in your saved starting XI -- replace them on the Squad screen first."
+			tr("That player is in your saved starting XI -- replace them on the Squad screen first.")
 			if res.status == 409
-			else "Could not release this player -- try again."
+			else tr("Could not release this player -- try again.")
 		)
 		_refresh_buttons()
 		return

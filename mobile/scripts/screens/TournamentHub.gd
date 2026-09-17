@@ -35,7 +35,7 @@ func _build_coming_soon() -> void:
 		row.add_theme_constant_override("separation", 12)
 
 		var button := Button.new()
-		button.text = entry["name"]
+		button.text = tr(entry["name"])
 		button.custom_minimum_size = Vector2(300, 50)
 		button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		button.add_theme_font_size_override("font_size", 18)
@@ -43,7 +43,7 @@ func _build_coming_soon() -> void:
 		row.add_child(button)
 
 		var hint := Label.new()
-		hint.text = "Coming soon. %s" % entry["hint"]
+		hint.text = tr("Coming soon. %s") % tr(entry["hint"])
 		hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

@@ -1,6 +1,6 @@
 [gd_resource type="Theme" format=3 uid="uid://byioxy8chbyis"]
 
-[ext_resource type="FontFile" uid="uid://c5devhv8uhf53" path="res://theme/fonts/Arial Rounded Bold.ttf" id="1_b06mf"]
+[ext_resource type="FontVariation" uid="uid://cappf0ntvar01" path="res://theme/fonts/AppFont.tres" id="1_b06mf"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_disabled"]
 content_margin_left = 16.0

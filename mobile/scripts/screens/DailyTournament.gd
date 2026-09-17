@@ -58,7 +58,7 @@ func _ready() -> void:
 	_busy_popup.visible = false
 
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
-	await _load("Loading today's tournament...")
+	await _load(tr("Loading today's tournament..."))
 
 
 func _process(delta: float) -> void:
@@ -84,7 +84,7 @@ func _load(status: String) -> void:
 	_busy = false
 
 	if not res.ok:
-		_set_status("Could not load the tournament -- try again.", true)
+		_set_status(tr("Could not load the tournament -- try again."), true)
 		return
 	_apply_state(res.data)
 
@@ -94,7 +94,7 @@ func _apply_state(data: Dictionary) -> void:
 	_seconds_remaining = float(_int(data, "seconds_remaining", 0))
 
 	var tier_name = data.get("tier_name")
-	_tier_label.text = tier_name if tier_name is String else "Tournament"
+	_tier_label.text = tier_name if tier_name is String else tr("Tournament")
 	_countdown_label.text = TimeFormat.ends_in(int(_seconds_remaining))
 
 	# Into the shared cache too, not just this bar -- Menu, Play and Shop all
@@ -129,9 +129,9 @@ func _refresh_progress() -> void:
 	var capacity := _int(_state, "group_capacity", 6)
 
 	if not bool(_state.get("joined", false)):
-		_progress_label.text = "Not entered yet."
+		_progress_label.text = tr("Not entered yet.")
 		return
-	_progress_label.text = "Match %d of %d  ·  %d of %d players in your group" % [
+	_progress_label.text = tr("Match %d of %d  ·  %d of %d players in your group") % [
 		mini(played + 1, total), total, size, capacity
 	]
 
@@ -151,9 +151,9 @@ func _refresh_rules() -> void:
 	# who was told "top 2 go up" would be misled -- so the screen says which
 	# rule is currently in force rather than one generic sentence.
 	if mode == "positional":
-		_rules_label.text = "Full group: the top 2 go up with at least %d points, the bottom 2 go down." % floor_pts
+		_rules_label.text = tr("Full group: the top 2 go up with at least %d points, the bottom 2 go down.") % floor_pts
 	else:
-		_rules_label.text = "Group isn't full, so points decide: %d or more goes up, under %d goes down. Needs %d players in the group to go up at all." % [floor_pts, drop_pts, min_group]
+		_rules_label.text = tr("Group isn't full, so points decide: %d or more goes up, under %d goes down. Needs %d players in the group to go up at all.") % [floor_pts, drop_pts, min_group]
 
 
 func _refresh_rewards() -> void:
@@ -164,7 +164,7 @@ func _refresh_rewards() -> void:
 	var rewards = _state.get("rewards")
 	if not (rewards is Array) or rewards.is_empty():
 		var none := Label.new()
-		none.text = "No placement rewards in this tier."
+		none.text = tr("No placement rewards in this tier.")
 		none.add_theme_font_size_override("font_size", 11)
 		none.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 		_rewards_box.add_child(none)
@@ -214,21 +214,21 @@ func _refresh_buttons() -> void:
 
 	if not joined:
 		_join_button.disabled = _busy or closed
-		_join_button.text = "Entries closed" if closed else "Enter today's tournament"
+		_join_button.text = tr("Entries closed") if closed else tr("Enter today's tournament")
 		if closed:
 			var reopens := TimeFormat.coarse_duration(int(_seconds_remaining))
-			_set_status("Entries are closed for the last hour of the day -- the next tournament starts in %s." % reopens, false)
+			_set_status(tr("Entries are closed for the last hour of the day -- the next tournament starts in %s.") % reopens, false)
 		return
 
 	_play_button.disabled = _busy or out_of_matches or out_of_energy
 	if out_of_matches:
-		_play_button.text = "All %d matches played" % total
-		_set_status("You're done for today. Come back when the day resets.", false)
+		_play_button.text = tr("All %d matches played") % total
+		_set_status(tr("You're done for today. Come back when the day resets."), false)
 	elif out_of_energy:
-		_play_button.text = "Out of energy"
-		_set_status("No energy left -- it refills over time, or top up in the Shop.", true)
+		_play_button.text = tr("Out of energy")
+		_set_status(tr("No energy left -- it refills over time, or top up in the Shop."), true)
 	else:
-		_play_button.text = "Play match %d of %d" % [played + 1, total]
+		_play_button.text = tr("Play match %d of %d") % [played + 1, total]
 
 
 func _show_pending_results(pending) -> void:
@@ -247,21 +247,21 @@ func _show_pending_results(pending) -> void:
 		"promote":
 			# A top-tier winner "promotes" nowhere -- the rule said up, the
 			# ceiling refused. Saying "you stayed" would read as failure.
-			headline = "You held the top tier!" if clamped else "You were promoted!"
+			headline = tr("You held the top tier!") if clamped else tr("You were promoted!")
 		"relegate":
-			headline = "You stayed up." if clamped else "You were relegated."
+			headline = tr("You stayed up.") if clamped else tr("You were relegated.")
 		_:
-			headline = "You held your tier."
+			headline = tr("You held your tier.")
 
 	var reward_text := ""
 	var rewards = me.get("rewards")
 	if rewards is Dictionary and not rewards.is_empty():
 		var parts: Array = []
 		for currency in rewards.keys():
-			parts.append("%d %s" % [int(rewards[currency]), currency])
-		reward_text = "\nYou earned %s." % ", ".join(parts)
+			parts.append("%d %s" % [int(rewards[currency]), CurrencyDisplay.lowercase_label_for(currency)])
+		reward_text = tr("\nYou earned %s.") % ", ".join(parts)
 
-	_banner_label.text = "Yesterday: finished %d%s\n\n%s%s" % [
+	_banner_label.text = tr("Yesterday: finished %d%s\n\n%s%s") % [
 		position, _ordinal_suffix(position), headline, reward_text
 	]
 	_banner.visible = true
@@ -269,12 +269,12 @@ func _show_pending_results(pending) -> void:
 
 static func _ordinal_suffix(n: int) -> String:
 	if n % 100 in [11, 12, 13]:
-		return "th"
+		return TranslationServer.translate("th")
 	match n % 10:
-		1: return "st"
-		2: return "nd"
-		3: return "rd"
-	return "th"
+		1: return TranslationServer.translate("st")
+		2: return TranslationServer.translate("nd")
+		3: return TranslationServer.translate("rd")
+	return TranslationServer.translate("th")
 
 
 func _set_status(text: String, warn: bool) -> void:
@@ -307,7 +307,7 @@ func _on_join_pressed() -> void:
 		return
 	_busy = true
 	_refresh_buttons()
-	_busy_popup.set_status("Entering today's tournament...")
+	_busy_popup.set_status(tr("Entering today's tournament..."))
 	_busy_popup.visible = true
 
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_POST, "/tournament/join")
@@ -320,11 +320,11 @@ func _on_join_pressed() -> void:
 		# Each needs a different fix from the player, so they get different
 		# sentences rather than one generic retry prompt.
 		if res.status == 409:
-			_set_status("Entries are closed for today -- try again after the reset.", true)
+			_set_status(tr("Entries are closed for today -- try again after the reset."), true)
 		elif res.status == 400:
-			_set_status("Your squad isn't match-ready. Fill all 11 slots on the Squad screen.", true)
+			_set_status(tr("Your squad isn't match-ready. Fill all 11 slots on the Squad screen."), true)
 		else:
-			_set_status("Could not enter -- try again.", true)
+			_set_status(tr("Could not enter -- try again."), true)
 		_refresh_buttons()
 		return
 
@@ -336,7 +336,7 @@ func _on_play_pressed() -> void:
 		return
 	_busy = true
 	_refresh_buttons()
-	_busy_popup.set_status("Finding an opponent...")
+	_busy_popup.set_status(tr("Finding an opponent..."))
 	_busy_popup.visible = true
 
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_POST, "/tournament/match")
@@ -345,22 +345,22 @@ func _on_play_pressed() -> void:
 		_busy_popup.visible = false
 		_busy = false
 		if res.status == 402:
-			_set_status("Not enough energy -- it refills over time, or top up in the Shop.", true)
+			_set_status(tr("Not enough energy -- it refills over time, or top up in the Shop."), true)
 		elif res.status == 409:
-			_set_status("You've played all your matches for today.", true)
+			_set_status(tr("You've played all your matches for today."), true)
 		else:
-			_set_status("Could not start the match -- try again.", true)
+			_set_status(tr("Could not start the match -- try again."), true)
 		# Re-read rather than trusting local state: a 409 usually means this
 		# screen is behind on what the server thinks.
-		await _load("Refreshing...")
+		await _load(tr("Refreshing..."))
 		return
 
 	MatchSession.set_from_match_response(res.data)
 	if not MatchSession.has_pending():
 		_busy_popup.visible = false
 		_busy = false
-		_set_status("The match finished, but its replay couldn't be loaded.", true)
-		await _load("Refreshing...")
+		_set_status(tr("The match finished, but its replay couldn't be loaded."), true)
+		await _load(tr("Refreshing..."))
 		return
 
 	GameProfile.apply_currency_balances(res.data.get("credits_remaining"))
@@ -368,7 +368,7 @@ func _on_play_pressed() -> void:
 	# So Continue and Exit come back HERE instead of the Menu, mid-run.
 	MatchSession.return_scene = "res://scenes/DailyTournament.tscn"
 
-	_busy_popup.set_status("Kick off!")
+	_busy_popup.set_status(tr("Kick off!"))
 	await get_tree().create_timer(0.3).timeout
 	get_tree().change_scene_to_file(MATCH_SCENE)
 

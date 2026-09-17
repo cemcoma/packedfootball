@@ -67,7 +67,7 @@ func _ready() -> void:
 	_send_reset_button.pressed.connect(_on_send_reset_pressed)
 	_back_from_reset_button.pressed.connect(_on_back_to_sign_in_pressed)
 
-	_status_label.text = "Checking for a saved session..."
+	_status_label.text = tr("Checking for a saved session...")
 	_set_busy(true)
 	var resumed: bool = await FirebaseAuth.try_resume_session()
 	if resumed:
@@ -125,11 +125,11 @@ func _show_panel(panel_actual: PanelContainer, panel: VBoxContainer) -> void:
 ## message to show, or "" when the pair is worth sending.
 func _validate_credentials(email: String, password: String) -> String:
 	if email.strip_edges() == "":
-		return "Please enter your email."
+		return tr("Please enter your email.")
 	if password == "":
-		return "Please enter your password."
+		return tr("Please enter your password.")
 	if password.length() < FirebaseAuth.MIN_PASSWORD_LENGTH:
-		return "Password must be at least %d characters." % FirebaseAuth.MIN_PASSWORD_LENGTH
+		return tr("Password must be at least %d characters.") % FirebaseAuth.MIN_PASSWORD_LENGTH
 	return ""
 
 
@@ -140,7 +140,7 @@ func _validate_credentials(email: String, password: String) -> String:
 ## non-empty, is applied right after (see class docstring for why not
 ## before).
 func _go_to_menu(chosen_display_name: String = "") -> void:
-	_status_label.text = "Loading your squad..."
+	_status_label.text = tr("Loading your squad...")
 	await GameProfile.load_all()
 	IapClient.initialize_for_signed_in_user(FirebaseAuth.uid)
 	if chosen_display_name != "":
@@ -156,7 +156,7 @@ func _on_sign_in_pressed() -> void:
 		return
 
 	_set_busy(true)
-	_status_label.text = "Signing in..."
+	_status_label.text = tr("Signing in...")
 	var res: Dictionary = await FirebaseAuth.sign_in_with_email(email, _password_field.text)
 	if res.ok:
 		_go_to_menu()
@@ -176,7 +176,7 @@ func _on_back_to_sign_in_pressed() -> void:
 func _on_create_account_pressed() -> void:
 	var display_name := _display_name_field.text.strip_edges()
 	if display_name == "":
-		_status_label.text = "Please enter a manager name."
+		_status_label.text = tr("Please enter a manager name.")
 		return
 	var email := _register_email_field.text.strip_edges()
 	var problem := _validate_credentials(email, _register_password_field.text)
@@ -185,7 +185,7 @@ func _on_create_account_pressed() -> void:
 		return
 
 	_set_busy(true)
-	_status_label.text = "Creating account..."
+	_status_label.text = tr("Creating account...")
 	var res: Dictionary = await FirebaseAuth.register_with_email(email, _register_password_field.text)
 	if res.ok:
 		_go_to_menu(display_name)
@@ -205,16 +205,16 @@ func _on_forgot_password_pressed() -> void:
 func _on_send_reset_pressed() -> void:
 	var email := _reset_email_field.text.strip_edges()
 	if email == "":
-		_status_label.text = "Please enter your email."
+		_status_label.text = tr("Please enter your email.")
 		return
 
 	_set_busy(true)
-	_status_label.text = "Sending reset email..."
+	_status_label.text = tr("Sending reset email...")
 	var res: Dictionary = await FirebaseAuth.send_password_reset(email)
 	_set_busy(false)
 	if res.ok:
 		# Stays on this panel so the message is read; Back returns to sign-in
 		# once the new password is set from the link.
-		_status_label.text = "Reset email sent to %s -- check your inbox (and spam folder), then sign in with your new password." % email
+		_status_label.text = tr("Reset email sent to %s -- check your inbox (and spam folder), then sign in with your new password.") % email
 		return
 	_status_label.text = res.error

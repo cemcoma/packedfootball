@@ -53,7 +53,7 @@ func _rebuild() -> void:
 
 	if _rows.is_empty():
 		var empty := Label.new()
-		empty.text = "Nobody has joined this group yet."
+		empty.text = tr("Nobody has joined this group yet.")
 		empty.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
 		empty.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 		add_child(empty)
@@ -68,7 +68,7 @@ func _add_header() -> void:
 	header.add_theme_constant_override("separation", 6)
 	for column in COLUMNS:
 		var label := Label.new()
-		label.text = column["label"]
+		label.text = tr(column["label"])
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		label.size_flags_stretch_ratio = column["ratio"]
 		label.horizontal_alignment = column["align"]

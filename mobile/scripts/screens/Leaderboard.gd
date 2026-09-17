@@ -53,10 +53,10 @@ func _on_back_pressed() -> void:
 
 
 func _load_users() -> void:
-	_status_label.text = "Loading..."
+	_status_label.text = tr("Loading...")
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/leaderboard/users")
 	if not res.ok:
-		_status_label.text = "Could not load the leaderboard -- try again later."
+		_status_label.text = tr("Could not load the leaderboard -- try again later.")
 		return
 	_users_loaded = true
 	_status_label.text = ""
@@ -64,10 +64,10 @@ func _load_users() -> void:
 
 
 func _load_players() -> void:
-	_status_label.text = "Loading..."
+	_status_label.text = tr("Loading...")
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/leaderboard/players")
 	if not res.ok:
-		_status_label.text = "Could not load the leaderboard -- try again later."
+		_status_label.text = tr("Could not load the leaderboard -- try again later.")
 		return
 	_players_loaded = true
 	_status_label.text = ""
@@ -81,10 +81,10 @@ func _load_players() -> void:
 ## own _str()/_int() helpers.
 func _format_user_row(rank: int, entry: Dictionary) -> String:
 	var name_raw = entry.get("display_name")
-	var name: String = name_raw if name_raw is String and name_raw != "" else "Manager"
+	var name: String = name_raw if name_raw is String and name_raw != "" else tr("Manager")
 	var value_raw = entry.get("value")
 	var value: int = value_raw if typeof(value_raw) in [TYPE_INT, TYPE_FLOAT] else 0
-	return "%d. %s -- %d wins" % [rank, name, value]
+	return tr("%d. %s -- %d wins") % [rank, name, value]
 
 
 func _format_player_row(rank: int, entry: Dictionary) -> String:
@@ -94,7 +94,7 @@ func _format_player_row(rank: int, entry: Dictionary) -> String:
 	var lname: String = lname_raw if lname_raw is String else ""
 	var name := ("%s %s" % [fname, lname]).strip_edges()
 	if name == "":
-		name = "Unknown Player"
+		name = tr("Unknown Player")
 	var position_raw = entry.get("position")
 	var position: String = position_raw if position_raw is String and position_raw != "" else ""
 	var value_raw = entry.get("value")
@@ -102,7 +102,7 @@ func _format_player_row(rank: int, entry: Dictionary) -> String:
 	var label := "%d. %s" % [rank, name]
 	if position != "":
 		label += " (%s)" % position
-	return "%s -- %d goals" % [label, value]
+	return tr("%s -- %d goals") % [label, value]
 
 
 ## Same remove_child()-then-queue_free() pairing Team.gd's bench grid and
@@ -114,7 +114,7 @@ func _populate_list(list: VBoxContainer, entries: Array, formatter: Callable) ->
 
 	if entries.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No entries yet."
+		empty_label.text = tr("No entries yet.")
 		list.add_child(empty_label)
 		return
 

@@ -55,7 +55,7 @@ const ICONS := {
 
 ## "Credits" / "Cash" / "Medals" -- for a title/tab/heading.
 static func label_for(currency_key: String) -> String:
-	return LABELS.get(currency_key, currency_key.capitalize())
+	return TranslationServer.translate(LABELS.get(currency_key, currency_key.capitalize()))
 
 
 ## Defers to ThemeManager's palette so a dark/light swap moves currency

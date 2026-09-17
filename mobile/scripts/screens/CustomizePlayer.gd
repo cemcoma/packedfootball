@@ -74,7 +74,7 @@ func _ready() -> void:
 	_saved_appearance = _card.resolved_appearance()
 	_edited_appearance = _saved_appearance.duplicate()
 
-	_title_label.text = "Customize %s" % _card.full_name()
+	_title_label.text = tr("Customize %s") % _card.full_name()
 	_preview.set_card(_card)
 	_build_options()
 	_refresh()
@@ -86,7 +86,7 @@ func _ready() -> void:
 func _build_options() -> void:
 	for slot in PlayerAppearance.SLOTS:
 		var heading := Label.new()
-		heading.text = PlayerAppearance.SLOT_LABELS.get(slot, slot.capitalize())
+		heading.text = tr(PlayerAppearance.SLOT_LABELS.get(slot, slot.capitalize()))
 		heading.add_theme_font_size_override("font_size", 14)
 		_options_box.add_child(heading)
 		_headings.append(heading)
@@ -165,7 +165,7 @@ func _refresh_cost() -> void:
 	var cost: int = changed.size() * CREDITS_PER_CHANGE
 	var affordable: bool = cost <= GameProfile.credits
 
-	_preview_caption.text = "%s  ·  %s" % [_card.position, _card.tier.capitalize()]
+	_preview_caption.text = "%s  ·  %s" % [_card.position, tr(_card.tier.capitalize())]
 
 	# Every one of these ends ON THE NUMBER, because the logo sits directly
 	# after this label and is what gives that number its unit -- so the
@@ -173,20 +173,20 @@ func _refresh_cost() -> void:
 	# for the same reason; how much the manager actually has is the chip in
 	# the header, which carries its own logo.
 	if changed.is_empty():
-		_cost_label.text = "Each change costs %s" % CurrencyDisplay.format_amount(CREDITS_PER_CHANGE)
+		_cost_label.text = tr("Each change costs %s") % CurrencyDisplay.format_amount(CREDITS_PER_CHANGE)
 	else:
 		var names: Array = []
 		for slot in changed:
-			names.append(PlayerAppearance.SLOT_LABELS.get(slot, slot))
+			names.append(tr(PlayerAppearance.SLOT_LABELS.get(slot, slot)))
 		_cost_label.text = "%s%s  ·  %s" % [
-			"" if affordable else "Not enough for ",
+			"" if affordable else tr("Not enough for "),
 			", ".join(names),
 			CurrencyDisplay.format_amount(cost),
 		]
 
 	_save_button.disabled = _saving or changed.is_empty() or not affordable
 	# Negative: this one is money going OUT, where Release's is money coming in.
-	CurrencyDisplay.set_button_price(_save_button, "Save Player", -cost)
+	CurrencyDisplay.set_button_price(_save_button, tr("Save Player"), -cost)
 
 
 ## Labels here sit on the plain screen background rather than inside a themed
@@ -233,7 +233,7 @@ func _on_save_pressed() -> void:
 
 	_saving = true
 	_save_button.disabled = true
-	_set_status("Saving...")
+	_set_status(tr("Saving..."))
 
 	# Only the changed slots go up. The endpoint keeps anything it isn't
 	# sent, so this can't accidentally rewrite a slot added by a newer client
@@ -252,8 +252,8 @@ func _on_save_pressed() -> void:
 
 	if not res.ok:
 		_set_status(
-			"Not enough for these changes." if res.status == 402
-			else "Could not save this look -- try again."
+			tr("Not enough for these changes.") if res.status == 402
+			else tr("Could not save this look -- try again.")
 		)
 		_refresh()
 		return
@@ -269,7 +269,7 @@ func _on_save_pressed() -> void:
 	_saved_appearance = PlayerAppearance.normalize(appearance)
 	_edited_appearance = _saved_appearance.duplicate()
 	_refresh()
-	_set_status("Saved.", true)
+	_set_status(tr("Saved."), true)
 
 
 func _on_back_pressed() -> void:

@@ -186,7 +186,7 @@ static func option_name(slot: String, index: int) -> String:
 			return hair_style(index).get("name", "Hair %d" % (index + 1))
 		"face":
 			return face_style(index).get("name", "Face %d" % (index + 1))
-	return "%s %d" % [SLOT_LABELS.get(slot, slot.capitalize()), index + 1]
+	return "%s %d" % [TranslationServer.translate(SLOT_LABELS.get(slot, slot.capitalize())), index + 1]
 
 
 ## Every slot present and in range. A card doc can be missing a slot (it

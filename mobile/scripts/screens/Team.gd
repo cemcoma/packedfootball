@@ -162,11 +162,11 @@ func _refresh_overall() -> void:
 	var complete: bool = filled == GameProfile.slot_assignment.size()
 
 	if filled == 0:
-		_overall_label.text = "Overall --"
+		_overall_label.text = tr("Overall --")
 	elif complete:
-		_overall_label.text = "Overall %d" % GameProfile.average_overall()
+		_overall_label.text = tr("Overall %d") % GameProfile.average_overall()
 	else:
-		_overall_label.text = "Overall %d  (%d/%d)" % [
+		_overall_label.text = tr("Overall %d  (%d/%d)") % [
 			GameProfile.average_overall(), filled, GameProfile.slot_assignment.size()
 		]
 	_overall_label.add_theme_color_override(
@@ -195,15 +195,15 @@ func _refresh_right_panel() -> void:
 	_cancel_button.visible = showing_picker
 
 	if showing_stats:
-		_panel_header.text = "Player"
+		_panel_header.text = tr("Player")
 		_populate_stats_panel()
 	elif showing_picker:
 		var slots := Formations.get_formation(GameProfile.formation)
 		var role: String = slots[selected_slot]["role"]
-		_panel_header.text = "Pick a %s:" % role
+		_panel_header.text = tr("Pick a %s:") % role
 		_populate_bench_grid(_eligible_bench_ids(role), role)
 	else:
-		_panel_header.text = "Bench (tap a slot to assign)"
+		_panel_header.text = tr("Bench (tap a slot to assign)")
 		_populate_bench_grid(_sorted_bench_ids(GameProfile.bench_ids()))
 
 
@@ -246,7 +246,7 @@ func _populate_bench_grid(ids: Array, role: String = "") -> void:
 
 	if ids.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No eligible players." if (selected_slot != -1 and picker_mode) else "No bench players."
+		empty_label.text = tr("No eligible players.") if (selected_slot != -1 and picker_mode) else tr("No bench players.")
 		_bench_grid.add_child(empty_label)
 		return
 
@@ -271,7 +271,7 @@ func _populate_stats_panel() -> void:
 	_stats_card_view.set_out_of_position(out_of_position)
 	_out_of_position_label.visible = out_of_position
 	if out_of_position:
-		_out_of_position_label.text = "Out of position: a %s playing %s -- attributes reduced 10%% in matches." % [card.position, role]
+		_out_of_position_label.text = tr("Out of position: a %s playing %s -- attributes reduced 10%% in matches.") % [card.position, role]
 
 	for child in _stats_attr_grid.get_children():
 		_stats_attr_grid.remove_child(child)
@@ -289,38 +289,38 @@ func _populate_stats_panel() -> void:
 
 
 func _populate_attributes_page(card: PlayerCard) -> void:
-	_stats_page_label.text = "Attributes"
+	_stats_page_label.text = tr("Attributes")
 	for row in ATTR_ROWS:
 		var key: String = row[1]
 		var value: int = card.attributes.get(key, 0)
 		# Height is centimetres, not a 0-100 skill (see player.py's
 		# PHYSICAL_FIELDS -- it's excluded from the overall for that reason).
-		_add_stat_row(row[0], "%d cm" % value if key == "height" else str(value))
+		_add_stat_row(tr(row[0]), "%d cm" % value if key == "height" else str(value))
 
 	var goals: int = card.statistics.get("goals", 0)
 	var assists: int = card.statistics.get("assists", 0)
 	var matches: int = card.statistics.get("matches_played", 0)
-	_stats_extra_gam.text = "\nGoals: %d\nAssists: %d\nMatches: %d" % [
+	_stats_extra_gam.text = tr("\nGoals: %d\nAssists: %d\nMatches: %d") % [
 		goals, assists, matches
 	]
 
 
 func _populate_statistics_page(card: PlayerCard) -> void:
-	_stats_page_label.text = "Career Statistics"
+	_stats_page_label.text = tr("Career Statistics")
 	for row in STAT_ROWS:
-		_add_stat_row(row[0], _career_stat_text(card, row[1]))
+		_add_stat_row(tr(row[0]), _career_stat_text(card, row[1]))
 	if card.position == "GK":
 		for row in KEEPER_STAT_ROWS:
-			_add_stat_row(row[0], _career_stat_text(card, row[1]))
+			_add_stat_row(tr(row[0]), _career_stat_text(card, row[1]))
 
 	# rating_sum/rating_count are storage rather than a stat -- derive the
 	# average the same way player.py's average_rating() does.
 	var count: float = float(card.statistics.get("rating_count", 0))
 	if count > 0.0:
 		var avg: float = float(card.statistics.get("rating_sum", 0.0)) / count
-		_stats_extra_gam.text = "\nAvg rating\n%.2f" % avg
+		_stats_extra_gam.text = tr("\nAvg rating\n%.2f") % avg
 	else:
-		_stats_extra_gam.text = "\nAvg rating\n-"
+		_stats_extra_gam.text = tr("\nAvg rating\n-")
 
 
 func _career_stat_text(card: PlayerCard, key: String) -> String:
@@ -343,7 +343,7 @@ func _add_stat_row(label_text: String, value_text: String) -> void:
 
 func _update_stats_page_button() -> void:
 	_stats_page_button.text = (
-		"Show Attributes" if stats_page == StatsPage.STATISTICS else "Show Statistics"
+		tr("Show Attributes") if stats_page == StatsPage.STATISTICS else tr("Show Statistics")
 	)
 
 
@@ -357,13 +357,13 @@ func _on_stats_page_pressed() -> void:
 func _refresh_bottom() -> void:
 	var dirty: bool = GameProfile.is_dirty()
 	var message := status_text
-	if (status_text == "" or status_text == "Saved!") and dirty:
-		message = "Unsaved changes"
+	if (status_text == "" or status_text == tr("Saved!")) and dirty:
+		message = tr("Unsaved changes")
 	_status_label.text = message
 	_status_label.add_theme_color_override(
 		"font_color", ThemeManager.color("warning") if dirty else ThemeManager.color("positive")
 	)
-	_save_button.text = "Save Team*" if dirty else "Save Team"
+	_save_button.text = tr("Save Team*") if dirty else tr("Save Team")
 
 
 # -- input handlers -----------------------------------------------------------
@@ -395,7 +395,7 @@ func _on_formation_button_pressed(formation_name: String) -> void:
 ## slot that suits them better.
 func _on_auto_pressed() -> void:
 	if GameProfile.all_cards.is_empty():
-		status_text = "You don't own any players yet."
+		status_text = tr("You don't own any players yet.")
 		_refresh_bottom()
 		return
 
@@ -417,13 +417,13 @@ func _on_auto_pressed() -> void:
 				missing.append(role)
 
 	if not missing.is_empty():
-		status_text = "No eligible player for: %s" % ", ".join(missing)
+		status_text = tr("No eligible player for: %s") % ", ".join(missing)
 	else:
 		var after := GameProfile.average_overall()
 		if after > before:
-			status_text = "Best XI picked -- overall %d to %d." % [before, after]
+			status_text = tr("Best XI picked -- overall %d to %d.") % [before, after]
 		else:
-			status_text = "Already the best XI available."
+			status_text = tr("Already the best XI available.")
 
 	selected_slot = -1
 	picker_mode = false
@@ -487,15 +487,15 @@ func _on_card_view_pressed(player_id: String) -> void:
 func _on_save_pressed() -> void:
 	for player_id in GameProfile.slot_assignment:
 		if player_id == "":
-			status_text = "Fill every slot before saving."
+			status_text = tr("Fill every slot before saving.")
 			_refresh_bottom()
 			return
 
-	status_text = "Saving..."
+	status_text = tr("Saving...")
 	_refresh_bottom()
 
 	var ok: bool = await GameProfile.save_team()
-	status_text = "Saved!" if ok else "Save failed -- try again."
+	status_text = tr("Saved!") if ok else tr("Save failed -- try again.")
 	_refresh_all()
 
 

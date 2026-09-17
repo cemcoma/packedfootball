@@ -46,28 +46,28 @@ func _ready() -> void:
 	var score: Array = MatchSession.score
 	var my_score: int = score[0] if score.size() == 2 else 0
 	var opp_score: int = score[1] if score.size() == 2 else 0
-	var opponent_name: String = MatchSession.opponent_display_name if MatchSession.opponent_display_name != "" else "Opponent"
+	var opponent_name: String = MatchSession.opponent_display_name if MatchSession.opponent_display_name != "" else tr("Opponent")
 	if MatchSession.opponent_is_bot:
-		opponent_name += " (Bot)"
+		opponent_name += tr(" (Bot)")
 
 	if my_score > opp_score:
-		_outcome_label.text = "You Won!"
+		_outcome_label.text = tr("You Won!")
 		_outcome_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4))
 	elif my_score == opp_score:
-		_outcome_label.text = "Draw"
+		_outcome_label.text = tr("Draw")
 		_outcome_label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.4))
 	else:
-		_outcome_label.text = "You Lost"
+		_outcome_label.text = tr("You Lost")
 		_outcome_label.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
 
-	_score_label.text = "You %d - %d %s" % [my_score, opp_score, opponent_name]
+	_score_label.text = tr("You %d - %d %s") % [my_score, opp_score, opponent_name]
 	# The logo beside it is what says which currency this is -- the name
 	# never appears on screen. Texture set here rather than in the scene
 	# so CurrencyDisplay.ICONS stays the only place a logo path lives.
 	_credits_label.text = "+%s" % CurrencyDisplay.format_amount(MatchSession.credits_earned)
 	_credits_icon.texture = CurrencyDisplay.icon_for("credits")
 
-	_populate_scorers("You", MatchSession.TEAM_HOME, _home_scorers)
+	_populate_scorers(tr("You"), MatchSession.TEAM_HOME, _home_scorers)
 	_populate_scorers(opponent_name, MatchSession.TEAM_AWAY, _away_scorers)
 	_populate_summary()
 
@@ -119,7 +119,7 @@ func _populate_summary() -> void:
 
 	if not MatchSession.has_match_stats():
 		var unavailable := Label.new()
-		unavailable.text = "Match stats unavailable for this match."
+		unavailable.text = tr("Match stats unavailable for this match.")
 		unavailable.add_theme_font_size_override("font_size", 12)
 		unavailable.add_theme_color_override("font_color", Color(0.65, 0.65, 0.65))
 		_stats_grid.add_child(unavailable)
@@ -129,7 +129,7 @@ func _populate_summary() -> void:
 	var away: Dictionary = MatchSession.team_summary(MatchSession.TEAM_AWAY)
 
 	for row in SUMMARY_ROWS:
-		var label: String = row[0]
+		var label: String = tr(row[0])
 		var key: String = row[1]
 		var kind: String = row[2]
 		var home_text := _format_stat(home.get(key, 0), kind)
@@ -196,7 +196,7 @@ func _on_details_pressed() -> void:
 func _on_continue_pressed() -> void:
 	_continue_button.disabled = true
 	_details_button.disabled = true
-	_loading_popup.set_status("Loading players...")
+	_loading_popup.set_status(tr("Loading players..."))
 	_loading_popup.visible = true
 	# Read the destination BEFORE clear(), which resets it -- otherwise a
 	# tournament match silently lands back on the Menu mid-run.

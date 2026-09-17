@@ -210,7 +210,7 @@ func _ready() -> void:
 	_resolve_team_colors()  # before _setup_scoreboard -- it paints the swatches
 	_setup_scoreboard()
 	_build_legend()
-	_pre_match_teams_label.text = "%s vs %s" % [roster.get("home_name", "Home"), roster.get("away_name", "Away")]
+	_pre_match_teams_label.text = tr("%s vs %s") % [roster.get("home_name", tr("Home")), roster.get("away_name", tr("Away"))]
 	# Only a real match has a roster worth opening -- the bundled demo's
 	# sidecar carries names only (see _attributes_for), so there'd be
 	# nothing to show but a grid of blanks.
@@ -235,8 +235,8 @@ func _ready() -> void:
 
 
 func _setup_scoreboard() -> void:
-	_home_name_label.text = roster.get("home_name", "Home")
-	_away_name_label.text = roster.get("away_name", "Away")
+	_home_name_label.text = roster.get("home_name", tr("Home"))
+	_away_name_label.text = roster.get("away_name", tr("Away"))
 	_home_color_swatch.color = _team_color(0)
 	_away_color_swatch.color = _team_color(1)
 	_update_score_label()
@@ -268,7 +268,8 @@ func _build_legend() -> void:
 		_legend_grid.add_child(swatch)
 
 		var label := Label.new()
-		label.text = entry[1]
+		# Context disambiguates "Save" (the keeper's) from the Save button.
+		label.text = tr(entry[1], "match_legend")
 		label.add_theme_font_size_override("font_size", 12)
 		# The pause scrim is black in BOTH themes, so this is explicitly
 		# white rather than left to the Theme's Label color, which goes
@@ -344,14 +345,14 @@ func _update_timer_label() -> void:# display_tick, not the raw playback tick:
 
 
 func _update_camera_button_label() -> void:
-	_camera_toggle_button.text = "Camera: Zoom" if camera_mode == "zoom" else "Camera: Full Pitch"
+	_camera_toggle_button.text = tr("Camera: Zoom") if camera_mode == "zoom" else tr("Camera: Full Pitch")
 
 func _update_pitch_canvas_size() -> void:
 	custom_minimum_size = get_viewport_rect().size if camera_mode == "zoom" else FULL_MODE_BOX_SIZE
 
 
 func _update_speed_button_label() -> void:
-	_speed_button.text = "Speed: %dx" % int(speed_options[speed_index])
+	_speed_button.text = tr("Speed: %dx") % int(speed_options[speed_index])
 
 
 func _load_roster(path: String) -> Dictionary:
@@ -412,7 +413,7 @@ func _on_start_match_pressed() -> void:
 func _on_pause_pressed() -> void:
 	is_paused = not is_paused
 	_pause_overlay.visible = is_paused
-	_pause_button.text = "Resume" if is_paused else "Pause"
+	_pause_button.text = tr("Resume") if is_paused else tr("Pause")
 	if is_paused:
 		# "No going back": once playback has moved past halftime, jumping to
 		# it again would rewind the score -- see _jump_to_event's docstring.
@@ -422,7 +423,7 @@ func _on_pause_pressed() -> void:
 func _close_pause_overlay() -> void:
 	is_paused = false
 	_pause_overlay.visible = false
-	_pause_button.text = "Pause"
+	_pause_button.text = tr("Pause")
 
 
 func _on_skip_halftime_pressed() -> void:
@@ -437,7 +438,7 @@ func _on_skip_fulltime_pressed() -> void:
 func _on_exit_pressed() -> void:
 	if _is_real_match:
 		_exit_button.disabled = true
-		_loading_popup.set_status("Loading players...")
+		_loading_popup.set_status(tr("Loading players..."))
 		_loading_popup.visible = true
 		await GameProfile.load_all()
 	# Before clear(), which resets it -- see MatchSession.return_scene.
@@ -627,12 +628,12 @@ func _process_events(current_tick: float) -> void:
 			banner_timer = GOAL_CELEBRATION_SECONDS
 			banner_color = ACTION_COLOR_GOAL
 		elif event_type == ReplayReader.ActionType.HALFTIME:
-			banner_text = "HALF TIME"
+			banner_text = tr("HALF TIME")
 			banner_timer = HALFTIME_PAUSE_SECONDS
 			banner_color = Color.WHITE
 			halftime_pause_remaining = HALFTIME_PAUSE_SECONDS
 		elif event_type == ReplayReader.ActionType.FULLTIME:
-			banner_text = "FULL TIME"
+			banner_text = tr("FULL TIME")
 			banner_timer = 4.0
 			banner_color = Color.WHITE
 			if _is_real_match:

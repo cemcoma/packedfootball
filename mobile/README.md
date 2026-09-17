@@ -83,7 +83,7 @@ This is a gameplay test build, not a shipping target.
 | `Shop.tscn` | `Shop.gd` | Packs and currency. |
 | `PackReveal.tscn` | `PackReveal.gd` | Pack-opening reveal animation. |
 | `Leaderboard.tscn` | `Leaderboard.gd` | Users (by wins) and Players (by goals) tabs, each lazy-loaded once and cached. |
-| `Settings.tscn` | `Settings.gd` | Rename, color theme, language stub, log out. |
+| `Settings.tscn` | `Settings.gd` | Rename, color theme, language, log out. |
 | `Tournament.tscn` | `StubScene.gd` | Placeholder. |
 
 ### Play / Quick Match
@@ -281,16 +281,45 @@ Tapping one opens a stats popup.
 ### Settings
 
 Rename (writes only if the trimmed name is non-empty and actually changed),
-**Color Theme** (real -- see Theming), **Language** (an explicit stub: a
-disabled `OptionButton` with one placeholder entry), and Log Out / Switch
-Account.
+**Color Theme** (see Theming), **Language** (see Localization), and Log Out /
+Switch Account.
+
+## Localization
+
+Godot's built-in translation system, keyed on the English text:
+
+- **`translations/messages.pot`** is the master list of every UI string.
+  **`translations/tr.po`** is Turkish; a new language is a copy of the
+  `.pot` with the `msgstr`s filled in, registered under
+  `[internationalization]` in `project.godot`, plus one line in
+  `LocaleManager.LANGUAGES`.
+- **Scene text** (`text`, `placeholder_text`, `tooltip_text` in a `.tscn`)
+  translates itself -- Godot looks the string up as a key. **Script text**
+  goes through `tr("...")`, or `TranslationServer.translate("...")` inside
+  a `static func` (no `self` there). A format string is translated before
+  formatting: `tr("Overall %d") % n`. A label pulled from a `const` table
+  (`ATTR_ROWS` and friends) is wrapped where it's displayed, not in the
+  table -- a `const` can't call `tr()`.
+- A key with no entry in the current language shows as written, so a
+  missing translation is never a blank label.
+- **`LocaleManager`** (autoload) owns the choice: saved in
+  `user://settings.cfg`, defaulting to the device language when it's one we
+  ship. Switching on the Settings screen reloads that scene, since text a
+  script filled with `tr()` was worded in the old language.
+- Not translated, by design: anything the **backend** composes -- pack,
+  deal and tournament-tier names, HTTP error details.
+- The font: `Arial Rounded Bold` lacks `ş ğ İ` (and `₺`), so
+  `theme/fonts/AppFont.tres` is a `FontVariation` over it with
+  `Nunito-Bold.ttf` (OFL, `Nunito-OFL.txt`) as the fallback for any glyph
+  it's missing. Both theme files point at that, not the raw `.ttf`.
 
 ## Theming (dark / light)
 
 Colors live in two places, because Godot splits the job:
 
-- **Widget chrome** -- Button/Panel/Label styles and the `Arial Rounded
-  Bold` font -- lives in real Theme resources: `theme/AppTheme.tres` (dark)
+- **Widget chrome** -- Button/Panel/Label styles and the app font
+  (`theme/fonts/AppFont.tres`, see Localization) -- lives in real Theme
+  resources: `theme/AppTheme.tres` (dark)
   and `theme/AppThemeLight.tres` (light). `ThemeManager` swaps them wholesale
   on the root Window, restyling every existing Control for free.
 
@@ -351,6 +380,7 @@ files never requires touching call sites -- only literal path strings
 | `PackSession.gd` | One just-opened pack's cards, `Shop.gd` -> `PackReveal.gd`. |
 | `IapClient.gd` | Wrapper around the RevenueCat plugin singleton. |
 | `ThemeManager.gd` | Dark/light mode, palettes, background selection; persists the choice. |
+| `LocaleManager.gd` | UI language: applies the locale, persists the choice, defaults to the device language. |
 
 `GameProfile` loads once at sign-in (`Auth.gd`'s `_go_to_menu()`) and is
 shared global state for the rest of the session, so opening a screen is

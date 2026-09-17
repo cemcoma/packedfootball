@@ -47,10 +47,10 @@ func _ready() -> void:
 
 func _refresh_account_panel() -> void:
 	_account_name_label.text = GameProfile.display_name
-	_account_overall_label.text = "Squad Overall: %d" % GameProfile.average_overall()
-	_account_wins_label.text = "Wins: %d" % GameProfile.wins
-	_account_draws_label.text = "Draws: %d" % GameProfile.draws
-	_account_losses_label.text = "Losses: %d" % GameProfile.losses
+	_account_overall_label.text = tr("Squad Overall: %d") % GameProfile.average_overall()
+	_account_wins_label.text = tr("Wins: %d") % GameProfile.wins
+	_account_draws_label.text = tr("Draws: %d") % GameProfile.draws
+	_account_losses_label.text = tr("Losses: %d") % GameProfile.losses
 	_account_credits_chip.set_amount(GameProfile.credits)
 	_account_bucks_chip.set_amount(GameProfile.bucks)
 	_account_medals_chip.set_amount(GameProfile.medals)

@@ -119,10 +119,10 @@ func _on_ads_tab_pressed() -> void:
 # ============================================================ Exchange tab
 
 func _load_exchange() -> void:
-	_status_label.text = "Loading..."
+	_status_label.text = tr("Loading...")
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/currency/exchange/list")
 	if not res.ok:
-		_status_label.text = "Could not load exchange rates -- try again later."
+		_status_label.text = tr("Could not load exchange rates -- try again later.")
 		return
 	_exchange_loaded = true
 	_status_label.text = ""
@@ -144,7 +144,7 @@ func _populate_exchange_grid() -> void:
 
 	if _exchange_rates.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No exchange rates available right now."
+		empty_label.text = tr("No exchange rates available right now.")
 		_exchange_grid.add_child(empty_label)
 		return
 
@@ -154,21 +154,21 @@ func _populate_exchange_grid() -> void:
 		_exchange_grid.add_child(tile)
 		tile.set_reward("credits", typed_rate.credits_reward)
 		tile.set_cost_currency("bucks", typed_rate.bucks_cost)
-		tile.set_action_text("Exchange")
+		tile.set_action_text(tr("Exchange"))
 		tile.set_affordable(GameProfile.bucks >= typed_rate.bucks_cost)
 		tile.action_pressed.connect(_on_exchange_tile_pressed.bind(typed_rate))
 
 
 func _on_exchange_tile_pressed(rate: ExchangeRateData) -> void:
 	if GameProfile.bucks < rate.bucks_cost:
-		_status_label.text = "Not enough %s for this exchange." % CurrencyDisplay.lowercase_label_for("bucks")
+		_status_label.text = tr("Not enough %s for this exchange.") % CurrencyDisplay.lowercase_label_for("bucks")
 		return
-	_status_label.text = "Exchanging..."
+	_status_label.text = tr("Exchanging...")
 	var res: Dictionary = await Backend.call_endpoint(
 		HTTPClient.METHOD_POST, "/currency/exchange/redeem", {"tier_id": rate.tier_id}
 	)
 	if not res.ok:
-		_status_label.text = "Could not exchange -- try again."
+		_status_label.text = tr("Could not exchange -- try again.")
 		return
 	_status_label.text = ""
 	GameProfile.apply_currency_balances(res.data.get("credits_remaining"), res.data.get("bucks_remaining"))
@@ -179,10 +179,10 @@ func _on_exchange_tile_pressed(rate: ExchangeRateData) -> void:
 # ============================================================ Bucks tab
 
 func _load_bucks() -> void:
-	_status_label.text = "Loading..."
+	_status_label.text = tr("Loading...")
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/currency/bucks/list")
 	if not res.ok:
-		_status_label.text = "Could not load the %s catalog -- try again later." % CurrencyDisplay.lowercase_label_for("bucks")
+		_status_label.text = tr("Could not load the %s catalog -- try again later.") % CurrencyDisplay.lowercase_label_for("bucks")
 		return
 	_bucks_loaded = true
 	_status_label.text = ""
@@ -216,7 +216,7 @@ func _populate_bucks_grid() -> void:
 
 	if _bucks_products.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No %s packages available right now." % CurrencyDisplay.lowercase_label_for("bucks")
+		empty_label.text = tr("No %s packages available right now.") % CurrencyDisplay.lowercase_label_for("bucks")
 		_bucks_grid.add_child(empty_label)
 		return
 
@@ -228,7 +228,7 @@ func _populate_bucks_grid() -> void:
 		tile.set_reward("bucks", typed_product.bucks_amount)
 		var store_price := IapClient.localized_price(typed_product.product_id)
 		tile.set_cost_text(store_price if store_price != "" else typed_product.reference_price_text())
-		tile.set_action_text("Buy" if available else "Coming Soon")
+		tile.set_action_text(tr("Buy") if available else tr("Coming Soon"))
 		tile.set_affordable(available)
 		tile.action_pressed.connect(_on_bucks_tile_pressed.bind(typed_product))
 
@@ -242,7 +242,7 @@ func _on_iap_prices_updated() -> void:
 
 
 func _on_bucks_tile_pressed(product: BucksProductData) -> void:
-	_status_label.text = "Starting purchase..."
+	_status_label.text = tr("Starting purchase...")
 	IapClient.purchase(product.product_id)
 
 
@@ -259,10 +259,10 @@ func _on_bucks_tile_pressed(product: BucksProductData) -> void:
 ## here to forward anywhere; all this does is give the player honest
 ## feedback and refresh the cached balance once it's had a moment to land.
 func _on_iap_purchase_completed(product_id: String) -> void:
-	_status_label.text = "Purchase successful! Updating your balance..."
+	_status_label.text = tr("Purchase successful! Updating your balance...")
 	await get_tree().create_timer(2.0).timeout  # give the webhook a moment to land before refetching
 	await GameProfile.refresh_currencies()
-	_status_label.text = "Purchase successful!"
+	_status_label.text = tr("Purchase successful!")
 	currency_changed.emit()
 
 
@@ -273,10 +273,10 @@ func _on_iap_purchase_failed(product_id: String, reason: String) -> void:
 # ============================================================ Deals tab
 
 func _load_deals() -> void:
-	_status_label.text = "Loading..."
+	_status_label.text = tr("Loading...")
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/deals/list")
 	if not res.ok:
-		_status_label.text = "Could not load deals -- try again later."
+		_status_label.text = tr("Could not load deals -- try again later.")
 		return
 	_deals_loaded = true
 	_status_label.text = ""
@@ -294,7 +294,7 @@ func _populate_deals_grid() -> void:
 
 	if _deals.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No deals available right now."
+		empty_label.text = tr("No deals available right now.")
 		_deals_grid.add_child(empty_label)
 		return
 
@@ -311,12 +311,12 @@ func _populate_deals_grid() -> void:
 func _on_deal_redeem_pressed(deal: DealData) -> void:
 	var balance: int = GameProfile.bucks if deal.cost_currency == "bucks" else GameProfile.credits
 	if balance < deal.cost_amount:
-		_status_label.text = "Not enough %s for %s." % [CurrencyDisplay.lowercase_label_for(deal.cost_currency), deal.deal_name]
+		_status_label.text = tr("Not enough %s for %s.") % [CurrencyDisplay.lowercase_label_for(deal.cost_currency), deal.deal_name]
 		return
-	_status_label.text = "Redeeming %s..." % deal.deal_name
+	_status_label.text = tr("Redeeming %s...") % deal.deal_name
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_POST, "/deals/redeem", {"deal_id": deal.deal_id})
 	if not res.ok:
-		_status_label.text = "Could not redeem %s -- try again." % deal.deal_name
+		_status_label.text = tr("Could not redeem %s -- try again.") % deal.deal_name
 		return
 	_status_label.text = ""
 	GameProfile.apply_currency_balances(res.data.get("credits_remaining"), res.data.get("bucks_remaining"))
@@ -333,7 +333,7 @@ func _on_deal_redeem_pressed(deal: DealData) -> void:
 ## than taken from the cached GameProfile.energy because it regenerates on
 ## wall-clock time -- see _on_energy_tab_pressed.
 func _load_energy() -> void:
-	_status_label.text = "Loading..."
+	_status_label.text = tr("Loading...")
 	await GameProfile.refresh_energy()
 	# The header's bar is now behind whatever we just read; Shop.gd listens
 	# for this and re-reads GameProfile.
@@ -341,7 +341,7 @@ func _load_energy() -> void:
 
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/energy/refill/list")
 	if not res.ok:
-		_status_label.text = "Could not load refills -- try again later."
+		_status_label.text = tr("Could not load refills -- try again later.")
 		return
 	_status_label.text = ""
 
@@ -362,24 +362,24 @@ func _populate_energy_grid() -> void:
 
 	if _energy_products.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No refills available right now."
+		empty_label.text = tr("No refills available right now.")
 		_energy_grid.add_child(empty_label)
 		return
 
 	var room: int = maxi(0, _energy_max - _current_energy())
 	if room <= 0:
-		_status_label.text = "Your energy is already full."
+		_status_label.text = tr("Your energy is already full.")
 
 	for product in _energy_products:
 		var typed_product: EnergyProductData = product
 		var tile: CurrencyTileView = CURRENCY_TILE_SCENE.instantiate()
 		_energy_grid.add_child(tile)
 		if typed_product.fills_bar():
-			tile.set_reward_text("energy", "Full")
+			tile.set_reward_text("energy", tr("Full"))
 		else:
 			tile.set_reward("energy", typed_product.energy_amount)
 		tile.set_cost_currency("bucks", typed_product.bucks_cost)
-		tile.set_action_text("Refill")
+		tile.set_action_text(tr("Refill"))
 		# Mirrors both 409s POST /energy/refill can return -- a full bar, and
 		# a fixed top-up bigger than the room left -- so a refill the server
 		# would refuse is greyed out here rather than costing a tap. The
@@ -399,9 +399,9 @@ func _current_energy() -> int:
 
 func _on_energy_tile_pressed(product: EnergyProductData) -> void:
 	if GameProfile.bucks < product.bucks_cost:
-		_status_label.text = "Not enough %s for this refill." % CurrencyDisplay.lowercase_label_for("bucks")
+		_status_label.text = tr("Not enough %s for this refill.") % CurrencyDisplay.lowercase_label_for("bucks")
 		return
-	_status_label.text = "Refilling..."
+	_status_label.text = tr("Refilling...")
 	var res: Dictionary = await Backend.call_endpoint(
 		HTTPClient.METHOD_POST, "/energy/refill", {"product_id": product.product_id}
 	)
@@ -411,10 +411,10 @@ func _on_energy_tile_pressed(product: EnergyProductData) -> void:
 		# means the local bar was behind. Re-read and rebuild rather than
 		# telling the player to retry something that cannot work.
 		if res.status == 409:
-			_status_label.text = "Your energy moved -- refills updated."
+			_status_label.text = tr("Your energy moved -- refills updated.")
 			await _load_energy()
 			return
-		_status_label.text = "Could not refill -- try again."
+		_status_label.text = tr("Could not refill -- try again.")
 		return
 
 	_status_label.text = ""
@@ -429,7 +429,7 @@ func _on_energy_tile_pressed(product: EnergyProductData) -> void:
 # ============================================================ Ads tab
 
 func _load_ads() -> void:
-	_status_label.text = "Loading..."
+	_status_label.text = tr("Loading...")
 	await GameProfile.refresh_energy()
 	
 	_ads_deals = AdManager.get_ad_deals()
@@ -443,7 +443,7 @@ func _populate_ads_grid() -> void:
 
 	if _ads_deals.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No ads available right now."
+		empty_label.text = tr("No ads available right now.")
 		_ads_grid.add_child(empty_label)
 		return
 
@@ -462,14 +462,14 @@ func _on_watch_ad_pressed(ad: AdData) -> void:
 		
 	_status_label.text = ""
 	if not AdManager.show_ad_for_track(ad.track):
-		_status_label.text = "Ad not ready -- try again in a moment."
+		_status_label.text = tr("Ad not ready -- try again in a moment.")
 
 
 func _on_ad_completed(_track: String, success: bool) -> void:
 	if success:
-		_status_label.text = "Reward claimed!"
+		_status_label.text = tr("Reward claimed!")
 		await _load_ads()
 		currency_changed.emit()
 	else:
-		_status_label.text = "Ad was closed early or failed to verify."
+		_status_label.text = tr("Ad was closed early or failed to verify.")
 		await _load_ads()

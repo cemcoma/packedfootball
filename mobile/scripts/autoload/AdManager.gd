@@ -121,14 +121,14 @@ func get_ad_deals() -> Array:
 
 	var reward_ad := AdData.new()
 	reward_ad.track = "reward"
-	reward_ad.title = "Free Reward"
-	reward_ad.description = "Watch an ad to progress along your daily reward track."
+	reward_ad.title = tr("Free Reward")
+	reward_ad.description = tr("Watch an ad to progress along your daily reward track.")
 	reward_ad.step_current = GameProfile.reward_ads_watched
 	reward_ad.step_max = GameProfile.reward_ads_max
 
 	if GameProfile.reward_ads_watched >= GameProfile.reward_ads_max:
 		reward_ad.available = false
-		reward_ad.unavailable_reason = "Limit reached for today"
+		reward_ad.unavailable_reason = tr("Limit reached for today")
 	else:
 		var step_index := mini(GameProfile.reward_ads_watched, REWARD_STEPS.size() - 1)
 		var reward: Dictionary = REWARD_STEPS[step_index]
@@ -139,8 +139,8 @@ func get_ad_deals() -> Array:
 
 	var energy_ad := AdData.new()
 	energy_ad.track = "energy"
-	energy_ad.title = "Free Energy"
-	energy_ad.description = "Watch an ad to instantly recover 1 match energy."
+	energy_ad.title = tr("Free Energy")
+	energy_ad.description = tr("Watch an ad to instantly recover 1 match energy.")
 	energy_ad.step_current = GameProfile.energy_ads_watched
 	energy_ad.step_max = GameProfile.energy_ads_max
 	energy_ad.reward_energy = 1
@@ -150,10 +150,10 @@ func get_ad_deals() -> Array:
 
 	if GameProfile.energy_ads_watched >= GameProfile.energy_ads_max:
 		energy_ad.available = false
-		energy_ad.unavailable_reason = "Limit reached for today"
+		energy_ad.unavailable_reason = tr("Limit reached for today")
 	elif cur_energy >= max_energy:
 		energy_ad.available = false
-		energy_ad.unavailable_reason = "Energy is full"
+		energy_ad.unavailable_reason = tr("Energy is full")
 	else:
 		energy_ad.available = true
 	list.append(energy_ad)

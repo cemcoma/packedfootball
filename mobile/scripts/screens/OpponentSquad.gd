@@ -121,12 +121,12 @@ func _refresh_all() -> void:
 ## The same penalty-aware number Team.gd shows for your own squad (see
 ## SquadOptimizer.squad_overall), so the two are directly comparable.
 func _refresh_header() -> void:
-	_title_label.text = MatchSession.roster().get("away_name", "Opponent")
+	_title_label.text = MatchSession.roster().get("away_name", tr("Opponent"))
 	_formation_label.text = _formation
 	if _cards.is_empty():
-		_overall_label.text = "Overall --"
+		_overall_label.text = tr("Overall --")
 	else:
-		_overall_label.text = "Overall %d" % SquadOptimizer.squad_overall(_formation, _slot_ids, _cards)
+		_overall_label.text = tr("Overall %d") % SquadOptimizer.squad_overall(_formation, _slot_ids, _cards)
 
 
 func _refresh_pitch() -> void:
@@ -140,10 +140,10 @@ func _refresh_right_panel() -> void:
 	_squad_scroll.visible = not showing_stats
 
 	if showing_stats:
-		_panel_header.text = "Player"
+		_panel_header.text = tr("Player")
 		_populate_stats_panel()
 	else:
-		_panel_header.text = "Starting XI (tap a player for stats)"
+		_panel_header.text = tr("Starting XI (tap a player for stats)")
 		_populate_squad_grid()
 
 
@@ -163,7 +163,7 @@ func _populate_squad_grid() -> void:
 			slots.append(slot)
 	if slots.is_empty():
 		var empty_label := Label.new()
-		empty_label.text = "No opponent squad to show."
+		empty_label.text = tr("No opponent squad to show.")
 		_squad_grid.add_child(empty_label)
 		return
 	slots.sort_custom(
@@ -190,7 +190,7 @@ func _populate_stats_panel() -> void:
 	_stats_card_view.set_out_of_position(out_of_position)
 	_out_of_position_label.visible = out_of_position
 	if out_of_position:
-		_out_of_position_label.text = "Out of position: a %s playing %s -- attributes reduced 10%% in matches." % [card.position, role]
+		_out_of_position_label.text = tr("Out of position: a %s playing %s -- attributes reduced 10%% in matches.") % [card.position, role]
 
 	_stats_extra_country.text = "%s\n%s" % [card.hometown, card.country]
 
@@ -198,21 +198,21 @@ func _populate_stats_panel() -> void:
 		_stats_attr_grid.remove_child(child)
 		child.queue_free()
 
-	_stats_page_label.text = "Career Statistics"
+	_stats_page_label.text = tr("Career Statistics")
 	for row in STAT_ROWS:
-		_add_stat_row(row[0], _career_stat_text(card, row[1]))
+		_add_stat_row(tr(row[0]), _career_stat_text(card, row[1]))
 	if card.position == "GK":
 		for row in KEEPER_STAT_ROWS:
-			_add_stat_row(row[0], _career_stat_text(card, row[1]))
+			_add_stat_row(tr(row[0]), _career_stat_text(card, row[1]))
 
 	# rating_sum/rating_count are storage rather than a stat -- derive the
 	# average the same way player.py's average_rating() does.
 	var count: float = float(card.statistics.get("rating_count", 0))
 	if count > 0.0:
 		var avg: float = float(card.statistics.get("rating_sum", 0.0)) / count
-		_stats_extra_rating.text = "\nAvg rating\n%.2f" % avg
+		_stats_extra_rating.text = tr("\nAvg rating\n%.2f") % avg
 	else:
-		_stats_extra_rating.text = "\nAvg rating\n-"
+		_stats_extra_rating.text = tr("\nAvg rating\n-")
 
 
 func _career_stat_text(card: PlayerCard, key: String) -> String:
