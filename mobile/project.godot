@@ -52,11 +52,10 @@ theme/custom="res://theme/AppTheme.tres"
 
 pointing/emulate_touch_from_mouse=true
 
-[rendering]
-
-textures/vram_compression/import_etc2_astc=true
-
 [internationalization]
 
 locale/translations=PackedStringArray("res://translations/tr.po")
-locale/fallback="en"
+
+[rendering]
+
+textures/vram_compression/import_etc2_astc=true

@@ -3,14 +3,17 @@ extends RefCounted
 
 ## Every option a player's look can be built from. THE place to add one.
 ##
-## Five independent slots -- skin tone, hair style, hair colour, face, boot
-## colour -- each stored on players/{id} as a plain INDEX into one of the
-## lists below. 5x5x5x5x5 = 3125 combinations today.
+## Six independent slots -- skin tone, hair style, hair colour, face, boot
+## colour, goal celebration -- each stored on players/{id} as a plain INDEX
+## into one of the lists below. 5x5x5x5x5x9 = 28125 combinations today.
 ##
 ## Colours are a list of Colors; SHAPES (hair, face) are a list of
-## rectangles. Both are data: PlayerFigure.gd renders whatever is here and
-## knows nothing about any individual style, so adding a hairstyle is an
-## entry in HAIR_STYLES and nothing else -- no drawing code, no new file.
+## rectangles; CELEBRATIONS are recipes of named poses. All data:
+## PlayerFigure.gd renders whatever is here and knows nothing about any
+## individual style, so adding a hairstyle is an entry in HAIR_STYLES and
+## nothing else -- no drawing code, no new file. (A celebration is the one
+## that may need a new arm or leg pose in PlayerFigure if none of the
+## existing parts does what you want -- see CELEBRATIONS.)
 ##
 ## APPEND ONLY.
 ## An index is stored on every card doc forever, so inserting an option in
@@ -146,13 +149,64 @@ const FACE_STYLES := [
 
 const MOUTH_COLOR := Color(0.25, 0.15, 0.12)
 
+# ---------------------------------------------------------- celebrations
+#
+# What the SCORER does during the goal hold (MatchPlayback freezes the
+# replay and PlayerFigure draws them in POSE_CELEBRATE, fed the seconds
+# since the goal). Their teammates all do TEAMMATE_CELEBRATION where they
+# stand -- a full-back knee-sliding on the halfway line is not a thing.
+#
+# Not a shape but a RECIPE: a timeline of up to three moving stages and
+# then a held pose built from named parts. PlayerFigure knows how to draw
+# each named part; most new celebrations are a new combination of parts
+# that already exist, and a genuinely new gesture is a new arm or leg pose
+# in PlayerFigure._draw_celebrating_arms / _draw_legs plus an entry here.
+#
+#   run     seconds of running off (toward the corner) before anything else
+#   jump    seconds of one leap with a full spin in the air, still moving
+#   slide   seconds the held pose keeps moving while braking to a stop --
+#           what makes a knee slide slide
+#   arms    "up"      both arms raised and swaying -- the classic
+#           "wide"    arms straight out to the sides, aeroplane
+#           "pump"    one fist pumping the air, the other arm down
+#           "shush"   one finger to the lips, the other arm down
+#           "back"    arms swept down and behind, chest out
+#           "cradle"  arms crossed low in front, rocking the baby
+#           "swing"   arms pumping alternately, as in a run
+#   legs    "stand"   (default) feet planted
+#           "wide"    a wide stance
+#           "kneel"   knees folded under -- the figure sits lower
+#           "step"    running on the spot
+#   bounce  how high the held pose hops, fraction of height (0 = none)
+#   spin    true to keep turning through all eight facings in the held pose
+#   rock    true to sway the upper body side to side
+#
+# The stages add up against PlayerFigure.CELEBRATE_DURATION (5s): leave at
+# least a couple of seconds for the pose itself or it's over before it
+# reads. Index 0 is what every card had before this slot existed (the
+# arms-up wave), which is what a doc without the field falls back to.
+const CELEBRATIONS := [
+	{"name": "Arms Up", "arms": "up"},
+	{"name": "Jump", "run": 0.8, "arms": "up", "bounce": 0.14},
+	{"name": "Knee Slide", "run": 1.2, "slide": 1.8, "arms": "wide", "legs": "kneel"},
+	{"name": "Spin", "run": 0.8, "arms": "wide", "spin": true},
+	{"name": "Fist Pump", "run": 0.8, "arms": "pump"},
+	{"name": "Shush", "run": 1.0, "arms": "shush"},
+	{"name": "Siuu", "run": 1.5, "jump": 0.8, "arms": "back", "legs": "wide"},
+	{"name": "Cradle", "run": 0.8, "arms": "cradle", "rock": true},
+	{"name": "Dance", "run": 0.6, "arms": "swing", "legs": "step", "rock": true},
+]
+
+## What everyone on the scoring side other than the scorer does.
+const TEAMMATE_CELEBRATION := 0
+
 # ------------------------------------------------------------ slot index
 #
-# The five slots, in the order a customization screen should present them:
+# The six slots, in the order a customization screen should present them:
 # top of the body down. Mirrors player.py's APPEARANCE_SLOTS (which is the
 # order the SERVER rolls them in, and irrelevant to display).
 
-const SLOTS := ["skin_tone", "hair_style", "hair_color", "face", "shoe_color"]
+const SLOTS := ["skin_tone", "hair_style", "hair_color", "face", "shoe_color", "celebration"]
 
 const SLOT_LABELS := {
 	"skin_tone": "Skin tone",
@@ -160,6 +214,7 @@ const SLOT_LABELS := {
 	"hair_color": "Hair colour",
 	"face": "Face",
 	"shoe_color": "Boots",
+	"celebration": "Celebration",
 }
 
 
@@ -186,6 +241,8 @@ static func option_name(slot: String, index: int) -> String:
 			return hair_style(index).get("name", "Hair %d" % (index + 1))
 		"face":
 			return face_style(index).get("name", "Face %d" % (index + 1))
+		"celebration":
+			return celebration(index).get("name", "Celebration %d" % (index + 1))
 	return "%s %d" % [TranslationServer.translate(SLOT_LABELS.get(slot, slot.capitalize())), index + 1]
 
 
@@ -217,6 +274,8 @@ static func option_count(slot: String) -> int:
 			return HAIR_STYLES.size()
 		"face":
 			return FACE_STYLES.size()
+		"celebration":
+			return CELEBRATIONS.size()
 	return 1
 
 
@@ -235,6 +294,14 @@ static func face_style(index: int) -> Dictionary:
 	return FACE_STYLES[index]
 
 
+## One celebration recipe by index, clamped to the arms-up wave -- the
+## same fallback a card from before this slot existed gets.
+static func celebration(index: int) -> Dictionary:
+	if index < 0 or index >= CELEBRATIONS.size():
+		return CELEBRATIONS[0]
+	return CELEBRATIONS[index]
+
+
 ## A deterministic look derived from a player_id alone, for a card whose doc
 ## predates the appearance field. Real cards carry their own rolled one --
 ## run backend/scripts/sync_player_appearance.py to backfill the old ones.
@@ -246,7 +313,7 @@ static func mock_from_id(player_id: String) -> Dictionary:
 
 
 ## Each slot hashes the id with its own salt rather than splitting one hash
-## into 5 pieces (e.g. via division/modulo) -- independent hashes avoid any
-## risk of the 5 slots correlating with each other for a given id.
+## into 6 pieces (e.g. via division/modulo) -- independent hashes avoid any
+## risk of the 6 slots correlating with each other for a given id.
 static func _mock_index(player_id: String, slot: String) -> int:
 	return abs((player_id + "_" + slot).hash()) % option_count(slot)

@@ -26,6 +26,8 @@ extends RefCounted
 ## much taller than the 1.3-unit physical radius the simulation uses,
 ## without anything in gameEngine.py changing.
 
+### SUPER IMPORTANT ###
+
 # ===========================================================================
 # PROPORTIONS
 # ===========================================================================
@@ -160,12 +162,78 @@ const REACH_H := 0.10
 const REACH_SPAN := 1.60          # multiple of ARM_W
 const REACH_GLOVE := 0.45         # fraction of the arm that is glove
 
+# -- celebrations -----------------------------------------------------------
+# WHICH celebration a player does is data (PlayerAppearance.CELEBRATIONS, a
+# recipe of the named parts below); these numbers shape the parts.
+#
+# A celebration is a TIMELINE, not a single pose: for POSE_CELEBRATE the
+# `phase` draw_into gets is SECONDS since the goal, and celebration_state()
+# turns that into which stage the player is in -- a run-up, an optional
+# leap, an optional slide, then the final pose held. The caller moves the
+# player along the ground by the `travel` it returns; this file only draws
+# the body. The whole thing is written to fit CELEBRATE_DURATION, the
+# real-time hold MatchPlayback puts on a goal.
+const CELEBRATE_DURATION := 5.0
+# Radians per second for the sways and waves of the held pose.
+const CELEBRATE_PHASE_RATE := 6.0
+# The run-up: leg cycle in radians per second.
+const CELEBRATE_RUN_CYCLE := 12.0
+# A leap: how high (fraction of height) and how fast the player keeps
+# moving while airborne (fraction of run speed). One full turn in the air.
+const CELEBRATE_JUMP_HEIGHT := 0.45
+const CELEBRATE_JUMP_SPEED := 0.5
+# A slide: starts at this fraction of run speed and brakes to a stop.
+const CELEBRATE_SLIDE_SPEED := 0.8
+
+const STAGE_RUN := "run"
+const STAGE_JUMP := "jump"
+const STAGE_SLIDE := "slide"
+const STAGE_POSE := "pose"
+
+# "up": both arms raised, swaying.
 const CELEBRATE_FLARE := 0.02     # how far raised arms sit OUTSIDE arm_spread()
 const CELEBRATE_ARM_Y := 0.62
 const CELEBRATE_ARM_H := 0.26
 const CELEBRATE_HAND_H := 0.06
 const CELEBRATE_WAVE_W := 0.14    # how far the arms sway
 const CELEBRATE_WAVE_SPEED := 2.20
+
+# "pump": one raised arm pumping up and down by this much (fraction of height).
+const CELEBRATE_PUMP_H := 0.08
+
+# "wide": arms straight out, aeroplane. Lower than a keeper's reach (which
+# is level with the head) -- shoulder height, so it reads as balance, not
+# a save.
+const CELEBRATE_WIDE_Y := 0.58
+const CELEBRATE_WIDE_HAND := 0.30 # fraction of the arm that is hand
+
+# "shush": the near arm bends up so a finger lands on the mouth.
+const CELEBRATE_SHUSH_MOUTH_Y := 0.22   # fraction up the head, PlayerAppearance's mouth band
+const CELEBRATE_SHUSH_FOREARM_H := 0.07
+
+# "back": arms swept down and behind, wider than the body, chest out.
+const CELEBRATE_BACK_FLARE := 0.14
+const CELEBRATE_BACK_Y := 0.30
+const CELEBRATE_BACK_H := 0.24
+
+# "cradle": both forearms across the front at waist height.
+const CELEBRATE_CRADLE_Y := 0.50
+const CELEBRATE_CRADLE_H := 0.08
+const CELEBRATE_CRADLE_OVERHANG := 0.06 # how far the arms stick out past the torso
+
+# Whole-body motion.
+const CELEBRATE_BOUNCE_SPEED := 1.10    # hops per phase unit, roughly (abs(sin) doubles it)
+const CELEBRATE_SPIN_SPEED := 0.90      # facings per phase unit: one turn every ~1.5s
+const CELEBRATE_ROCK_W := 0.10          # side-to-side sway, fraction of width
+const CELEBRATE_ROCK_SPEED := 1.10
+const CELEBRATE_STEP_SPEED := 2.20      # running on the spot
+const CELEBRATE_KNEEL_DROP := 0.14      # how much shorter a kneeling figure is (fraction of height)
+const CELEBRATE_WIDE_STANCE := 0.12     # extra spread per leg for a wide stance
+
+const LEGS_STAND := "stand"
+const LEGS_WIDE := "wide"
+const LEGS_KNEEL := "kneel"
+const LEGS_STEP := "step"
 
 const SOCK_DARKEN := 0.55         # how much darker the sock is than the boot
 
@@ -184,8 +252,8 @@ const SOCK_DARKEN := 0.55         # how much darker the sock is than the boot
 # variation off entirely.
 const BUILD_CM_MIN := 160.0       # packEngine.HEIGHT_MIN
 const BUILD_CM_MAX := 205.0       # packEngine.HEIGHT_MAX
-const BUILD_SHORTEST := 0.88
-const BUILD_TALLEST := 1.14
+const BUILD_SHORTEST := 0.90
+const BUILD_TALLEST := 1.10
 const BUILD_NARROWEST := 1.00
 const BUILD_WIDEST := 1.00
 
@@ -286,6 +354,14 @@ static func facing_from_velocity(vel: Vector2, previous: int, min_speed: float =
 	return nearest
 
 
+## The facing nearest a direction, no hysteresis -- for a direction that
+## is chosen rather than measured, like a celebration run-off.
+static func facing_from_direction(dir: Vector2) -> int:
+	if dir.is_zero_approx():
+		return FACING_S
+	return posmod(int(round(atan2(dir.y, dir.x) / (PI / 4.0))), 8)
+
+
 static func faces_viewer(facing: int) -> bool:
 	return facing in FACINGS_TOWARD
 
@@ -294,13 +370,60 @@ static func faces_away(facing: int) -> bool:
 	return facing in FACINGS_AWAY
 
 
+## Where a celebration recipe is `t` seconds after the goal:
+##
+##   stage   STAGE_RUN / STAGE_JUMP / STAGE_SLIDE / STAGE_POSE
+##   travel  ground covered so far, in SECONDS OF RUNNING -- the caller
+##           multiplies by its own run speed to get pitch units
+##   lift    how far off the ground (fraction of height), the leap's arc
+##   turn    0..1 through the leap's one full spin
+##
+## The stages come from the recipe's "run", "jump" and "slide" seconds,
+## each 0 when absent; a recipe with none of them is just its pose from
+## the first frame.
+static func celebration_state(recipe: Dictionary, t: float) -> Dictionary:
+	var run: float = recipe.get("run", 0.0)
+	var jump: float = recipe.get("jump", 0.0)
+	var slide: float = recipe.get("slide", 0.0)
+	var state := {"stage": STAGE_POSE, "travel": 0.0, "lift": 0.0, "turn": 0.0}
+
+	if t < run:
+		state.stage = STAGE_RUN
+		state.travel = t
+		return state
+	state.travel = run
+	t -= run
+
+	if t < jump:
+		var u := t / jump
+		state.stage = STAGE_JUMP
+		state.travel += t * CELEBRATE_JUMP_SPEED
+		state.lift = sin(u * PI) * CELEBRATE_JUMP_HEIGHT
+		state.turn = u
+		return state
+	state.travel += jump * CELEBRATE_JUMP_SPEED
+	t -= jump
+
+	if t < slide:
+		# Speed falls linearly to zero over the slide, so the distance is
+		# the integral: u - u^2/2 of the full-speed distance.
+		var u := t / slide
+		state.stage = STAGE_SLIDE
+		state.travel += CELEBRATE_SLIDE_SPEED * slide * (u - u * u / 2.0)
+		return state
+	state.travel += CELEBRATE_SLIDE_SPEED * slide / 2.0
+	return state
+
+
 ## Draws one player standing at `feet`, `height_px` tall before `build`.
 ##
 ## `build` is Vector2(width, height) multipliers -- see build_from(). `phase`
 ## drives the run cycle (pass the playback tick plus something per-player so
-## 22 figures don't march in lockstep); `flash` is the action colour from the
-## replay event stream, drawn as a ground marker so the legend still means
-## what it says without repainting the whole shirt.
+## 22 figures don't march in lockstep) -- except for POSE_CELEBRATE, where
+## it is SECONDS since the goal and drives the whole celebration timeline
+## (see celebration_state); `flash` is the action colour from the replay
+## event stream, drawn as a ground marker so the legend still means what it
+## says without repainting the whole shirt.
 static func draw_into(
 	canvas: CanvasItem,
 	feet: Vector2,
@@ -339,21 +462,66 @@ static func draw_into(
 
 	_ellipse(canvas, feet, marker_w, marker_h , marker)
 
-	# 3/4 lean: shift the upper body toward where they're looking, which is
-	# most of what sells a direction on a figure this blocky.
-	var lean := _lean_for(facing) * w * LEAN
-
+	# A celebration is the one pose that moves the WHOLE figure: it can hop
+	# (the body leaves `feet`, the shadow stays), spin (the facing turns on
+	# its own, whatever the velocity says) or drop to its knees. Everything
+	# below draws from `body` rather than `feet` for that reason. It's also
+	# a timeline: the run-up stage is drawn as an ordinary run, the leap as
+	# a body in the air, and only the slide and the held pose use the
+	# recipe's arm and leg parts.
+	var body := feet
+	var arms := ""
+	var legs := LEGS_STAND
+	var rock := 0.0
 	var swing := 0.0
 	if pose == POSE_RUN:
 		swing = sin(phase) * RUN_SWING
+	elif pose == POSE_CELEBRATE:
+		var recipe := PlayerAppearance.celebration(int(appearance.get("celebration", 0)))
+		var state := celebration_state(recipe, phase)
+		var clock := phase * CELEBRATE_PHASE_RATE
+		match state.stage:
+			STAGE_RUN:
+				pose = POSE_RUN
+				swing = sin(phase * CELEBRATE_RUN_CYCLE) * RUN_SWING
+			STAGE_JUMP:
+				body.y -= h * state.lift
+				facing = posmod(facing + int(floor(state.turn * 8.0)), 8)
+				arms = "up"
+			_:
+				arms = recipe.get("arms", "up")
+				legs = recipe.get("legs", LEGS_STAND)
+				if recipe.get("spin", false):
+					facing = posmod(int(floor(clock * CELEBRATE_SPIN_SPEED)), 8)
+				if recipe.get("rock", false):
+					rock = sin(clock * CELEBRATE_ROCK_SPEED) * w * CELEBRATE_ROCK_W
+				var bounce: float = recipe.get("bounce", 0.0)
+				if bounce > 0.0:
+					body.y -= h * bounce * absf(sin(clock * CELEBRATE_BOUNCE_SPEED))
+				if legs == LEGS_STEP:
+					swing = sin(clock * CELEBRATE_STEP_SPEED) * RUN_SWING
+		# The held pose's sways run off the faster clock.
+		phase = clock
 
-	_draw_legs(canvas, feet, w, h, boots, trim, pose, swing, lean)
-	_draw_torso(canvas, feet, w, h, shirt, trim, pattern, pose, lean, detail)
-	_draw_arms(canvas, feet, w, h, trim, skin, pose, swing, lean, phase, is_keeper)
-	_draw_head(canvas, feet, w, h, skin, hair, appearance, facing, lean, detail)
+	# 3/4 lean: shift the upper body toward where they're looking, which is
+	# most of what sells a direction on a figure this blocky.
+	var lean := _lean_for(facing) * w * LEAN + rock
+
+	_draw_legs(canvas, body, w, h, boots, trim, pose, swing, lean, legs)
+	# Kneeling folds the legs under, so everything above them sits lower.
+	if legs == LEGS_KNEEL:
+		body.y += h * CELEBRATE_KNEEL_DROP
+	_draw_torso(canvas, body, w, h, shirt, trim, pattern, pose, lean, detail)
+	# Arms under the head, except when the hand is ON the face.
+	if arms == "shush":
+		_draw_head(canvas, body, w, h, skin, hair, appearance, facing, lean, detail)
+		_draw_arms(canvas, body, w, h, trim, skin, pose, swing, lean, phase, is_keeper, arms)
+	else:
+		_draw_arms(canvas, body, w, h, trim, skin, pose, swing, lean, phase, is_keeper, arms)
+		_draw_head(canvas, body, w, h, skin, hair, appearance, facing, lean, detail)
 
 	if detail == DETAIL_FULL and number > 0 and faces_away(facing) and font != null:
-		_draw_number(canvas, feet, w, h, number, trim, shirt, font, lean)
+		_draw_number(canvas, body, w, h, number, trim, shirt, font, lean)
 
 
 # ------------------------------------------------------------------ layers
@@ -363,11 +531,17 @@ static func draw_into(
 ## or a kick. Lifts are fractions of height, like every other Y here.
 static func _draw_legs(
 	canvas: CanvasItem, feet: Vector2, w: float, h: float,
-	boots: Color, shorts: Color, pose: String, swing: float, lean: float
+	boots: Color, shorts: Color, pose: String, swing: float, lean: float,
+	legs: String = LEGS_STAND
 ) -> void:
 	var leg_w := w * LEG_W
-	var left_x := -w * LEG_SPREAD
-	var right_x := w * LEG_SPREAD - leg_w
+	var spread := LEG_SPREAD + (CELEBRATE_WIDE_STANCE if legs == LEGS_WIDE else 0.0)
+	var left_x := -w * spread
+	var right_x := w * spread - leg_w
+	# Kneeling: the legs are folded under, so the band is shorter and the
+	# shorts (and everything draw_into stacks above them) come down with it.
+	var leg_h := LEG_H - (CELEBRATE_KNEEL_DROP if legs == LEGS_KNEEL else 0.0)
+	var shorts_y := SHORTS_Y - (CELEBRATE_KNEEL_DROP if legs == LEGS_KNEEL else 0.0)
 
 	var left_lift := 0.0
 	var right_lift := 0.0
@@ -375,6 +549,10 @@ static func _draw_legs(
 		POSE_RUN:
 			left_lift = swing
 			right_lift = -swing
+		POSE_CELEBRATE:
+			if legs == LEGS_STEP:
+				left_lift = swing
+				right_lift = -swing
 		POSE_KICK:
 			left_lift = LIFT_KICK
 		POSE_LUNGE:
@@ -388,11 +566,11 @@ static func _draw_legs(
 		var x: float = side[0] + lean * LEG_LEAN
 		var lift: float = side[1]
 		_rect(canvas, feet, w, h, x, BOOT_Y + lift, leg_w, h * BOOT_H, boots)
-		_rect(canvas, feet, w, h, x, LEG_Y + lift, leg_w, h * LEG_H, boots.lerp(Color.BLACK, SOCK_DARKEN))
+		_rect(canvas, feet, w, h, x, LEG_Y + lift, leg_w, h * leg_h, boots.lerp(Color.BLACK, SOCK_DARKEN))
 
 	# Shorts last: they overlap the top of both legs, which is what hides
 	# the seam when one leg is lifted.
-	_rect(canvas, feet, w, h, -w * SHORTS_W / 2.0, SHORTS_Y, w * SHORTS_W, h * SHORTS_H, shorts)
+	_rect(canvas, feet, w, h, -w * SHORTS_W / 2.0, shorts_y, w * SHORTS_W, h * SHORTS_H, shorts)
 
 
 static func _draw_torso(
@@ -438,7 +616,7 @@ static func _draw_torso(
 static func _draw_arms(
 	canvas: CanvasItem, feet: Vector2, w: float, h: float,
 	sleeve: Color, skin: Color, pose: String, swing: float, lean: float,
-	phase: float = 0.0, is_keeper: bool = false
+	phase: float = 0.0, is_keeper: bool = false, celebration_arms: String = "up"
 ) -> void:
 	var arm_w := w * ARM_W
 	var hand := GLOVE_COLOR if is_keeper else skin
@@ -455,18 +633,11 @@ static func _draw_arms(
 		_rect(canvas, feet, w, h, right_x + span * (1.0 - REACH_GLOVE), REACH_Y, span * REACH_GLOVE, h * REACH_H, hand)
 		return
 
-	if pose == POSE_CELEBRATE:
-		# Both arms up, waving. The sway is the only thing moving -- the
-		# player is stationary, which is what makes it read as celebrating
-		# rather than running.
-		var wave := sin(phase * CELEBRATE_WAVE_SPEED) * w * CELEBRATE_WAVE_W
-		var celebrate_spread := arm_spread() + CELEBRATE_FLARE
-		for ax in [-w * celebrate_spread + lean + wave, w * celebrate_spread - arm_w + lean + wave]:
-			_rect(canvas, feet, w, h, ax, CELEBRATE_ARM_Y, arm_w, h * CELEBRATE_ARM_H, sleeve)
-			_rect(
-				canvas, feet, w, h, ax, CELEBRATE_ARM_Y + CELEBRATE_ARM_H,
-				arm_w, h * CELEBRATE_HAND_H, hand
-			)
+	# "swing" is the ordinary run-cycle arms, driven by the leg swing
+	# draw_into computed for a LEGS_STEP celebration; every other arm pose
+	# is its own gesture.
+	if pose == POSE_CELEBRATE and celebration_arms != "swing":
+		_draw_celebrating_arms(canvas, feet, w, h, sleeve, hand, celebration_arms, lean, phase)
 		return
 
 	var lift := swing * ARM_SWING
@@ -476,6 +647,93 @@ static func _draw_arms(
 		var dy: float = side[1]
 		_rect(canvas, feet, w, h, x, ARM_Y + dy, arm_w, h * ARM_H, sleeve)
 		_rect(canvas, feet, w, h, x, ARM_Y + dy - HAND_H, arm_w, h * HAND_H, hand)
+
+
+## The arm poses a celebration recipe can name (PlayerAppearance.CELEBRATIONS'
+## "arms"). Each is a gesture on its own; the sway/pump is the only thing
+## moving, since the player is standing still -- that is what makes any of
+## them read as celebrating rather than running. An unknown name draws the
+## arms-up wave, so a recipe from a newer build still shows something.
+static func _draw_celebrating_arms(
+	canvas: CanvasItem, feet: Vector2, w: float, h: float,
+	sleeve: Color, hand: Color, arms: String, lean: float, phase: float
+) -> void:
+	var arm_w := w * ARM_W
+	var spread := arm_spread()
+	var wave := sin(phase * CELEBRATE_WAVE_SPEED) * w * CELEBRATE_WAVE_W
+	# Screen-space: "left" is the viewer's left, hanging arms are drawn
+	# from ARM_Y up (hand below), raised arms from CELEBRATE_ARM_Y up
+	# (hand on top).
+	var left_x := -w * spread + lean
+	var right_x := w * spread - arm_w + lean
+
+	match arms:
+		"wide":
+			# Straight out to both sides -- the keeper's reach geometry at
+			# shoulder height, hands on the ends.
+			var span := arm_w * REACH_SPAN
+			var lx := -w * REACH_SPREAD + lean
+			var rx := w * REACH_SPREAD - span + lean
+			_rect(canvas, feet, w, h, lx, CELEBRATE_WIDE_Y, span, h * REACH_H, sleeve)
+			_rect(canvas, feet, w, h, rx, CELEBRATE_WIDE_Y, span, h * REACH_H, sleeve)
+			_rect(canvas, feet, w, h, lx, CELEBRATE_WIDE_Y, span * CELEBRATE_WIDE_HAND, h * REACH_H, hand)
+			_rect(canvas, feet, w, h, rx + span * (1.0 - CELEBRATE_WIDE_HAND), CELEBRATE_WIDE_Y, span * CELEBRATE_WIDE_HAND, h * REACH_H, hand)
+		"pump":
+			# Right fist punching the air, left arm hanging.
+			var pump := (0.5 + 0.5 * sin(phase * CELEBRATE_WAVE_SPEED)) * CELEBRATE_PUMP_H
+			_draw_raised_arm(canvas, feet, w, h, right_x + w * CELEBRATE_FLARE, CELEBRATE_ARM_Y + pump, sleeve, hand)
+			_draw_hanging_arm(canvas, feet, w, h, left_x, sleeve, hand)
+		"shush":
+			# Right upper arm raised, forearm across to the mouth, finger
+			# on the lips. Left arm hanging.
+			var mouth_y := HEAD_Y + HEAD_H * CELEBRATE_SHUSH_MOUTH_Y
+			_rect(canvas, feet, w, h, right_x, ARM_Y + ARM_H * 0.5, arm_w, h * (mouth_y - ARM_Y - ARM_H * 0.5), sleeve)
+			_rect(canvas, feet, w, h, lean, mouth_y, right_x + arm_w - lean, h * CELEBRATE_SHUSH_FOREARM_H, sleeve)
+			_rect(canvas, feet, w, h, lean - arm_w * 0.5, mouth_y, arm_w * 0.5, h * CELEBRATE_SHUSH_FOREARM_H, hand)
+			_draw_hanging_arm(canvas, feet, w, h, left_x, sleeve, hand)
+		"back":
+			# Both arms down and swept out behind: lower than a hanging arm
+			# and flared past the shoulders, chest out.
+			var flare := w * CELEBRATE_BACK_FLARE
+			for ax in [left_x - flare, right_x + flare]:
+				_rect(canvas, feet, w, h, ax, CELEBRATE_BACK_Y, arm_w, h * CELEBRATE_BACK_H, sleeve)
+				_rect(canvas, feet, w, h, ax, CELEBRATE_BACK_Y - HAND_H, arm_w, h * HAND_H, hand)
+		"cradle":
+			# Forearms stacked across the front at waist height, one a
+			# little above the other, hands on opposite ends. The rocking
+			# comes from draw_into's `rock` lean, not from here.
+			var overhang := w * CELEBRATE_CRADLE_OVERHANG
+			var span := w * TORSO_W + overhang * 2.0
+			var x := -w * TORSO_W / 2.0 - overhang + lean
+			for i in range(2):
+				var y := CELEBRATE_CRADLE_Y + CELEBRATE_CRADLE_H * float(i)
+				_rect(canvas, feet, w, h, x, y, span, h * CELEBRATE_CRADLE_H, sleeve)
+				var hand_x := x if i == 0 else x + span - arm_w
+				_rect(canvas, feet, w, h, hand_x, y, arm_w, h * CELEBRATE_CRADLE_H, hand)
+		_:
+			# "up", and anything this build doesn't know: both arms raised,
+			# swaying together.
+			var celebrate_spread := spread + CELEBRATE_FLARE
+			for ax in [-w * celebrate_spread + lean + wave, w * celebrate_spread - arm_w + lean + wave]:
+				_draw_raised_arm(canvas, feet, w, h, ax, CELEBRATE_ARM_Y, sleeve, hand)
+
+
+## One arm straight up from `y`, hand on top.
+static func _draw_raised_arm(
+	canvas: CanvasItem, feet: Vector2, w: float, h: float, x: float, y: float, sleeve: Color, hand: Color
+) -> void:
+	var arm_w := w * ARM_W
+	_rect(canvas, feet, w, h, x, y, arm_w, h * CELEBRATE_ARM_H, sleeve)
+	_rect(canvas, feet, w, h, x, y + CELEBRATE_ARM_H, arm_w, h * CELEBRATE_HAND_H, hand)
+
+
+## One arm hanging at the side, hand below -- the idle arm.
+static func _draw_hanging_arm(
+	canvas: CanvasItem, feet: Vector2, w: float, h: float, x: float, sleeve: Color, hand: Color
+) -> void:
+	var arm_w := w * ARM_W
+	_rect(canvas, feet, w, h, x, ARM_Y, arm_w, h * ARM_H, sleeve)
+	_rect(canvas, feet, w, h, x, ARM_Y - HAND_H, arm_w, h * HAND_H, hand)
 
 
 static func _draw_head(

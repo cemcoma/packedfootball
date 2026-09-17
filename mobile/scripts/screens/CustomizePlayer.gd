@@ -11,9 +11,14 @@ extends Control
 ##
 ## Every picker is built at RUNTIME from PlayerAppearance.SLOTS, the same way
 ## CustomizeKit builds itself from KitDesign: slots with a palette get
-## swatches, slots with shapes get named buttons, and a sixth slot added to
+## swatches, slots with shapes get named buttons, and a seventh slot added to
 ## that file appears here with no scene editing. Nothing in this screen knows
 ## what a mohawk is.
+##
+## The one slot this screen does know by name is "celebration": picking one
+## makes the preview PLAY it (a still portrait can't show a jump), and
+## picking anything else puts the portrait back to standing still so the
+## new hair or face can be seen properly.
 ##
 ## The save is a backend call (POST /player/customize), not a direct write:
 ## it moves credits and mutates players/{id}, both of which firestore.rules
@@ -91,8 +96,11 @@ func _build_options() -> void:
 		_options_box.add_child(heading)
 		_headings.append(heading)
 
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
+		# Flow rather than a plain row: the celebrations alone are nine
+		# buttons, which is wider than any phone, so they wrap.
+		var row := HFlowContainer.new()
+		row.add_theme_constant_override("h_separation", 6)
+		row.add_theme_constant_override("v_separation", 6)
 		_options_box.add_child(row)
 
 		# A palette means swatches; no palette means this slot picks a shape,
@@ -220,6 +228,9 @@ func _set_status(text: String, positive: bool = false) -> void:
 
 func _on_option_pressed(slot: String, index: int) -> void:
 	_edited_appearance[slot] = index
+	_preview.set_pose(
+		PlayerFigure.POSE_CELEBRATE if slot == "celebration" else PlayerFigure.POSE_IDLE
+	)
 	_set_status("")
 	_refresh()
 

@@ -69,16 +69,25 @@ const CAMERA_MARGIN_UNITS := 4.5
 # REAL seconds, so there is time to actually watch the celebration. The
 # engine's own goal pause (gameEngine._award_goal sets goal_pause_timer =
 # 90) is only 1.5s of playback and the clock keeps running through it, which
-# is far too short to read as anything.
-const GOAL_CELEBRATION_SECONDS := 5.0
+# is far too short to read as anything. PlayerFigure's, because the
+# celebration timelines are written to fit it.
+const GOAL_CELEBRATION_SECONDS := PlayerFigure.CELEBRATE_DURATION
 # Once the replay resumes, the scoring side keeps its arms up for the rest
 # of the engine's own dead-ball window rather than snapping straight back to
 # running -- otherwise there's a stretch of players milling about around a
 # ball sitting in the net before the kickoff reset.
 const GOAL_CELEBRATION_FRAMES := 90.0
-# Radians per real second for the arm wave. Independent of playback speed
-# and of the match clock, both of which are stopped while this is running.
-const CELEBRATION_WAVE_RATE := 6.0
+# How fast the scorer runs off during their celebration, pitch units per
+# real second -- about a real sprint (a player covers ~9 units/s in the
+# engine). The recipe says how long they run for; this says how far that
+# gets them.
+const CELEBRATION_RUN_SPEED := 7.0
+# How far back toward halfway the run-off angles, per unit of sideways --
+# the scorer heads for the corner flag, not straight into the touchline.
+const CELEBRATION_RUN_BACK := 0.6
+# Teammates' arm waves are offset by this many seconds each so ten figures
+# don't wave in lockstep.
+const CELEBRATION_TEAMMATE_STAGGER := 0.13
 
 # Home / away shirts when the roster carries no kit (demo replay, or a
 # backend older than kits).
@@ -141,6 +150,15 @@ var _team_colors: Array = DEFAULT_TEAM_COLORS.duplicate()
 var _celebration_until_tick: float = -1.0
 var _celebration_team: int = -1
 var _celebration_positions: Array = []
+# Who scored (roster index, -1 if the event didn't say) and which way they
+# run off: only they do their own celebration and move; the rest of the
+# side does PlayerAppearance.TEAMMATE_CELEBRATION where they stand.
+var _celebration_scorer: int = -1
+var _celebration_direction: Vector2 = Vector2.ZERO
+var _celebration_facing: int = PlayerFigure.FACING_S
+# The scorer's PlayerFigure.celebration_state for this frame, computed
+# once in _draw_players before the draw loop needs its stage.
+var _celebration_stage: String = PlayerFigure.STAGE_POSE
 # Real seconds left on the hold, and the clock that drives the arm wave
 # while everything else is frozen.
 var goal_pause_remaining: float = 0.0
@@ -386,6 +404,7 @@ func _reset_state() -> void:
 	_celebration_until_tick = -1.0
 	_celebration_team = -1
 	_celebration_positions = []
+	_celebration_scorer = -1
 	goal_pause_remaining = 0.0
 	_celebration_phase = 0.0
 	for i in range(player_flash_timers.size()):
@@ -479,6 +498,7 @@ func _jump_to_event(action_type: int) -> void:
 			goal_pause_remaining = 0.0
 			_celebration_team = -1
 			_celebration_positions = []
+			_celebration_scorer = -1
 			has_started = true
 			return
 
@@ -519,6 +539,11 @@ func _process(delta: float) -> void:
 		banner_timer = maxf(0.0, banner_timer - delta)
 		queue_redraw()
 		return
+
+	# The tail of the celebration (the engine's own dead-ball frames after
+	# the hold) keeps animating rather than freezing mid-wave.
+	if _celebrating():
+		_celebration_phase += delta
 
 	playback_tick += effective_delta * TICKS_PER_SECOND
 	var last_tick: float = samples[-1]["tick"]
@@ -614,6 +639,7 @@ func _process_events(current_tick: float) -> void:
 				away_score += 1
 			_update_score_label()
 			_celebration_team = team
+			_celebration_scorer = idx if idx >= 0 and idx < ReplayReader.NUM_PLAYERS else -1
 			_celebration_until_tick = float(event["tick"]) + GOAL_CELEBRATION_FRAMES
 			goal_pause_remaining = GOAL_CELEBRATION_SECONDS
 			_celebration_phase = 0.0
@@ -1001,7 +1027,26 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 		# celebration that wanders is not a celebration.
 		if _celebration_positions.is_empty():
 			_celebration_positions = players.duplicate()
+			_celebration_direction = _celebration_run_direction()
+			_celebration_facing = PlayerFigure.facing_from_direction(_celebration_direction)
 		players = _celebration_positions
+		# ...except the scorer, who runs off along their celebration's
+		# timeline: toward the nearest corner, as far as its stages carry
+		# them, then stops there. Copied so the latch itself stays put.
+		if _celebration_scorer >= 0:
+			players = players.duplicate()
+			var recipe := PlayerAppearance.celebration(
+				int(_appearance_for(_celebration_scorer).get("celebration", 0))
+			)
+			var timeline: Dictionary = PlayerFigure.celebration_state(recipe, _celebration_phase)
+			_celebration_stage = timeline.stage
+			var travel: float = timeline.travel
+			var run_off: Vector2 = _celebration_direction * travel * CELEBRATION_RUN_SPEED
+			var start: Vector2 = _celebration_positions[_celebration_scorer]
+			players[_celebration_scorer] = Vector2(
+				clampf(start.x + run_off.x, 1.0, PITCH_WIDTH - 1.0),
+				clampf(start.y + run_off.y, 1.0, PITCH_HEIGHT - 1.0)
+			)
 
 	var order: Array = []
 	for i in range(ReplayReader.NUM_PLAYERS):
@@ -1021,19 +1066,32 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 		)
 
 		var pose: String = player_poses[i]
-		if celebrating:
-			# Scorers celebrate; the side that conceded just stands there,
-			# which is its own kind of correct.
-			pose = PlayerFigure.POSE_CELEBRATE if team == _celebration_team else PlayerFigure.POSE_IDLE
-		elif pose == "":
-			pose = PlayerFigure.POSE_RUN if velocity.length() > FACING_MIN_SPEED else PlayerFigure.POSE_IDLE
-
-		# Offset per player so 22 figures don't run in lockstep. While
-		# celebrating the match clock is stopped dead, so the wave runs off
-		# its own real-time clock or every arm would freeze mid-air.
+		var appearance: Dictionary = _appearance_for(i)
+		# Offset per player so 22 figures don't run in lockstep.
 		var phase: float = playback_tick * RUN_CYCLE_SPEED + float(i)
 		if celebrating:
-			phase = _celebration_phase * CELEBRATION_WAVE_RATE + float(i)
+			# Scorers celebrate; the side that conceded just stands there,
+			# which is its own kind of correct. Only the scorer does THEIR
+			# celebration -- everyone else on the side gets the plain
+			# arms-up, so nobody knee-slides in their own half.
+			pose = PlayerFigure.POSE_CELEBRATE if team == _celebration_team else PlayerFigure.POSE_IDLE
+			if i == _celebration_scorer:
+				# The match clock is stopped dead during the hold, so the
+				# celebration runs on its own real-time clock -- and for
+				# the scorer that clock IS the timeline, so no offset. They
+				# face the way they're running while they run, then turn
+				# to the camera for the pose itself: a shush with the back
+				# of the head to you is nothing.
+				phase = _celebration_phase
+				var running := _celebration_stage in [PlayerFigure.STAGE_RUN, PlayerFigure.STAGE_JUMP]
+				player_facings[i] = _celebration_facing if running else PlayerFigure.FACING_S
+			else:
+				phase = _celebration_phase + float(i) * CELEBRATION_TEAMMATE_STAGGER
+				if team == _celebration_team:
+					appearance = appearance.duplicate()
+					appearance["celebration"] = PlayerAppearance.TEAMMATE_CELEBRATION
+		elif pose == "":
+			pose = PlayerFigure.POSE_RUN if velocity.length() > FACING_MIN_SPEED else PlayerFigure.POSE_IDLE
 
 		var flash := Color(0, 0, 0, 0)
 		if player_flash_timers[i] > 0.0:
@@ -1047,7 +1105,7 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 			self,
 			feet,
 			height_px,
-			_appearance_for(i),
+			appearance,
 			_team_kits[team] if _team_kits.size() == 2 else null,
 			int(player_facings[i]),
 			pose,
@@ -1064,6 +1122,18 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 			# figures aren't 22 identical blocks.
 			PlayerFigure.build_from(_attributes_for(i))
 		)
+
+
+## Which way the scorer runs off: to the nearer touchline, angled back
+## toward endline -- the corner flag, roughly, from anywhere in the box.
+## Pitch units, so +y is the home side's attacking direction.
+func _celebration_run_direction() -> Vector2:
+	if _celebration_scorer < 0:
+		return Vector2.ZERO
+	var start: Vector2 = _celebration_positions[_celebration_scorer]
+	var sideways := 1.0 if start.x >= PITCH_WIDTH / 2.0 else -1.0
+	var back := 1.0 if _celebration_team == 0 else -1.0
+	return Vector2(sideways, back * CELEBRATION_RUN_BACK).normalized()
 
 
 ## True while a goal is still being celebrated. Two windows back to back:

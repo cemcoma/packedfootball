@@ -18,6 +18,14 @@ extends Control
 ## to backfill those instead of relying on it.
 
 var _appearance: Dictionary = {}
+# Idle by default -- a portrait. CustomizePlayer switches this to
+# POSE_CELEBRATE to preview the celebration being picked, and then the
+# figure animates: _process runs the same seconds-since-the-goal clock the
+# pitch feeds PlayerFigure, looping every CELEBRATE_DURATION, so what you
+# see here is what plays after a goal -- minus the ground covered, since
+# a portrait runs on the spot.
+var _pose: String = PlayerFigure.POSE_IDLE
+var _phase: float = 0.0
 # The kit this player is drawn wearing. Null means "ask GameProfile at draw
 # time" -- every card shown in this client belongs to the signed-in manager,
 # so their own kit is the right shirt for it.
@@ -25,6 +33,10 @@ var _kit: KitDesign = null
 # Width/height multipliers from this card's own height and power -- see
 # PlayerFigure.build_from. Vector2.ONE until a card is set.
 var _build: Vector2 = Vector2.ONE
+
+## How much of the frame a celebrating figure gets -- enough headroom for
+## the tallest hop (Jump's bounce) and the widest arms (the aeroplane).
+const CELEBRATE_FIT := 0.8
 
 
 func set_card(card: PlayerCard) -> void:
@@ -38,6 +50,24 @@ func set_card(card: PlayerCard) -> void:
 
 func set_appearance(appearance: Dictionary) -> void:
 	_appearance = appearance
+	queue_redraw()
+
+
+## Which pose the portrait stands in. POSE_CELEBRATE plays the card's
+## celebration on a loop; anything else is a still.
+func set_pose(pose: String) -> void:
+	_pose = pose
+	_phase = 0.0
+	set_process(pose == PlayerFigure.POSE_CELEBRATE)
+	queue_redraw()
+
+
+func _ready() -> void:
+	set_process(false)
+
+
+func _process(delta: float) -> void:
+	_phase = fmod(_phase + delta, PlayerFigure.CELEBRATE_DURATION)
 	queue_redraw()
 
 
@@ -65,10 +95,13 @@ func _draw() -> void:
 
 	# Fit to whichever dimension runs out first, and leave room for the
 	# build: a tall card would otherwise grow straight out of the frame.
+	# A celebration can reach past the standing figure (arms out wide, a
+	# hop), so it's drawn a little smaller to keep the whole gesture in.
+	var celebrating := _pose == PlayerFigure.POSE_CELEBRATE
 	var height: float = minf(
 		size.y / PlayerFigure.BUILD_TALLEST,
 		size.x / (PlayerFigure.ASPECT * PlayerFigure.BUILD_WIDEST)
-	)
+	) * (CELEBRATE_FIT if celebrating else 1.0)
 	PlayerFigure.draw_into(
 		self,
 		Vector2(size.x / 2.0, (size.y + height * _build.y) / 2.0),  # feet, vertically centred
@@ -76,9 +109,9 @@ func _draw() -> void:
 		_appearance,
 		kit,
 		PlayerFigure.FACING_S,   # facing the viewer: it's a portrait
-		PlayerFigure.POSE_IDLE,
+		_pose,
 		PlayerFigure.DETAIL_FULL,
-		0.0,
+		_phase,
 		0,
 		Color(0, 0, 0, 0),
 		null,

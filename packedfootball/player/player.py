@@ -81,10 +81,12 @@ MATCH_STAT_FIELDS = (
     "clean_sheets",
 )
 
-# Layered character appearance: 5 independent slots, each an INDEX into an
+# Layered character appearance: 6 independent slots, each an INDEX into an
 # option list that lives client-side in mobile/scripts/data/
 # PlayerAppearance.gd. This end only rolls the indices -- it has no idea what
-# a hairstyle looks like, and doesn't need to.
+# a hairstyle looks like, and doesn't need to. "celebration" is the goal
+# celebration the client plays for this player after they score -- rolled
+# and stored like any other look, just animated rather than drawn once.
 #
 # The counts below must not exceed what the client actually has options for,
 # or a card gets an index that renders as a fallback. They are per-slot (not
@@ -99,13 +101,14 @@ MATCH_STAT_FIELDS = (
 # Real players always get one rolled by packEngine.PackManager;
 # DEFAULT_APPEARANCE only backstops a player object built without going
 # through that (e.g. reconstructing a doc saved before this field existed).
-APPEARANCE_SLOTS = ("skin_tone", "hair_style", "hair_color", "face", "shoe_color")
+APPEARANCE_SLOTS = ("skin_tone", "hair_style", "hair_color", "face", "shoe_color", "celebration")
 APPEARANCE_OPTION_COUNTS = {
     "skin_tone": 5,   # PlayerAppearance.SKIN_TONES
     "hair_style": 5,  # PlayerAppearance.HAIR_STYLES
     "hair_color": 5,  # PlayerAppearance.HAIR_COLORS
     "face": 5,        # PlayerAppearance.FACE_STYLES
     "shoe_color": 5,  # PlayerAppearance.SHOE_COLORS
+    "celebration": 9, # PlayerAppearance.CELEBRATIONS
 }
 DEFAULT_APPEARANCE = {slot: 0 for slot in APPEARANCE_SLOTS}
 
