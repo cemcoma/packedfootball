@@ -69,7 +69,7 @@ func open_for(pack: PackData) -> void:
 	visible = true
 
 
-## [[label, percent_int], ...] for every key in `order` whose rate is > 0,
+## [[label, float .2f], ...] for every key in `order` whose rate is > 0,
 ## in that fixed order -- zero-chance tiers/positions aren't "obtainable"
 ## so they're left off rather than cluttering the disclosure with 0% rows.
 func _odds_rows(rates: Dictionary, order: Array) -> Array:
