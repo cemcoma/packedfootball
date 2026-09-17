@@ -3,7 +3,7 @@ extends Node
 ## Ported from packedfootball/firebase_client.py -- same endpoints, same
 ## request/response shapes, same session-resume-via-refresh-token idea.
 ## Registered as an autoload singleton (see project.godot) so any scene can
-## call FirebaseAuth.sign_in_anonymously() etc. and read FirebaseAuth.uid,
+## call FirebaseAuth.sign_in_with_email() etc. and read FirebaseAuth.uid,
 ## mirroring how firebase_client.FirebaseClient is one shared instance
 ## threaded through every pygame scene.
 ##
@@ -17,6 +17,36 @@ extends Node
 const IDENTITY_TOOLKIT_URL := "https://identitytoolkit.googleapis.com/v1/accounts"
 const SECURE_TOKEN_URL := "https://securetoken.googleapis.com/v1/token"
 const SESSION_PATH := "user://session.json"
+
+## Firebase's own minimum -- signUp rejects anything shorter with
+## WEAK_PASSWORD. Checked client-side too (see Auth.gd) so the obvious case
+## never costs a round trip.
+const MIN_PASSWORD_LENGTH := 6
+
+## Identity Toolkit answers a failed request with an all-caps code in
+## error.message (sometimes with a " : explanation" suffix, e.g.
+## "WEAK_PASSWORD : Password should be at least 6 characters"). These are
+## what a manager reads instead. Anything not listed falls through as the
+## raw code, which at least says what went wrong to whoever reads the bug
+## report.
+##
+## INVALID_LOGIN_CREDENTIALS is what newer projects return for BOTH a wrong
+## password and an unknown email (email enumeration protection); the older
+## split codes are kept for projects that still have it off.
+const ERROR_MESSAGES := {
+	"INVALID_LOGIN_CREDENTIALS": "Wrong email or password.",
+	"INVALID_PASSWORD": "Wrong password.",
+	"EMAIL_NOT_FOUND": "No account with that email.",
+	"INVALID_EMAIL": "That email address isn't valid.",
+	"MISSING_EMAIL": "Please enter your email.",
+	"MISSING_PASSWORD": "Please enter your password.",
+	"WEAK_PASSWORD": "Password must be at least %d characters." % MIN_PASSWORD_LENGTH,
+	"EMAIL_EXISTS": "An account with that email already exists.",
+	"USER_DISABLED": "This account has been disabled.",
+	"TOO_MANY_ATTEMPTS_TRY_LATER": "Too many attempts -- please wait a bit and try again.",
+	"RESET_PASSWORD_EXCEED_LIMIT": "Too many reset emails sent -- please wait a bit and try again.",
+	"OPERATION_NOT_ALLOWED": "Email sign-in isn't enabled for this app.",
+}
 
 var uid: String = ""
 var id_token: String = ""
@@ -76,7 +106,7 @@ func _parse_response(result: Array) -> Dictionary:
 	if response_code < 200 or response_code >= 300:
 		var message := "HTTP %d" % response_code
 		if parsed is Dictionary and parsed.has("error"):
-			message = parsed["error"].get("message", message)
+			message = _friendly_error(parsed["error"].get("message", message))
 		return {"ok": false, "error": message}
 
 	if not (parsed is Dictionary):
@@ -89,20 +119,17 @@ func _parse_response(result: Array) -> Dictionary:
 	return {"ok": true, "data": parsed}
 
 
+## The readable version of an Identity Toolkit error code (see
+## ERROR_MESSAGES), or the code itself when there isn't one.
+static func _friendly_error(raw: String) -> String:
+	var code := raw.get_slice(" : ", 0).strip_edges()
+	return ERROR_MESSAGES.get(code, raw)
+
+
 func _apply_auth_payload(data: Dictionary) -> void:
 	id_token = data.get("idToken", "")
 	refresh_token = data.get("refreshToken", "")
 	uid = data.get("localId", "")
-
-
-func sign_in_anonymously() -> Dictionary:
-	var url := "%s:signUp?key=%s" % [IDENTITY_TOOLKIT_URL, FirebaseConfig.FIREBASE_API_KEY]
-	var res := await _post_json(url, {"returnSecureToken": true})
-	if not res.ok:
-		return res
-	_apply_auth_payload(res.data)
-	_persist_refresh_token()
-	return {"ok": true, "uid": uid}
 
 
 func register_with_email(email: String, password: String) -> Dictionary:
@@ -123,6 +150,23 @@ func sign_in_with_email(email: String, password: String) -> Dictionary:
 	_apply_auth_payload(res.data)
 	_persist_refresh_token()
 	return {"ok": true, "uid": uid}
+
+
+## Asks Firebase to email a password-reset link -- the email itself (sender,
+## template, where the link lands) is whatever the Firebase console's
+## Authentication > Templates has set; nothing about it lives in this app.
+## Signs nobody in and touches no session state: the manager comes back
+## and signs in with the new password like anyone else.
+##
+## With email enumeration protection on (the default for new projects)
+## Firebase answers OK for an unknown address too, so a success here means
+## "if that account exists, it has mail", not "that account exists".
+func send_password_reset(email: String) -> Dictionary:
+	var url := "%s:sendOobCode?key=%s" % [IDENTITY_TOOLKIT_URL, FirebaseConfig.FIREBASE_API_KEY]
+	var res := await _post_json(url, {"requestType": "PASSWORD_RESET", "email": email})
+	if not res.ok:
+		return res
+	return {"ok": true}
 
 
 func try_resume_session() -> bool:
