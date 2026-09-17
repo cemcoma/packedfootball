@@ -16,7 +16,9 @@ func _auth_headers() -> PackedStringArray:
 
 
 ## Returns {"ok": bool, "status": int, "data": Dictionary}. "data" is the
-## parsed JSON response body on a 2xx status, {} otherwise.
+## parsed JSON response body -- on a 2xx the endpoint's result, on an error
+## whatever FastAPI sent back (typically {"detail": "..."}), {} when the
+## body wasn't a JSON object or the request never left.
 func call_endpoint(method: HTTPClient.Method, path: String, body: Dictionary = {}) -> Dictionary:
 	var http := HTTPRequest.new()
 	http.accept_gzip = false
@@ -46,9 +48,10 @@ func call_endpoint(method: HTTPClient.Method, path: String, body: Dictionary = {
 	var body_bytes: PackedByteArray = result[3]
 	var text := body_bytes.get_string_from_utf8()
 
+	var parsed = JSON.parse_string(text) if text != "" else {}
+	var data: Dictionary = parsed if parsed is Dictionary else {}
 	if status < 200 or status >= 300:
 		push_warning("Backend call %s failed: HTTP %d %s" % [path, status, text])
-		return {"ok": false, "status": status, "data": {}}
+		return {"ok": false, "status": status, "data": data}
 
-	var parsed = JSON.parse_string(text) if text != "" else {}
-	return {"ok": true, "status": status, "data": (parsed if parsed is Dictionary else {})}
+	return {"ok": true, "status": status, "data": data}

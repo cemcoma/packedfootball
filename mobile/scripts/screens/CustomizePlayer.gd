@@ -173,7 +173,7 @@ func _refresh_cost() -> void:
 	var cost: int = changed.size() * CREDITS_PER_CHANGE
 	var affordable: bool = cost <= GameProfile.credits
 
-	_preview_caption.text = "%s  ·  %s" % [_card.position, tr(_card.tier.capitalize())]
+	_preview_caption.text = "%s  ·  %s" % [_card.position, PlayerCard.tier_label(_card.tier)]
 
 	# Every one of these ends ON THE NUMBER, because the logo sits directly
 	# after this label and is what gives that number its unit -- so the

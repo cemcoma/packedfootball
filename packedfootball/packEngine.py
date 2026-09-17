@@ -47,17 +47,38 @@ PLAYER_CLASS_MAP = {
 }
 
 ### SUPER IMPORTANT ###
+# Every tier a card can be rolled at, with its overall range.
+#
+# A key is "<family>" or "<family>_<variant>". The family is the RARITY --
+# what release value, card colour, ordering and the pack-odds disclosure go
+# by (tier_family() is that collapse) -- and a variant is a themed edition
+# of it with its own range and its own card art
+# (mobile/sprites/player_cards/<tier>.png). So special_ucl is a special,
+# and a future diamond_turkish would be a diamond. A new variant is one
+# entry here plus a sprite, and nothing else needs to know it exists; a new
+# FAMILY also needs a row in the family tables (config.RELEASE_CREDITS_BY_TIER,
+# PlayerCard.TIER_COLORS / RELEASE_CREDITS).
+#
+# Plain "special" is the family's own baseline
 TIER_RANGES = {
     "bronze": (45, 54),
     "silver": (55, 64),
     "gold": (62, 75),
     "platinum": (72, 80),
     "diamond": (78, 85),
+    "special": (82, 87),
     "special_conf": (83, 88),
     "special_uel": (84, 90),
     "special_ucl": (85, 93),
     "icon": (95,99)
 }
+
+
+def tier_family(tier: str) -> str:
+    """The rarity a tier string counts as: everything before the first "_",
+    so "special_ucl" -> "special", "diamond_turkish" -> "diamond", and a
+    plain tier is itself. Mirrored by PlayerCard.tier_family() on the client."""
+    return str(tier).split("_", 1)[0]
 
 
 TENDENCY_RANGES = {

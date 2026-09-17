@@ -19,7 +19,7 @@ from config import (
 )
 from admin_firestore_client import AdminFirestoreClient
 from deps import verify_id_token
-from engine import APPEARANCE_OPTION_COUNTS, APPEARANCE_SLOTS, DEFAULT_APPEARANCE
+from engine import APPEARANCE_OPTION_COUNTS, APPEARANCE_SLOTS, DEFAULT_APPEARANCE, tier_family
 
 router = APIRouter(tags=["players"])
 
@@ -155,8 +155,10 @@ async def _release_cards(uid: str, player_ids: list[str]) -> dict:
             released.append(
                 {
                     "player_id": pid,
+                    # By family: a special_ucl card pays the "special" rate,
+                    # not the unknown-tier floor.
                     "credits_awarded": RELEASE_CREDITS_BY_TIER.get(
-                        card.get("tier", ""), RELEASE_CREDITS_DEFAULT
+                        tier_family(card.get("tier", "")), RELEASE_CREDITS_DEFAULT
                     ),
                 }
             )

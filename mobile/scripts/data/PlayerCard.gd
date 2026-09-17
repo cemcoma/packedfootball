@@ -37,7 +37,8 @@ const TENDENCY_FIELDS := [
 const PHYSICAL_FIELDS := ["height"]
 
 ### SUPER IMPORTANT ###
-## Card-back color by tier -- used for ranking tiers!
+## Card-back color by tier FAMILY -- and, by key order, the project's one
+## canonical rarity ordering (see tier_rank).
 const TIER_COLORS := {
 	"bronze": Color(0.72, 0.45, 0.2),
 	"silver": Color(0.75, 0.75, 0.78),
@@ -48,10 +49,35 @@ const TIER_COLORS := {
 	"icon": Color(0.95, 0.85, 0.55),
 }
 
+## A tier string is "<family>" or "<family>_<variant>" -- "special_ucl",
+## "special_conf", a future "diamond_turkish". The family is the RARITY,
+## which is all that colour, release value, ordering and the odds
+## disclosure care about; the variant only picks the card art
+## (sprites/player_cards/<tier>.png) and, server-side, the attribute
+## range. Mirrors packEngine.tier_family(): everything before the first "_".
+static func tier_family(tier: String) -> String:
+	return tier.get_slice("_", 0)
+
+
+## The variant part, "" for a plain tier: "special_ucl" -> "ucl".
+static func tier_variant(tier: String) -> String:
+	return tier.substr(tier_family(tier).length() + 1) if tier.contains("_") else ""
+
+
+## What a tier is called on screen: the family, translated, plus the
+## variant in capitals -- "Special UCL". The family word is what's in the
+## translation catalog; a variant is an edition's name or acronym and stays
+## as it is in every language.
+static func tier_label(tier: String) -> String:
+	var label := TranslationServer.translate(tier_family(tier).capitalize())
+	var variant := tier_variant(tier)
+	if variant != "":
+		label += " " + variant.to_upper()
+	return label
+
+
 static func tier_color(tier: String) -> Color:
-	if tier.begins_with("special"):
-		tier = "special"
-	return TIER_COLORS.get(tier, Color(0.5, 0.5, 0.5))
+	return TIER_COLORS.get(tier_family(tier), Color(0.5, 0.5, 0.5))
 
 ## What releasing a card pays out. Shown on the Release button before the
 ## request; backend/main.py's RELEASE_CREDITS_BY_TIER is what actually pays,
@@ -68,7 +94,7 @@ const RELEASE_CREDITS := {
 }
 
 static func release_credits(tier: String) -> int:
-	return RELEASE_CREDITS.get(tier, 10)
+	return RELEASE_CREDITS.get(tier_family(tier), 10)
 
 
 ## Rarity ordering for anything that needs to know
@@ -79,9 +105,7 @@ static func release_credits(tier: String) -> int:
 ## deliberately not raw dict iteration order, since a Firestore/JSON map
 ## field's key order isn't guaranteed to survive the round trip).
 static func tier_rank(tier: String) -> int:
-	if tier.begins_with("special"):
-		tier = "special"
-	var rank := TIER_COLORS.keys().find(tier)
+	var rank := TIER_COLORS.keys().find(tier_family(tier))
 	return rank if rank != -1 else 0
 
 

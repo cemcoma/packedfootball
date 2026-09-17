@@ -86,6 +86,9 @@ Credentials automatically -- no key file.
 | --- | --- |
 | `GET /health` | Liveness check. |
 | `POST /account/bootstrap` | Idempotent. Creates the profile plus an 11-card bronze starter roster on a uid's first ever call; no-op afterwards. |
+| `GET /account/name_available` | Unauthenticated. Whether `?display_name=` passes the rules and is free -- the registration form asks before creating the Auth user. Advisory only. |
+| `POST /account/display_name` | Renames the manager, uniquely: reserves `display_names/{key}` in the same transaction as the name. 400 with a reason code, 409 when taken. |
+| `DELETE /account` | Deletes the account: profile, inventory, every owned card, games it started, its name reservation, its seat in an unsettled tournament group, then the Firebase Auth user (last, so a failed attempt can be retried). Keeps `iap_transactions` and games it only played in as the opponent. Backfill old accounts' name reservations with `scripts/sync_display_names.py`. |
 | `GET /pack/list` | Live pack catalog, filtered by availability. |
 | `POST /pack/open` | Charges the pack's currency, rolls cards, writes them. |
 | `GET /currency/exchange/list` | Bucks -> credits tiers. |
@@ -315,9 +318,10 @@ you flip it, in the Firestore console or via `--activate-new` on first sync.
 
 ## Firestore rules
 
-`users/{uid}` `update` is an **allow-list**: `display_name`,
-`roster_player_ids`, `formation` -- the only three fields the client writes
-directly. Everything else on that doc (all three currencies, wins/losses/
+`users/{uid}` `update` is an **allow-list**: `roster_player_ids`,
+`formation`, `kit` -- the only three fields the client writes directly.
+`display_name` used to be on it and no longer is: names are unique, and
+only `POST /account/display_name` writes the reservation that makes them so. Everything else on that doc (all three currencies, wins/losses/
 draws, anything added later) is deny-by-default. `create` and `delete` are
 `false`; the only legitimate creation path is `POST /account/bootstrap` via
 the Admin SDK.

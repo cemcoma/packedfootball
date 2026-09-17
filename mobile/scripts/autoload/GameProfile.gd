@@ -333,11 +333,42 @@ func get_best_player() -> PlayerCard:
 func average_overall() -> int:
 	return SquadOptimizer.squad_overall(formation, slot_assignment, all_cards)
 
-func set_display_name(new_name: String) -> bool:
-	var ok := await Firestore.set_document(_user_doc_path(), {"display_name": new_name}, true)
-	if ok:
-		display_name = new_name
-	return ok
+func set_display_name(new_name: String) -> Dictionary:
+	var res: Dictionary = await Backend.call_endpoint(
+		HTTPClient.METHOD_POST, "/account/display_name", {"display_name": new_name}
+	)
+	if res.ok:
+		display_name = str(res.data.get("display_name", new_name))
+	return res
+
+func check_display_name(new_name: String) -> Dictionary:
+	var res: Dictionary = await Backend.call_endpoint(
+		HTTPClient.METHOD_GET, "/account/name_available?display_name=" + new_name.uri_encode()
+	)
+	if not res.ok:
+		return {"available": true, "reason": ""}
+	return {"available": bool(res.data.get("available", true)), "reason": str(res.data.get("reason", ""))}
+
+func delete_account() -> bool:
+	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_DELETE, "/account")
+	return res.ok
+
+
+## The wording for a refused name, from the backend's reason code -- one
+## place, since both the registration form and Settings show it.
+static func display_name_problem(reason: String) -> String:
+	match reason:
+		"taken":
+			return TranslationServer.translate("That name is taken.")
+		"too_short":
+			return TranslationServer.translate("Names need at least 3 characters.")
+		"too_long":
+			return TranslationServer.translate("Names can be at most 16 characters.")
+		"characters":
+			return TranslationServer.translate("Names can only use letters, numbers, spaces, _ . and -")
+		"empty":
+			return TranslationServer.translate("Please enter a manager name.")
+	return ""
 
 func kit_design() -> KitDesign:
 	return KitDesign.parse(kit)

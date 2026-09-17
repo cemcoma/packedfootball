@@ -113,7 +113,7 @@ static func _is_worse_pull(a: PlayerCard, b: PlayerCard) -> bool:
 
 
 static func _hero_scale_for(tier: String) -> Vector2:
-	var s: float = HERO_SCALE_BY_TIER.get(tier, DEFAULT_HERO_SCALE)
+	var s: float = HERO_SCALE_BY_TIER.get(PlayerCard.tier_family(tier), DEFAULT_HERO_SCALE)
 	return Vector2(s, s)
 
 

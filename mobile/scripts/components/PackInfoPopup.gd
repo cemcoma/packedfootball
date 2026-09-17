@@ -72,12 +72,24 @@ func open_for(pack: PackData) -> void:
 ## [[label, float .2f], ...] for every key in `order` whose rate is > 0,
 ## in that fixed order -- zero-chance tiers/positions aren't "obtainable"
 ## so they're left off rather than cluttering the disclosure with 0% rows.
+##
+## `order` is by tier FAMILY (TIER_COLORS' keys), while a pack's rates are
+## keyed by the exact tier it rolls -- "special_ucl", not "special" -- so
+## each family slot collects every rate key that belongs to it. Without
+## that the special row was never matched and the 2% simply went missing
+## from the disclosure, which is the one thing this popup exists to show.
+## Position keys ("goalkeeper", ...) have no family and pass through as
+## themselves, so the same function serves both tables.
 func _odds_rows(rates: Dictionary, order: Array) -> Array:
 	var rows: Array = []
-	for key in order:
-		var rate: float = rates.get(key, 0.0)
-		if rate > 0.0:
-			rows.append([tr(String(key).capitalize()), float(rate * 100.0)])
+	for family in order:
+		for key in rates.keys():
+			var tier := String(key)
+			if PlayerCard.tier_family(tier) != family:
+				continue
+			var rate: float = rates.get(key, 0.0)
+			if rate > 0.0:
+				rows.append([PlayerCard.tier_label(tier), float(rate * 100.0)])
 	return rows
 
 

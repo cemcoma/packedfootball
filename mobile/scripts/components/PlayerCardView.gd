@@ -105,7 +105,7 @@ func set_card(card: PlayerCard) -> void:
 	_overall_label.text = str(card.overall())
 	_position_label.text = card.position
 	_name_label.text = card.display_name()
-	_tier_label.text = tr(card.tier.capitalize())
+	_tier_label.text = PlayerCard.tier_label(card.tier)
 	_model_view.set_card(card)
 	# All three are per-CONTEXT, not per-card, and this view gets recycled
 	# (PackReveal reuses instances). Clear them so a card never inherits the

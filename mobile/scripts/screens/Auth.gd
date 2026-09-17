@@ -185,6 +185,14 @@ func _on_create_account_pressed() -> void:
 		return
 
 	_set_busy(true)
+	
+	_status_label.text = tr("Checking name...")
+	var check: Dictionary = await GameProfile.check_display_name(display_name)
+	if not check.available:
+		_status_label.text = GameProfile.display_name_problem(check.reason)
+		_set_busy(false)
+		return
+
 	_status_label.text = tr("Creating account...")
 	var res: Dictionary = await FirebaseAuth.register_with_email(email, _register_password_field.text)
 	if res.ok:

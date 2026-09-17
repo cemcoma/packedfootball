@@ -8,12 +8,15 @@ rules_version = '2';
 // only ever writes directly for a small, explicitly enumerated set of
 // low-stakes fields (confirmed by grepping every Firestore.set_document/
 // add_document/delete_document call site in mobile/scripts/): a manager's
-// own display_name, their live roster_player_ids/formation, their kit
-// (cosmetic shirt colors), and their own inventory pointers. Everything
+// live roster_player_ids/formation, their kit (cosmetic shirt colors), and
+// their own inventory pointers. display_name is NOT on that list any more:
+// names are unique, and the reservation that makes them so is written by
+// POST /account/display_name in the same transaction as the name -- a
+// direct write would skip it. Everything
 // else is deny-by-default, both at the collection level (no match block at
-// all for packs/deals/iap_transactions -- an unmatched path is denied
-// automatically) and at the field level (users/{uid}'s update rule
-// allow-lists exactly those 4 fields, rather than block-listing the ones
+// all for packs/deals/iap_transactions/display_names -- an unmatched path
+// is denied automatically) and at the field level (users/{uid}'s update
+// rule allow-lists exactly those 3 fields, rather than block-listing the ones
 // known to be sensitive -- a
 // block-list needs remembering to add every new sensitive field forever,
 // which is exactly how wins/losses/draws stayed client-writable long after
@@ -27,7 +30,7 @@ service cloud.firestore {
       allow create: if false;
       allow update: if request.auth != null && request.auth.uid == uid
                     && request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['display_name', 'roster_player_ids', 'formation', 'kit']);
+                         .hasOnly(['roster_player_ids', 'formation', 'kit']);
       allow delete: if false;
 
       match /inventory/{invId} {

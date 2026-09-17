@@ -173,7 +173,7 @@ func _refresh_detail() -> void:
 
 	_detail_name.text = MatchSession.player_name(_selected_index)
 	var side := tr("You") if _selected_index < MatchSession.PLAYERS_PER_TEAM else _away_header.text
-	_detail_sub.text = "%s  -  %s  -  %s" % [position, tr(tier.capitalize()), side]
+	_detail_sub.text = "%s  -  %s  -  %s" % [position, PlayerCard.tier_label(tier), side]
 
 	if _show_career:
 		_build_career_rows(fields, position)

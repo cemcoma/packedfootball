@@ -1,11 +1,24 @@
 extends Control
 
-## Account settings: rename, language, color theme, plus log out. Squad/account details (overall, wins/draws/losses) that used to
+## Account settings: rename, language, color theme, log out, and deleting
+## the account. Squad/account details (overall, wins/draws/losses) that used to
 ## live on this screen (back when it was "Profile") moved to Menu's own
 ## AccountPanel instead -- glanceable from the hub every visit rather than
 ## needing a whole screen just to see them, leaving this screen for actual
-## settings. Rename behavior is unchanged from that screen (only writes if
-## the trimmed name is non-empty and actually changed).
+## settings.
+##
+## Renaming goes through the backend (names are unique -- see
+## backend/services/account.py), so the request can come back refused:
+## taken, too short, bad characters. The status line under the field is
+## where that lands.
+##
+## Delete Account is what App Store guideline 5.1.1(v) requires of any app
+## with sign-up: the user has to be able to remove the account from inside
+## the app. It is deliberately hard to hit by accident -- a flat button
+## well below the others, a confirmation panel that spells out what goes,
+## and the word DELETE typed before the button enables. The deletion
+## itself is one backend call; only once it has succeeded is the session
+## dropped, so a failed attempt leaves a signed-in account to retry from.
 ##
 ## GameProfile.gd (unlike game_state.py's own profile shape) has no elo
 ## field at all -- by design decision, elo was removed from the active
@@ -25,20 +38,42 @@ extends Control
 ## add_item() order in _ready().
 const THEME_MODES := ["dark", "light"]
 
+## What has to be typed into the confirmation field, compared
+## case-insensitively. Not translated: it's a deliberate speed bump, and a
+## fixed word is the same speed bump in every language.
+const DELETE_CONFIRM_WORD := "DELETE"
+
 @onready var _name_field: LineEdit = %NameField
 @onready var _save_name_button: Button = %SaveNameButton
+@onready var _status_label: Label = %StatusLabel
 @onready var _language_option: OptionButton = %LanguageOption
 @onready var _theme_option: OptionButton = %ThemeOption
 @onready var _back_button: Button = %BackButton
 @onready var _logout_button: Button = %LogoutButton
+@onready var _delete_account_button: Button = %DeleteAccountButton
+@onready var _delete_overlay: Control = %DeleteConfirmOverlay
+@onready var _delete_footnote: Label = %DeleteConfirmFootnote
+@onready var _delete_field: LineEdit = %DeleteConfirmField
+@onready var _delete_cancel_button: Button = %DeleteCancelButton
+@onready var _delete_confirm_button: Button = %DeleteConfirmButton
+
+var _busy: bool = false
 
 
 func _ready() -> void:
 	_save_name_button.pressed.connect(_on_save_name_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 	_logout_button.pressed.connect(_on_logout_pressed)
+	_delete_account_button.pressed.connect(_on_delete_account_pressed)
+	_delete_cancel_button.pressed.connect(_on_delete_cancel_pressed)
+	_delete_confirm_button.pressed.connect(_on_delete_confirm_pressed)
+	_delete_field.text_changed.connect(_on_delete_field_changed)
+
+	ThemeManager.theme_changed.connect(_apply_theme_colors)
+	_apply_theme_colors()
 
 	_name_field.text = GameProfile.display_name
+	_delete_overlay.visible = false
 
 	# Index order follows LocaleManager.codes().
 	for code in LocaleManager.codes():
@@ -66,11 +101,47 @@ func _on_theme_selected(index: int) -> void:
 		ThemeManager.set_mode(THEME_MODES[index])
 
 
+## The delete button is the one thing on this screen that should NOT look
+## like the others -- red, quiet, and clearly a different kind of action.
+func _apply_theme_colors() -> void:
+	_delete_account_button.add_theme_color_override("font_color", ThemeManager.color("warning"))
+	_delete_footnote.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+
+
+func _set_status(text: String, positive: bool = false) -> void:
+	_status_label.text = text
+	_status_label.add_theme_color_override(
+		"font_color",
+		ThemeManager.color("positive") if positive else ThemeManager.color("warning")
+	)
+
+
 func _on_save_name_pressed() -> void:
 	var new_name := _name_field.text.strip_edges()
-	if new_name == "" or new_name == GameProfile.display_name:
+	if new_name == "" or new_name == GameProfile.display_name or _busy:
 		return
-	await GameProfile.set_display_name(new_name)
+	_busy = true
+	_save_name_button.disabled = true
+	_set_status(tr("Saving..."))
+	var res: Dictionary = await GameProfile.set_display_name(new_name)
+	_busy = false
+	_save_name_button.disabled = false
+	if res.ok:
+		_name_field.text = GameProfile.display_name  # as stored: spacing collapsed
+		_set_status(tr("Saved."), true)
+		return
+	match int(res.status):
+		409:
+			_set_status(GameProfile.display_name_problem("taken"))
+		400:
+			# FastAPI's detail is "Display name refused: <reason>" -- the
+			# reason code after the colon is what maps to wording.
+			var detail := str(res.data.get("detail", ""))
+			var reason := detail.get_slice(": ", 1) if detail.contains(": ") else "characters"
+			var problem := GameProfile.display_name_problem(reason)
+			_set_status(problem if problem != "" else GameProfile.display_name_problem("characters"))
+		_:
+			_set_status(tr("Could not save the name -- try again."))
 
 
 func _on_back_pressed() -> void:
@@ -82,6 +153,54 @@ func _on_logout_pressed() -> void:
 	# resume first, so without this a device with a saved session can never
 	# reach Auth again to register or switch accounts (see main.py's own
 	# Log Out button for the same reasoning).
+	FirebaseAuth.sign_out()
+	GameProfile.reset()
+	get_tree().change_scene_to_file("res://scenes/Auth.tscn")
+
+
+# -- delete account -------------------------------------------------------------
+
+
+func _on_delete_account_pressed() -> void:
+	_delete_field.text = ""
+	_delete_confirm_button.disabled = true
+	_delete_overlay.visible = true
+	_delete_field.grab_focus()
+
+
+func _on_delete_cancel_pressed() -> void:
+	if _busy:
+		return
+	_delete_overlay.visible = false
+
+
+func _on_delete_field_changed(text: String) -> void:
+	_delete_confirm_button.disabled = _busy or text.strip_edges().to_upper() != DELETE_CONFIRM_WORD
+
+
+func _on_delete_confirm_pressed() -> void:
+	if _busy or _delete_field.text.strip_edges().to_upper() != DELETE_CONFIRM_WORD:
+		return
+	_busy = true
+	_delete_confirm_button.disabled = true
+	_delete_cancel_button.disabled = true
+	_delete_confirm_button.text = tr("Deleting...")
+
+	var ok: bool = await GameProfile.delete_account()
+
+	if not ok:
+		# The account is still there (the server only removes the Auth user
+		# as its very last step), so the session is still good to retry.
+		_busy = false
+		_delete_cancel_button.disabled = false
+		_delete_confirm_button.text = tr("Delete Forever")
+		_delete_confirm_button.disabled = false
+		_set_status(tr("Could not delete the account -- try again."))
+		return
+
+	# Gone server-side; drop the session the same way Log Out does. The
+	# saved refresh token would otherwise let the next launch try to
+	# resume an account that no longer exists.
 	FirebaseAuth.sign_out()
 	GameProfile.reset()
 	get_tree().change_scene_to_file("res://scenes/Auth.tscn")

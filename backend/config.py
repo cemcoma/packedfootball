@@ -53,13 +53,20 @@ STARTER_TIER = "bronze"
 # fallback, never an authority.
 INVENTORY_CAP = 100
 
+# -- display names ------------------------------------------------------------
+
+# A manager name is 3-16 characters of letters
+DISPLAY_NAME_MIN_LENGTH = 3
+DISPLAY_NAME_MAX_LENGTH = 16
+
 # -- what things cost, what they pay ------------------------------------------
 
-# What releasing a card pays, by tier -- the keys are packEngine.TIER_RANGES'.
-# mobile/scripts/data/PlayerCard.gd carries the same table so the Release
-# button can show the amount BEFORE the request; this end is the one that
-# actually pays out, so the two have to be kept in step by hand (same
-# arrangement as APPEARANCE_OPTION_COUNTS and PlayerAppearance.gd).
+# What releasing a card pays, by tier FAMILY -- packEngine.TIER_RANGES'
+# keys after tier_family(), so the three special_* variants share the one
+# "special" row. mobile/scripts/data/PlayerCard.gd carries the same table so
+# the Release button can show the amount BEFORE the request; this end is
+# the one that actually pays out, so the two have to be kept in step by
+# hand (same arrangement as APPEARANCE_OPTION_COUNTS and PlayerAppearance.gd).
 RELEASE_CREDITS_BY_TIER = {
     "bronze": 10,
     "silver": 20,

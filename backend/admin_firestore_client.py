@@ -9,9 +9,11 @@ Here it's this class instead, backed by the Admin SDK (a service account),
 so GameState's exact same persistence logic can run as the authoritative
 side behind the backend without being duplicated.
 
-Two things here are NOT part of that five-method protocol and exist only for
-the backend: `query_top` (leaderboards) and `run_transaction` (anything that
-moves a balance). GameState never calls either.
+Four things here are NOT part of that five-method protocol and exist only
+for the backend: `query_top` (leaderboards), `query_ids` (everything a user
+owns, for account deletion), `delete_paths` (bulk deletion) and
+`run_transaction` (anything that moves a balance). GameState never calls
+any of them.
 """
 
 from __future__ import annotations
@@ -168,6 +170,34 @@ class AdminFirestoreClient:
                 return body(TransactionScope(self, transaction))
 
             return _txn(self._db.transaction())
+
+        return await asyncio.to_thread(_run)
+
+    async def query_ids(self, collection: str, field: str, value) -> list[str]:
+        """Ids of every doc in `collection` whose `field` equals `value`.
+
+        A single-field equality filter, which Firestore auto-indexes, so
+        like query_top this needs no composite index. Ids only: the callers
+        (account deletion) address the docs by path afterwards and never
+        need their contents.
+        """
+        query = self._db.collection(collection).where(filter=google_firestore.FieldFilter(field, "==", value))
+        docs = await asyncio.to_thread(lambda: list(query.select(["__name__"]).stream()))
+        return [d.id for d in docs]
+
+    async def delete_paths(self, paths: list[str]) -> int:
+        """Deletes every path, in write batches of at most 500 (Firestore's
+        ceiling). Not atomic across batches, and doesn't need to be: the
+        one caller (account deletion) is idempotent and re-runnable, so a
+        batch that fails halfway leaves less to do next time, not a mess.
+        Returns how many deletes were issued."""
+        def _run() -> int:
+            for start in range(0, len(paths), 500):
+                batch = self._db.batch()
+                for path in paths[start : start + 500]:
+                    batch.delete(self._ref(path))
+                batch.commit()
+            return len(paths)
 
         return await asyncio.to_thread(_run)
 
