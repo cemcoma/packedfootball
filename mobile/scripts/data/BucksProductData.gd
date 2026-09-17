@@ -4,10 +4,11 @@ extends RefCounted
 ## Client-side mirror of one entry from GET /currency/bucks/list -- a
 ## real-money product: pay (roughly) usd_reference_price_cents, get
 ## bucks_amount bucks. usd_reference_price_cents is a display fallback
-## only -- once IapClient's platform plugin is actually wired, prefer its
-## own localized price string per product_id over this field (see
-## CurrencyPanel.gd's Bucks tab), since Apple/Google own actual regional
-## pricing, not this server.
+## only -- CurrencyPanel.gd's Bucks tab shows IapClient.localized_price()
+## (the store's own string, in the storefront's currency) whenever the
+## store has answered, and this field only until then or on a build with
+## no store plugin, since Apple/Google own actual regional pricing, not
+## this server.
 
 static func _str(fields: Dictionary, key: String, default: String = "") -> String:
 	var value = fields.get(key)

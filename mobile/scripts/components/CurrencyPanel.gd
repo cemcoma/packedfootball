@@ -70,6 +70,7 @@ func _ready() -> void:
 	_ads_tab_button.pressed.connect(_on_ads_tab_pressed)
 	IapClient.purchase_completed.connect(_on_iap_purchase_completed)
 	IapClient.purchase_failed.connect(_on_iap_purchase_failed)
+	IapClient.prices_updated.connect(_on_iap_prices_updated)
 
 	await _load_exchange()
 	if Engine.has_singleton("AdManager") or has_node("/root/AdManager"):
@@ -187,9 +188,15 @@ func _load_bucks() -> void:
 	_status_label.text = ""
 
 	_bucks_products = []
+	var product_ids: Array = []
 	for fields in res.data.get("products", []):
-		_bucks_products.append(BucksProductData.from_fields(fields))
+		var product := BucksProductData.from_fields(fields)
+		_bucks_products.append(product)
+		product_ids.append(product.product_id)
 	_populate_bucks_grid()
+	# Tiles go up with the USD reference price first; the store's own
+	# localized prices land on prices_updated and repaint them.
+	IapClient.fetch_localized_prices(product_ids)
 
 
 ## Unlike Exchange/Deals, a bucks tile never carries a per-tile affordability
@@ -198,6 +205,10 @@ func _load_bucks() -> void:
 ## at all, which is false on every platform until a real plugin exists (see
 ## IapClient.gd), so tiles show real content but stay disabled/relabeled
 ## rather than pretending a purchase would work.
+##
+## The price on each tile is the store's own localized string whenever
+## IapClient has one ("₺49,99" on the Turkish App Store, say), and the
+## backend's USD reference only until then / on a build with no store.
 func _populate_bucks_grid() -> void:
 	for child in _bucks_grid.get_children():
 		_bucks_grid.remove_child(child)
@@ -215,10 +226,19 @@ func _populate_bucks_grid() -> void:
 		var tile: CurrencyTileView = CURRENCY_TILE_SCENE.instantiate()
 		_bucks_grid.add_child(tile)
 		tile.set_reward("bucks", typed_product.bucks_amount)
-		tile.set_cost_text(typed_product.reference_price_text())
+		var store_price := IapClient.localized_price(typed_product.product_id)
+		tile.set_cost_text(store_price if store_price != "" else typed_product.reference_price_text())
 		tile.set_action_text("Buy" if available else "Coming Soon")
 		tile.set_affordable(available)
 		tile.action_pressed.connect(_on_bucks_tile_pressed.bind(typed_product))
+
+
+## Repaints with the store's prices once they arrive -- only if the tab has
+## been built, since the grid is populated from _load_bucks and a repaint
+## before that would just draw an empty catalog.
+func _on_iap_prices_updated() -> void:
+	if _bucks_loaded:
+		_populate_bucks_grid()
 
 
 func _on_bucks_tile_pressed(product: BucksProductData) -> void:
