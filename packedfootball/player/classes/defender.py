@@ -1,6 +1,15 @@
-from player.player import player, ActionProfile
+from player.player import _norm2, player, ActionProfile
 from gameEngine import PITCH_HEIGHT,PITCH_WIDTH
 import numpy as np
+
+# Where a full-back stands in to cover the middle when no centre-back is
+# home (state["cb_home"] is False): this far off their own goal line, this
+# far either side of the centre, on the side their flank is. Deep enough
+# to be between a lone striker and the goal, not so deep the whole side
+# collapses onto the six-yard box.
+COVER_DEPTH = 22.0
+COVER_HALF_GAP = 7.0
+COVER_ROLES = ("LB", "RB", "WB")
 
 class CenterBackActionProfile(ActionProfile):
     role_name = "center_back"
@@ -23,13 +32,14 @@ class FullbackActionProfile(ActionProfile):
         "stop", "pass", "clear", "dribble", "forward_run", "cross",
         "support", "hold_attack", "hold_defense", "press",
         "contain", "recover", "recover_slow", "tackle", "capture",
-        "man_mark"
+        "man_mark", "cover"
     }
     action_biases = {
         "pass": 2.0, "clear": 0.2, "dribble": 0.8, "cross": 1.6,
         "forward_run": 1.2, "support": 1.0, "hold_attack": 1.0,
         "hold_defense": 1.2, "press": 1.2, "contain": 1.2,
-        "recover": 1.4, "tackle": 1.2, "capture": 1.0, "man_mark": 1.0
+        "recover": 1.4, "tackle": 1.2, "capture": 1.0, "man_mark": 1.0,
+        "cover": 1.0,
     }
 
 
@@ -39,14 +49,14 @@ class WingbackActionProfile(ActionProfile):
         "stop", "pass", "clear", "dribble", "forward_run", "cross",
         "support", "hold_attack", "hold_defense", "press",
         "contain", "recover", "recover_slow", "tackle", "capture",
-        "man_mark", "overlap"
+        "man_mark", "overlap", "cover"
     }
     action_biases = {
         "pass": 1.8, "clear": 0.15, "dribble": 1.0, "cross": 2.0,
         "forward_run": 1.8, "support": 1.3, "hold_attack": 1.4,
         "hold_defense": 0.9, "press": 1.1, "contain": 1.0,
         "recover": 1.2, "tackle": 1.0, "capture": 0.9, "man_mark": 0.8,
-        "overlap": 1.6,
+        "overlap": 1.6, "cover": 1.0,
     }
 
 
@@ -60,7 +70,7 @@ class Defender(player):
             
         elif decision == "pass":
             best_target = self._choose_pass_target(state)
-            dist = np.linalg.norm(best_target - state["my_pos"])
+            dist = _norm2(best_target - state["my_pos"])
             required_power = min(1.0, dist / 10.0) 
             actual_power = required_power * (self.attributes.power / 60.0)
             return {"type": "pass", "target": best_target, "power": actual_power}
@@ -73,7 +83,7 @@ class Defender(player):
 
         elif decision == "cross":
             cross_target = self._choose_cross_target(state)
-            dist = np.linalg.norm(cross_target - state["my_pos"])
+            dist = _norm2(cross_target - state["my_pos"])
             required_power = min(1.0, dist / 12.0) 
             actual_power = required_power * (self.attributes.power / 60.0)
             return {"type": "pass", "target": cross_target, "power": actual_power, "pass_type": "cross"}
@@ -111,6 +121,9 @@ class Defender(player):
             tactical_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + forward_shift])
             return {"type": "move", "target": tactical_pos, "speed_mod": (self.attributes.speed * 0.5) / 100.0}
             
+        elif decision == "cover" or (decision in {"hold_defense", "hold_attack", "recover", "recover_slow"} and self._should_cover(state)):
+            return {"type": "move", "target": self._cover_target(state), "speed_mod": (self.attributes.speed * 0.8) / 100.0}
+
         elif decision == "hold_defense":
             backward_shift = -10.0 if state.get("a_direction", 1) == 1 else 10.0
             defensive_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + backward_shift])
@@ -126,7 +139,7 @@ class Defender(player):
             own_goal = np.array([35.0, 0.0 if state.get("a_direction", 1) == 1 else 100.0])
             
             vec_to_goal = own_goal - target_opp
-            mark_pos = target_opp + (vec_to_goal / (np.linalg.norm(vec_to_goal) + 1e-5)) * 1.5
+            mark_pos = target_opp + (vec_to_goal / (_norm2(vec_to_goal) + 1e-5)) * 1.5
             return {"type": "move", "target": mark_pos, "speed_mod": (self.attributes.speed * 0.8) / 100.0}
 
         elif decision == "press":
@@ -166,8 +179,8 @@ class Defender(player):
         elif decision == "chase":
             ball_pos = state["ball_pos"]
             ball_vel = state.get("ball_velocity", np.zeros(2, dtype=float))
-            ball_speed = np.linalg.norm(ball_vel)
-            dist_to_ball = np.linalg.norm(ball_pos - state["my_pos"])
+            ball_speed = _norm2(ball_vel)
+            dist_to_ball = _norm2(ball_pos - state["my_pos"])
             
             if ball_speed < 2.0:
                 target = ball_pos
@@ -244,7 +257,7 @@ class Defender(player):
         elif pressure > 0: t_pass *= 1.3
 
         own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
-        dist_to_own_goal = np.linalg.norm(np.array([35.0, own_goal_y]) - state["my_pos"])
+        dist_to_own_goal = _norm2(np.array([35.0, own_goal_y]) - state["my_pos"])
 
         if dist_to_own_goal < 25.0:
             t_clear *= 2.5
@@ -265,10 +278,16 @@ class Defender(player):
         probs = [t_pass/total, t_dribble/total, t_stop/total, t_clear/total]
         return state["rng"].choice(actions, p=probs)
 
+    def _should_cover(self, state: dict) -> bool:
+        """A full-back with no centre-back home holds the middle instead of
+        its flank -- own corners, or both CBs caught upfield. Checked after
+        the loose-ball chase so a ball only they can reach is still theirs."""
+        return state.get("my_role") in COVER_ROLES and not state.get("cb_home", True)
+
     def _decide_off_ball_attack(self, state: dict) -> str:
         if state.get("is_loose", False):
             landing_target = self._predict_ball_landing_target(state)
-            my_dist = np.linalg.norm(landing_target - state["my_pos"])
+            my_dist = _norm2(landing_target - state["my_pos"])
             
             teammates = np.asarray(state.get("teammates", []))
             closer_teammates = 0
@@ -277,6 +296,9 @@ class Defender(player):
                 
             if closer_teammates == 0:
                 return "chase"
+
+        if self._should_cover(state):
+            return "cover"
         
         actions = ["forward_run", "support", "hold_attack", "overlap"]
         t_forward = (self.attributes.shoot_tendency + (self.attributes.speed * 0.5)) * self.get_action_bias("forward_run")
@@ -284,7 +306,7 @@ class Defender(player):
         t_hold = (self.attributes.defending + 30.0) * self.get_action_bias("hold_attack")
         t_overlap = (self.attributes.speed + 20.0) * self.get_action_bias("overlap", 0.0)
 
-        dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
+        dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
         if dist_to_ball > 12.0:
             t_support *= 0.4
             t_hold *= 2.5
@@ -302,7 +324,7 @@ class Defender(player):
     def _decide_off_ball_defense(self, state: dict) -> str:
         if state.get("is_loose", False):
             landing_target = self._predict_ball_landing_target(state)
-            my_dist = np.linalg.norm(landing_target - state["my_pos"])
+            my_dist = _norm2(landing_target - state["my_pos"])
             
             teammates = np.asarray(state.get("teammates", []))
             closer_teammates = 0
@@ -312,8 +334,13 @@ class Defender(player):
             if closer_teammates == 0:
                 return "chase"
             
-        dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
+        dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
         ball_pressure_count = int(np.sum(np.linalg.norm(state.get("opponents", []) - state["ball_pos"], axis=1) < 3.0))
+
+        # Close enough to matter, the ball wins; otherwise an uncovered
+        # middle does.
+        if dist_to_ball >= 15.0 and self._should_cover(state):
+            return "cover"
 
         if dist_to_ball < 2.0:
             actions = ["tackle", "contain"]
@@ -332,8 +359,16 @@ class Defender(player):
         probs = [t_hold / (t_hold + t_mark), t_mark / (t_hold + t_mark)]
         return state["rng"].choice(actions, p=probs)
 
+    def _cover_target(self, state: dict) -> np.ndarray:
+        """The spot a covering full-back holds: COVER_DEPTH off its own goal
+        line, COVER_HALF_GAP to the side of centre its flank is on."""
+        own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else PITCH_HEIGHT
+        toward_pitch = 1.0 if own_goal_y == 0.0 else -1.0
+        side = -1.0 if state["formation_pos"][0] < PITCH_WIDTH / 2.0 else 1.0
+        return np.array([PITCH_WIDTH / 2.0 + side * COVER_HALF_GAP, own_goal_y + toward_pitch * COVER_DEPTH])
+
     def _decide_loose_ball(self, state: dict) -> str:
-            dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
+            dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
             
             # Calculate distances of all teammates to the ball
             teammates = np.asarray(state.get("teammates", []))

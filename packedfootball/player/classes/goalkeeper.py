@@ -1,5 +1,5 @@
 from gameEngine import PITCH_WIDTH, GOAL_WIDTH, PITCH_HEIGHT, possession_radius
-from player.player import player, ActionProfile
+from player.player import _norm2, player, ActionProfile
 import numpy as np
 
 
@@ -69,7 +69,7 @@ class Goalkeeper(player):
 
         elif decision == "pass":
             best_target = self._choose_pass_target(state)
-            dist = np.linalg.norm(best_target - state["my_pos"])
+            dist = _norm2(best_target - state["my_pos"])
             required_power = min(1.0, dist / 8.0)
             actual_power = required_power * (self.attributes.power / 50.0)
             return {"type": "pass", "target": best_target, "power": actual_power}
@@ -85,7 +85,7 @@ class Goalkeeper(player):
             # engine's _attempt_save handles the dive movement and the single
             # save roll (which already penalises how far there is to go), so
             # a dive genuinely stops shots rather than only repositioning.
-            dist_to_ball = float(np.linalg.norm(state["ball_pos"] - state["my_pos"]))
+            dist_to_ball = float(_norm2(state["ball_pos"] - state["my_pos"]))
             if dist_to_ball <= DIVE_COMMIT_DISTANCE:
                 return {"type": "save", "stat": self.attributes.agility}
 
@@ -183,9 +183,9 @@ class Goalkeeper(player):
         """
         my_pos = state["my_pos"]
         ball_pos = state["ball_pos"]
-        dist_to_ball = float(np.linalg.norm(ball_pos - my_pos))
+        dist_to_ball = float(_norm2(ball_pos - my_pos))
         ball_vel = state.get("ball_velocity", np.zeros(2, dtype=float))
-        ball_speed = float(np.linalg.norm(ball_vel))
+        ball_speed = float(_norm2(ball_vel))
         own_goal_y = self._own_goal_y(state)
 
         moving_to_goal = (own_goal_y == 0.0 and ball_vel[1] < -1.0) or (own_goal_y == PITCH_HEIGHT and ball_vel[1] > 1.0)
@@ -215,7 +215,7 @@ class Goalkeeper(player):
         if state.get("is_loose", False) and not dangerous and dist_to_ball <= SWEEP_MAX_DISTANCE:
             landing = self._predict_ball_landing_target(state)
             if self._in_own_box(state, landing):
-                my_dist = float(np.linalg.norm(landing - my_pos))
+                my_dist = float(_norm2(landing - my_pos))
                 teammates = np.asarray(state.get("teammates", []))
                 closer = 0
                 if teammates.size > 0:

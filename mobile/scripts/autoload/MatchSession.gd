@@ -44,6 +44,13 @@ var player_match_stats: Array = []
 
 var return_scene: String = DEFAULT_RETURN_SCENE
 var tournament: Dictionary = {}
+## True for a match simulated on this machine by Play.tscn's TESTING panel
+## (packedfootball/scripts/local_match.py) rather than by the backend.
+## Nothing about it was persisted anywhere, so the post-match screens skip
+## the GameProfile reload they normally do on the way out -- there's
+## nothing new to fetch, and the whole point of a local match is that it
+## never touches the network.
+var is_local: bool = false
 
 
 func has_pending() -> bool:
@@ -99,8 +106,11 @@ func set_from_match_response(data: Dictionary) -> void:
 	var formations: Array = formations_raw if formations_raw is Array else []
 
 	var players_raw = data.get("roster")
+	# A local test match (see is_local) can run signed out, with a generated
+	# home side named by the script; a real match always has a display name.
+	var home_name_raw = data.get("home_display_name")
 	_roster = {
-		"home_name": GameProfile.display_name,
+		"home_name": GameProfile.display_name if GameProfile.display_name != "" else (home_name_raw if home_name_raw is String else "You"),
 		"away_name": opponent_display_name,
 		"home_kit": kits[0] if kits.size() > 0 and kits[0] is String else "",
 		"away_kit": kits[1] if kits.size() > 1 and kits[1] is String else "",
@@ -263,6 +273,7 @@ func clear() -> void:
 	credits_earned = 0
 	player_match_stats = []
 	tournament = {}
+	is_local = false
 	# Back to the default, or a tournament return would leak into the next
 	# Quick Match and send it somewhere it never came from.
 	return_scene = DEFAULT_RETURN_SCENE

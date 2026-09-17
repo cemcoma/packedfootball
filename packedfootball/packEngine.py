@@ -46,15 +46,16 @@ PLAYER_CLASS_MAP = {
     "ST": Forward,
 }
 
+### SUPER IMPORTANT ###
 TIER_RANGES = {
     "bronze": (45, 54),
-    "silver": (55, 60),
-    "gold": (62, 70),
-    "platinum": (72, 77),
-    "diamond": (78, 83),
-    "special_conf": (85, 88),
-    "special_uel": (86, 90),
-    "special_ucl": (87, 92),
+    "silver": (55, 64),
+    "gold": (62, 75),
+    "platinum": (72, 80),
+    "diamond": (78, 85),
+    "special_conf": (83, 88),
+    "special_uel": (84, 90),
+    "special_ucl": (85, 93),
     "icon": (95,99)
 }
 
@@ -121,7 +122,7 @@ POSITION_STAT_TIERS = {
     "CB": {
         "defending": "primary", "tackling": "primary",
         "shooting": "nerfed", "dribbiling": "nerfed", "speed": "nerfed",
-        "passing": "tertiary", "ballcontrol": "tertiary", "agility": "tertiary", "accuracy": "tertiary", "vision": "tertiary",
+        "passing": "tertiary", "ballcontrol": "tertiary", "agility": "tertiary", "accuracy": "secondary", "vision": "tertiary",
         "power": "secondary", "composure": "secondary",
         "stamina": "tertiary",
         "clear_tendency": "primary", "aggression": "secondary",
@@ -129,7 +130,7 @@ POSITION_STAT_TIERS = {
     },
     "LB": {
         "defending": "primary", "tackling": "primary",
-        "shooting": "nerfed", "accuracy": "nerfed",
+        "shooting": "nerfed", "accuracy": "secondary",
         "passing": "secondary", "speed": "secondary",
         "dribbiling": "tertiary", "ballcontrol": "tertiary", "agility": "tertiary", "power": "tertiary",
         "vision": "tertiary", "composure": "tertiary",
@@ -139,7 +140,7 @@ POSITION_STAT_TIERS = {
     },
     "WB": {
         "speed": "primary", "passing": "primary",
-        "shooting": "nerfed", "accuracy": "nerfed",
+        "shooting": "nerfed", "accuracy": "secondary",
         "defending": "secondary", "tackling": "secondary", "dribbiling": "secondary",
         "ballcontrol": "secondary", "agility": "secondary", "vision": "secondary",
         "power": "tertiary", "composure": "tertiary",
@@ -151,7 +152,7 @@ POSITION_STAT_TIERS = {
         "defending": "primary", "tackling": "primary", "passing": "primary",
         "shooting": "nerfed", "drible_tendency": "nerfed",
         "ballcontrol": "secondary", "power": "secondary", "vision": "secondary", "composure": "secondary",
-        "dribbiling": "tertiary", "speed": "tertiary", "agility": "tertiary", "accuracy": "tertiary",
+        "dribbiling": "tertiary", "speed": "tertiary", "agility": "tertiary", "accuracy": "primary",
         "stamina": "primary",
         "pass_tendency": "secondary", "clear_tendency": "secondary", "aggression": "secondary",
         "shoot_tendency": "nerfed",
@@ -159,7 +160,7 @@ POSITION_STAT_TIERS = {
     "CM": {
         "passing": "primary", "ballcontrol": "primary", "vision": "primary",
         "dribbiling": "secondary", "speed": "secondary", "agility": "secondary", "composure": "secondary",
-        "defending": "tertiary", "tackling": "tertiary", "shooting": "tertiary", "power": "tertiary", "accuracy": "tertiary",
+        "defending": "tertiary", "tackling": "tertiary", "shooting": "tertiary", "power": "tertiary", "accuracy": "primary",
         "stamina": "primary",
         "pass_tendency": "primary", "drible_tendency": "secondary",
         "shoot_tendency": "tertiary", "aggression": "tertiary", "clear_tendency": "tertiary",
@@ -167,7 +168,7 @@ POSITION_STAT_TIERS = {
     "CAM": {
         "passing": "primary", "ballcontrol": "primary", "vision": "primary", "shooting": "primary",
         "defending": "nerfed", "tackling": "nerfed",
-        "dribbiling": "secondary", "speed": "secondary", "agility": "secondary", "accuracy": "secondary", "composure": "secondary",
+        "dribbiling": "secondary", "speed": "secondary", "agility": "secondary", "accuracy": "primary", "composure": "secondary",
         "power": "tertiary",
         "stamina": "tertiary",
         "shoot_tendency": "primary", "pass_tendency": "secondary", "drible_tendency": "secondary",
@@ -177,7 +178,7 @@ POSITION_STAT_TIERS = {
         "passing": "primary", "ballcontrol": "primary", "speed": "primary",
         "dribbiling": "secondary", "agility": "secondary", "vision": "secondary",
         "defending": "tertiary", "tackling": "tertiary", "shooting": "tertiary", "power": "tertiary",
-        "accuracy": "tertiary", "composure": "tertiary",
+        "accuracy": "secondary", "composure": "tertiary",
         "stamina": "secondary",
         "pass_tendency": "secondary", "drible_tendency": "secondary",
         "shoot_tendency": "tertiary", "aggression": "tertiary", "clear_tendency": "tertiary",
@@ -191,7 +192,7 @@ POSITION_STAT_TIERS = {
         "drible_tendency": "primary", "shoot_tendency": "secondary", "pass_tendency": "tertiary",
     },
     "ST": {
-        "shooting": "primary", "power": "primary", "accuracy": "primary",
+        "shooting": "primary", "power": "primary", "accuracy": "secondary",
         "defending": "nerfed", "tackling": "nerfed", "pass_tendency": "nerfed", "clear_tendency": "nerfed",
         "dribbiling": "secondary", "ballcontrol": "secondary", "speed": "secondary", "agility": "secondary", "composure": "secondary",
         "passing": "tertiary", "vision": "tertiary",

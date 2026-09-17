@@ -10,6 +10,7 @@
 #                      which is what you want while editing.
 #   make test-slow     only the full-match simulations, stdout shown
 #   make test-gap      icon XI vs bronze XI, prints the scoreline table
+#   make test-tiers    same-tier matchups up the ladder, prints goals per match
 #   make test-one T=tests/test_goalkeeper.py            one file
 #   make test-one T=tests/test_goalkeeper.py::test_name one test
 #   make test-k K=keeper                                by name substring
@@ -48,7 +49,7 @@ PYTEST  := $(PYTHON) -m pytest
 MATCHES ?= 10
 SEED    ?= 1
 
-.PHONY: test test-fast test-slow test-gap test-one test-k sim \
+.PHONY: test test-fast test-slow test-gap test-tiers test-one test-k sim \
         web serve-web deploy-web clean-web
 
 ## Everything. Config (testpaths, sys.path) comes from pytest.ini.
@@ -66,6 +67,10 @@ test-slow:
 ## Icon XI vs bronze XI. The printed table is the point, hence -s.
 test-gap:
 	$(PYTEST) -s tests/test_quality_gap.py
+
+## Bronze v bronze up to icon v icon. The printed table is the point, hence -s.
+test-tiers:
+	$(PYTEST) -s tests/test_tier_scorelines.py
 
 ## One file, or one test: make test-one T=tests/test_goalkeeper.py::test_name
 test-one:

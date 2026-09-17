@@ -201,6 +201,8 @@ func _on_continue_pressed() -> void:
 	# Read the destination BEFORE clear(), which resets it -- otherwise a
 	# tournament match silently lands back on the Menu mid-run.
 	var destination := MatchSession.return_scene
+	var is_local := MatchSession.is_local
 	MatchSession.clear()
-	await GameProfile.load_all()
+	if not is_local:  # a local test match persisted nothing -- see MatchSession.is_local
+		await GameProfile.load_all()
 	get_tree().change_scene_to_file(destination)

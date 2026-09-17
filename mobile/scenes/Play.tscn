@@ -101,6 +101,53 @@ autowrap_mode = 2
 layout_mode = 2
 size_flags_vertical = 3
 
+[node name="TestingPanel" type="VBoxContainer" parent="Margin/RootVBox" unique_id=1950000100]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="TestingTitle" type="Label" parent="Margin/RootVBox/TestingPanel" unique_id=1950000101]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.7, 0.3, 1)
+theme_override_font_sizes/font_size = 14
+text = "TESTING (editor only, runs the engine on this machine -- nothing leaves it)"
+
+[node name="TestingRow" type="HBoxContainer" parent="Margin/RootVBox/TestingPanel" unique_id=1950000102]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="IntervalLabel" type="Label" parent="Margin/RootVBox/TestingPanel/TestingRow" unique_id=1950000103]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Decision every N frames"
+
+[node name="IntervalOption" type="OptionButton" parent="Margin/RootVBox/TestingPanel/TestingRow" unique_id=1950000104]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+
+[node name="OpponentLabel" type="Label" parent="Margin/RootVBox/TestingPanel/TestingRow" unique_id=1950000105]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Opponent bot"
+
+[node name="OpponentOption" type="OptionButton" parent="Margin/RootVBox/TestingPanel/TestingRow" unique_id=1950000106]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(130, 0)
+layout_mode = 2
+
+[node name="RunLocalButton" type="Button" parent="Margin/RootVBox/TestingPanel/TestingRow" unique_id=1950000107]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Run local match"
+
+[node name="TestingStatus" type="Label" parent="Margin/RootVBox/TestingPanel" unique_id=1950000108]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+autowrap_mode = 2
+
 [node name="Spacer6" type="Control" parent="Margin/RootVBox" unique_id=479933101]
 layout_mode = 2
 size_flags_vertical = 3

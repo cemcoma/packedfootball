@@ -23,6 +23,8 @@ the roster from the match-start payload and looks names up by index.
 from __future__ import annotations
 
 import struct
+
+import numpy as np
 from enum import IntEnum
 
 MAGIC = b"PFRP"
@@ -67,19 +69,14 @@ class ReplayRecorder:
         self._events: list[tuple] = []
 
     def snapshot(self, tick: int, positions, velocity, ball, ball_controller: int) -> None:
-        values = [tick]
-        for i in range(22):
-            values.append(_q(positions[i][0]))
-            values.append(_q(positions[i][1]))
-            values.append(_q(velocity[i][0]))
-            values.append(_q(velocity[i][1]))
-        values.append(_q(ball[0]))
-        values.append(_q(ball[1]))
-        values.append(_q(ball[2]))
-        values.append(_q(ball[3]))
-        values.append(_q(ball[4]))  # "height" -- see gameEngine.py's ball array comment
-        values.append(int(ball_controller))
-        self._samples.append(tuple(values))
+        # Same quantisation as _q, done on the whole sample at once: the
+        # per-player layout is x, y, vx, vy, then the ball's x, y, vx, vy,
+        # height (see gameEngine.py's ball array comment). np.rint rounds
+        # half-to-even exactly as Python's round() does.
+        per_player = np.concatenate([np.asarray(positions, dtype=float), np.asarray(velocity, dtype=float)], axis=1)
+        raw = np.concatenate([per_player.ravel(), np.asarray(ball[:5], dtype=float)]) * POSITION_SCALE
+        quantised = np.clip(np.rint(raw), -32767, 32767).astype(int).tolist()
+        self._samples.append((tick, *quantised, int(ball_controller)))
 
     def event(self, tick: int, action_type: ActionType, player_idx: int = -1, team: int = -1) -> None:
         self._events.append((tick, int(action_type), player_idx, team))

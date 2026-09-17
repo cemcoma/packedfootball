@@ -40,7 +40,44 @@ extends Control
 @onready var _energy_bar: EnergyBar = %EnergyBar
 @onready var _matchmaking_popup: Control = %MatchmakingPopup
 
+@onready var _testing_panel: VBoxContainer = %TestingPanel
+@onready var _interval_option: OptionButton = %IntervalOption
+@onready var _opponent_option: OptionButton = %OpponentOption
+@onready var _run_local_button: Button = %RunLocalButton
+@onready var _testing_status: Label = %TestingStatus
+
 var _matchmaking_active: bool = false
+
+# -- TESTING panel (editor only) ---------------------------------------------
+#
+# Runs packedfootball/scripts/local_match.py as a child process and plays
+# the result through the normal MatchSession path. For A/B-ing the engine's
+# decision interval by feel, against the CPU seconds each setting costs --
+# see that script's docstring. Only ever shown under the editor
+# (OS.has_feature("editor")): it needs this repo's Python engine on disk,
+# which no exported build has, and nothing about it belongs on a phone.
+#
+# The engine is Python, so it can't run inside Godot; it runs beside it.
+# Nothing leaves this machine: no backend call, no Firestore write, and
+# MatchSession.is_local keeps the post-match screens from reloading the
+# profile afterwards.
+
+## "adaptive" is what production runs (per-player, by distance to the ball;
+## see gameEngine's ADAPTIVE_* constants); the numbers force a fixed frame
+## interval on everyone, 2 being the old behaviour. Passed straight through
+## as --decision-interval.
+const TEST_INTERVALS := ["adaptive", "2", "3", "4", "6"]
+## Bot tiers, same keys as packEngine.TIER_RANGES.
+const TEST_OPPONENT_TIERS := ["bronze", "silver", "gold", "platinum", "diamond", "special_conf", "special_uel", "special_ucl", "icon"]
+const LOCAL_MATCH_SCRIPT := "res://../packedfootball/scripts/local_match.py"
+const LOCAL_MATCH_DIR := "user://local_match"
+## Tried in order; the editor's PATH on macOS often lacks Homebrew/python.org
+## installs, so bare "python3" is the last resort rather than the first.
+const PYTHON_CANDIDATES := ["/usr/local/bin/python3", "/opt/homebrew/bin/python3", "/usr/bin/python3", "python3"]
+
+var _local_pid: int = -1
+var _local_out_path: String = ""
+var _local_started_msec: int = 0
 
 
 func _ready() -> void:
@@ -51,6 +88,7 @@ func _ready() -> void:
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
 	_apply_theme_colors()
 	_refresh_energy()
+	_setup_testing_panel()
 
 
 func _refresh_energy() -> void:
@@ -153,3 +191,128 @@ func _on_tournament_pressed() -> void:
 
 func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/Menu.tscn")
+
+
+# -- TESTING panel -------------------------------------------------------------
+
+
+func _setup_testing_panel() -> void:
+	if not OS.has_feature("editor"):
+		return
+	_testing_panel.visible = true
+	for interval in TEST_INTERVALS:
+		_interval_option.add_item(interval + (" (live)" if interval == "adaptive" else ""))
+	for tier in TEST_OPPONENT_TIERS:
+		_opponent_option.add_item(tier.capitalize())
+	_opponent_option.select(TEST_OPPONENT_TIERS.find("gold"))
+	_run_local_button.pressed.connect(_on_run_local_pressed)
+	_testing_status.text = (
+		"Home side: your saved XI." if _has_complete_lineup()
+		else "Home side: a generated Gold squad (sign in with a full XI to use yours)."
+	)
+
+
+func _has_complete_lineup() -> bool:
+	if not GameProfile.is_loaded or GameProfile.slot_assignment.size() != 11:
+		return false
+	for player_id in GameProfile.slot_assignment:
+		if player_id == "" or not GameProfile.all_cards.has(player_id):
+			return false
+	return true
+
+
+## Your own squad in the shape local_match.py's --home-roster expects:
+## player_to_fields dicts in formation-slot order. Reassembled from
+## PlayerCard rather than kept as raw fields because nothing else has ever
+## needed the raw doc after from_fields().
+func _write_home_roster() -> String:
+	var players: Array = []
+	for player_id in GameProfile.slot_assignment:
+		var card: PlayerCard = GameProfile.all_cards[player_id]
+		players.append({
+			"fname": card.fname, "lname": card.lname, "tier": card.tier, "position": card.position,
+			"country": card.country, "hometown": card.hometown,
+			"attributes": card.attributes, "statistics": card.statistics, "appearance": card.appearance,
+		})
+	var path := LOCAL_MATCH_DIR + "/home_roster.json"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(JSON.stringify({
+		"display_name": GameProfile.display_name, "formation": GameProfile.formation,
+		"kit": GameProfile.kit, "players": players,
+	}))
+	file.close()
+	return ProjectSettings.globalize_path(path)
+
+
+func _python_path() -> String:
+	for candidate in PYTHON_CANDIDATES:
+		if not candidate.begins_with("/") or FileAccess.file_exists(candidate):
+			return candidate
+	return "python3"
+
+
+func _on_run_local_pressed() -> void:
+	if _local_pid != -1:
+		return
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(LOCAL_MATCH_DIR))
+	_local_out_path = ProjectSettings.globalize_path(LOCAL_MATCH_DIR + "/match.json")
+	if FileAccess.file_exists(_local_out_path):
+		DirAccess.remove_absolute(_local_out_path)
+
+	var interval: String = TEST_INTERVALS[_interval_option.selected]
+	var tier: String = TEST_OPPONENT_TIERS[_opponent_option.selected]
+	var args: PackedStringArray = [
+		ProjectSettings.globalize_path(LOCAL_MATCH_SCRIPT),
+		"--out", _local_out_path,
+		"--decision-interval", interval,
+		"--opponent-tier", tier,
+	]
+	if _has_complete_lineup():
+		args.append_array(PackedStringArray(["--home-roster", _write_home_roster()]))
+
+	# create_process, not execute: a match is ~5-10s of CPU and execute()
+	# would freeze the editor window for all of it. _process polls the pid.
+	_local_pid = OS.create_process(_python_path(), args)
+	if _local_pid == -1:
+		_testing_status.text = "Could not start python3 -- see PYTHON_CANDIDATES in Play.gd."
+		return
+	_local_started_msec = Time.get_ticks_msec()
+	_run_local_button.disabled = true
+	_testing_status.text = "Simulating locally (interval %s vs %s bot)..." % [interval, tier.capitalize()]
+
+
+func _process(_delta: float) -> void:
+	if _local_pid == -1:
+		return
+	if OS.is_process_running(_local_pid):
+		_testing_status.text = "Simulating locally... %.0fs" % ((Time.get_ticks_msec() - _local_started_msec) / 1000.0)
+		return
+	_local_pid = -1
+	_run_local_button.disabled = false
+	_on_local_match_finished()
+
+
+func _on_local_match_finished() -> void:
+	if not FileAccess.file_exists(_local_out_path):
+		_testing_status.text = "The engine wrote nothing -- run local_match.py from a terminal to see why."
+		return
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(_local_out_path))
+	if not (parsed is Dictionary):
+		_testing_status.text = "Unreadable output from local_match.py."
+		return
+	if parsed.has("error"):
+		_testing_status.text = "Engine error: %s" % parsed["error"]
+		push_error(parsed.get("traceback", parsed["error"]))
+		return
+
+	MatchSession.set_from_match_response(parsed)
+	if not MatchSession.has_pending():
+		_testing_status.text = "Simulated, but the replay couldn't be decoded."
+		return
+	MatchSession.is_local = true
+	MatchSession.return_scene = "res://scenes/Play.tscn"
+	# Not localized -- dev-only text, and the numbers are the point.
+	print("[local match] interval=%s  decisions=%s  cpu=%ss  wall=%ss  score=%s" % [
+		parsed.get("decision_interval"), parsed.get("decisions"), parsed.get("sim_seconds"), parsed.get("wall_seconds"), parsed.get("score")
+	])
+	get_tree().change_scene_to_file("res://scenes/Match.tscn")

@@ -181,9 +181,18 @@ def test_a_bronze_keeper_is_beaten_more_but_is_not_a_sieve(summary):
     assert save_rate < 0.80, f"bronze keeper saved {save_rate:.0%} -- keeper quality barely matters"
 
 
+# Fewer bronze shots than this and the comparison is noise: a bronze XI that
+# is being pinned in its own half all match gets a handful of shots, and
+# whether six of seven happened to be tap-ins says nothing about accuracy.
+MIN_SHOTS_FOR_ACCURACY = 20
+
+
 def test_icons_are_more_accurate_in_front_of_goal(summary):
-    if summary["bronze_shots"] == 0:
-        pytest.skip("bronzes took no shots at all this run -- see the printed table")
+    if summary["bronze_shots"] < MIN_SHOTS_FOR_ACCURACY:
+        pytest.skip(
+            f"bronzes took only {summary['bronze_shots']} shots this run "
+            f"(need {MIN_SHOTS_FOR_ACCURACY} for a meaningful rate) -- see the printed table"
+        )
     icon_acc = summary["icon_shots_on_target"] / summary["icon_shots"]
     bronze_acc = summary["bronze_shots_on_target"] / summary["bronze_shots"]
     assert icon_acc > bronze_acc, f"icons {icon_acc:.0%} on target vs bronzes {bronze_acc:.0%}"

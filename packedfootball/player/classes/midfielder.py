@@ -1,4 +1,4 @@
-from player.player import player, ActionProfile
+from player.player import _norm2, player, ActionProfile
 from gameEngine import PITCH_HEIGHT,PITCH_WIDTH
 import numpy as np
 
@@ -96,7 +96,7 @@ class Midfielder(player):
 
         elif decision == "pass":
             best_target = self._choose_pass_target(state)
-            dist = np.linalg.norm(best_target - state["my_pos"])
+            dist = _norm2(best_target - state["my_pos"])
             required_power = min(1.0, dist / 10.0)
             actual_power = required_power * (self.attributes.power / 60.0)
             return {"type": "pass", "target": best_target, "power": actual_power}
@@ -105,7 +105,7 @@ class Midfielder(player):
             through_target = self._choose_through_ball_target(state)
             if through_target is None:
                 through_target = self._choose_pass_target(state)
-            dist = np.linalg.norm(through_target - state["my_pos"])
+            dist = _norm2(through_target - state["my_pos"])
             required_power = min(1.0, dist / 9.0)
             actual_power = required_power * (self.attributes.power / 55.0)
             return {"type": "pass", "target": through_target, "power": actual_power, "pass_type": "through_ball"}
@@ -118,7 +118,7 @@ class Midfielder(player):
 
         elif decision == "cross":
             cross_target = self._choose_cross_target(state)
-            dist = np.linalg.norm(cross_target - state["my_pos"])
+            dist = _norm2(cross_target - state["my_pos"])
             required_power = min(1.0, dist / 12.0) 
             actual_power = required_power * (self.attributes.power / 60.0)
             return {"type": "pass", "target": cross_target, "power": actual_power, "pass_type": "cross"}
@@ -160,7 +160,7 @@ class Midfielder(player):
             own_goal = np.array([35.0, own_goal_y])
             ball_pos = np.asarray(state["ball_pos"], dtype=float)
             vec_to_goal = own_goal - ball_pos
-            dist = np.linalg.norm(vec_to_goal)
+            dist = _norm2(vec_to_goal)
             shield_distance = min(14.0, dist * 0.4)
             screen_target = ball_pos + (vec_to_goal / (dist + 1e-5)) * shield_distance
             return {"type": "move", "target": screen_target, "speed_mod": (self.attributes.speed * 0.7) / 100.0}
@@ -203,8 +203,8 @@ class Midfielder(player):
         elif decision == "chase":
             ball_pos = state["ball_pos"]
             ball_vel = state.get("ball_velocity", np.zeros(2, dtype=float))
-            ball_speed = np.linalg.norm(ball_vel)
-            dist_to_ball = np.linalg.norm(ball_pos - state["my_pos"])
+            ball_speed = _norm2(ball_vel)
+            dist_to_ball = _norm2(ball_pos - state["my_pos"])
             
             if ball_speed < 2.0:
                 target = ball_pos
@@ -307,7 +307,7 @@ class Midfielder(player):
             t_pass *= 1.3
 
         own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
-        dist_to_own_goal = np.linalg.norm(np.array([35.0, own_goal_y]) - state["my_pos"])
+        dist_to_own_goal = _norm2(np.array([35.0, own_goal_y]) - state["my_pos"])
 
         if dist_to_own_goal < 25.0:
             t_clear *= 2.5
@@ -339,7 +339,7 @@ class Midfielder(player):
     def _decide_off_ball_attack(self, state: dict) -> str:
         if state.get("is_loose", False):
             landing_target = self._predict_ball_landing_target(state)
-            my_dist = np.linalg.norm(landing_target - state["my_pos"])
+            my_dist = _norm2(landing_target - state["my_pos"])
             
             teammates = np.asarray(state.get("teammates", []))
             closer_teammates = 0
@@ -354,7 +354,7 @@ class Midfielder(player):
         t_support = self.attributes.pass_tendency + 20.0
         t_hold = self.attributes.defending + 30.0
 
-        dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
+        dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
         ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
         own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
         dist_to_own_goal = abs(state["formation_pos"][1] - own_goal_y)
@@ -387,7 +387,7 @@ class Midfielder(player):
     def _decide_off_ball_defense(self, state: dict) -> str:
         if state.get("is_loose", False):
             landing_target = self._predict_ball_landing_target(state)
-            my_dist = np.linalg.norm(landing_target - state["my_pos"])
+            my_dist = _norm2(landing_target - state["my_pos"])
             
             teammates = np.asarray(state.get("teammates", []))
             closer_teammates = 0
@@ -397,7 +397,7 @@ class Midfielder(player):
             if closer_teammates == 0:
                 return "chase"
             
-        dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
+        dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
         ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
 
         if dist_to_ball < 2.0:
@@ -425,7 +425,7 @@ class Midfielder(player):
         return "hold_defense"
 
     def _decide_loose_ball(self, state: dict) -> str:
-            dist_to_ball = np.linalg.norm(state["ball_pos"] - state["my_pos"])
+            dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
             
             # Calculate distances of all teammates to the ball
             teammates = np.asarray(state.get("teammates", []))

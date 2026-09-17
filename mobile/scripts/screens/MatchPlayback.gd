@@ -436,7 +436,7 @@ func _on_skip_fulltime_pressed() -> void:
 	_close_pause_overlay()
 
 func _on_exit_pressed() -> void:
-	if _is_real_match:
+	if _is_real_match and not MatchSession.is_local:
 		_exit_button.disabled = true
 		_loading_popup.set_status(tr("Loading players..."))
 		_loading_popup.visible = true

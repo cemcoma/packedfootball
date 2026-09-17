@@ -37,7 +37,7 @@ def replays():
     pm = C.PackManager(C.PACK_DATABASE, seed=55)
     pool = []
     while len(pool) < 400:
-        pool += pm.open_pack(3)
+        pool += pm.open_pack(2)
     home, away = C._assemble_xi(pool), C._assemble_xi(pool)
 
     out = []

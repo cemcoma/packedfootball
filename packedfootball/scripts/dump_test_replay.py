@@ -45,7 +45,7 @@ def build_teams(roster_seed: int):
     pm = PackManager(PACK_DATABASE, seed=roster_seed)
     pool = []
     while len(pool) < 400:  # generous margin so every position group is covered
-        pool += pm.open_pack(3)
+        pool += pm.open_pack(2)  # the Jumbo pack: mixed positions (pack 3 is forwards-only now)
 
     def take(positions: list, n: int) -> list:
         chosen = [p for p in pool if p.position in positions][:n]

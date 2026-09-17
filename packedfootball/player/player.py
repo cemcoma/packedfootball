@@ -3,9 +3,15 @@ from dataclasses import dataclass, asdict
 from typing import Final
 from abc import ABC, abstractmethod
 import numpy as np
+import math
 
 position = ["GK","CD","LB","RB","CDM","CM","CAM","LM","RM","CF","LW","RW"]
 base_speed:Final = 10.0
+
+
+# Minimum spread (in pitch units at the goal line) on any shot's aim -- see
+# _calculate_shot.
+SHOT_VARIANCE_FLOOR = 0.9
 
 @dataclass
 class Attributes: #out of 100, can be over
@@ -108,6 +114,14 @@ DEFAULT_ACTIONS = {
     "forward_run", "support", "hold_attack", "hold_defense",
     "press", "contain", "recover", "recover_slow", "tackle", "capture",
 }
+
+
+def _norm2(v) -> float:
+    """|v| for a 2-vector. np.linalg.norm spends more on call overhead than
+    on the arithmetic at this size, and the decision code calls this
+    hundreds of thousands of times a match."""
+    return math.hypot(float(v[0]), float(v[1]))
+
 
 class ActionProfile:
     """Role template for tweening action sets and decision weights per position."""
@@ -234,7 +248,7 @@ class player(ABC):
             projection = float(np.dot(opp_vec, segment)) / segment_length_sq
             clamped = np.clip(projection, 0.0, 1.0)
             closest_point = start + clamped * segment
-            distance_to_line = np.linalg.norm(opp - closest_point)
+            distance_to_line = _norm2(opp - closest_point)
             if distance_to_line <= line_width:
                 return False
         return True
@@ -242,7 +256,7 @@ class player(ABC):
     def _goal_lane_is_open(self, state: dict, lane_width: float = 2.5, lookahead: float = 10.0) -> bool:
         my_pos = np.asarray(state["my_pos"], dtype=float)
         goal_vec = np.asarray(state["enemy_goal"], dtype=float) - my_pos
-        goal_norm = np.linalg.norm(goal_vec)
+        goal_norm = _norm2(goal_vec)
         if goal_norm < 1e-8:
             return True
         goal_dir = goal_vec / goal_norm
@@ -252,14 +266,14 @@ class player(ABC):
             forward = float(np.dot(rel, goal_dir))
             if forward <= 0.0:
                 continue
-            lateral = np.linalg.norm(rel - forward * goal_dir)
+            lateral = _norm2(rel - forward * goal_dir)
             if forward <= lookahead and lateral <= lane_width:
                 return False
         return True
 
     def _is_progressive_ball_move(self, state: dict) -> bool:
         ball_vel = np.asarray(state.get("ball_velocity", np.zeros(2, dtype=float)), dtype=float)
-        ball_speed = float(np.linalg.norm(ball_vel))
+        ball_speed = float(_norm2(ball_vel))
         if ball_speed <= 1e-6:
             return False
 
@@ -271,7 +285,7 @@ class player(ABC):
         ball_pos = np.asarray(state["ball_pos"], dtype=float)
         ball_vel = np.asarray(state.get("ball_velocity", np.zeros(2, dtype=float)), dtype=float)
         ball_height = float(state.get("ball_height", 0.0))
-        ball_speed = float(np.linalg.norm(ball_vel))
+        ball_speed = float(_norm2(ball_vel))
 
         if not self._is_progressive_ball_move(state):
             return ball_pos.copy()
@@ -314,7 +328,7 @@ class player(ABC):
             nearby_opp_distance = np.min(np.linalg.norm(opponents - tm, axis=1)) if opponents.size else 999.0
             if nearby_opp_distance < 1.5: continue
 
-            score = forward_progress * 30.0 - np.linalg.norm(vec_to_tm) * 0.7 + nearby_opp_distance * 12.0
+            score = forward_progress * 30.0 - _norm2(vec_to_tm) * 0.7 + nearby_opp_distance * 12.0
             if score > best_score:
                 best_score = score
                 best_target = tm
@@ -328,12 +342,12 @@ class player(ABC):
         goal_dir = 1.0 if state.get("a_direction", 1) == 1 else -1.0
 
         pass_options = []
-        nearby_teammates = sum(1 for tm in teammates if np.linalg.norm(tm - my_pos) < 4.5)
+        nearby_teammates = sum(1 for tm in teammates if _norm2(tm - my_pos) < 4.5)
 
         for tm in teammates:
             if np.array_equal(tm, my_pos): continue
 
-            dist_to_tm = np.linalg.norm(tm - my_pos)
+            dist_to_tm = _norm2(tm - my_pos)
             nearest_opp_dist = np.min(np.linalg.norm(opponents - tm, axis=1))
 
             forward_progress = (tm[1] - my_pos[1]) * goal_dir
@@ -344,7 +358,7 @@ class player(ABC):
                 if dist_to_tm < 4.5: raw_score -= 35.0
                 if nearby_teammates > 3: raw_score -= 12.0
 
-            if np.linalg.norm(state["enemy_goal"] - tm) < np.linalg.norm(state["enemy_goal"] - my_pos):
+            if _norm2(state["enemy_goal"] - tm) < _norm2(state["enemy_goal"] - my_pos):
                 raw_score += 18.0
             if forward_progress < 0.0:
                 raw_score -= 50.0
@@ -372,12 +386,17 @@ class player(ABC):
         intended_target = np.array([target_x, goal_y, rng.uniform(0.5, 2.0)])
         
         pressure_penalty = state["pressure_count"] * ((100.0 - self.attributes.composure) / 20.0)
-        dist = np.linalg.norm(np.array([goal_center_x, goal_y]) - state["my_pos"])
+        dist = _norm2(np.array([goal_center_x, goal_y]) - state["my_pos"])
         unit_to_goal = (np.array([goal_center_x, goal_y]) - state["my_pos"]) / (dist + 0.001)
         
         heading_penalty = max(0.0, (0.8 - np.dot(state["my_heading"], unit_to_goal)) * 5.0) 
         total_variance = ((100.0 - self.attributes.shooting) / 15.0) + pressure_penalty + heading_penalty
-        total_variance = max(total_variance, 2.1)
+        # A floor so even a perfect shooter isn't a laser -- but a low one.
+        # This was 2.1, which is what a 68-shooting player computes to
+        # unpenalised, so everyone from gold up shot with identical spread
+        # and a 96 was no more accurate than a 70. Now 96 -> ~0.9, 80 -> 1.3,
+        # 50 -> 3.3, and a calm icon in space is meant to hit the target.
+        total_variance = max(total_variance, SHOT_VARIANCE_FLOOR)
         
         actual_x = intended_target[0] + rng.normal(0, total_variance)
         actual_z = max(0.0, intended_target[2] + rng.normal(0, total_variance * 0.5))
@@ -401,7 +420,7 @@ class player(ABC):
         for tm in teammates:
             if np.array_equal(tm, my_pos): continue
 
-            dist_to_goal = np.linalg.norm(np.array([35.0, enemy_goal_y]) - tm)
+            dist_to_goal = _norm2(np.array([35.0, enemy_goal_y]) - tm)
         
             if dist_to_goal > 35.0:
                 continue
@@ -418,7 +437,7 @@ class player(ABC):
             base_target = np.array([35.0, enemy_goal_y - (12.0 * goal_dir)])
         else:
             vec_to_goal = np.array([35.0, enemy_goal_y]) - best_target
-            dist = np.linalg.norm(vec_to_goal)
+            dist = _norm2(vec_to_goal)
             lead_dist = min(4.0, dist * 0.4)
             lead = (vec_to_goal / (dist + 1e-5)) * lead_dist
             base_target = best_target + lead
