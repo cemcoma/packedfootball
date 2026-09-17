@@ -326,6 +326,7 @@ async def tournament_match(uid: str = Depends(verify_id_token)):
         "added_time": result["added_time"],
         "player_match_stats": result["player_match_stats"],
         "kits": result["kits"],
+        "formations": result["formations"],
         # Extra block on top of the /match/quick shape. MatchSession reads
         # only the keys it knows and ignores the rest, so playback and the
         # result screen work with no autoload change.

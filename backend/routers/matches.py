@@ -134,6 +134,7 @@ async def quick_match(uid: str = Depends(verify_id_token)):
         # rendering had nothing to read.
         "player_match_stats": result["player_match_stats"],
         "kits": result["kits"],
+        "formations": result["formations"],
     }
 
 
@@ -235,4 +236,5 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
         # rendering had nothing to read.
         "player_match_stats": result["player_match_stats"],
         "kits": result["kits"],
+        "formations": result["formations"],
     }

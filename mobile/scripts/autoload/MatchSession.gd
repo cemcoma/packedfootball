@@ -91,12 +91,21 @@ func set_from_match_response(data: Dictionary) -> void:
 	var kits_raw = data.get("kits")
 	var kits: Array = kits_raw if kits_raw is Array else []
 
+	# Both sides' formation names, [caller, opponent], same order as "kits".
+	# The opponent's is what OpponentSquad.gd lays their 11 out with -- the
+	# roster's indices 11-21 are in that formation's slot order. A backend
+	# older than this field just means the away side is drawn as a 4-4-2.
+	var formations_raw = data.get("formations")
+	var formations: Array = formations_raw if formations_raw is Array else []
+
 	var players_raw = data.get("roster")
 	_roster = {
 		"home_name": GameProfile.display_name,
 		"away_name": opponent_display_name,
 		"home_kit": kits[0] if kits.size() > 0 and kits[0] is String else "",
 		"away_kit": kits[1] if kits.size() > 1 and kits[1] is String else "",
+		"home_formation": _formation_or_default(formations, 0),
+		"away_formation": _formation_or_default(formations, 1),
 		"players": players_raw if players_raw is Array else [],
 	}
 
@@ -115,7 +124,20 @@ func set_from_match_response(data: Dictionary) -> void:
 	tournament = tournament_raw if tournament_raw is Dictionary else {}
 
 
+static func _formation_or_default(formations: Array, side: int) -> String:
+	if side < formations.size() and formations[side] is String and Formations.FORMATION_NAMES.has(formations[side]):
+		return formations[side]
+	return Formations.FORMATION_NAMES[0]
+
+
 # ------------------------------------------------------------- lookups
+
+## The opponent's formation name (see set_from_match_response), or the
+## default when this session isn't carrying a match at all.
+func away_formation() -> String:
+	var name = _roster.get("away_formation")
+	return name if name is String and name != "" else Formations.FORMATION_NAMES[0]
+
 
 ## Roster field dictionary for a global player index (0-21), or {}.
 func player_fields(index: int) -> Dictionary:

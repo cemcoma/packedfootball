@@ -94,6 +94,11 @@ def run_match(caller_profile: dict, opponent_profile: dict, seed: int) -> dict:
         # from each profile -- see game_state.load_or_create_profile on why
         # this end never parses them. A bot's comes from BOT_KIT.
         "kits": [caller_profile.get("kit", ""), opponent_profile.get("kit", "")],
+        # Both sides' formation names, [caller, opponent], same order as
+        # "kits". The client already knows its own; the opponent's is what
+        # lets it lay their 11 out on a pitch (roster indices 11-21 are in
+        # that formation's slot order -- see gameEngine._combine_formations).
+        "formations": [caller_profile["formation"], opponent_profile["formation"]],
     }
 
 

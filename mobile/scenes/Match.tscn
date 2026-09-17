@@ -266,6 +266,15 @@ theme_override_font_sizes/font_size = 22
 text = "Home vs Away"
 horizontal_alignment = 1
 
+[node name="ViewOpponentButton" type="Button" parent="PreMatchOverlay/Center/VBoxContainer" unique_id=1930000100]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(220, 44)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 15
+text = "View Opponent Squad"
+
 [node name="StartButton" type="Button" parent="PreMatchOverlay/Center/VBoxContainer" unique_id=38405616]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 56)

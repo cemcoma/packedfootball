@@ -35,6 +35,7 @@ const PITCH_HEIGHT := 100.0
 const TICKS_PER_SECOND := 60.0
 const REPLAY_PATH := "res://test_data/sample_match.bin"
 const ROSTER_PATH := "res://test_data/sample_match.json"
+const OPPONENT_SQUAD_SCENE := "res://scenes/OpponentSquad.tscn"
 
 
 const FULL_MODE_BOX_SIZE := Vector2(378.0, 540.0)
@@ -166,6 +167,7 @@ var _is_real_match: bool = false #for local testing demo replays
 
 @onready var _pre_match_overlay: Control = %PreMatchOverlay
 @onready var _pre_match_teams_label: Label = %PreMatchTeamsLabel
+@onready var _view_opponent_button: Button = %ViewOpponentButton
 @onready var _start_button: Button = %StartButton
 
 @onready var _pause_overlay: Control = %PauseOverlay
@@ -209,10 +211,15 @@ func _ready() -> void:
 	_setup_scoreboard()
 	_build_legend()
 	_pre_match_teams_label.text = "%s vs %s" % [roster.get("home_name", "Home"), roster.get("away_name", "Away")]
+	# Only a real match has a roster worth opening -- the bundled demo's
+	# sidecar carries names only (see _attributes_for), so there'd be
+	# nothing to show but a grid of blanks.
+	_view_opponent_button.visible = _is_real_match
 	_update_camera_button_label()
 	_update_speed_button_label()
 	_update_pitch_canvas_size()
 
+	_view_opponent_button.pressed.connect(_on_view_opponent_pressed)
 	_start_button.pressed.connect(_on_start_match_pressed)
 	_pause_button.pressed.connect(_on_pause_pressed)
 	_camera_toggle_button.pressed.connect(_on_camera_toggle_pressed)
@@ -385,6 +392,14 @@ func _reset_state() -> void:
 		player_flash_colors[i] = ACTION_COLOR_DEFAULT
 		player_poses[i] = ""
 	_update_score_label()
+
+
+## A look at the other side before kicking off. A plain scene change, not
+## an overlay: MatchSession keeps the match, so coming back re-runs
+## _ready() from the same data and lands on this same popup, with nothing
+## having started in between. Not offered once the match is under way.
+func _on_view_opponent_pressed() -> void:
+	get_tree().change_scene_to_file(OPPONENT_SQUAD_SCENE)
 
 
 func _on_start_match_pressed() -> void:
