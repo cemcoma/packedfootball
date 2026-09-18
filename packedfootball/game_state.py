@@ -124,7 +124,13 @@ class GameState:
         p.player_id = player_id
         return p
 
-    async def _load_players(self, player_ids: list[str]) -> list:
+    async def load_players(self, player_ids: list[str]) -> list:
+        """The cards behind these ids, in the order asked for, each tagged
+        with its .player_id; an id whose players/ doc is gone is skipped
+        rather than raised. One parallel batch, so a whole roster costs one
+        round trip's latency -- which is why /account/bootstrap hands the
+        client its squad from here instead of letting it fetch card by card.
+        """
         players = await asyncio.gather(*(self._load_player(pid) for pid in player_ids))
         return [p for p in players if p is not None]
 
@@ -198,7 +204,7 @@ class GameState:
             "wins": doc.get("wins", 0),
             "losses": doc.get("losses", 0),
             "draws": doc.get("draws", 0),
-            "roster": await self._load_players(doc.get("roster_player_ids", [])),
+            "roster": await self.load_players(doc.get("roster_player_ids", [])),
             "formation": doc.get("formation", DEFAULT_FORMATION),
             # Absent on every account created before kits existed.
             "kit": doc.get("kit", DEFAULT_KIT),

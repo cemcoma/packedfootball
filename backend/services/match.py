@@ -252,7 +252,7 @@ async def pick_opponent_from_candidates(
 
     TWO STAGES, and the split is the whole point. Hydrating a profile reads
     users/{uid} PLUS all eleven players/{id} documents (see
-    game_state._load_players), so validating a candidate the naive way costs
+    game_state.load_players), so validating a candidate the naive way costs
     ~12 reads EACH. Most rejections don't need the roster at all, so the
     cheap checks -- does this account have exactly 11 roster ids, is its
     formation one we know -- run against the user document alone, and only a

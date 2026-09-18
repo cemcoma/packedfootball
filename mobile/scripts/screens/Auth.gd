@@ -210,7 +210,16 @@ func _go_to_menu(chosen_display_name: String = "") -> void:
 	_show_form(false)
 	_working_spinner.visible = true
 	_status_label.text = tr("Loading your squad...")
-	await GameProfile.load_all()
+	var loaded: bool = await GameProfile.load_all()
+	if not loaded:
+		# Neither the backend nor Firestore answered. Back to the form with
+		# the reason, rather than a Menu with a blank squad that reads as a
+		# wiped account. (_show_form clears the status line, so it goes first.)
+		_working_spinner.visible = false
+		_set_busy(false)
+		_show_form(true)
+		_status_label.text = tr("Could not load your squad. Check your connection and sign in again.")
+		return
 	IapClient.initialize_for_signed_in_user(FirebaseAuth.uid)
 	if chosen_display_name != "":
 		await GameProfile.set_display_name(chosen_display_name)

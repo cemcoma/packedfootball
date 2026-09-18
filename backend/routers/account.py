@@ -3,6 +3,7 @@ display name, and deleting the account."""
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,7 +11,7 @@ from pydantic import BaseModel
 
 from config import INVENTORY_CAP, STARTER_FORMATION, STARTER_TIER
 from deps import admin_client, game_state_for, verify_id_token
-from engine import generate_starter_roster
+from engine import generate_starter_roster, player_to_fields
 from services import account as account_service
 from services import energy as energy_service
 from services import tournament as tournament_service
@@ -23,32 +24,63 @@ async def health():
     return {"status": "ok"}
 
 
+# The users/{uid} fields the client keeps in memory for the session (see
+# GameProfile.gd's load_all). Listed rather than "the whole document" so a
+# field added to the doc for the backend's own bookkeeping (energy anchors,
+# tournament seat) never leaks into the reply by accident.
+PROFILE_FIELDS = (
+    "display_name", "credits", "bucks", "medals", "wins", "draws", "losses",
+    "formation", "kit", "roster_player_ids", "reward_ads_watched", "energy_ads_watched",
+)
+
+
+def _card_payload(card, doc_id: str = "") -> dict:
+    """A card as the client already parses it from /pack/open: the stored
+    fields plus its players/ id, and for a benched card the inventory doc
+    that points at it (what save_team deletes when the card is picked)."""
+    return {**player_to_fields(card), "player_id": card.player_id, "doc_id": doc_id}
+
+
 @router.post("/account/bootstrap")
 async def bootstrap_account(uid: str = Depends(verify_id_token)):
-    """Ensures uid has a profile document, creating one with a full bronze
-    starter roster if this is the account's first time here. Idempotent --
-    safe to call on every sign-in (mirrors game_state.py's
-    load_or_create_profile, which already does exactly this for the Python
-    client, just with an empty default_roster since packedfootball/main.py
-    builds its own local starter squad instead of asking the backend for
-    one). The Godot client calls this once right after sign-in succeeds
-    (see mobile/scripts/GameProfile.gd's load_all()), which never had an
-    equivalent local-squad fallback -- without this, a brand new account
-    created straight through Godot had no cards and no roster at all.
+    """The one request a sign-in makes: ensures uid has a profile and hands
+    back everything the session caches -- the profile fields, the roster
+    cards in lineup order, the bench, the inventory cap and the energy bar.
 
-    Also carries the two numbers every screen needs but nothing else hands
-    over: the inventory cap, and the energy bar. Both ride along here because
-    this already runs on every login -- a separate GET for each would be two
-    more round trips before the Menu can draw itself.
+    Creates the profile with a full bronze starter roster if this is the
+    account's first time here, idempotently -- safe to call on every
+    sign-in (mirrors game_state.py's load_or_create_profile, which already
+    does exactly this for the Python client, just with an empty
+    default_roster since packedfootball/main.py builds its own local
+    starter squad instead of asking the backend for one). The Godot client
+    never had an equivalent local-squad fallback -- without this, a brand
+    new account created straight through Godot had no cards and no roster
+    at all.
+
+    Returning the squad here, rather than letting the client read it, is
+    what makes sign-in quick: the client used to fetch users/{uid} and then
+    every single card as its own Firestore request -- a dozen for the XI
+    plus one per benched card, in sequence, each a fresh TLS connection
+    from a phone. Here the same reads run in parallel from inside the
+    region and go back as one reply. The card shape is /pack/open's, so
+    the client parses both with the same code.
     """
     state = game_state_for(uid)
-    existing = await state.client.get_document(f"users/{uid}")
+    user_path = f"users/{uid}"
+    existing = await state.client.get_document(user_path)
     if existing is not None:
+        roster, inventory = await asyncio.gather(
+            state.load_players(existing.get("roster_player_ids") or []),
+            state.load_inventory(),
+        )
         current, anchor = energy_service.from_profile(existing)
         return {
             "created": False,
             "inventory_cap": INVENTORY_CAP,
             "energy": energy_service.describe(current, anchor),
+            "profile": {k: existing[k] for k in PROFILE_FIELDS if k in existing},
+            "roster": [_card_payload(c) for c in roster],
+            "inventory": [_card_payload(c, c.doc_id) for c in inventory],
         }
 
     seed = secrets.randbits(63)
@@ -67,6 +99,12 @@ async def bootstrap_account(uid: str = Depends(verify_id_token)):
         "roster_size": len(profile["roster"]),
         "inventory_cap": INVENTORY_CAP,
         "energy": energy_service.describe(current, anchor),
+        "profile": {
+            **{k: profile[k] for k in PROFILE_FIELDS if k in profile},
+            "roster_player_ids": [c.player_id for c in profile["roster"]],
+        },
+        "roster": [_card_payload(c) for c in profile["roster"]],
+        "inventory": [],
     }
 
 

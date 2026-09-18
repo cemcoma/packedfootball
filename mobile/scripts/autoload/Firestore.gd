@@ -17,6 +17,11 @@ extends Node
 
 const FIRESTORE_URL := "https://firestore.googleapis.com/v1"
 
+## Seconds before a request is given up on -- see Backend.gd's own. A
+## timed-out call comes back with status 0, which every caller already
+## treats as a failure.
+const REQUEST_TIMEOUT_SECONDS := 30.0
+
 
 func _doc_url(path: String) -> String:
 	var trimmed := path.strip_edges().trim_prefix("/").trim_suffix("/")
@@ -36,6 +41,7 @@ func _auth_headers() -> PackedStringArray:
 func _request(method: HTTPClient.Method, url: String, body: String = "") -> Dictionary:
 	var http := HTTPRequest.new()
 	http.accept_gzip = false
+	http.timeout = REQUEST_TIMEOUT_SECONDS
 	add_child(http)
 	var err := http.request(url, _auth_headers(), method, body)
 	if err != OK:

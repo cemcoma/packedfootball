@@ -397,20 +397,10 @@ func _on_buy_pressed(pack: PackData) -> void:
 		)
 		return
 
-	# .get(key, default) only falls back to `default` when the key is
-	# entirely absent -- a present-but-null value (which a malformed
-	# response could send) comes back as null regardless, and null can't go
-	# into a statically-typed String/int var. See PackData.gd's own version
-	# of this same defensive pattern for the bug this avoids.
 	var card_fields_list: Array = res.data.get("cards", [])
 	var cards: Array = []
 	for card_fields in card_fields_list:
-		var player_id_raw = card_fields.get("player_id")
-		var player_id: String = player_id_raw if player_id_raw is String else ""
-		var card := PlayerCard.from_fields(card_fields, player_id)
-		var doc_id_raw = card_fields.get("doc_id")
-		card.doc_id = doc_id_raw if doc_id_raw is String else ""
-		cards.append(card)
+		cards.append(PlayerCard.from_response(card_fields))
 
 	# /pack/open returns every balance now, not just credits -- a pack can be
 	# priced in any one of them, and apply_currency_balances ignores whichever

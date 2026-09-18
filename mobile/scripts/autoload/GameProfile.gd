@@ -104,58 +104,103 @@ static func _array(doc: Dictionary, key: String, default: Array) -> Array:
 
 
 ## Fetches everything needed to populate the cache above in one go. Called
-## once right after sign-in (see Auth.gd) so every later scene reads
-## instantly from memory instead of re-hitting Firestore every time it opens.
+## once right after sign-in (see Auth.gd) and again after a match, so every
+## other scene reads instantly from memory instead of re-hitting Firestore
+## every time it opens.
 ##
-## Calls the backend's /account/bootstrap first, which creates a profile +
+## ONE request: the backend's /account/bootstrap, which creates a profile +
 ## a full bronze starter roster if (and only if) this uid has never signed
-## in before -- a no-op otherwise, safe to call on every login. Without
-## this, a brand new account created straight through this Godot client had
-## no cards and no roster at all (packedfootball/main.py's own client
-## builds its own local starter squad instead of needing this, which is why
-## this gap only ever existed on the Godot side).
-func load_all() -> void:
+## in before (a no-op otherwise, safe to call on every login) and answers
+## with the profile, the XI and the bench together. This used to be one
+## request per CARD from here -- the XI plus every benched card, in
+## sequence, each on a fresh HTTPS connection from the phone -- which is
+## what made "Loading your squad..." take as long as it did. That direct-
+## Firestore read survives only as the fallback for when the backend can't
+## be reached (or is an older build that doesn't send the squad yet), so a
+## Cloud Run hiccup still shows the manager their squad rather than an
+## empty Menu that reads as a wiped account.
+##
+## Returns whether the squad was actually loaded, from either source.
+func load_all() -> bool:
 	var bootstrap: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_POST, "/account/bootstrap")
+	var loaded := false
 	if bootstrap.ok:
 		apply_inventory_cap(bootstrap.data.get("inventory_cap"))
 		apply_energy(bootstrap.data.get("energy"))
+		loaded = _apply_bootstrap(bootstrap.data)
+	if not loaded:
+		loaded = await _load_from_firestore()
+	saved_formation = formation
+	saved_slot_assignment = slot_assignment.duplicate()
+	is_loaded = true
+	return loaded
 
+
+## Fills the cache from a /account/bootstrap reply. False when the reply
+## carries no profile (an older backend), in which case nothing was touched.
+func _apply_bootstrap(data: Dictionary) -> bool:
+	var profile = data.get("profile")
+	if not (profile is Dictionary):
+		return false
+	_apply_profile_fields(profile)
+	_reset_squad()
+	var roster_raw = data.get("roster")
+	var roster: Array = roster_raw if roster_raw is Array else []
+	for i in range(mini(roster.size(), slot_assignment.size())):
+		if not (roster[i] is Dictionary):
+			continue
+		var card := PlayerCard.from_response(roster[i])
+		all_cards[card.player_id] = card
+		slot_assignment[i] = card.player_id
+	var inventory_raw = data.get("inventory")
+	var inventory: Array = inventory_raw if inventory_raw is Array else []
+	for fields in inventory:
+		if fields is Dictionary:
+			var card := PlayerCard.from_response(fields)
+			all_cards[card.player_id] = card
+	return true
+
+
+## The slow path: users/{uid} and then each card as its own request.
+func _load_from_firestore() -> bool:
 	var doc = await Firestore.get_document(_user_doc_path())
-	var ids: Array = []
-	if doc != null:
-		display_name = _str(doc, "display_name")
-		credits = _int(doc, "credits")
-		bucks = _int(doc, "bucks")
-		medals = _int(doc, "medals")
-		wins = _int(doc, "wins")
-		losses = _int(doc, "losses")
-		draws = _int(doc, "draws")
-		formation = _str(doc, "formation", DEFAULT_FORMATION)
-		kit = _str(doc, "kit", "")
-		ids = _array(doc, "roster_player_ids", [])
-
-	var slots: Array = Formations.get_formation(formation)
-	slot_assignment.resize(slots.size())
-	slot_assignment.fill("")
-
-	all_cards.clear()
-	var roster_cards: Array = await _load_cards(ids)
-	for i in range(mini(roster_cards.size(), slots.size())):
+	if doc == null:
+		return false
+	_apply_profile_fields(doc)
+	_reset_squad()
+	var roster_cards: Array = await _load_cards(_array(doc, "roster_player_ids", []))
+	for i in range(mini(roster_cards.size(), slot_assignment.size())):
 		var card: PlayerCard = roster_cards[i]
 		all_cards[card.player_id] = card
 		slot_assignment[i] = card.player_id
-
 	var inventory: Array = await load_inventory()
 	for card in inventory:
 		var typed_card: PlayerCard = card
 		all_cards[typed_card.player_id] = typed_card
+	return true
 
-	saved_formation = formation
-	saved_slot_assignment = slot_assignment.duplicate()
-	is_loaded = true
-	
-	reward_ads_watched = _int(doc,"reward_ads_watched")
-	energy_ads_watched = _int(doc,"energy_ads_watched")
+
+## The users/{uid} fields, from the doc itself or the backend's copy of it.
+func _apply_profile_fields(doc: Dictionary) -> void:
+	display_name = _str(doc, "display_name")
+	credits = _int(doc, "credits")
+	bucks = _int(doc, "bucks")
+	medals = _int(doc, "medals")
+	wins = _int(doc, "wins")
+	losses = _int(doc, "losses")
+	draws = _int(doc, "draws")
+	formation = _str(doc, "formation", DEFAULT_FORMATION)
+	kit = _str(doc, "kit", "")
+	reward_ads_watched = _int(doc, "reward_ads_watched")
+	energy_ads_watched = _int(doc, "energy_ads_watched")
+
+
+## An empty lineup for the current formation, and no cards.
+func _reset_squad() -> void:
+	var slots: Array = Formations.get_formation(formation)
+	slot_assignment.resize(slots.size())
+	slot_assignment.fill("")
+	all_cards.clear()
 
 
 func refresh_currencies() -> bool:

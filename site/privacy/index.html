@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy – Packed Football</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1a1a1a; --muted: #555; --bg: #fafafa; --line: #ddd; --link: #0b5fff; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #ededed; --muted: #aaa; --bg: #151515; --line: #333; --link: #7aa7ff; } }
+  body { margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--fg);
+         font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.8rem; margin: 0 0 4px; }
+  h2 { font-size: 1.2rem; margin: 32px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+  p, li { color: var(--fg); }
+  .meta { color: var(--muted); margin: 0 0 24px; }
+  a { color: var(--link); }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 0.95rem; }
+  th, td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  nav { font-size: 0.95rem; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<main>
+<nav><a href="../">Play</a> · <a href="../support/">Support</a></nav>
+<h1>Privacy Policy</h1>
+<p class="meta">Packed Football · effective 19 September 2026</p>
+
+<p>Packed Football is a football squad-building game made by Cem Tarkan Tekcan. This page explains what data the game collects, why, who handles it and how you can delete it. It applies to the iOS and Android apps and to the web version at <a href="https://cemcoma.github.io/packedfootball/">cemcoma.github.io/packedfootball</a>.</p>
+
+<h2>What we collect</h2>
+<table>
+<tr><th>Data</th><th>Why</th></tr>
+<tr><td><strong>Email address and password.</strong> Handled by Firebase Authentication; we never see your password, only a secure hash of it.</td><td>To create your account, sign you in on any device and send password-reset emails.</td></tr>
+<tr><td><strong>Manager name.</strong> The display name you choose.</td><td>Shown to other players on leaderboards, in tournament standings and as the opponent in their matches.</td></tr>
+<tr><td><strong>Game data.</strong> Your cards, squad, formation, kit, in-game currencies (credits, bucks, medals), energy, match results and player statistics, daily-tournament standings and rewards, and how many rewarded ads you watched today.</td><td>To run the game and keep your progress in sync across devices.</td></tr>
+<tr><td><strong>Match records.</strong> For every match: both squads as they were played, both manager names, the score and the random seed.</td><td>To reproduce a match exactly when a bug or a cheating dispute is investigated.</td></tr>
+<tr><td><strong>Bug reports.</strong> The category and any text you write on the match-result screen, linked to that match and your account.</td><td>To find and fix the problem. Please don't put personal information in the text.</td></tr>
+<tr><td><strong>Purchase records.</strong> When you buy Bucks, Apple or Google processes the payment; we receive from RevenueCat a record of the product, the time and the store's transaction id. We never receive card or bank details.</td><td>To deliver what you bought, and to answer refund disputes.</td></tr>
+<tr><td><strong>Advertising data.</strong> Rewarded videos are served by Google AdMob, which may collect your device's advertising identifier, IP address and basic device information to serve and measure ads.</td><td>Optional ads that fund the free game. Ads are <em>not personalised</em>: the game does not ask for tracking permission and does not track you across other apps or websites.</td></tr>
+<tr><td><strong>Server logs.</strong> Our game server (Google Cloud Run) records request metadata such as IP address, time and the request made. The web version is hosted on GitHub Pages, which keeps its own visitor logs.</td><td>Security, abuse prevention and debugging. Logs are kept for a limited time and are not used to profile you.</td></tr>
+</table>
+<p>We do not use analytics SDKs, and we do not collect your contacts, location, photos or anything from other apps.</p>
+
+<h2>What other players can see</h2>
+<p>Your manager name, win/draw/loss record, tournament tier, kit and starting eleven are visible to other players — on leaderboards, in tournament groups, and when they view an opponent. Your email address is never shown to anyone.</p>
+
+<h2>Who handles the data</h2>
+<p>We do not sell your data and we do not share it for advertising purposes. It is processed by these services on our behalf:</p>
+<ul>
+<li><strong>Google Firebase / Google Cloud</strong> — sign-in, the game database and the game server. Game data is stored in Google Cloud's Frankfurt region (European Union); Firebase Authentication is a global service and your sign-in data may be processed in the United States. <a href="https://firebase.google.com/support/privacy">Firebase privacy</a></li>
+<li><strong>RevenueCat</strong> — validates in-app purchases with Apple and Google. <a href="https://www.revenuecat.com/privacy">RevenueCat privacy</a></li>
+<li><strong>Google AdMob</strong> — serves rewarded video ads in the iOS and Android apps. <a href="https://policies.google.com/privacy">Google privacy</a> · <a href="https://policies.google.com/technologies/partner-sites">How Google uses data from partner apps</a></li>
+<li><strong>Apple App Store / Google Play</strong> — payment processing for purchases, under their own terms.</li>
+<li><strong>GitHub Pages</strong> — hosts the web version. <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub privacy statement</a></li>
+</ul>
+<p>We may also disclose data if the law requires it.</p>
+
+<h2>How long we keep it</h2>
+<p>Your account data is kept for as long as your account exists. When you delete your account (below) it is removed promptly, with these exceptions:</p>
+<ul>
+<li><strong>Purchase records</strong> are kept as financial records, for as long as needed to handle refunds and meet legal obligations.</li>
+<li><strong>Matches you played against other managers</strong> stay in their match history, with the manager name you had at the time — their results stand.</li>
+<li><strong>Finished daily-tournament standings</strong> keep the name you had at the time.</li>
+<li><strong>Bug reports</strong> you sent are kept to fix the issue; after deletion they can no longer be linked to an account.</li>
+</ul>
+
+<h2>Deleting your account</h2>
+<p>In the game: <strong>Settings → Delete Account</strong>, then type DELETE to confirm. This removes your profile, your manager name, every card, your squad, currencies, energy, your seat in today's tournament, the matches you started and your sign-in. It cannot be undone, and purchases cannot be restored afterwards. You can also email us (below) and we will delete it for you.</p>
+
+<h2>Your rights</h2>
+<p>Depending on where you live (for example under the GDPR in the EU/EEA and the UK, or the KVKK in Türkiye) you may have the right to access, correct, export or delete your data, or to object to how it is processed. Your manager name can be changed in Settings, your password from the sign-in screen, and everything else by writing to us. We answer within 30 days.</p>
+<p>To limit advertising data on your device: iOS <em>Settings → Privacy &amp; Security → Apple Advertising</em> and <em>→ Tracking</em>; Android <em>Settings → Google → Ads</em>.</p>
+
+<h2>Children</h2>
+<p>Packed Football is not directed at children under 13, and we do not knowingly collect data from them. If you believe a child has created an account, email us and we will delete it.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes, the new version is published here with a new effective date. Significant changes are announced in the game.</p>
+
+<h2>Contact</h2>
+<p>Cem Tarkan Tekcan<br>
+<a href="mailto:packedfootball@gmail.com">packedfootball@gmail.com</a></p>
+</main>
+</body>
+</html>

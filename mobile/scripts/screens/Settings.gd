@@ -1,6 +1,7 @@
 extends Control
 
-## Account settings: rename, language, color theme, log out, and deleting
+## Account settings: rename, language, color theme, the privacy policy and
+## support links, log out, and deleting
 ## the account. Squad/account details (overall, wins/draws/losses) that used to
 ## live on this screen (back when it was "Profile") moved to Menu's own
 ## AccountPanel instead -- glanceable from the hub every visit rather than
@@ -43,11 +44,22 @@ const THEME_MODES := ["dark", "light"]
 ## fixed word is the same speed bump in every language.
 const DELETE_CONFIRM_WORD := "DELETE"
 
+## The store-facing pages, published next to the web build by `make
+## deploy-web` from site/ at the repo root. App Store guideline 5.1.1 wants
+## the privacy policy reachable from inside the app, not only from the
+## listing, which is why they are here and not just in App Store Connect.
+## Same URLs as the listing's Privacy Policy / Support fields -- change
+## both together.
+const PRIVACY_URL := "https://cemcoma.github.io/packedfootball/privacy/"
+const SUPPORT_URL := "https://cemcoma.github.io/packedfootball/support/"
+
 @onready var _name_field: LineEdit = %NameField
 @onready var _save_name_button: Button = %SaveNameButton
 @onready var _status_label: Label = %StatusLabel
 @onready var _language_option: OptionButton = %LanguageOption
 @onready var _theme_option: OptionButton = %ThemeOption
+@onready var _privacy_button: Button = %PrivacyButton
+@onready var _support_button: Button = %SupportButton
 @onready var _back_button: Button = %BackButton
 @onready var _logout_button: Button = %LogoutButton
 @onready var _delete_account_button: Button = %DeleteAccountButton
@@ -62,6 +74,8 @@ var _busy: bool = false
 
 func _ready() -> void:
 	_save_name_button.pressed.connect(_on_save_name_pressed)
+	_privacy_button.pressed.connect(func() -> void: OS.shell_open(PRIVACY_URL))
+	_support_button.pressed.connect(func() -> void: OS.shell_open(SUPPORT_URL))
 	_back_button.pressed.connect(_on_back_pressed)
 	_logout_button.pressed.connect(_on_logout_pressed)
 	_delete_account_button.pressed.connect(_on_delete_account_pressed)

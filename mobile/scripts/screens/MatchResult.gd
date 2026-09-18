@@ -83,8 +83,11 @@ func _ready() -> void:
 	var my_score: int = score[0] if score.size() == 2 else 0
 	var opp_score: int = score[1] if score.size() == 2 else 0
 	var opponent_name: String = MatchSession.opponent_display_name if MatchSession.opponent_display_name != "" else tr("Opponent")
+	
+	# Decision: dont show that they are bots the user doesnt need to know
 	if MatchSession.opponent_is_bot:
-		opponent_name += tr(" (Bot)")
+		pass
+		#opponent_name += tr(" (Bot)")
 
 	if my_score > opp_score:
 		_outcome_label.text = tr("You Won!")

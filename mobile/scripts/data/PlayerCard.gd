@@ -177,6 +177,17 @@ static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
 	return card
 
 
+## A card as the backend sends it -- /pack/open's cards and
+## /account/bootstrap's roster and inventory share the shape: the stored
+## fields plus "player_id", and "doc_id" (the inventory pointer, "" or
+## absent for a card in the XI). Both go through _str so a present-but-null
+## id degrades to "" rather than crashing (see _str's own comment).
+static func from_response(fields: Dictionary) -> PlayerCard:
+	var card := from_fields(fields, _str(fields, "player_id"))
+	card.doc_id = _str(fields, "doc_id")
+	return card
+
+
 func display_name() -> String:
 	return lname if lname != "" else fname
 

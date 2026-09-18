@@ -61,12 +61,20 @@ gcloud run deploy packedfootball-backend \
   --region europe-west3 \
   --allow-unauthenticated \
   --max-instances 3 \
+  --cpu-boost \
   --env-vars-file backend/.env
 ```
 
 Deploy to the same region as your Firestore database. `gcloud builds
 submit .` uploads your working tree, not `HEAD`, so uncommitted changes do
 ship.
+
+`--cpu-boost` gives a starting instance extra CPU while it imports the
+engine and initialises the Admin SDK, which is most of what a sign-in waits
+on after the service has been idle (a cold start; free). To remove cold
+starts entirely, `--min-instances 1` keeps one instance warm around the
+clock -- that is billed at the idle rate even with no players, so it is a
+deliberate spend rather than a default.
 
 `--env-vars-file` takes the same dotenv file used locally. It **replaces
 the whole env var list on every deploy**, so `backend/.env` must hold every
@@ -93,7 +101,7 @@ Credentials automatically -- no key file.
 | Endpoint | What it does |
 | --- | --- |
 | `GET /health` | Liveness check. |
-| `POST /account/bootstrap` | Idempotent. Creates the profile plus an 11-card bronze starter roster on a uid's first ever call; no-op afterwards. |
+| `POST /account/bootstrap` | The one call a sign-in makes. Idempotent: creates the profile plus an 11-card bronze starter roster on a uid's first ever call, then always answers with `profile`, `roster` (cards in lineup order), `inventory` (bench cards with their `doc_id`), `inventory_cap` and `energy`, so the client never fetches cards one by one. |
 | `GET /account/name_available` | Unauthenticated. Whether `?display_name=` passes the rules and is free -- the registration form asks before creating the Auth user. Advisory only. |
 | `POST /account/display_name` | Renames the manager, uniquely: reserves `display_names/{key}` in the same transaction as the name. 400 with a reason code, 409 when taken. |
 | `POST /claim` | One door for every reward that is earned silently and paid on a tap. Body `{"type": ...}` plus what the type needs; today `tournament_full_day` (optional `day_id` + `group_id`, default today's entry). Pays once, returns `rewards` and every `*_remaining` balance. |

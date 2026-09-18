@@ -40,6 +40,7 @@ GODOT      ?= /Users/cemtarkantekcan/Desktop/Godot.app/Contents/MacOS/Godot
 MOBILE_DIR := mobile
 PRESET     := Web
 BUILD_WEB  := $(MOBILE_DIR)/build/web
+SITE_DIR   := site
 PORT       ?= 8060
 BRANCH     := gh-pages
 PAGES_URL  := https://cemcoma.github.io/packedfootball/
@@ -95,18 +96,23 @@ web:
 		echo "Override it, e.g.: make web GODOT=/path/to/Godot.app/Contents/MacOS/Godot"; \
 		exit 1; \
 	}
+	@if grep -rl '\[\[' $(SITE_DIR) >/dev/null; then \
+		echo "Fill in the [[PLACEHOLDER]]s before building:"; grep -rn '\[\[' $(SITE_DIR); exit 1; \
+	fi
 	mkdir -p $(BUILD_WEB)
 	"$(GODOT)" --headless --path $(MOBILE_DIR) --export-release "$(PRESET)" build/web/index.html
+	cp -R $(SITE_DIR)/. $(BUILD_WEB)/
 	@touch $(BUILD_WEB)/.nojekyll
-	@echo "Exported to $(BUILD_WEB)"
+	@echo "Exported to $(BUILD_WEB) (game + $(SITE_DIR)/ pages)"
 
 ## Serve the export locally -- a Godot web build cannot run from file://.
 serve-web: web
 	@echo "Serving $(BUILD_WEB) at http://localhost:$(PORT)/  (ctrl-c to stop)"
 	@cd $(BUILD_WEB) && python3 -m http.server $(PORT)
 
-## Build, then publish $(BUILD_WEB) to the gh-pages branch without touching
-## your current branch or working tree (uses a throwaway git worktree).
+## Build, then publish $(BUILD_WEB) -- the game and the site/ pages -- to
+## the gh-pages branch without touching your current branch or working
+## tree (uses a throwaway git worktree).
 deploy-web: web
 	@set -e; \
 	tmp=$$(mktemp -d); \

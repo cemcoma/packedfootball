@@ -9,6 +9,14 @@ extends Node
 ## GDScript has no try/except, so a failed call comes back as
 ## {"ok": false, ...} instead of raising -- same pattern as Firestore.gd.
 
+## Seconds before a request is given up on and comes back as a failure.
+## Generous, because /match/quick simulates a whole match before answering
+## and a cold Cloud Run instance adds its start-up on top; the point is
+## only that a dead connection ends in an error the caller can show instead
+## of a spinner that never stops.
+const REQUEST_TIMEOUT_SECONDS := 60.0
+
+
 func _auth_headers() -> PackedStringArray:
 	return PackedStringArray(
 		["Authorization: Bearer %s" % FirebaseAuth.id_token, "Content-Type: application/json"]
@@ -22,6 +30,7 @@ func _auth_headers() -> PackedStringArray:
 func call_endpoint(method: HTTPClient.Method, path: String, body: Dictionary = {}) -> Dictionary:
 	var http := HTTPRequest.new()
 	http.accept_gzip = false
+	http.timeout = REQUEST_TIMEOUT_SECONDS
 	add_child(http)
 	var url := FirebaseConfig.BACKEND_URL + path
 	# A method that conventionally carries a body (POST/PUT/PATCH) needs real
