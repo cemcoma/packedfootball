@@ -15,10 +15,7 @@ extends Control
 ##
 ## The whole /match/quick call is one request-response round trip -- the
 ## backend picks an opponent AND simulates the match AND persists the
-## result before it ever replies -- so "Finding an opponent..." ->
-## "Simulating match..." below isn't the server reporting real progress,
-## it's a scripted status narrative shown while that one request is still
-## in flight, so the wait doesn't read as a stuck/frozen button.
+## result before it ever replies 
 ##
 ## Tournament leads to the tournament hub (Tournament.tscn), which offers the
 ## daily league -- ten matches a day in a group of six, drawn from your own
@@ -154,7 +151,7 @@ func _on_quick_match_pressed() -> void:
 
 	# Not awaited -- fires on its own while the request below is in flight,
 	# purely to move the status text along; see class docstring.
-	get_tree().create_timer(0.6).timeout.connect(_on_matchmaking_midpoint)
+	get_tree().create_timer(1.2).timeout.connect(_on_matchmaking_midpoint)
 
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_POST, "/match/quick")
 
@@ -198,7 +195,7 @@ func _on_quick_match_pressed() -> void:
 
 
 func _on_matchmaking_midpoint() -> void:
-	_set_matchmaking_status(tr("Simulating match..."))
+	_set_matchmaking_status(tr("Getting players ready..."))
 
 
 static func _int(data: Dictionary, key: String, default: int) -> int:
