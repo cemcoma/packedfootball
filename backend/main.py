@@ -31,6 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import ALLOWED_ORIGINS
 from routers import (
     account,
+    claims,
     currency,
     deals,
     energy,
@@ -62,5 +63,6 @@ for _router in (
     matches.router,
     tournaments.router,
     ads.router,
+    claims.router,
 ):
     app.include_router(_router)

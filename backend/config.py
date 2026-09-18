@@ -220,8 +220,10 @@ TOURNAMENT_JOIN_CUTOFF_SECONDS = 60 * 60
 # position to mean anything.
 TOURNAMENT_PROMOTE_POSITIONS = (1, 2)
 TOURNAMENT_RELEGATE_POSITIONS = (5, 6)
-TOURNAMENT_PROMOTION_FLOOR = 20
-TOURNAMENT_RELEGATION_FLOOR = 10
+# 16 is five wins and a draw out of ten; 20 needed seven wins, which in a
+# real group of six meant the top two rarely both cleared it.
+TOURNAMENT_PROMOTION_FLOOR = 16
+TOURNAMENT_RELEGATION_FLOOR = 8
 
 # A group this small has no competition in it -- a solo player who wins 7 of
 # 10 clears the floor and promotes against nobody, and at launch (everyone in
@@ -230,26 +232,51 @@ TOURNAMENT_RELEGATION_FLOOR = 10
 # this is refused.
 TOURNAMENT_MIN_GROUP_FOR_PROMOTION = 3
 
-# Placement pays medals and bucks ONLY -- per-match credits are the separate,
-# smaller table below. Scarcity is the point: packs 6 and 7 cost 1 and 3
-# medals (see packedfootball/packEngine.py), so two medals is a real prize
-# rather than a consolation. Bucks exist on the tier 1 podium and nowhere
-# else in the game outside the store.
+# Placement pays EVERY position, by position alone -- not by whether the
+# player promoted. The podium carries the scarce currencies (medals, and
+# bucks on the tier 1 podium only -- packs 6 and 7 cost 1 and 3 medals, see
+# packedfootball/packEngine.py, so two medals is a real prize) and every
+# row down to last carries credits, so a bad day still pays something and
+# there is a reason to keep playing from 5th. A position missing from a
+# tier's table pays nothing.
 #
-# A position missing from a tier's table pays nothing.
-#
-# A PROMOTION-SLOT reward only pays if the player actually cleared
-# PROMOTION_FLOOR -- finishing 2nd on 15 points in a weak group is not worth a
-# medal. That keys off the rule's VERDICT rather than its clamped effect, so a
-# tier 1 winner (who cannot promote and is recorded as staying) still collects
-# the top prize.
+# Sized against the per-match credits below: ten wins is 3000, so a
+# bronze win is worth about half a perfect day on top.
 TOURNAMENT_REWARDS = {
-    1: {1: {"medals": 5, "bucks": 5}, 2: {"medals": 3, "bucks": 3}, 3: {"medals": 3}},
-    2: {1: {"medals": 3}, 2: {"medals": 2}, 3: {"medals": 1}},
-    3: {1: {"medals": 2}, 2: {"medals": 1}},
+    1: {
+        1: {"medals": 5, "bucks": 5, "credits": 3000},
+        2: {"medals": 3, "bucks": 3, "credits": 2000},
+        3: {"medals": 3, "credits": 1500},
+        4: {"medals": 1, "credits": 1000},
+        5: {"credits": 750},
+        6: {"credits": 500},
+    },
+    2: {
+        1: {"medals": 3, "credits": 2000},
+        2: {"medals": 2, "credits": 1500},
+        3: {"medals": 1, "credits": 1000},
+        4: {"credits": 750},
+        5: {"credits": 500},
+        6: {"credits": 300},
+    },
+    3: {
+        1: {"medals": 2, "credits": 1500},
+        2: {"medals": 1, "credits": 1000},
+        3: {"credits": 500},
+        4: {"credits": 400},
+        5: {"credits": 300},
+        6: {"credits": 200},
+    },
 }
 
 TOURNAMENT_REWARD_MIN_MATCHES = 1
+
+# Playing every one of the day's matches pays this, on top of placement --
+# but only when CLAIMED (POST /claim, type "tournament_full_day"), so the
+# player presses the button and watches the number move rather than
+# finding the credits already there. Same table shape as a placement
+# reward, so any currency works.
+TOURNAMENT_FULL_DAY_REWARD = {"credits": 500}
 
 # What a single tournament match pays, regardless of placement. Higher than 
 # quickplay as an incentive to play tournaments more and more

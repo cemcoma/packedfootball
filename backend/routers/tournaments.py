@@ -61,10 +61,12 @@ async def _today_payload(client, uid: str, profile_doc: dict | None) -> dict:
     group_id = (profile_doc or {}).get("tournament_group_id") if joined else None
 
     standings, played, group_size = [], 0, 0
+    my_entry = None
     if group_id:
         entries = await client.list_collection(tournament_service.entries_path(day_id, group_id))
         group_doc = await client.get_document(tournament_service.group_path(day_id, group_id))
         group_size = len((group_doc or {}).get("member_uids") or entries)
+        my_entry = next((e for e in entries if e.get("uid") == uid), None)
         # "What happens if the day ended now", from the SAME apply_rules
         # settlement calls -- one implementation is what stops the projection
         # and the payout from ever disagreeing.
@@ -109,6 +111,10 @@ async def _today_payload(client, uid: str, profile_doc: dict | None) -> dict:
         "matches_max": config.TOURNAMENT_MATCHES_PER_DAY,
         "energy": energy_service.describe(current_energy, anchor, now),
         "standings": standings,
+        # The play-every-match reward: progress for the bar, and whether
+        # the Claim button is live. Claiming goes through POST /claim with
+        # type "tournament_full_day" (routers/claims.py).
+        "full_day": tournament_service.full_day_state(my_entry) if joined else None,
         "rules": {
             "points_win": config.TOURNAMENT_POINTS["win"],
             "points_draw": config.TOURNAMENT_POINTS["draw"],
@@ -171,7 +177,13 @@ async def _pending_results(client, uid: str, profile_doc: dict | None, today: st
 
     await client.set_document(e_path, {"is_shown": True}, merge=True)
 
-    return {"day_id": last_day, "group_id": group_id, "me": mine, "rows": rows}
+    return {
+        "day_id": last_day,
+        "group_id": group_id,
+        "me": mine,
+        "rows": rows,
+        "full_day": tournament_service.full_day_state(entry),
+    }
 
 @router.post("/tournament/join")
 async def join_tournament(uid: str = Depends(verify_id_token)):
@@ -413,12 +425,14 @@ async def tournament_results(day_id: str = "", uid: str = Depends(verify_id_toke
         raise HTTPException(409, "That day hasn't been settled yet")
 
     rows = settlement.get("rows") or []
+    entry = await client.get_document(tournament_service.entry_path(target_day, group_id, uid))
     return {
         "day_id": target_day,
         "group_id": group_id,
         "mode": settlement.get("mode"),
         "rows": rows,
         "me": next((r for r in rows if r.get("uid") == uid), None),
+        "full_day": tournament_service.full_day_state(entry) if entry is not None else None,
     }
 
 

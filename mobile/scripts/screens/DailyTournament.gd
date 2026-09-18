@@ -17,6 +17,14 @@ extends Control
 ## Countdowns tick locally from the seconds the server sent (see TimeFormat),
 ## never from a parsed timestamp, so a device with a wrong clock still shows
 ## the right numbers.
+##
+## THE FULL-DAY REWARD. Playing all ten matches earns a bonus that is paid
+## only when the player presses Claim -- the server marks it earned, this
+## screen asks for it (POST /claim, type "tournament_full_day"), and the
+## credits move in front of them. The panel under the rewards list shows
+## the progress bar towards it; the same Claim also appears on yesterday's
+## result banner, because a tenth match played at 23:50 is claimable next
+## morning from the results and would otherwise be lost.
 
 const HUB_SCENE := "res://scenes/Tournament.tscn"
 const MATCH_SCENE := "res://scenes/Match.tscn"
@@ -32,6 +40,12 @@ const MATCH_SCENE := "res://scenes/Match.tscn"
 @onready var _rules_label: Label = %RulesLabel
 @onready var _rewards_box: VBoxContainer = %RewardsBox
 @onready var _rewards_heading: Label = %RewardsHeading
+@onready var _full_day_panel: PanelContainer = %FullDayPanel
+@onready var _full_day_heading: Label = %FullDayHeading
+@onready var _full_day_bar: ProgressBar = %FullDayBar
+@onready var _full_day_label: Label = %FullDayLabel
+@onready var _full_day_reward: CurrencyAmount = %FullDayReward
+@onready var _full_day_claim_button: Button = %FullDayClaimButton
 
 @onready var _join_button: Button = %JoinButton
 @onready var _play_button: Button = %PlayButton
@@ -40,11 +54,16 @@ const MATCH_SCENE := "res://scenes/Match.tscn"
 
 @onready var _banner: Control = %ResultBanner
 @onready var _banner_label: Label = %BannerLabel
+@onready var _banner_claim_button: Button = %BannerClaimButton
 @onready var _banner_button: Button = %BannerButton
 
 var _state: Dictionary = {}
 var _busy: bool = false
 var _seconds_remaining: float = 0.0
+## Yesterday's day/group while the result banner is up with a claimable
+## full-day reward -- what the banner's Claim sends, since today's entry
+## is a different document.
+var _banner_claim: Dictionary = {}
 
 
 func _ready() -> void:
@@ -52,6 +71,8 @@ func _ready() -> void:
 	_play_button.pressed.connect(_on_play_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 	_banner_button.pressed.connect(func() -> void: _banner.visible = false)
+	_full_day_claim_button.pressed.connect(_on_claim_full_day_pressed.bind({}))
+	_banner_claim_button.pressed.connect(_on_banner_claim_pressed)
 
 	_credits_chip.set_currency("credits")
 	_banner.visible = false
@@ -109,6 +130,7 @@ func _apply_state(data: Dictionary) -> void:
 	_refresh_progress()
 	_refresh_rules()
 	_refresh_rewards()
+	_refresh_full_day()
 	_refresh_buttons()
 	_apply_theme_colors()
 	_show_pending_results(data.get("pending_results"))
@@ -201,6 +223,51 @@ func _reward_row(entry: Dictionary) -> HBoxContainer:
 	return row
 
 
+## The play-every-match panel: hidden until joined, a bar filling towards
+## the tenth match, then a live Claim, then "Claimed". The reward amount is
+## shown throughout so the bar is a bar TOWARDS something.
+func _refresh_full_day() -> void:
+	var full_day = _state.get("full_day")
+	_full_day_panel.visible = full_day is Dictionary
+	if not (full_day is Dictionary):
+		return
+
+	var played := _int(full_day, "played", 0)
+	var required := _int(full_day, "required", 10)
+	var claimable: bool = bool(full_day.get("claimable", false))
+	var claimed: bool = bool(full_day.get("claimed", false))
+	var reward = full_day.get("reward")
+	var reward_dict: Dictionary = reward if reward is Dictionary else {}
+
+	_full_day_heading.text = tr("Play all %d matches") % required
+	_full_day_bar.max_value = required
+	_full_day_bar.value = mini(played, required)
+	_full_day_label.text = "%d / %d" % [mini(played, required), required]
+
+	# One currency is all the reward table carries today; show the first
+	# non-zero one, which is how a two-currency reward would degrade too.
+	var currency := "credits"
+	var amount := 0
+	for key in ["credits", "bucks", "medals"]:
+		if _int(reward_dict, key, 0) > 0:
+			currency = key
+			amount = _int(reward_dict, key, 0)
+			break
+	_full_day_reward.set_amount(currency, amount)
+	_full_day_reward.set_sizes(16, 12)
+
+	if claimed:
+		_full_day_claim_button.text = tr("Claimed")
+		_full_day_claim_button.disabled = true
+	elif claimable:
+		CurrencyDisplay.set_button_price(_full_day_claim_button, tr("Claim"), amount, currency)
+		_full_day_claim_button.disabled = _busy
+	else:
+		_full_day_claim_button.text = tr("%d more to go") % (required - played)
+		_full_day_claim_button.icon = null
+		_full_day_claim_button.disabled = true
+
+
 func _refresh_buttons() -> void:
 	var joined: bool = bool(_state.get("joined", false))
 	var closed: bool = bool(_state.get("join_closed", false))
@@ -220,6 +287,7 @@ func _refresh_buttons() -> void:
 			_set_status(tr("Entries are closed for the last hour of the day -- the next tournament starts in %s.") % reopens, false)
 		return
 
+	_refresh_full_day()  # its Claim follows _busy too
 	_play_button.disabled = _busy or out_of_matches or out_of_energy
 	if out_of_matches:
 		_play_button.text = tr("All %d matches played") % total
@@ -264,6 +332,19 @@ func _show_pending_results(pending) -> void:
 	_banner_label.text = tr("Yesterday: finished %d%s\n\n%s%s") % [
 		position, _ordinal_suffix(position), headline, reward_text
 	]
+
+	# A full day played yesterday but never claimed: offer it here, keyed to
+	# yesterday's entry, or it would silently expire behind today's panel.
+	_banner_claim = {}
+	var full_day = pending.get("full_day")
+	var claimable: bool = full_day is Dictionary and bool(full_day.get("claimable", false))
+	_banner_claim_button.visible = claimable
+	if claimable:
+		_banner_claim = {"day_id": str(pending.get("day_id", "")), "group_id": str(pending.get("group_id", ""))}
+		var reward = full_day.get("reward")
+		var amount := _int(reward if reward is Dictionary else {}, "credits", 0)
+		CurrencyDisplay.set_button_price(_banner_claim_button, tr("Claim yesterday's full-day bonus"), amount, "credits")
+		_banner_claim_button.disabled = false
 	_banner.visible = true
 
 
@@ -294,6 +375,9 @@ func _apply_theme_colors() -> void:
 	_countdown_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 	_progress_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 	_rules_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+	# The full-day panel is a themed PanelContainer, so its labels take the
+	# Theme's own colour -- only the heading is lifted to match Rewards.
+	_full_day_heading.add_theme_color_override("font_color", heading)
 	# The banner text is inside a themed PanelContainer, which carries its own
 	# background in both modes -- so it takes the Theme's Label colour. Forcing
 	# white here would vanish against the light theme's near-white panel.
@@ -371,6 +455,71 @@ func _on_play_pressed() -> void:
 	_busy_popup.set_status(tr("Kick off!"))
 	await get_tree().create_timer(0.3).timeout
 	get_tree().change_scene_to_file(MATCH_SCENE)
+
+
+## POST /claim for the full-day reward. `target` is {} for today's entry
+## (the server resolves it from the profile) or yesterday's day_id +
+## group_id from the result banner. On success the balances in the
+## response are applied straight to the shared cache, so the chip moves
+## the moment the button is pressed -- that's the whole point of claiming
+## by hand rather than paying out silently.
+func _on_claim_full_day_pressed(target: Dictionary) -> void:
+	if _busy:
+		return
+	_busy = true
+	_full_day_claim_button.disabled = true
+	_banner_claim_button.disabled = true
+
+	var body := {"type": "tournament_full_day"}
+	body.merge(target)
+	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_POST, "/claim", body)
+
+	_busy = false
+	if not res.ok:
+		# 409 is "already claimed" or "not earned" -- both mean this screen
+		# is behind the server, so re-read rather than guess.
+		_set_status(
+			tr("Already claimed.") if res.status == 409 else tr("Could not claim -- try again."),
+			res.status != 409,
+		)
+		if res.status == 409:
+			await _load(tr("Refreshing..."))
+		else:
+			_refresh_full_day()
+			_banner_claim_button.disabled = false
+		return
+
+	GameProfile.apply_currency_balances(
+		res.data.get("credits_remaining"),
+		res.data.get("bucks_remaining"),
+		res.data.get("medals_remaining"),
+	)
+	_credits_chip.set_amount(GameProfile.credits)
+
+	var rewards = res.data.get("rewards")
+	var parts: Array = []
+	if rewards is Dictionary:
+		for currency in rewards.keys():
+			parts.append("%d %s" % [int(rewards[currency]), CurrencyDisplay.lowercase_label_for(currency)])
+	_set_status(tr("Claimed %s!") % ", ".join(parts), false)
+
+	if target.is_empty():
+		# Today's: mark it locally so the panel flips to Claimed without a
+		# round trip -- the server already did the same.
+		var full_day = _state.get("full_day")
+		if full_day is Dictionary:
+			full_day["claimable"] = false
+			full_day["claimed"] = true
+		_refresh_full_day()
+	else:
+		_banner_claim_button.visible = false
+		_banner_claim = {}
+
+
+func _on_banner_claim_pressed() -> void:
+	if _banner_claim.is_empty():
+		return
+	await _on_claim_full_day_pressed(_banner_claim)
 
 
 func _on_back_pressed() -> void:

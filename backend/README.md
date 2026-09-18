@@ -1,14 +1,21 @@
 # Backend (Cloud Run service)
 
 FastAPI service holding everything the client isn't allowed to decide for
-itself: match simulation, pack opening, currency balances, leaderboards.
-Imports `gameEngine.py`, `packEngine.py` and `game_state.py` from
-`packedfootball/` unmodified; `admin_firestore_client.py` plugs into
-`GameState` as a service-account-backed client, which bypasses
-`firestore.rules` entirely.
+itself: match simulation, pack opening, currency balances, energy, daily
+tournaments, leaderboards, account lifecycle. Imports `gameEngine.py`,
+`packEngine.py` and `game_state.py` from `packedfootball/` unmodified;
+`admin_firestore_client.py` plugs into `GameState` as a service-account-
+backed client, which bypasses `firestore.rules` entirely.
 
-Auth is per-request: every endpoint except `/health` and the RevenueCat
-webhook takes a Firebase ID token (`verify_id_token`).
+Layout: `main.py` mounts one router per area from `routers/`; the work an
+endpoint delegates to lives in `services/` (match simulation, energy,
+tournament rules, account rules), where the rule-like parts are pure
+functions covered by `tests/`; `config.py` holds every tunable.
+
+Auth is per-request: every endpoint takes a Firebase ID token
+(`verify_id_token`) except `/health`, `GET /account/name_available`, the
+RevenueCat webhook (shared secret) and `POST /tournament/settle` (its own
+shared secret, for Cloud Scheduler).
 
 ## Tests
 
@@ -31,6 +38,7 @@ build context by the repo-root `.dockerignore`) and fill in real values:
 | --- | --- |
 | `FIREBASE_PROJECT_ID` | Firestore project. Defaults to `packedfootball` in code. |
 | `REVENUECAT_WEBHOOK_SECRET` | Shared secret for `POST /webhooks/revenuecat`. Fails closed if unset. Generate your own (`openssl rand -hex 32`). |
+| `TOURNAMENT_ADMIN_SECRET` | Shared secret for `POST /tournament/settle` (Cloud Scheduler). Fails closed if unset. |
 
 ```sh
 pip install -r backend/requirements.txt
@@ -88,24 +96,102 @@ Credentials automatically -- no key file.
 | `POST /account/bootstrap` | Idempotent. Creates the profile plus an 11-card bronze starter roster on a uid's first ever call; no-op afterwards. |
 | `GET /account/name_available` | Unauthenticated. Whether `?display_name=` passes the rules and is free -- the registration form asks before creating the Auth user. Advisory only. |
 | `POST /account/display_name` | Renames the manager, uniquely: reserves `display_names/{key}` in the same transaction as the name. 400 with a reason code, 409 when taken. |
+| `POST /claim` | One door for every reward that is earned silently and paid on a tap. Body `{"type": ...}` plus what the type needs; today `tournament_full_day` (optional `day_id` + `group_id`, default today's entry). Pays once, returns `rewards` and every `*_remaining` balance. |
 | `DELETE /account` | Deletes the account: profile, inventory, every owned card, games it started, its name reservation, its seat in an unsettled tournament group, then the Firebase Auth user (last, so a failed attempt can be retried). Keeps `iap_transactions` and games it only played in as the opponent. Backfill old accounts' name reservations with `scripts/sync_display_names.py`. |
-| `GET /pack/list` | Live pack catalog, filtered by availability. |
-| `POST /pack/open` | Charges the pack's currency, rolls cards, writes them. |
+| `GET /pack/list` | Live pack catalog, filtered by availability; puts a pack whose `available_at` has passed on sale as a side effect (see Pack availability). |
+| `POST /pack/open` | Charges the pack's currency, rolls cards, writes them. Refuses when the bench can't hold the whole pack (`INVENTORY_CAP`). |
+| `POST /player/release`, `/player/release/batch` | Sells cards back for credits by tier family (`RELEASE_CREDITS_BY_TIER`); a starting-XI card is refused. Batch is one transaction, at most `RELEASE_BATCH_MAX`. |
+| `POST /player/customize` | Changes appearance slots, `CUSTOMIZE_CREDITS_PER_SLOT` each; indices validated against `APPEARANCE_OPTION_COUNTS`. |
 | `GET /currency/exchange/list` | Bucks -> credits tiers. |
 | `POST /currency/exchange/redeem` | Spends bucks, grants credits. |
 | `GET /currency/bucks/list` | Real-money bucks catalog (product ids for RevenueCat). |
 | `POST /webhooks/revenuecat` | Grants bucks after a verified purchase. Called by RevenueCat, not the client. |
+| `GET /energy`, `GET /energy/refill/list`, `POST /energy/refill` | The energy bar (regenerates `ENERGY_REGEN_SECONDS` per point up to `ENERGY_MAX`), and buying it back. |
+| `POST /ads/reward` | Grants the next step of a rewarded-ad track (`reward` or `energy`), with a daily cap that resets on the tournament day boundary. |
 | `GET /deals/list` | Timed offers, with per-caller availability. |
 | `POST /deals/redeem` | Spends a deal's cost currency, grants its rewards. |
 | `GET /leaderboard/players` | Ranks `players/{id}` by `goals`/`assists`/`matches_played`. |
 | `GET /leaderboard/users` | Ranks `users/{uid}` by `wins`. |
-| `POST /match/quick` | Finds an opponent (real account or bot), simulates, rewards, persists. |
+| `POST /match/quick` | Finds an opponent (real account or bot), spends energy, simulates, rewards, persists. |
 | `POST /match/simulate` | Ranked challenge against a named `opponent_uid`. |
+| `GET /tournament/today` | Everything the tournament screen needs in one response; settles any overdue day first and carries yesterday's result in `pending_results`. |
+| `POST /tournament/join` | Joins today's group in the caller's tier. Refused in the last hour of the day. |
+| `POST /tournament/match` | One of the day's `TOURNAMENT_MATCHES_PER_DAY` matches against someone in the same tier's pool (or a tier-appropriate bot). |
+| `GET /tournament/results` | A settled day's final table for the caller's group. |
+| `POST /tournament/settle` | Scheduler/admin: settles the lookback window, or one `day_id`. |
 
 Both leaderboard endpoints return `{"stat": ..., "entries": [...]}` already
 in rank order; index + 1 is the rank, there's no explicit rank field. They
 use a plain `order_by(...).limit(...)`, so no composite index is needed even
 on a nested path like `statistics.goals`.
+
+### Tiers
+
+A card's `tier` is `"<family>"` or `"<family>_<variant>"`: `special_camp`
+is a special, a future `diamond_turkish` would be a diamond.
+`packEngine.tier_family()` (mirrored by `PlayerCard.tier_family()` on the
+client) is the collapse, and everything that treats a tier as a rarity --
+release value, card colour, ordering, the pack-odds disclosure -- goes by
+the family. The variant only picks the card art and, in `TIER_RANGES`, the
+overall range. Adding a variant is a `TIER_RANGES` entry plus a sprite; a
+new family also needs rows in `RELEASE_CREDITS_BY_TIER` and the client's
+`PlayerCard.TIER_COLORS` / `RELEASE_CREDITS`. Renaming a key means
+`scripts/rename_tiers.py` for the cards already out there.
+
+### Daily tournaments
+
+Everyone in a tier is grouped into `tournaments/{day}/groups/{id}` of
+`TOURNAMENT_GROUP_CAPACITY` as they join (the tier's *desk* document points
+at the group being filled, so a join is a path read, not a query). A day
+runs noon-to-noon Istanbul (`TOURNAMENT_DAY_OFFSET_HOURS`), and each player
+gets `TOURNAMENT_MATCHES_PER_DAY` matches, each costing one energy.
+
+Settlement is **lazy**: the first request of any kind after a day ends
+settles it (`ensure_settled_through`, capped per request so it can't stall
+a player's own call), and Cloud Scheduler's `POST /tournament/settle` makes
+it punctual. `settle_group` is one idempotent transaction per group: the
+`settlement.status` token, the payouts (as `Increment`, never
+read-compute-write) and the tier moves land together or not at all.
+
+The rules are pure functions in `services/tournament.py`, tested in
+`tests/test_tournament_rules.py`:
+
+- **Full group** -- positional: `TOURNAMENT_PROMOTE_POSITIONS` go up if
+  they also reach `TOURNAMENT_PROMOTION_FLOOR` (16), `RELEGATE_POSITIONS` go
+  down regardless.
+- **Short group** -- thresholds: on or over the floor goes up, under
+  `TOURNAMENT_RELEGATION_FLOOR` (8) goes down. Promotion needs at least
+  `TOURNAMENT_MIN_GROUP_FOR_PROMOTION` players in the group.
+- **Rewards** (`TOURNAMENT_REWARDS`) pay **every position by position**, not
+  by whether the player promoted: medals and, on the tier 1 podium, bucks
+  at the top, credits down to last place. A player who played nothing is
+  paid nothing.
+- **Full-day bonus** (`TOURNAMENT_FULL_DAY_REWARD`) for playing every match
+  of the day. Earned silently, paid only through `POST /claim`
+  (`type: "tournament_full_day"`), once -- `full_day_claimed` on the entry
+  and the payout flip in one transaction.
+
+`POST /claim` is the one door for anything earned-then-tapped;
+`routers/claims.py`'s `CLAIM_HANDLERS` is where the next claimable type
+goes.
+
+### Accounts
+
+Display names are **unique**, case- and spacing-insensitive
+(`services/account.py`): `display_names/{key}` reservations are written in
+the same transaction as the name, and `firestore.rules` no longer lets the
+client write `display_name` directly, so nothing can skip the reservation.
+`GET /account/name_available` lets the registration form ask before the
+Auth user exists.
+
+`DELETE /account` is what App Store guideline 5.1.1(v) requires. It removes
+the profile, inventory pointers, every owned `players/{id}`, games the
+account initiated, its name reservation and its seat in any unsettled
+group (`member_uids`, entry, matchmaking pool -- so settlement never tries
+to pay a deleted account, which would recreate its profile doc), then the
+Firebase Auth user **last** so a failed attempt can be retried. It keeps
+`iap_transactions` (financial records) and games it only played in as the
+opponent.
 
 ### Matches
 
@@ -188,7 +274,7 @@ along with `replay.FORMAT_VERSION` and the existing `seed`. Seed + engine
 version together reproduce a reported match exactly, which is what makes a
 bug report or a dispute investigable after the engine has moved on.
 
-It is a **string**, `MAJOR.MINOR.PATCH` (currently `"2.1.0"`) -- bump it
+It is a **string**, `MAJOR.MINOR.PATCH` (currently `"2.2.0"`) -- bump it
 whenever match behaviour changes:
 
 | | means | effect on a stored match |
@@ -214,10 +300,15 @@ that live **only** in Firestore and are never written by a deploy:
 - `active` -- must be `true` or the pack is unavailable. **Absent counts as
   false.**
 - `max_opens` / `times_opened` -- a hard cap on total opens.
-- `expires_at` -- ISO datetime after which it can't be opened.
-- `available_at` -- opt an unavailable pack into still being
-  *shown*, grayed out with a tag, instead of hidden. A display hint only;
-  neither auto-flips `active`.
+- `expires_at` -- datetime (or ISO string) after which it can't be opened.
+- `available_at` -- a planned on-sale time. Until then the pack is
+  *shown* grayed out with an "Available <date>" tag instead of hidden; once
+  it passes, the first `/pack/list` or `/pack/open` to see it sets
+  `active: true` and **deletes `available_at`** (`_activate_if_due`).
+  Deleting is what makes it fire once -- pulling the pack afterwards by
+  setting `active: false` sticks, because the date that would re-activate
+  it is gone.
+- `visible` -- show an unavailable pack grayed out even without a date.
 
 `_pack_unavailable_reason` and `_pack_is_teased` are shared by `/pack/list`
 (filters what's shown) and `/pack/open` (rejects a purchase), so the two
@@ -237,16 +328,18 @@ profile with that name to both check and deduct.
 guess which one moved. Set `price_currency` in `PACK_DATABASE` and
 `sync_pack_definitions.py` carries it across.
 
-Nothing grants medals yet (Tournament mode doesn't exist), so a
-medals-priced pack is visible but unbuyable.
+Medals come only from tournament placement (`TOURNAMENT_REWARDS`), which is
+what makes a medals-priced pack scarce rather than unbuyable.
 
 ### Currencies
 
-Three balances on `users/{uid}`: `credits` (soft, earned from matches),
-`bucks` (hard, real-money, also spendable on credits), `medals` (tournament
-only -- nothing grants these yet). All three are backend-only writes
-(`GameState.set_credits`/`set_bucks`/`set_medals`); `firestore.rules` blocks
-the client from writing them directly.
+Three balances on `users/{uid}`: `credits` (soft: matches, placement, the
+full-day bonus, ads, releasing cards), `bucks` (hard, real-money, also
+spendable on credits; the tier 1 tournament podium is the only in-game
+source), `medals` (tournament placement only). All three are backend-only
+writes (`GameState.set_credits`/`set_bucks`/`set_medals`, or `Increment`
+inside a transaction); `firestore.rules` blocks the client from writing
+them directly.
 
 `CREDIT_EXCHANGE_RATES` and `BUCKS_IAP_CATALOG` are code constants in
 `main.py`, not Firestore-backed -- changing them takes a redeploy, which is
@@ -308,10 +401,12 @@ python3 backend/scripts/<script>.py [--dry-run]
 | `sync_pack_definitions.py` | Pushes `packEngine.PACK_DATABASE`'s definitional fields onto existing `packs/{id}` docs. Never touches operational fields. `--pack-id N` for one pack. Skips ids with no existing doc. |
 | `sync_deal_definitions.py` | Same for `packedfootball/deal_database.py`'s `DEAL_DATABASE` -> `deals/{id}`. Unlike the pack version it *creates* missing docs, seeded `active: false`; `--activate-new` seeds them `active: true` instead. Never changes an existing doc's `active`. |
 | `sync_player_appearance.py` | Backfills a placeholder `appearance` onto `players/{id}` docs that predate the field. |
+| `sync_display_names.py` | Backfills `display_names/{key}` reservations for accounts created before names were unique. Oldest account keeps a duplicated name; conflicts are printed, never renamed. |
+| `rename_tiers.py` | Rewrites `tier` on `players/{id}` after a `TIER_RANGES` key is renamed (its `RENAMES` map). Run `sync_pack_definitions.py` too, for the pack rates. |
 | `list_packs.py` | Read-only dump of live `packs/{id}` docs. `--pack-id N` for one. |
 | `list_deals.py` | Read-only dump of live `deals/{id}` docs. |
 | `list_accounts.py` | Read-only. Lists every `users/{uid}` and whether its roster is Quick-Match complete (`roster_player_ids` length == 11). |
-| `settle_tournaments.py`| Settles tournaments by hand, only should be used when an error happens. --dry-run to check why it failed (or why it will work) |
+| `settle_tournaments.py` | Settles tournaments by hand when a day is stuck; `--dry-run` to see why it failed (or why it will work). |
 
 A synced deal left `active: false` won't appear in `GET /deals/list` until
 you flip it, in the Firestore console or via `--activate-new` on first sync.
@@ -344,23 +439,14 @@ Firestore's default-deny covers them, and only the Admin SDK touches them.
 The engine produces these; nothing displays them yet.
 
 - **Added time** -- `added_time` in both match responses, clock seconds per
-  half. Wants a "+3" at the end of each half.
-- **Post and crossbar rebounds** -- the ball now bounces off the frame and
+  half. Wants a "+3" at the end of each half; the replay already plays the
+  extra minutes, the clock just doesn't say so.
+- **Post and crossbar rebounds** -- the ball bounces off the frame and
   stays live. No replay event is emitted for it (that would mean a new
   `ActionType`, which has to be mirrored into `ReplayReader.gd`), so a
-  rebound currently plays back as ordinary ball movement.
-- **Match stats and ratings** -- every card carries shots, passes, tackles,
-  saves, clean sheets and an average rating. Only goals/assists/matches are
-  shown today.
+  rebound plays back as ordinary ball movement.
 - **Stamina** -- live per-match, 0-100, and it already slows tired players.
   Not surfaced anywhere.
-- **Height** -- generated and persisted, nothing reads it yet. It is the
-  foundation for headers, free kicks and shots over players.
-
-## Not built yet
-
-Tournament mode: a 1-day, 10-match bracket per entry, 4 skill categories
-with promotion by winning, matched against similarly-ranked players rather
-than Quick Match's random pool. `mobile/scenes/Tournament.tscn` is a stub
-and nothing server-side exists. Medals have nowhere to be earned until it
-ships.
+- **Height** -- generated and persisted; the client draws taller figures
+  from it, but the engine doesn't use it yet. It is the foundation for
+  headers, free kicks and shots over players.

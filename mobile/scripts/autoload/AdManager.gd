@@ -2,11 +2,12 @@ extends Node
 
 signal ad_reward_completed(track: String, success: bool)
 
-### SUPER IMPORTANT ###
+### SUPER IMPORTANT ### DUPER IPORTANT ###
+#
 #  Change test mode before relase!
 #
-#
-const TEST_MODE: bool = false
+
+const TEST_MODE: bool = True
 
 # Google's official Test IDs for Rewarded Video Ads
 const REWARDED_TEST_ID_ANDROID := "ca-app-pub-3940256099942544/5224354917"

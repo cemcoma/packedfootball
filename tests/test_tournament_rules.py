@@ -154,9 +154,9 @@ def test_short_group_relegates_below_the_floor():
 
 
 def test_short_group_can_promote_more_than_two():
-    """The brief's own example: 20, 19, 18 all go up when the group is short
-    and the floor is met."""
-    got = outcomes([entry("a", 22), entry("b", 21), entry("c", 20), entry("d", 16)])
+    """Everyone on or over the floor goes up when the group is short --
+    three of them here -- and the one just under it stays."""
+    got = outcomes([entry("a", FLOOR + 6), entry("b", FLOOR + 3), entry("c", FLOOR), entry("d", FLOOR - 1)])
     assert [got[u] for u in ("a", "b", "c")] == ["promote"] * 3
     assert got["d"] == "stay"
 
@@ -240,26 +240,33 @@ def test_winner_of_a_real_group_collects():
     assert rows[0]["rewards"] == config.TOURNAMENT_REWARDS[3][1]
 
 
-def test_promotion_slot_below_the_floor_collects_nothing():
-    """Finishing 2nd on 15 points in a weak group is not worth a medal."""
-    rows = t.apply_rules(t.rank_rows(full_group([16, 15, 12, 10, 8, 4])), 3)
+def test_placement_pays_by_position_not_by_promotion():
+    """Finishing 2nd on 15 points in a weak group doesn't promote -- but it
+    still finished 2nd, and 2nd is what the table pays for."""
+    rows = t.apply_rules(t.rank_rows(full_group([FLOOR - 1, 15, 12, 10, 8, 4])), 3)
     assert rows[0]["outcome"] == "stay"
-    assert rows[0]["rewards"] == {}
-    assert rows[1]["rewards"] == {}
+    assert rows[0]["rewards"] == config.TOURNAMENT_REWARDS[3][1]
+    assert rows[1]["rewards"] == config.TOURNAMENT_REWARDS[3][2]
 
 
-def test_top_tier_winner_still_collects_despite_the_clamp():
-    """The reward gate keys off the VERDICT, not the clamped effect -- the
-    case most likely to be got wrong."""
+def test_top_tier_winner_collects_despite_the_clamp():
     rows = t.apply_rules(t.rank_rows(full_group([30, 28, 26, 14, 11, 6])), config.TOURNAMENT_TOP_TIER)
     assert rows[0]["to_tier"] == rows[0]["from_tier"]     # went nowhere
     assert rows[0]["rewards"] == config.TOURNAMENT_REWARDS[1][1]   # paid anyway
 
 
-def test_non_promotion_positions_are_not_floor_gated():
-    """Third place is not a promotion slot, so its reward is unconditional."""
-    rows = t.apply_rules(t.rank_rows(full_group([30, 28, 26, 14, 11, 6])), 1)
-    assert rows[2]["rewards"] == config.TOURNAMENT_REWARDS[1][3]
+def test_every_position_in_a_full_group_is_paid():
+    """Down to last place: a bad day still pays credits."""
+    for tier in config.TOURNAMENT_REWARDS:
+        rows = t.apply_rules(t.rank_rows(full_group([30, 28, 26, 14, 11, 6])), tier)
+        for row in rows:
+            assert row["rewards"].get("credits", 0) > 0, (tier, row["position"])
+
+
+def test_placement_credits_fall_with_position():
+    for tier, table in config.TOURNAMENT_REWARDS.items():
+        credits = [table[pos]["credits"] for pos in sorted(table)]
+        assert credits == sorted(credits, reverse=True), tier
 
 
 def test_bottom_tier_pays_no_bucks_anywhere():
@@ -275,9 +282,9 @@ def test_bucks_exist_only_on_the_top_tier_podium():
                 assert position in config.TOURNAMENT_PROMOTE_POSITIONS
 
 
-def test_unrewarded_positions_pay_nothing():
-    rows = t.apply_rules(t.rank_rows(full_group([30, 28, 26, 14, 11, 6])), 3)
-    assert rows[-1]["rewards"] == {}
+def test_a_position_missing_from_the_table_pays_nothing():
+    rows = t.apply_rules(t.rank_rows(full_group([30, 28, 26, 14, 11, 6])), 99)  # no such tier
+    assert all(r["rewards"] == {} for r in rows)
 
 
 def test_rewards_are_copies_not_the_config_table():
@@ -371,3 +378,41 @@ def test_tier_defaults_to_the_bottom_and_clamps():
 def test_settlement_mode_names_the_path_taken():
     assert t.settlement_mode(CAP) == "positional"
     assert t.settlement_mode(CAP - 1) == "threshold"
+
+
+# ---------------------------------------------------------- full-day reward
+
+
+def test_full_day_is_not_claimable_until_every_match_is_played():
+    state = t.full_day_state({"played": config.TOURNAMENT_MATCHES_PER_DAY - 1})
+    assert state["claimable"] is False
+    assert state["claimed"] is False
+    assert state["played"] == config.TOURNAMENT_MATCHES_PER_DAY - 1
+    assert state["required"] == config.TOURNAMENT_MATCHES_PER_DAY
+
+
+def test_full_day_is_claimable_once_complete():
+    state = t.full_day_state({"played": config.TOURNAMENT_MATCHES_PER_DAY})
+    assert state["claimable"] is True
+    assert state["reward"] == config.TOURNAMENT_FULL_DAY_REWARD
+
+
+def test_full_day_is_not_claimable_twice():
+    state = t.full_day_state({"played": config.TOURNAMENT_MATCHES_PER_DAY, "full_day_claimed": True})
+    assert state["claimable"] is False
+    assert state["claimed"] is True
+
+
+def test_full_day_state_of_no_entry_is_empty_not_an_error():
+    assert t.full_day_state(None)["played"] == 0
+
+
+def test_full_day_reward_is_a_copy():
+    t.full_day_state({})["reward"]["credits"] = 999
+    assert config.TOURNAMENT_FULL_DAY_REWARD["credits"] != 999
+
+
+def test_a_blank_entry_starts_unclaimed():
+    from datetime import datetime, timezone
+    entry = t.blank_entry("u", "U", 3, "t3-g0001", datetime(2026, 9, 18, tzinfo=timezone.utc))
+    assert entry["full_day_claimed"] is False

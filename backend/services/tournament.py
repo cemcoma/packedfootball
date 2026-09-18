@@ -138,6 +138,7 @@ def blank_entry(uid: str, display_name: str, tier: int, group_id: str, now: date
         "joined_at_iso": now.isoformat(),
         "settled": False,
         "is_shown": False,
+        "full_day_claimed": False,
     }
 
 
@@ -238,25 +239,99 @@ def _verdict(row: dict, tier: int, group_size: int) -> str:
 
 
 def rewards_for(tier: int, row: dict, verdict: str) -> dict:
-    """What a finishing position pays.
+    """What a finishing position pays: the tier's table row for that
+    position, whatever the verdict. Promotion is a separate question from
+    prize money -- 2nd on 15 points still finished 2nd.
 
-    Two gates, both deliberate:
-
-      - A PROMOTION-SLOT reward only pays if the verdict is "promote".
-        Finishing 2nd on 15 points in a weak group is not worth a medal. This
-        keys off the verdict rather than the clamped effect, so a top-tier
-        winner -- who cannot go any higher and is recorded as staying -- still
-        collects the top prize.
-
-      - Playing nothing pays nothing. Medals for tapping Join is an exploit,
-        not a rule anyone wrote down.
+    The one gate: playing nothing pays nothing. Medals for tapping Join is
+    an exploit, not a rule anyone wrote down. (`verdict` is kept in the
+    signature so apply_rules and the tests need no change if a verdict-
+    dependent reward ever comes back.)
     """
     if row.get("played", 0) < config.TOURNAMENT_REWARD_MIN_MATCHES:
         return {}
-    position = row["position"]
-    if position in config.TOURNAMENT_PROMOTE_POSITIONS and verdict != "promote":
-        return {}
-    return dict(config.TOURNAMENT_REWARDS.get(tier, {}).get(position, {}))
+    return dict(config.TOURNAMENT_REWARDS.get(tier, {}).get(row["position"], {}))
+
+
+# -- the full-day reward --------------------------------------------------------
+
+
+def full_day_state(entry: dict | None) -> dict:
+    """Where a player stands with the play-every-match reward, for the
+    screen's progress bar and Claim button.
+
+        played     matches played so far
+        required   TOURNAMENT_MATCHES_PER_DAY
+        reward     the payout table (TOURNAMENT_FULL_DAY_REWARD)
+        claimable  played every match and not claimed yet
+        claimed    already paid
+
+    Pure, so the /today payload, the results payload and claim_full_day's
+    transaction all agree on what "claimable" means.
+    """
+    played = int((entry or {}).get("played", 0))
+    claimed = bool((entry or {}).get("full_day_claimed", False))
+    complete = played >= config.TOURNAMENT_MATCHES_PER_DAY
+    return {
+        "played": played,
+        "required": config.TOURNAMENT_MATCHES_PER_DAY,
+        "reward": dict(config.TOURNAMENT_FULL_DAY_REWARD),
+        "claimable": complete and not claimed,
+        "claimed": claimed,
+    }
+
+
+class NotClaimable(Exception):
+    """The reward can't be paid: not earned yet, already claimed, or no such
+    entry. `.reason` is a short code the endpoint turns into a status."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+async def claim_full_day(client, uid: str, day_id: str, group_id: str) -> dict:
+    """Pays the full-day reward for one entry, exactly once.
+
+    One transaction reads the entry and the profile, checks full_day_state,
+    then flips full_day_claimed and applies the reward with Increment --
+    the same read-nothing-write-increment shape settlement uses, so a pack
+    purchase committing at the same moment can't be clobbered. The flag and
+    the payout land in the same commit: either both happened or neither.
+
+    Returns {"rewards": {...}, "balances": {currency: new amount}} -- the
+    balances are computed from the profile this transaction read plus the
+    reward, which is exact under the transaction's own lock.
+    """
+    from firebase_admin import firestore  # local: keeps the pure half import-free
+
+    e_path = entry_path(day_id, group_id, uid)
+    user_path = f"users/{uid}"
+
+    def _claim(tx):
+        docs = tx.get_all([e_path, user_path])
+        entry, user_doc = docs[e_path], docs[user_path]
+        if entry is None or entry.get("uid", uid) != uid:
+            raise NotClaimable("no_entry")
+        state = full_day_state(entry)
+        if state["claimed"]:
+            raise NotClaimable("already_claimed")
+        if not state["claimable"]:
+            raise NotClaimable("not_earned")
+
+        rewards = state["reward"]
+        fields = {}
+        balances = {}
+        for currency, amount in rewards.items():
+            if amount:
+                fields[currency] = firestore.Increment(amount)
+                balances[currency] = int((user_doc or {}).get(currency, 0)) + amount
+        if fields:
+            tx.set(user_path, fields, merge=True)
+        tx.set(e_path, {"full_day_claimed": True}, merge=True)
+        return {"rewards": rewards, "balances": balances}
+
+    return await client.run_transaction(_claim)
 
 
 def apply_rules(rows: list[dict], tier: int, group_size: int | None = None) -> list[dict]:
