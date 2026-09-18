@@ -106,6 +106,13 @@ def pool_path(day_id: str, tier: int) -> str:
     return f"tournaments/{day_id}/pools/{tier}"
 
 
+def bot_pool_path(tier: int) -> str:
+    """The stored bots for a tier, as one list of ids -- written by
+    scripts/seed_bots.py, read when a day's pool is first created so the
+    pool has opponents in it before anyone else has joined."""
+    return f"bot_pools/{tier}"
+
+
 # -- reading a profile --------------------------------------------------------
 
 
@@ -549,16 +556,28 @@ async def join_today(client, uid: str, display_name: str, tier: int, day_id: str
     The matchmaking pool is written with ArrayUnion -- a server-side transform
     in the same family as the Increment used for pack counters -- so
     concurrent joins cannot clobber each other's entries.
+
+    The first join of a day in a tier also seeds the pool with that tier's
+    stored bots (bot_pools/{tier}, see scripts/seed_bots.py): they're in
+    the same ArrayUnion as the joiner, so the pool never exists without
+    them and a second joiner racing the first can't create it empty. Bots
+    are opponents only -- they hold no seat in any group and never appear
+    in a table; the pick is as random over the whole pool as it is over
+    real players, which is the point.
     """
     from firebase_admin import firestore  # local: keeps the pure half import-free
 
     d_path = day_path(day_id)
     dk_path = desk_path(day_id, tier)
+    p_path = pool_path(day_id, tier)
     user_path = f"users/{uid}"
+    bp_path = bot_pool_path(tier)
 
     def _join(tx):
-        docs = tx.get_all([d_path, dk_path, user_path])
+        docs = tx.get_all([d_path, dk_path, user_path, p_path, bp_path])
         day_doc, desk, user_doc = docs[d_path], docs[dk_path], docs[user_path]
+        pool_exists = docs[p_path] is not None
+        bot_ids = list((docs[bp_path] or {}).get("uids") or [])
 
         already = (user_doc or {}).get("tournament_day_id") == day_id
         existing_group = (user_doc or {}).get("tournament_group_id")
@@ -616,8 +635,8 @@ async def join_today(client, uid: str, display_name: str, tier: int, day_id: str
             merge=True,
         )
         tx.set(
-            pool_path(day_id, tier),
-            {"tier": tier, "uids": firestore.ArrayUnion([uid])},
+            p_path,
+            {"tier": tier, "uids": firestore.ArrayUnion([uid] + ([] if pool_exists else bot_ids))},
             merge=True,
         )
         tx.set(

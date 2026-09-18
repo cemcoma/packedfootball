@@ -21,12 +21,43 @@ from engine import (
     Midfielder,
     PLAYER_CLASS_MAP,
     TIER_RANGES,
+    fields_to_player,
     game,
     generate_starter_roster,
     get_formation,
     is_similar_position,
     player_to_fields,
 )
+
+# Stored bots (bots/{id}, see scripts/seed_bots.py) share the "bot_" uid
+# prefix with the throwaway ones _generate_bot_opponent rolls, so every
+# "is this a bot" check downstream (no record, no uid in the response, no
+# stats persisted) already treats them right. The prefix is what tells the
+# candidate loop to read bots/ instead of users/.
+BOT_UID_PREFIX = "bot_"
+
+
+def bot_profile_from_doc(bot_id: str, doc: dict) -> dict | None:
+    """A bots/{id} doc as the profile shape run_match takes, or None when
+    the doc can't field a legal XI. Unlike a user, a bot's eleven are
+    embedded on its own doc rather than pointers into players/ -- one read
+    instead of twelve, and no bot cards on the leaderboards."""
+    fields_list = doc.get("players") or []
+    if len(fields_list) != 11 or doc.get("formation") not in FORMATIONS:
+        return None
+    try:
+        roster = [fields_to_player(f, PLAYER_CLASS_MAP, Midfielder) for f in fields_list]
+    except (KeyError, TypeError, ValueError):
+        return None
+    return {
+        "display_name": doc.get("display_name") or bot_id[:12],
+        "formation": doc["formation"],
+        "roster": roster,
+        "kit": doc.get("kit") or BOT_KIT,
+        "wins": doc.get("wins", 0),
+        "draws": doc.get("draws", 0),
+        "losses": doc.get("losses", 0),
+    }
 
 
 class _Team:
@@ -159,20 +190,25 @@ async def persist_player_stats(caller_state: GameState, caller_profile: dict) ->
     await caller_state.save_roster(caller_profile["roster"])
 
 
-def _generate_bot_opponent(card_tier_pool=None) -> tuple[str, dict]:
+def _generate_bot_opponent(card_tier_rates: dict | None = None) -> tuple[str, dict]:
     """A freshly-rolled bot squad -- random formation AND random card tier so
     a Quick Match bot can plausibly be "the best or worst player" too, not
     always a bronze pushover. Never persisted anywhere; exists only for this
     one match.
 
-    `card_tier_pool` narrows which card tiers it can roll. Quick Match passes
-    nothing and keeps the full TIER_RANGES spread; a tournament passes a
-    tier-appropriate pool, because an icon bot in the bronze league is not a
-    match, it is a guaranteed loss.
+    `card_tier_rates` ({tier: weight}) makes each card roll its own tier
+    from those weights. Quick Match passes nothing and keeps one random
+    tier from the full TIER_RANGES spread for the whole squad; a tournament
+    passes its league's TOURNAMENT_BOT_CARD_RATES, because an icon bot in
+    the bronze league is not a match, it is a guaranteed loss.
     """
     formation = random.choice(list(FORMATIONS.keys()))
-    tier = random.choice(list(card_tier_pool or TIER_RANGES.keys()))
-    roster = generate_starter_roster(formation, tier, seed=secrets.randbits(63))
+    if card_tier_rates:
+        tier = max(card_tier_rates, key=card_tier_rates.get)  # the typical card, for the name
+        roster = generate_starter_roster(formation, seed=secrets.randbits(63), tier_rates=card_tier_rates)
+    else:
+        tier = random.choice(list(TIER_RANGES.keys()))
+        roster = generate_starter_roster(formation, tier, seed=secrets.randbits(63))
     bot_uid = f"bot_{secrets.token_hex(6)}"  # never collides with a real Firebase uid's shape
     profile = {
         "display_name": f"{tier.capitalize()} Bot",
@@ -210,7 +246,7 @@ async def pick_opponent_from_candidates(
     candidate_uids: list[str],
     *,
     max_attempts: int | None = None,
-    card_tier_pool=None,
+    card_tier_rates: dict | None = None,
 ) -> tuple[str, dict]:
     """The shared "find a playable opponent among these uids" loop.
 
@@ -244,6 +280,18 @@ async def pick_opponent_from_candidates(
     for candidate_uid in candidate_uids:
         client = AdminFirestoreClient(candidate_uid)
 
+        # A stored bot: the whole squad is on its one doc.
+        if candidate_uid.startswith(BOT_UID_PREFIX):
+            bot_doc = await client.get_document(f"bots/{candidate_uid}")
+            bot_profile = bot_profile_from_doc(candidate_uid, bot_doc) if bot_doc else None
+            if bot_profile is None:
+                continue
+            try:
+                validate_formation_positions(bot_profile)
+            except HTTPException:
+                continue
+            return candidate_uid, bot_profile
+
         # Stage one: one read, no roster.
         doc = await client.get_document(f"users/{candidate_uid}")
         if doc is None:
@@ -266,4 +314,4 @@ async def pick_opponent_from_candidates(
             continue  # this candidate's own saved data is invalid -- try another, or fall back to a bot
         return candidate_uid, profile
 
-    return _generate_bot_opponent(card_tier_pool)
+    return _generate_bot_opponent(card_tier_rates)

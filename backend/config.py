@@ -324,13 +324,17 @@ TOURNAMENT_ADMIN_SECRET = os.environ.get("TOURNAMENT_ADMIN_SECRET", "")
 # reads to hydrate its roster, so this bounds the worst case.
 TOURNAMENT_OPPONENT_MAX_ATTEMPTS = 5
 
-# _generate_bot_opponent rolls a random CARD tier from the full spread by
-# default, which puts icon bots in bronze tournaments. Tournaments pick from
-# a tier-appropriate pool instead.
-TOURNAMENT_BOT_CARD_TIERS = {
-    1: ("platinum", "diamond"),
-    2: ("gold", "platinum"),
-    3: ("silver", "gold"),
+# What a tournament bot's cards are made of, per league tier: each of its
+# eleven rolls a card tier from these weights (a pack's "rates" shape), so
+# a bronze-league bot is mostly silver with a few golds and the odd
+# platinum rather than eleven identical cards. Used both for the stored
+# bots scripts/seed_bots.py creates and for the throwaway one
+# _generate_bot_opponent rolls when a pool is empty. Quick Match bots keep
+# rolling a single random tier from the whole spread.
+TOURNAMENT_BOT_CARD_RATES = {
+    1: {"gold": 0.20, "platinum": 0.45, "diamond": 0.35},
+    2: {"silver": 0.15, "gold": 0.50, "platinum": 0.30, "diamond": 0.05},
+    3: {"bronze": 0.10, "silver": 0.45, "gold": 0.40, "platinum": 0.05},
 }
 
 # -- match bug reports --------------------------------------------------------

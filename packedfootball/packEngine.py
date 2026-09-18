@@ -490,10 +490,20 @@ class PackManager:
         }
 
 
-def generate_starter_roster(formation_name: str = "4-4-2", tier: str = "bronze", seed=None) -> list:
+def generate_starter_roster(
+    formation_name: str = "4-4-2", tier: str = "bronze", seed=None, tier_rates: dict | None = None
+) -> list:
     """Generates a full 11-card roster, one player per slot of the given
-    formation, all at one tier -- used to bootstrap a brand new account with
-    an actually-playable squad (see backend/main.py's /account/bootstrap).
+    formation -- used to bootstrap a brand new account with an actually-
+    playable squad (see backend/main.py's /account/bootstrap), and to build
+    bot squads.
+
+    All at one `tier`, unless `tier_rates` is given: then each card rolls
+    its own tier from those weights ({tier: weight}, a pack's "rates"
+    shape), so a bot in the bronze league can be mostly silver with a gold
+    or two and the odd platinum rather than eleven identical cards. The
+    roll only happens when rates are given, so a single-tier call draws
+    exactly what it always did from its seed.
 
     Reuses the same tier-attribute generation open_pack() uses (via a
     PackManager whose pack database is never actually consulted -- only
@@ -504,10 +514,14 @@ def generate_starter_roster(formation_name: str = "4-4-2", tier: str = "bronze",
     from formations import get_formation
 
     manager = PackManager({}, seed=seed)
+    rate_tiers = list(tier_rates.keys()) if tier_rates else []
+    rate_weights = list(tier_rates.values()) if tier_rates else []
     roster = []
     for i in range(11):
         position = get_formation(formation_name)[i]["role"]
         player_cls = PLAYER_CLASS_MAP.get(position, Midfielder)
+        if rate_tiers:
+            tier = manager.rng.choices(rate_tiers, weights=rate_weights, k=1)[0]
         attrs = manager._generate_tier_attributes(tier, position)
 
         country = manager.rng.choice(COUNTRIES)

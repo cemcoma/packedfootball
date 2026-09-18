@@ -261,7 +261,7 @@ async def tournament_match(uid: str = Depends(verify_id_token)):
         uid,
         list((pool or {}).get("uids") or []),
         max_attempts=config.TOURNAMENT_OPPONENT_MAX_ATTEMPTS,
-        card_tier_pool=config.TOURNAMENT_BOT_CARD_TIERS.get(tier),
+        card_tier_rates=config.TOURNAMENT_BOT_CARD_RATES.get(tier),
     )
     is_bot = opponent_uid.startswith("bot_")
     seed = secrets.randbits(63)

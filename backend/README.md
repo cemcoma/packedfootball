@@ -164,6 +164,15 @@ at the group being filled, so a join is a path read, not a query). A day
 runs noon-to-noon Istanbul (`TOURNAMENT_DAY_OFFSET_HOURS`), and each player
 gets `TOURNAMENT_MATCHES_PER_DAY` matches, each costing one energy.
 
+**Stored bots** keep the pool alive before there are players: `bots/{id}`
+is a permanent opponent (name, formation, kit, the XI embedded on the doc),
+`bot_pools/{tier}` lists a tier's bot ids, and the first join of a day
+seeds the new pool with them in the same write as the joiner. A bot is only
+ever the other side of a match -- no group seat, no table row, no record,
+no cards on the leaderboards -- and `pick_opponent_from_candidates` reads
+`bots/` for a `bot_` id the same way it reads `users/` for anyone else.
+`scripts/seed_bots.py` makes them (idempotent, tops each tier up).
+
 Settlement is **lazy**: the first request of any kind after a day ends
 settles it (`ensure_settled_through`, capped per request so it can't stall
 a player's own call), and Cloud Scheduler's `POST /tournament/settle` makes
@@ -419,6 +428,7 @@ python3 backend/scripts/<script>.py [--dry-run]
 | `sync_pack_definitions.py` | Pushes `packEngine.PACK_DATABASE`'s definitional fields onto existing `packs/{id}` docs. Never touches operational fields. `--pack-id N` for one pack. Skips ids with no existing doc. |
 | `sync_deal_definitions.py` | Same for `packedfootball/deal_database.py`'s `DEAL_DATABASE` -> `deals/{id}`. Unlike the pack version it *creates* missing docs, seeded `active: false`; `--activate-new` seeds them `active: true` instead. Never changes an existing doc's `active`. |
 | `sync_player_appearance.py` | Backfills a placeholder `appearance` onto `players/{id}` docs that predate the field. |
+| `seed_bots.py` | Creates `bots/{id}` opponents per league tier (`--per-tier`, default 30) and their `bot_pools/{tier}` id lists. Tops up, never rewrites an existing bot. |
 | `backfill_avg_rating.py` | Writes `statistics.avg_rating` onto cards with `RATED_MATCHES_FOR_AVERAGE`+ rated matches that predate the field. Re-runnable. |
 | `sync_display_names.py` | Backfills `display_names/{key}` reservations for accounts created before names were unique. Oldest account keeps a duplicated name; conflicts are printed, never renamed. |
 | `rename_tiers.py` | Rewrites `tier` on `players/{id}` after a `TIER_RANGES` key is renamed (its `RENAMES` map). Run `sync_pack_definitions.py` too, for the pack rates. |
