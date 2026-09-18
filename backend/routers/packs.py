@@ -22,6 +22,21 @@ from engine import PackManager, player_to_fields
 router = APIRouter(tags=["packs"])
 
 
+def _parse_time(value) -> Optional[datetime]:
+    """A pack's expires_at / available_at as an aware datetime, or None when
+    absent or malformed. Firestore hands back a datetime for a timestamp
+    field and a string for one written as ISO text; both are accepted, and
+    a naive value is taken as UTC. Malformed fails OPEN (None), so a typo
+    in an admin-set field never blocks opening."""
+    if not value:
+        return None
+    try:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+    except (ValueError, TypeError):
+        return None
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+
+
 def _pack_unavailable_reason(config: dict) -> Optional[str]:
     """Why this pack can't be opened right now, or None if it can. Shared by
     /pack/open (to reject one) and /pack/list (to filter the catalog down
@@ -39,25 +54,43 @@ def _pack_unavailable_reason(config: dict) -> Optional[str]:
     if max_opens is not None and times_opened >= max_opens:
         return "This pack has sold out"
 
-    expires_at = config.get("expires_at")
-    if expires_at:
-        try:
-            # Handle cases where Firestore already returns a datetime object
-            if isinstance(expires_at, datetime):
-                pack_expiry = expires_at
-            else:
-                pack_expiry = datetime.fromisoformat(expires_at)
-            
-            # If the resulting datetime is naive, assume UTC to prevent TypeError
-            if pack_expiry.tzinfo is None:
-                pack_expiry = pack_expiry.replace(tzinfo=timezone.utc)
-
-            if datetime.now(timezone.utc) > pack_expiry:
-                return "This pack has expired"
-        except (ValueError, TypeError):
-            pass  # malformed expires_at shouldn't block opening -- fail open, not closed
+    pack_expiry = _parse_time(config.get("expires_at"))
+    if pack_expiry is not None and datetime.now(timezone.utc) > pack_expiry:
+        return "This pack has expired"
 
     return None
+
+
+def _activation_due(config: dict) -> bool:
+    """An inactive pack whose planned on-sale time has come."""
+    if config.get("active", False):
+        return False
+    available_at = _parse_time(config.get("available_at"))
+    return available_at is not None and datetime.now(timezone.utc) >= available_at
+
+
+async def _activate_if_due(client: AdminFirestoreClient, pack_path: str, config: dict) -> dict:
+    """Puts a pack on sale the first time anyone looks at it after its
+    available_at -- there is no scheduler in this project, so the shop
+    itself is the trigger, the same way tournaments settle lazily.
+
+    Writes `active: true` and DELETES available_at in one merge. Deleting
+    is what makes this fire exactly once: an admin who later pulls the
+    pack (active back to false) doesn't get it re-activated by the next
+    /pack/list, because the date that would have done so is gone. Two
+    concurrent requests both activating is harmless -- identical writes.
+
+    Returns the config as it now stands, so the caller sees the pack as
+    purchasable in the same request rather than one refresh later.
+    """
+    if not _activation_due(config):
+        return config
+    await client.set_document(
+        pack_path, {"active": True, "available_at": firestore.DELETE_FIELD}, merge=True
+    )
+    updated = {k: v for k, v in config.items() if k != "available_at"}
+    updated["active"] = True
+    return updated
 
 
 def _pack_is_teased(config: dict) -> bool:
@@ -84,9 +117,11 @@ async def list_packs(uid: str = Depends(verify_id_token)):
     returned, so a teased pack's Buy button being disabled client-side
     isn't the only thing stopping someone from opening it early.
     """
-    docs = await AdminFirestoreClient(uid).list_collection("packs")
+    client = AdminFirestoreClient(uid)
+    docs = await client.list_collection("packs")
     packs = []
     for doc in docs:
+        doc = await _activate_if_due(client, f"packs/{doc['id']}", doc)
         unavailable_reason = _pack_unavailable_reason(doc)
         is_available = unavailable_reason is None
         if not is_available and not _pack_is_teased(doc):
@@ -130,6 +165,9 @@ async def open_pack(req: OpenPackRequest, uid: str = Depends(verify_id_token)):
     config = await packs_client.get_document(pack_path)
     if config is None:
         raise HTTPException(404, "Unknown pack_id")
+    # A tap right on the on-sale minute can reach here before any /pack/list
+    # did the flip -- same rule, so it opens rather than 403s.
+    config = await _activate_if_due(packs_client, pack_path, config)
     unavailable_reason = _pack_unavailable_reason(config)
     if unavailable_reason is not None:
         raise HTTPException(403, unavailable_reason)
