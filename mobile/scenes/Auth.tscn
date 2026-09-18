@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="Texture2D" uid="uid://dqqqu4co1ircr" path="res://sprites/title.png" id="3_xv86k"]
 [ext_resource type="StyleBox" uid="uid://bp3gkhcykqouw" path="res://theme/auth_scene_panel_container.tres" id="4_cmkj7"]
+[ext_resource type="PackedScene" path="res://scenes/components/LoadingSpinner.tscn" id="5_spinner"]
 
 [node name="Auth" type="Control" unique_id=2070115553]
 layout_mode = 3
@@ -203,6 +204,13 @@ text = "Back"
 [node name="Control" type="Control" parent="CenterContainer/VBoxContainer" unique_id=1280548356]
 custom_minimum_size = Vector2(0, 10)
 layout_mode = 2
+
+[node name="WorkingSpinner" parent="CenterContainer/VBoxContainer" unique_id=1280548400 instance=ExtResource("5_spinner")]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(56, 56)
+layout_mode = 2
+size_flags_horizontal = 4
 
 [node name="StatusLabel" type="Label" parent="CenterContainer/VBoxContainer" unique_id=551010979]
 unique_name_in_owner = true

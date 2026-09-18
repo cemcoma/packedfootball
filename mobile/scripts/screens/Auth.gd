@@ -56,6 +56,22 @@ extends Control
 @onready var _back_from_reset_button: Button = %BackFromResetButton
 
 @onready var _status_label: Label = %StatusLabel
+@onready var _working_spinner: Control = %WorkingSpinner
+@onready var _center: CenterContainer = $CenterContainer
+
+# -- keyboard avoidance ----------------------------------------------------------
+#
+# On a phone the on-screen keyboard covers the lower half of a landscape
+# screen, and this form sits in the middle of it: focus the password field
+# and the keyboard lands right on top of it. Godot doesn't move anything
+# for you, so _process watches the keyboard's height and slides the whole
+# centred column up just far enough that the focused field clears it,
+# then back down when the keyboard goes. The title scrolls off the top in
+# the process, which is the right thing to lose.
+
+## Gap kept between the focused field's bottom edge and the keyboard.
+const KEYBOARD_CLEARANCE := 16.0
+var _keyboard_shift: float = 0.0
 
 
 func _ready() -> void:
@@ -67,6 +83,11 @@ func _ready() -> void:
 	_send_reset_button.pressed.connect(_on_send_reset_pressed)
 	_back_from_reset_button.pressed.connect(_on_back_to_sign_in_pressed)
 
+	# A saved session resumes silently: no form on screen while it's being
+	# checked, just the spinner -- testers kept typing their credentials
+	# into a form that was about to disappear on its own. The form only
+	# appears once we know there's nothing to resume.
+	_show_form(false)
 	_status_label.text = tr("Checking for a saved session...")
 	_set_busy(true)
 	var resumed: bool = await FirebaseAuth.try_resume_session()
@@ -75,9 +96,52 @@ func _ready() -> void:
 		return
 	_status_label.text = ""
 	_set_busy(false)
+	_show_form(true)
+
+
+func _process(_delta: float) -> void:
+	_avoid_keyboard()
+
+
+## Slides the centred column so the focused field sits above the keyboard.
+## Keyboard height comes back in screen pixels; the canvas is scaled
+## (canvas_items stretch), so it's converted through the ratio of the
+## visible canvas to the window before comparing against control rects.
+func _avoid_keyboard() -> void:
+	var keyboard_px := DisplayServer.virtual_keyboard_get_height()
+	var wanted := 0.0
+	if keyboard_px > 0:
+		var focused := get_viewport().gui_get_focus_owner()
+		if focused is LineEdit and is_ancestor_of(focused):
+			var canvas_height := get_viewport().get_visible_rect().size.y
+			var window_height := float(DisplayServer.window_get_size().y)
+			var keyboard := keyboard_px * canvas_height / maxf(window_height, 1.0)
+			# The field's bottom as it would be with no shift applied.
+			var field_bottom: float = focused.get_global_rect().end.y + _keyboard_shift
+			wanted = maxf(0.0, field_bottom + KEYBOARD_CLEARANCE - (canvas_height - keyboard))
+	if not is_equal_approx(wanted, _keyboard_shift):
+		_keyboard_shift = wanted
+		_center.position.y = -_keyboard_shift
+
+
+## The whole sign-in/register/reset form, as opposed to the spinner and
+## status line that stand in for it while a saved session is being
+## resumed or a signed-in manager's squad is loading.
+func _show_form(shown: bool) -> void:
+	if shown:
+		_show_sign_in()
+	else:
+		for pair in [
+			[_sign_in_panel_actual, _sign_in_panel],
+			[_register_panel_actual, _register_panel],
+			[_reset_panel_actual, _reset_panel],
+		]:
+			pair[0].visible = false
+			pair[1].visible = false
 
 
 func _set_busy(busy: bool) -> void:
+	_working_spinner.visible = busy
 	var enabled := not busy
 	_email_field.editable = enabled
 	_password_field.editable = enabled
@@ -140,6 +204,11 @@ func _validate_credentials(email: String, password: String) -> String:
 ## non-empty, is applied right after (see class docstring for why not
 ## before).
 func _go_to_menu(chosen_display_name: String = "") -> void:
+	# Signed in: the form has done its job, so it goes and the spinner
+	# carries the wait -- a visible email field under "Loading your
+	# squad..." reads as "still needs filling in".
+	_show_form(false)
+	_working_spinner.visible = true
 	_status_label.text = tr("Loading your squad...")
 	await GameProfile.load_all()
 	IapClient.initialize_for_signed_in_user(FirebaseAuth.uid)
