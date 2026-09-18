@@ -90,6 +90,11 @@ var _formation_buttons: Dictionary = {}  # name -> Button
 @onready var _kit_button: Button = %KitButton
 @onready var _save_button: Button = %SaveButton
 @onready var _back_button: Button = %BackButton
+@onready var _discard_overlay: Control = %DiscardConfirmOverlay
+@onready var _discard_save_button: Button = %DiscardSaveButton
+@onready var _discard_confirm_button: Button = %DiscardConfirmButton
+@onready var _discard_cancel_button: Button = %DiscardCancelButton
+@onready var _saving_popup: Control = %SavingPopup
 
 
 func _ready() -> void:
@@ -113,6 +118,10 @@ func _ready() -> void:
 	_kit_button.pressed.connect(_on_kit_pressed)
 	_save_button.pressed.connect(_on_save_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
+	_discard_save_button.pressed.connect(_on_discard_save_pressed)
+	_discard_confirm_button.pressed.connect(_on_discard_confirm_pressed)
+	_discard_cancel_button.pressed.connect(func() -> void: _discard_overlay.visible = false)
+	_discard_overlay.visible = false
 
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
 	_apply_theme_colors()
@@ -484,12 +493,18 @@ func _on_card_view_pressed(player_id: String) -> void:
 	_refresh_all()
 
 
-func _on_save_pressed() -> void:
+func _lineup_is_complete() -> bool:
 	for player_id in GameProfile.slot_assignment:
 		if player_id == "":
-			status_text = tr("Fill every slot before saving.")
-			_refresh_bottom()
-			return
+			return false
+	return true
+
+
+func _on_save_pressed() -> void:
+	if not _lineup_is_complete():
+		status_text = tr("Fill every slot before saving.")
+		_refresh_bottom()
+		return
 
 	status_text = tr("Saving...")
 	_refresh_bottom()
@@ -507,7 +522,41 @@ func _on_kit_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/CustomizeKit.tscn")
 
 
+## Back with unsaved lineup changes asks first -- the "Unsaved changes" line
+## at the bottom is easy to miss, and a lineup silently reverting looked
+## like a bug to testers. Save & Leave runs the normal save, so its own
+## refusals (an empty slot, a failed request) land in the status line and
+## keep the manager here, exactly as if they had pressed Save.
 func _on_back_pressed() -> void:
 	if GameProfile.is_dirty():
-		GameProfile.discard_changes()
+		_discard_overlay.visible = true
+		return
+	_leave()
+
+
+func _leave() -> void:
 	get_tree().change_scene_to_file("res://scenes/TeamHub.tscn")
+
+
+func _on_discard_confirm_pressed() -> void:
+	_discard_overlay.visible = false
+	GameProfile.discard_changes()
+	_leave()
+
+
+## Save & Leave is a save the manager is waiting on to go somewhere, so it
+## gets the modal "Saving changes..." rather than the status line: the wait
+## reads as progress, and nothing can be tapped under it while the writes
+## are in flight. An incomplete lineup never opens it -- that refusal is
+## instant and lands in the status line like a plain Save.
+func _on_discard_save_pressed() -> void:
+	_discard_overlay.visible = false
+	var will_save := _lineup_is_complete()
+	if will_save:
+		_saving_popup.set_status(tr("Saving changes..."))
+		_saving_popup.visible = true
+	await _on_save_pressed()
+	if will_save:
+		_saving_popup.visible = false
+	if not GameProfile.is_dirty():
+		_leave()

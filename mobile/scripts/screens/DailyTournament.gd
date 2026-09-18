@@ -6,7 +6,9 @@ extends Control
 ## ONE request builds this whole screen. GET /tournament/today returns the
 ## tier, the standings, the energy block, the rules and the reward table
 ## together, because the screen is useless until it has all of it and four
-## round trips on a phone is four chances to show a half-built page.
+## round trips on a phone is four chances to show a half-built page. The
+## reward table is drawn INTO the standings (StandingsTable's Reward
+## column), not as a list of its own.
 ##
 ## That same request is also what SETTLES yesterday. There is no scheduler and
 ## no notification system, so the day a player comes back, their previous
@@ -21,7 +23,7 @@ extends Control
 ## THE FULL-DAY REWARD. Playing all ten matches earns a bonus that is paid
 ## only when the player presses Claim -- the server marks it earned, this
 ## screen asks for it (POST /claim, type "tournament_full_day"), and the
-## credits move in front of them. The panel under the rewards list shows
+## credits move in front of them. The panel beside the standings shows
 ## the progress bar towards it; the same Claim also appears on yesterday's
 ## result banner, because a tenth match played at 23:50 is claimable next
 ## morning from the results and would otherwise be lost.
@@ -38,8 +40,6 @@ const MATCH_SCENE := "res://scenes/Match.tscn"
 @onready var _progress_label: Label = %ProgressLabel
 @onready var _standings: StandingsTable = %Standings
 @onready var _rules_label: Label = %RulesLabel
-@onready var _rewards_box: VBoxContainer = %RewardsBox
-@onready var _rewards_heading: Label = %RewardsHeading
 @onready var _full_day_panel: PanelContainer = %FullDayPanel
 @onready var _full_day_heading: Label = %FullDayHeading
 @onready var _full_day_bar: ProgressBar = %FullDayBar
@@ -124,12 +124,19 @@ func _apply_state(data: Dictionary) -> void:
 	_energy_bar.set_energy(GameProfile.energy)
 	_credits_chip.set_amount(GameProfile.credits)
 
+	# The reward table rides along on the standings -- each row shows what
+	# its position pays, so there is no separate rewards list to keep in step.
 	var standings = data.get("standings")
-	_standings.set_rows(standings if standings is Array else [])
+	var rewards = data.get("rewards")
+	_standings.set_rows(
+		standings if standings is Array else [],
+		rewards if rewards is Array else [],
+		bool(data.get("is_top_tier", false)),
+		bool(data.get("is_bottom_tier", false)),
+	)
 
 	_refresh_progress()
 	_refresh_rules()
-	_refresh_rewards()
 	_refresh_full_day()
 	_refresh_buttons()
 	_apply_theme_colors()
@@ -176,51 +183,6 @@ func _refresh_rules() -> void:
 		_rules_label.text = tr("Full group: the top 2 go up with at least %d points, the bottom 2 go down.") % floor_pts
 	else:
 		_rules_label.text = tr("Group isn't full, so points decide: %d or more goes up, under %d goes down. Needs %d players in the group to go up at all.") % [floor_pts, drop_pts, min_group]
-
-
-func _refresh_rewards() -> void:
-	for child in _rewards_box.get_children():
-		_rewards_box.remove_child(child)
-		child.queue_free()
-
-	var rewards = _state.get("rewards")
-	if not (rewards is Array) or rewards.is_empty():
-		var none := Label.new()
-		none.text = tr("No placement rewards in this tier.")
-		none.add_theme_font_size_override("font_size", 11)
-		none.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
-		_rewards_box.add_child(none)
-		return
-
-	for entry in rewards:
-		if not (entry is Dictionary):
-			continue
-		_rewards_box.add_child(_reward_row(entry))
-
-
-## One reward line: the finishing position, then each currency as an amount
-## beside its logo. CurrencyAmount already does amount-plus-logo, so the
-## currency is never named here either.
-func _reward_row(entry: Dictionary) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-
-	var position := Label.new()
-	position.text = "%d." % _int(entry, "position", 0)
-	position.custom_minimum_size = Vector2(24, 0)
-	position.add_theme_font_size_override("font_size", 12)
-	row.add_child(position)
-
-	for currency in ["medals", "bucks", "credits"]:
-		var amount := _int(entry, currency, 0)
-		if amount <= 0:
-			continue
-		var view: CurrencyAmount = preload("res://scenes/components/CurrencyAmount.tscn").instantiate()
-		row.add_child(view)
-		view.set_amount(currency, amount)
-		view.set_sizes(16, 12)
-
-	return row
 
 
 ## The play-every-match panel: hidden until joined, a bar filling towards
@@ -371,12 +333,11 @@ func _set_status(text: String, warn: bool) -> void:
 func _apply_theme_colors() -> void:
 	var heading := ThemeManager.color("heading")
 	_tier_label.add_theme_color_override("font_color", heading)
-	_rewards_heading.add_theme_color_override("font_color", heading)
 	_countdown_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 	_progress_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 	_rules_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 	# The full-day panel is a themed PanelContainer, so its labels take the
-	# Theme's own colour -- only the heading is lifted to match Rewards.
+	# Theme's own colour -- only the heading is lifted to match the title.
 	_full_day_heading.add_theme_color_override("font_color", heading)
 	# The banner text is inside a themed PanelContainer, which carries its own
 	# background in both modes -- so it takes the Theme's Label colour. Forcing

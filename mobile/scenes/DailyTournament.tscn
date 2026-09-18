@@ -98,48 +98,33 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 11
 autowrap_mode = 2
 
-[node name="RewardsColumn" type="VBoxContainer" parent="Margin/RootVBox/Body" unique_id=1999000016]
+[node name="FullDayColumn" type="VBoxContainer" parent="Margin/RootVBox/Body" unique_id=1999000016]
 custom_minimum_size = Vector2(190, 0)
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="RewardsHeading" type="Label" parent="Margin/RootVBox/Body/RewardsColumn" unique_id=1999000017]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 14
-text = "Rewards"
-
-[node name="RewardsBox" type="VBoxContainer" parent="Margin/RootVBox/Body/RewardsColumn" unique_id=1999000018]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_constants/separation = 4
-
-[node name="FullDaySpacer" type="Control" parent="Margin/RootVBox/Body/RewardsColumn" unique_id=1999000040]
-custom_minimum_size = Vector2(0, 6)
-layout_mode = 2
-
-[node name="FullDayPanel" type="PanelContainer" parent="Margin/RootVBox/Body/RewardsColumn" unique_id=1999000041]
+[node name="FullDayPanel" type="PanelContainer" parent="Margin/RootVBox/Body/FullDayColumn" unique_id=1999000041]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="FullDayMargin" type="MarginContainer" parent="Margin/RootVBox/Body/RewardsColumn/FullDayPanel" unique_id=1999000042]
+[node name="FullDayMargin" type="MarginContainer" parent="Margin/RootVBox/Body/FullDayColumn/FullDayPanel" unique_id=1999000042]
 layout_mode = 2
 theme_override_constants/margin_left = 10
 theme_override_constants/margin_top = 8
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 8
 
-[node name="FullDayVBox" type="VBoxContainer" parent="Margin/RootVBox/Body/RewardsColumn/FullDayPanel/FullDayMargin" unique_id=1999000043]
+[node name="FullDayVBox" type="VBoxContainer" parent="Margin/RootVBox/Body/FullDayColumn/FullDayPanel/FullDayMargin" unique_id=1999000043]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="FullDayHeading" type="Label" parent="Margin/RootVBox/Body/RewardsColumn/FullDayPanel/FullDayMargin/FullDayVBox" unique_id=1999000044]
+[node name="FullDayHeading" type="Label" parent="Margin/RootVBox/Body/FullDayColumn/FullDayPanel/FullDayMargin/FullDayVBox" unique_id=1999000044]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "Play every match"
 
-[node name="FullDayBar" type="ProgressBar" parent="Margin/RootVBox/Body/RewardsColumn/FullDayPanel/FullDayMargin/FullDayVBox" unique_id=1999000045]
+[node name="FullDayBar" type="ProgressBar" parent="Margin/RootVBox/Body/FullDayColumn/FullDayPanel/FullDayMargin/FullDayVBox" unique_id=1999000045]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 14)
 layout_mode = 2
@@ -147,22 +132,21 @@ max_value = 10.0
 step = 1.0
 show_percentage = false
 
-[node name="FullDayRow" type="HBoxContainer" parent="Margin/RootVBox/Body/RewardsColumn/FullDayPanel/FullDayMargin/FullDayVBox" unique_id=1999000046]
+[node name="FullDayRow" type="HBoxContainer" parent="Margin/RootVBox/Body/FullDayColumn/FullDayPanel/FullDayMargin/FullDayVBox" unique_id=1999000046]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="FullDayLabel" type="Label" parent="Margin/RootVBox/Body/RewardsColumn/FullDayPanel/FullDayMargin/FullDayVBox/FullDayRow" unique_id=1999000047]
+[node name="FullDayLabel" type="Label" parent="Margin/RootVBox/Body/FullDayColumn/FullDayPanel/FullDayMargin/FullDayVBox/FullDayRow" unique_id=1999000047]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 12
 text = "0 / 10"
 
-[node name="FullDayReward" parent="Margin/RootVBox/Body/RewardsColumn/FullDayPanel/FullDayMargin/FullDayVBox/FullDayRow" unique_id=1999000048 instance=ExtResource("7")]
+[node name="FullDayReward" parent="Margin/RootVBox/Body/FullDayColumn/FullDayPanel/FullDayMargin/FullDayVBox/FullDayRow" unique_id=1999000048 instance=ExtResource("7")]
 unique_name_in_owner = true
-layout_mode = 2
 
-[node name="FullDayClaimButton" type="Button" parent="Margin/RootVBox/Body/RewardsColumn/FullDayPanel/FullDayMargin/FullDayVBox" unique_id=1999000049]
+[node name="FullDayClaimButton" type="Button" parent="Margin/RootVBox/Body/FullDayColumn/FullDayPanel/FullDayMargin/FullDayVBox" unique_id=1999000049]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
@@ -172,6 +156,11 @@ text = "Claim"
 [node name="BottomRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1999000019]
 layout_mode = 2
 theme_override_constants/separation = 12
+
+[node name="BackButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1999000023]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Back"
 
 [node name="StatusLabel" type="Label" parent="Margin/RootVBox/BottomRow" unique_id=1999000020]
 unique_name_in_owner = true
@@ -192,11 +181,6 @@ visible = false
 custom_minimum_size = Vector2(200, 40)
 layout_mode = 2
 text = "Play match"
-
-[node name="BackButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1999000023]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Back"
 
 [node name="BusyPopup" parent="." unique_id=1999000024 instance=ExtResource("5")]
 unique_name_in_owner = true

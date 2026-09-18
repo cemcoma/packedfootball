@@ -100,6 +100,12 @@ async def _today_payload(client, uid: str, profile_doc: dict | None) -> dict:
         "seconds_remaining": tournament_service.seconds_remaining(day_id, now),
         "tier": tier,
         "tier_name": config.TOURNAMENT_TIER_NAMES.get(tier, f"Tier {tier}"),
+        # The standings' projected_outcome is the rule's verdict BEFORE the
+        # tier edges clamp it (see services.tournament._verdict); these let
+        # the client word the top tier's "promote" and the bottom tier's
+        # "relegate" the way the result banner already does.
+        "is_top_tier": tier == config.TOURNAMENT_TOP_TIER,
+        "is_bottom_tier": tier == config.TOURNAMENT_BOTTOM_TIER,
         "joined": joined,
         "join_closed": tournament_service.joining_is_closed(day_id, now),
         "join_cutoff_seconds": config.TOURNAMENT_JOIN_CUTOFF_SECONDS,

@@ -138,6 +138,14 @@ size_flags_horizontal = 4
 placeholder_text = "Password"
 secret = true
 
+[node name="RegisterConfirmPasswordField" type="LineEdit" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel" unique_id=2050492645]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+placeholder_text = "Confirm password"
+secret = true
+
 [node name="RegisterButtonRow" type="HBoxContainer" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel" unique_id=1375750417]
 layout_mode = 2
 size_flags_horizontal = 4

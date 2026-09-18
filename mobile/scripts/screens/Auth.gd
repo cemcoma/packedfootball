@@ -10,8 +10,9 @@ extends Control
 ## Three panels sharing one StatusLabel, toggled by _show_sign_in()/
 ## _show_register()/_show_reset(): SignInPanel (email/password, matches an
 ## existing account), RegisterPanel (a genuinely separate form -- display
-## name in addition to email/password, since a brand new manager needs a
-## name before anyone's squad/leaderboard entry means anything) and
+## name and a password confirmation in addition to email/password, since a
+## brand new manager needs a name before anyone's squad/leaderboard entry
+## means anything, and a mistyped password can't be seen) and
 ## ResetPanel (email only -- FirebaseAuth.send_password_reset has Firebase
 ## mail a reset link; the new password is set on that link's page, never
 ## here).
@@ -46,6 +47,7 @@ extends Control
 @onready var _display_name_field: LineEdit = %DisplayNameField
 @onready var _register_email_field: LineEdit = %RegisterEmailField
 @onready var _register_password_field: LineEdit = %RegisterPasswordField
+@onready var _register_confirm_password_field: LineEdit = %RegisterConfirmPasswordField
 @onready var _create_account_button: Button = %CreateAccountButton
 @onready var _back_to_sign_in_button: Button = %BackToSignInButton
 
@@ -151,6 +153,7 @@ func _set_busy(busy: bool) -> void:
 	_display_name_field.editable = enabled
 	_register_email_field.editable = enabled
 	_register_password_field.editable = enabled
+	_register_confirm_password_field.editable = enabled
 	_create_account_button.disabled = not enabled
 	_back_to_sign_in_button.disabled = not enabled
 	_reset_email_field.editable = enabled
@@ -261,9 +264,14 @@ func _on_create_account_pressed() -> void:
 	if problem != "":
 		_status_label.text = problem
 		return
+	# A typo in a hidden field would otherwise only surface as "wrong
+	# password" on the next sign-in, with a reset email as the only way out.
+	if _register_confirm_password_field.text != _register_password_field.text:
+		_status_label.text = tr("Passwords do not match.")
+		return
 
 	_set_busy(true)
-	
+
 	_status_label.text = tr("Checking name...")
 	var check: Dictionary = await GameProfile.check_display_name(display_name)
 	if not check.available:

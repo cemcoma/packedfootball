@@ -1,7 +1,12 @@
 class_name StandingsTable
 extends VBoxContainer
 
-## A league table: position, manager, played, W-D-L, goal difference, points.
+## A league table: position, manager, played, W-D-L, goal difference, points,
+## what would happen to each manager if the day ended now, and -- when the
+## tier pays placement rewards -- what each position earns, as
+## amount-plus-logo on the row itself. Outcome and payout sit next to the
+## standing they belong to, so "where does this leave me and what do I get"
+## is answered in the table rather than in a list beside it.
 ##
 ## Rows are PanelContainers rather than cells in a GridContainer, and that is
 ## the whole reason this component exists. A league table needs promotion and
@@ -25,11 +30,33 @@ const COLUMNS := [
 	{"key": "points", "label": "Pts", "ratio": 1.0, "align": HORIZONTAL_ALIGNMENT_CENTER},
 ]
 
+## The outcome cell: the zone tint put into words, in the zone's colour. The
+## words are the result banner's, so what the table says during the day is
+## what the banner says the morning after.
+const OUTCOME_COLUMN := {"label": "Outcome", "ratio": 1.9}
+
+## The reward cell: wide enough for the richest payout (medals, cash and
+## credits side by side) at the row's own font size, logos a touch smaller
+## than the text so three of them don't crowd the row.
+const REWARD_COLUMN := {"label": "Reward", "ratio": 2.6}
+const REWARD_CURRENCY_ORDER := ["medals", "bucks", "credits"]
+const REWARD_ICON_SIZE := 14
+const CURRENCY_AMOUNT := preload("res://scenes/components/CurrencyAmount.tscn")
+
 const ROW_HEIGHT := 30
 const HEADER_FONT_SIZE := 11
 const ROW_FONT_SIZE := 13
 
 var _rows: Array = []
+## position -> {"credits": n, "bucks": n, "medals": n}; empty means the tier
+## pays nothing for placement and the column is left out altogether.
+var _rewards_by_position: Dictionary = {}
+## Whether this group plays in the top / bottom tier. `projected_outcome`
+## is the rule's verdict before the tier edges clamp it, so a Gold League
+## leader arrives as "promote" and a Bronze League straggler as "relegate";
+## these turn those into "holds the top" and "stays up".
+var _top_tier: bool = false
+var _bottom_tier: bool = false
 
 
 func _ready() -> void:
@@ -39,9 +66,22 @@ func _ready() -> void:
 
 ## `rows` is the standings array from /tournament/today verbatim -- each entry
 ## carries `projected_outcome`, which is what decides the zone tint.
-func set_rows(rows: Array) -> void:
+## `rewards` is the same response's reward table (one entry per finishing
+## position), matched to rows by position. The tier flags are the
+## response's is_top_tier / is_bottom_tier.
+func set_rows(rows: Array, rewards: Array = [], top_tier: bool = false, bottom_tier: bool = false) -> void:
 	_rows = rows
+	_top_tier = top_tier
+	_bottom_tier = bottom_tier
+	_rewards_by_position = {}
+	for entry in rewards:
+		if entry is Dictionary:
+			_rewards_by_position[int(entry.get("position", 0))] = entry
 	_rebuild()
+
+
+func _has_rewards() -> bool:
+	return not _rewards_by_position.is_empty()
 
 
 func _rebuild() -> void:
@@ -75,7 +115,27 @@ func _add_header() -> void:
 		label.add_theme_font_size_override("font_size", HEADER_FONT_SIZE)
 		label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 		header.add_child(label)
+	header.add_child(_header_label(OUTCOME_COLUMN, HORIZONTAL_ALIGNMENT_CENTER))
+	if _has_rewards():
+		var reward_label := Label.new()
+		reward_label.text = tr(REWARD_COLUMN["label"])
+		reward_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		reward_label.size_flags_stretch_ratio = REWARD_COLUMN["ratio"]
+		reward_label.add_theme_font_size_override("font_size", HEADER_FONT_SIZE)
+		reward_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+		header.add_child(reward_label)
 	add_child(header)
+
+
+func _header_label(column: Dictionary, align: HorizontalAlignment) -> Label:
+	var label := Label.new()
+	label.text = tr(column["label"])
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.size_flags_stretch_ratio = column["ratio"]
+	label.horizontal_alignment = align
+	label.add_theme_font_size_override("font_size", HEADER_FONT_SIZE)
+	label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+	return label
 
 
 func _build_row(row: Dictionary) -> PanelContainer:
@@ -107,8 +167,67 @@ func _build_row(row: Dictionary) -> PanelContainer:
 		if is_me:
 			label.add_theme_color_override("font_color", ThemeManager.color("accent"))
 		line.add_child(label)
+	line.add_child(_outcome_cell(str(row.get("projected_outcome", "stay"))))
+	if _has_rewards():
+		line.add_child(_reward_cell(int(row.get("position", 0))))
 
 	return panel
+
+
+## Where the day would leave this manager, in the colour of the row's zone
+## -- kept even on the caller's own accented row, since the colour IS the
+## information here.
+func _outcome_cell(outcome: String) -> Label:
+	var label := Label.new()
+	label.text = _outcome_text(outcome)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.size_flags_stretch_ratio = OUTCOME_COLUMN["ratio"]
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.clip_text = true
+	label.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
+	label.add_theme_color_override("font_color", _outcome_color(outcome))
+	return label
+
+
+func _outcome_text(outcome: String) -> String:
+	match outcome:
+		"promote":
+			return tr("Holds top") if _top_tier else tr("Promotion")
+		"relegate":
+			return tr("Stays up") if _bottom_tier else tr("Relegation")
+	return tr("Stays")
+
+
+func _outcome_color(outcome: String) -> Color:
+	match outcome:
+		"promote":
+			return ThemeManager.color("positive")
+		"relegate":
+			return ThemeManager.color("warning")
+	return ThemeManager.color("text_hint")
+
+
+## This position's payout, each currency as an amount beside its logo.
+## CurrencyAmount colours the number in the currency's own colour, which is
+## what makes three of them readable side by side without naming any. A
+## position that pays nothing keeps an empty cell so the columns line up.
+func _reward_cell(position: int) -> HBoxContainer:
+	var cell := HBoxContainer.new()
+	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cell.size_flags_stretch_ratio = REWARD_COLUMN["ratio"]
+	cell.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	cell.add_theme_constant_override("separation", 8)
+	var entry: Dictionary = _rewards_by_position.get(position, {})
+	for currency in REWARD_CURRENCY_ORDER:
+		var amount := int(entry.get(currency, 0))
+		if amount <= 0:
+			continue
+		var view: CurrencyAmount = CURRENCY_AMOUNT.instantiate()
+		cell.add_child(view)
+		view.set_amount(currency, amount)
+		view.set_sizes(REWARD_ICON_SIZE, ROW_FONT_SIZE - 1)
+	return cell
 
 
 static func _cell_text(row: Dictionary, key: String) -> String:

@@ -151,7 +151,7 @@ func _on_quick_match_pressed() -> void:
 
 	# Not awaited -- fires on its own while the request below is in flight,
 	# purely to move the status text along; see class docstring.
-	get_tree().create_timer(1.2).timeout.connect(_on_matchmaking_midpoint)
+	get_tree().create_timer(0.9).timeout.connect(_on_matchmaking_midpoint)
 
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_POST, "/match/quick")
 

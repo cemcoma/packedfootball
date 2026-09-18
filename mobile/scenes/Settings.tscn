@@ -31,104 +31,109 @@ theme_override_constants/margin_right = 24
 theme_override_constants/margin_bottom = 20
 script = ExtResource("4_1dggd")
 
-[node name="CenterContainer" type="CenterContainer" parent="Margin" unique_id=651017994]
+[node name="OuterVBox" type="VBoxContainer" parent="Margin" unique_id=651017990]
 layout_mode = 2
+theme_override_constants/separation = 12
 
-[node name="RootVBox" type="VBoxContainer" parent="Margin/CenterContainer" unique_id=771828380]
+[node name="CenterContainer" type="CenterContainer" parent="Margin/OuterVBox" unique_id=651017994]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="RootVBox" type="VBoxContainer" parent="Margin/OuterVBox/CenterContainer" unique_id=771828380]
 custom_minimum_size = Vector2(380, 0)
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="TitleLabel" type="Label" parent="Margin/CenterContainer/RootVBox" unique_id=1725613320]
+[node name="TitleLabel" type="Label" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=1725613320]
 layout_mode = 2
 theme_override_font_sizes/font_size = 28
 text = "SETTINGS"
 horizontal_alignment = 1
 
-[node name="NameRow" type="HBoxContainer" parent="Margin/CenterContainer/RootVBox" unique_id=1018989684]
+[node name="NameRow" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=1018989684]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="NameField" type="LineEdit" parent="Margin/CenterContainer/RootVBox/NameRow" unique_id=772939797]
+[node name="NameField" type="LineEdit" parent="Margin/OuterVBox/CenterContainer/RootVBox/NameRow" unique_id=772939797]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(260, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "Manager name"
 
-[node name="SaveNameButton" type="Button" parent="Margin/CenterContainer/RootVBox/NameRow" unique_id=1876657335]
+[node name="SaveNameButton" type="Button" parent="Margin/OuterVBox/CenterContainer/RootVBox/NameRow" unique_id=1876657335]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Save Name"
 
-[node name="StatusLabel" type="Label" parent="Margin/CenterContainer/RootVBox" unique_id=1876657400]
+[node name="StatusLabel" type="Label" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=1876657400]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="OptionsRow" type="HBoxContainer" parent="Margin/CenterContainer/RootVBox" unique_id=396134971]
+[node name="OptionsRow" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=396134971]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="LanguageOption" type="OptionButton" parent="Margin/CenterContainer/RootVBox/OptionsRow" unique_id=565509366]
+[node name="LanguageOption" type="OptionButton" parent="Margin/OuterVBox/CenterContainer/RootVBox/OptionsRow" unique_id=565509366]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="ThemeOption" type="OptionButton" parent="Margin/CenterContainer/RootVBox/OptionsRow" unique_id=2039548150]
+[node name="ThemeOption" type="OptionButton" parent="Margin/OuterVBox/CenterContainer/RootVBox/OptionsRow" unique_id=2039548150]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="LinksRow" type="HBoxContainer" parent="Margin/CenterContainer/RootVBox" unique_id=689277720]
+[node name="LinksRow" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=689277720]
 layout_mode = 2
 theme_override_constants/separation = 10
 alignment = 1
 
-[node name="PrivacyButton" type="Button" parent="Margin/CenterContainer/RootVBox/LinksRow" unique_id=689277721]
+[node name="PrivacyButton" type="Button" parent="Margin/OuterVBox/CenterContainer/RootVBox/LinksRow" unique_id=689277721]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Privacy Policy"
 flat = true
 
-[node name="SupportButton" type="Button" parent="Margin/CenterContainer/RootVBox/LinksRow" unique_id=689277722]
+[node name="SupportButton" type="Button" parent="Margin/OuterVBox/CenterContainer/RootVBox/LinksRow" unique_id=689277722]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Support"
 flat = true
 
-[node name="Spacer" type="Control" parent="Margin/CenterContainer/RootVBox" unique_id=689277706]
+[node name="Spacer" type="Control" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=689277706]
 custom_minimum_size = Vector2(0, 12)
 layout_mode = 2
 
-[node name="ButtonRow" type="HBoxContainer" parent="Margin/CenterContainer/RootVBox" unique_id=1940000200]
+[node name="ButtonRow" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=1940000200]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="BackButton" type="Button" parent="Margin/CenterContainer/RootVBox/ButtonRow" unique_id=1809327123]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Back to Menu"
-
-[node name="LogoutButton" type="Button" parent="Margin/CenterContainer/RootVBox/ButtonRow" unique_id=1658000256]
+[node name="LogoutButton" type="Button" parent="Margin/OuterVBox/CenterContainer/RootVBox/ButtonRow" unique_id=1658000256]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Log Out / Switch Account"
 
-[node name="DeleteSpacer" type="Control" parent="Margin/CenterContainer/RootVBox" unique_id=1658000300]
+[node name="DeleteSpacer" type="Control" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=1658000300]
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 
-[node name="DeleteAccountButton" type="Button" parent="Margin/CenterContainer/RootVBox" unique_id=1658000301]
+[node name="DeleteAccountButton" type="Button" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=1658000301]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Delete Account"
+
+[node name="BackButton" type="Button" parent="Margin/OuterVBox" unique_id=1809327123]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Back to Menu"
 
 [node name="DeleteConfirmOverlay" type="Control" parent="." unique_id=1658000310]
 unique_name_in_owner = true

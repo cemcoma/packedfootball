@@ -4,11 +4,11 @@
 [ext_resource type="PackedScene" uid="uid://cl2jiom47jugr" path="res://scenes/components/PackInfoPopup.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="3"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_ht580"]
-[ext_resource type="PackedScene" path="res://scenes/components/CurrencyPanel.tscn" id="4"]
+[ext_resource type="PackedScene" uid="uid://4v5328a5h2ap" path="res://scenes/components/CurrencyPanel.tscn" id="4"]
 [ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="5"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="6"]
-[ext_resource type="PackedScene" uid="uid://d3yxqql70v6n8" path="res://scenes/components/EnergyBar.tscn" id="energybar"]
 [ext_resource type="PackedScene" path="res://scenes/components/CurrencyAmount.tscn" id="7_buyconfirm"]
+[ext_resource type="PackedScene" uid="uid://d3yxqql70v6n8" path="res://scenes/components/EnergyBar.tscn" id="energybar"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_shop_tabs"]
 
@@ -134,10 +134,6 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 
-[node name="spacer" type="Control" parent="Margin/RootVBox" unique_id=677376901]
-custom_minimum_size = Vector2(0, 20)
-layout_mode = 2
-
 [node name="CurrencyPanel" type="VBoxContainer" parent="Margin/RootVBox" unique_id=928833879]
 unique_name_in_owner = true
 visible = false
@@ -146,10 +142,12 @@ size_flags_vertical = 3
 
 [node name="CurrencyTabs" parent="Margin/RootVBox/CurrencyPanel" unique_id=1168928666 instance=ExtResource("4")]
 unique_name_in_owner = true
+layout_mode = 2
 
 [node name="BackButton" type="Button" parent="Margin/RootVBox" unique_id=1679033898]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 0
 text = "Back to Menu"
 
 [node name="InfoPopup" parent="." unique_id=2119326642 instance=ExtResource("2")]
@@ -240,7 +238,6 @@ text = "Price"
 
 [node name="BuyConfirmPrice" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox/PriceRow" unique_id=2119326713 instance=ExtResource("7_buyconfirm")]
 unique_name_in_owner = true
-layout_mode = 2
 
 [node name="BuyConfirmFootnote" type="Label" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox" unique_id=2119326714]
 unique_name_in_owner = true
