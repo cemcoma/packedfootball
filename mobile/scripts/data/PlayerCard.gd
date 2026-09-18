@@ -49,7 +49,7 @@ const TIER_COLORS := {
 	"icon": Color(0.95, 0.85, 0.55),
 }
 
-## A tier string is "<family>" or "<family>_<variant>" -- "special_ucl",
+## A tier string is "<family>" or "<family>_<variant>" -- "special_champ",
 ## "special_conf", a future "diamond_turkish". The family is the RARITY,
 ## which is all that colour, release value, ordering and the odds
 ## disclosure care about; the variant only picks the card art
@@ -59,13 +59,13 @@ static func tier_family(tier: String) -> String:
 	return tier.get_slice("_", 0)
 
 
-## The variant part, "" for a plain tier: "special_ucl" -> "ucl".
+## The variant part, "" for a plain tier: "special_champ" -> "champ".
 static func tier_variant(tier: String) -> String:
 	return tier.substr(tier_family(tier).length() + 1) if tier.contains("_") else ""
 
 
 ## What a tier is called on screen: the family, translated, plus the
-## variant in capitals -- "Special UCL". The family word is what's in the
+## variant in capitals -- "Special champ". The family word is what's in the
 ## translation catalog; a variant is an edition's name or acronym and stays
 ## as it is in every language.
 static func tier_label(tier: String) -> String:

@@ -8,6 +8,7 @@
 [ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="5"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="6"]
 [ext_resource type="PackedScene" uid="uid://d3yxqql70v6n8" path="res://scenes/components/EnergyBar.tscn" id="energybar"]
+[ext_resource type="PackedScene" path="res://scenes/components/CurrencyAmount.tscn" id="7_buyconfirm"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_shop_tabs"]
 
@@ -155,6 +156,119 @@ text = "Back to Menu"
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
+
+[node name="BuyConfirmOverlay" type="Control" parent="." unique_id=2119326700]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="BuyConfirmOverlay" unique_id=2119326701]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.7)
+
+[node name="Center" type="CenterContainer" parent="BuyConfirmOverlay" unique_id=2119326702]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="BuyConfirmOverlay/Center" unique_id=2119326703]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+
+[node name="PanelMargin" type="MarginContainer" parent="BuyConfirmOverlay/Center/Panel" unique_id=2119326704]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
+
+[node name="ConfirmHBox" type="HBoxContainer" parent="BuyConfirmOverlay/Center/Panel/PanelMargin" unique_id=2119326705]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="ArtRatio" type="AspectRatioContainer" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox" unique_id=2119326706]
+custom_minimum_size = Vector2(120, 160)
+layout_mode = 2
+ratio = 0.75
+
+[node name="BuyConfirmArt" type="TextureRect" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ArtRatio" unique_id=2119326707]
+unique_name_in_owner = true
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ConfirmVBox" type="VBoxContainer" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox" unique_id=2119326708]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="BuyConfirmTitle" type="Label" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox" unique_id=2119326709]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Pack Name"
+autowrap_mode = 2
+
+[node name="BuyConfirmCards" type="Label" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox" unique_id=2119326710]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "0 cards"
+
+[node name="PriceRow" type="HBoxContainer" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox" unique_id=2119326711]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BuyConfirmPriceLabel" type="Label" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox/PriceRow" unique_id=2119326712]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Price"
+
+[node name="BuyConfirmPrice" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox/PriceRow" unique_id=2119326713 instance=ExtResource("7_buyconfirm")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="BuyConfirmFootnote" type="Label" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox" unique_id=2119326714]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 2
+
+[node name="ConfirmSpacer" type="Control" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox" unique_id=2119326715]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ConfirmButtons" type="HBoxContainer" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox" unique_id=2119326716]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="BuyCancelButton" type="Button" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox/ConfirmButtons" unique_id=2119326717]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Cancel"
+
+[node name="BuyConfirmButton" type="Button" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox/ConfirmButtons" unique_id=2119326718]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Buy"
 
 [node name="BusyPopup" parent="." unique_id=470723575 instance=ExtResource("6")]
 unique_name_in_owner = true

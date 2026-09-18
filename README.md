@@ -2,7 +2,7 @@
 
 A PvP football manager game built around opening packs: open packs to get
 stronger players, build a squad, play matches. Special players are awarded
-around real footballing events (UCL, World Cup).
+around real footballing events (continental cups, World Cup).
 
 Work in progress.
 

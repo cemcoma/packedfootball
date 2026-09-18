@@ -155,7 +155,7 @@ async def _release_cards(uid: str, player_ids: list[str]) -> dict:
             released.append(
                 {
                     "player_id": pid,
-                    # By family: a special_ucl card pays the "special" rate,
+                    # By family: a special_champ card pays the "special" rate,
                     # not the unknown-tier floor.
                     "credits_awarded": RELEASE_CREDITS_BY_TIER.get(
                         tier_family(card.get("tier", "")), RELEASE_CREDITS_DEFAULT

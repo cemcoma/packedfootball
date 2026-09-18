@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://gxfexkiw703n"
-path="res://.godot/imported/UCLPack.png-26ab9717b3546ce2468fa02d87fd3b54.ctex"
+uid="uid://bnfgrud4gdhtx"
+path="res://.godot/imported/CHAMPPack.png-feea8a36692b217546280938f3bc8d9f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/packs/UCLPack.png"
-dest_files=["res://.godot/imported/UCLPack.png-26ab9717b3546ce2468fa02d87fd3b54.ctex"]
+source_file="res://sprites/packs/CHAMPPack.png"
+dest_files=["res://.godot/imported/CHAMPPack.png-feea8a36692b217546280938f3bc8d9f.ctex"]
 
 [params]
 

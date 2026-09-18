@@ -9,7 +9,7 @@ the box).
 
 The three special_* tiers are one bucket here: same generator, adjacent
 ranges, and the question is about the ladder's shape, not about the
-difference between a Conference and a UCL card.
+difference between a Conference and a Champions card.
 
 The printed table is the point:
 
@@ -31,9 +31,9 @@ pytestmark = pytest.mark.slow
 REGULATION_FRAMES = 10800
 SEEDS = (21, 22, 23, 24)
 
-# Ladder order. special_ucl stands in for the whole special bucket -- its
+# Ladder order. special_champ stands in for the whole special bucket -- its
 # range sits between the other two specials' and diamond/icon.
-TIERS = ("bronze", "silver", "gold", "platinum", "diamond", "special_ucl", "icon")
+TIERS = ("bronze", "silver", "gold", "platinum", "diamond", "special_champ", "icon")
 
 
 def _label(tier: str) -> str:

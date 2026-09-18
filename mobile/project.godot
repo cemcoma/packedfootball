@@ -28,9 +28,9 @@ MatchSession="*res://scripts/autoload/MatchSession.gd"
 PackSession="*res://scripts/autoload/PackSession.gd"
 IapClient="*res://scripts/autoload/IapClient.gd"
 ThemeManager="*res://scripts/autoload/ThemeManager.gd"
-LocaleManager="*res://scripts/autoload/LocaleManager.gd"
 PlayerSession="*res://scripts/autoload/PlayerSession.gd"
 AdManager="*uid://d1x5ac4vymns1"
+LocaleManager="*res://scripts/autoload/LocaleManager.gd"
 
 [display]
 

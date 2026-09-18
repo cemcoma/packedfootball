@@ -10,6 +10,13 @@ extends Control
 ## one ever reads as selected -- without it both stayed visibly toggled at
 ## once, since a bare toggle_mode Button has no idea its sibling exists.
 ##
+## Buying is tap-the-pack -> confirmation popup -> /pack/open. The popup
+## (BuyConfirmOverlay) is the deliberate step that the old per-pack "Buy"
+## button used to be, and it is ALSO where "you can't buy this" gets
+## explained -- not enough of the currency, no room on the bench, not on
+## sale yet -- with the Buy button disabled and a footnote saying why,
+## instead of a greyed-out box the player has to guess at.
+##
 ## Packs are fetched fresh from the backend's GET /pack/list every time
 ## this scene loads (and again after every purchase, so a limited pack's
 ## remaining count/disappearance stays accurate) rather than cached on
@@ -36,6 +43,18 @@ const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
 @onready var _back_button: Button = %BackButton
 @onready var _info_popup: PackInfoPopup = %InfoPopup
 @onready var _busy_popup: Control = %BusyPopup
+@onready var _buy_confirm_overlay: Control = %BuyConfirmOverlay
+@onready var _buy_confirm_art: TextureRect = %BuyConfirmArt
+@onready var _buy_confirm_title: Label = %BuyConfirmTitle
+@onready var _buy_confirm_cards: Label = %BuyConfirmCards
+@onready var _buy_confirm_price_label: Label = %BuyConfirmPriceLabel
+@onready var _buy_confirm_price: CurrencyAmount = %BuyConfirmPrice
+@onready var _buy_confirm_footnote: Label = %BuyConfirmFootnote
+@onready var _buy_cancel_button: Button = %BuyCancelButton
+@onready var _buy_confirm_button: Button = %BuyConfirmButton
+
+## The pack the confirmation popup is currently asking about.
+var _confirming_pack: PackData = null
 
 var _packs: Array = []  # PackData, every pack the backend returned
 var _pack_types: Array[String] = []  # dropdown item index -> pack type
@@ -65,6 +84,9 @@ func _ready() -> void:
 	_pack_type_dropdown.item_selected.connect(_on_pack_type_selected)
 	_back_button.pressed.connect(_on_back_pressed)
 	_currency_tabs.currency_changed.connect(_refresh_currency_labels)
+	_buy_cancel_button.pressed.connect(_close_buy_confirm)
+	_buy_confirm_button.pressed.connect(_on_buy_confirmed)
+	_buy_confirm_overlay.visible = false
 
 	_credits_chip.set_currency("credits")
 	_bucks_chip.set_currency("bucks")
@@ -220,7 +242,7 @@ func _on_pack_type_selected(_index: int) -> void:
 func _populate_packs_grid() -> void:
 	# Same remove_child()-then-queue_free() pairing Team.gd's bench grid
 	# uses: safe even though this can indirectly run from a PackView's own
-	# "buy_pressed" signal (see _on_buy_pressed -> _load_packs -> here).
+	# "pressed" signal (tap -> confirm -> _on_buy_pressed -> _load_packs -> here).
 	for child in _packs_grid.get_children():
 		_packs_grid.remove_child(child)
 		child.queue_free()
@@ -247,12 +269,64 @@ func _populate_packs_grid() -> void:
 		view.set_affordable(
 			_balance_for(typed_pack.price_currency) >= typed_pack.price and _has_room_for(typed_pack)
 		)
-		view.buy_pressed.connect(_on_buy_pressed.bind(typed_pack))
+		view.pressed.connect(_open_buy_confirm.bind(typed_pack))
 		view.info_pressed.connect(_on_info_pressed.bind(typed_pack))
 
 
 func _on_info_pressed(pack: PackData) -> void:
 	_info_popup.open_for(pack)
+
+
+# -- buy confirmation ---------------------------------------------------------
+
+
+## Opens the "buy this?" popup for a pack. Always opens, whatever the
+## pack's state: an unbuyable one gets the Buy button disabled and the
+## reason in the footnote, which is the whole point of asking here rather
+## than greying out the box.
+func _open_buy_confirm(pack: PackData) -> void:
+	if _busy:
+		return
+	_confirming_pack = pack
+	_buy_confirm_art.texture = pack.get_texture()
+	_buy_confirm_title.text = pack.pack_name
+	_buy_confirm_cards.text = tr("%d cards") % pack.cards_per_pack
+	_buy_confirm_price_label.text = tr("Price")
+	_buy_confirm_price.set_amount(pack.price_currency, pack.price)
+	_buy_confirm_price.set_sizes(18, 16)
+
+	var reason := ""
+	if not pack.available:
+		reason = pack.tag_text()
+	elif not _has_room_for(pack):
+		reason = tr("Your inventory is full (%d / %d) -- release players from the Team screen to make room.") % [
+			GameProfile.inventory_count(), GameProfile.inventory_cap
+		]
+	elif _balance_for(pack.price_currency) < pack.price:
+		# Deliberately doesn't name the currency: the price right above it
+		# carries the currency's logo, which is the only place it needs saying.
+		reason = tr("You don't have enough for this pack.")
+	_buy_confirm_footnote.text = reason if reason != "" else tr("Opens straight away.")
+	_buy_confirm_footnote.add_theme_color_override(
+		"font_color", ThemeManager.color("warning") if reason != "" else ThemeManager.color("text_hint")
+	)
+	_buy_confirm_button.disabled = reason != ""
+	# Negative: money going OUT, same convention as CustomizePlayer's Save.
+	CurrencyDisplay.set_button_price(_buy_confirm_button, tr("Buy"), -pack.price, pack.price_currency)
+	_status_label.text = ""
+	_buy_confirm_overlay.visible = true
+
+
+func _close_buy_confirm() -> void:
+	_buy_confirm_overlay.visible = false
+	_confirming_pack = null
+
+
+func _on_buy_confirmed() -> void:
+	var pack := _confirming_pack
+	_close_buy_confirm()
+	if pack != null:
+		_on_buy_pressed(pack)
 
 
 ## A pack is priced in exactly one currency (see PackData.price_currency) --

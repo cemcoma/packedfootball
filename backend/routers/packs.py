@@ -63,7 +63,7 @@ def _pack_unavailable_reason(config: dict) -> Optional[str]:
 def _pack_is_teased(config: dict) -> bool:
     """A pack that's currently unavailable but should still be shown
     (grayed out, tagged with why -- see PackData.tag_text() on the Godot
-    side) instead of hidden outright, e.g. a UCL Promo pack previewed
+    side) instead of hidden outright, e.g. a Champions Promo pack previewed
     ahead of its real on-sale date. Opt-in only, via either of two
     Firestore-only fields an admin sets directly on the pack's doc (no
     redeploy): "visible": true, and/or "available_at" (which alone implies

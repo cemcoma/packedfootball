@@ -22,7 +22,7 @@ extends RefCounted
 ##
 ## Most packs the backend returns are purchasable ("available" true), but
 ## it can also return ones that aren't -- an inactive/sold-out/expired pack
-## an admin opted into still showing (e.g. a UCL Promo pack previewed ahead
+## an admin opted into still showing (e.g. a Champions Promo pack previewed ahead
 ## of its real on-sale date, tagged with "available_at" rather than hidden
 ## outright). "available" is what actually gates the Buy button; a pack the
 ## backend hides completely (the ordinary case for an inactive pack) never

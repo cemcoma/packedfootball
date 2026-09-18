@@ -68,7 +68,7 @@ var _matchmaking_active: bool = false
 ## as --decision-interval.
 const TEST_INTERVALS := ["adaptive", "2", "3", "4", "6"]
 ## Bot tiers, same keys as packEngine.TIER_RANGES.
-const TEST_OPPONENT_TIERS := ["bronze", "silver", "gold", "platinum", "diamond", "special_conf", "special_uel", "special_ucl", "icon"]
+const TEST_OPPONENT_TIERS := ["bronze", "silver", "gold", "platinum", "diamond", "special_conf", "special_cont", "special_champ", "icon"]
 const LOCAL_MATCH_SCRIPT := "res://../packedfootball/scripts/local_match.py"
 const LOCAL_MATCH_DIR := "user://local_match"
 ## Tried in order; the editor's PATH on macOS often lacks Homebrew/python.org

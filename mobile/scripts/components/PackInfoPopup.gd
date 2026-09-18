@@ -74,7 +74,7 @@ func open_for(pack: PackData) -> void:
 ## so they're left off rather than cluttering the disclosure with 0% rows.
 ##
 ## `order` is by tier FAMILY (TIER_COLORS' keys), while a pack's rates are
-## keyed by the exact tier it rolls -- "special_ucl", not "special" -- so
+## keyed by the exact tier it rolls -- "special_champ", not "special" -- so
 ## each family slot collects every rate key that belongs to it. Without
 ## that the special row was never matched and the 2% simply went missing
 ## from the disclosure, which is the one thing this popup exists to show.

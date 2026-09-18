@@ -53,7 +53,7 @@ PLAYER_CLASS_MAP = {
 # what release value, card colour, ordering and the pack-odds disclosure go
 # by (tier_family() is that collapse) -- and a variant is a themed edition
 # of it with its own range and its own card art
-# (mobile/sprites/player_cards/<tier>.png). So special_ucl is a special,
+# (mobile/sprites/player_cards/<tier>.png). So special_champ is a special,
 # and a future diamond_turkish would be a diamond. A new variant is one
 # entry here plus a sprite, and nothing else needs to know it exists; a new
 # FAMILY also needs a row in the family tables (config.RELEASE_CREDITS_BY_TIER,
@@ -68,15 +68,15 @@ TIER_RANGES = {
     "diamond": (78, 85),
     "special": (82, 87),
     "special_conf": (83, 88),
-    "special_uel": (84, 90),
-    "special_ucl": (85, 93),
+    "special_cont": (84, 90),
+    "special_champ": (85, 93),
     "icon": (95,99)
 }
 
 
 def tier_family(tier: str) -> str:
     """The rarity a tier string counts as: everything before the first "_",
-    so "special_ucl" -> "special", "diamond_turkish" -> "diamond", and a
+    so "special_champ" -> "special", "diamond_turkish" -> "diamond", and a
     plain tier is itself. Mirrored by PlayerCard.tier_family() on the client."""
     return str(tier).split("_", 1)[0]
 
@@ -336,29 +336,29 @@ PACK_DATABASE = {
     },
     8: {
         "active": False,
-        "name": "UCL Promo Pack",
+        "name": "Champions Promo Pack",
         "type": "timed",
-        "description": "Champions League season is here! Take your chances for a special UCL player now!",
+        "description": "The champions season is here! Take your chances for a special Champions player now!",
         "price": 3000,
         "cards_per_pack": 5,
-        "rates": {"silver": 0.15, "gold": 0.40, "platinum": 0.30, "diamond": 0.13, "special_ucl": 0.02},
+        "rates": {"silver": 0.15, "gold": 0.40, "platinum": 0.30, "diamond": 0.13, "special_champ": 0.02},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits",
-        "sprite_key":"UCLPack",
+        "sprite_key":"CHAMPPack",
         "available_at": datetime.datetime(2026, 10, 10, 15, 0, tzinfo=datetime.timezone.utc)
     },
 
     9: {
         "active": True,
-        "name": "UEL Promo Pack",
+        "name": "Continental Promo Pack",
         "type": "timed",
-        "description": "Europa League  is here! Take your chances for a special UEL player now!",
+        "description": "The continental cup is here! Take your chances for a special Continental player now!",
         "price": 1500,
         "cards_per_pack": 5,
-        "rates": {"silver": 0.2, "gold": 0.40, "platinum": 0.30, "diamond": 0.08, "special_uel": 0.02},
+        "rates": {"silver": 0.2, "gold": 0.40, "platinum": 0.30, "diamond": 0.08, "special_cont": 0.02},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits",
-        "sprite_key":"UELPack",
+        "sprite_key":"CONTPack",
         "expires_at":datetime.datetime(2026, 9, 18, 15, 0, tzinfo=datetime.timezone.utc)
     },
     10: {
