@@ -313,6 +313,21 @@ TOURNAMENT_BOT_CARD_TIERS = {
     3: ("silver", "gold"),
 }
 
+# -- match bug reports --------------------------------------------------------
+
+# What a player can tag a report with (POST /match/report). Keys are what
+# the client sends and what match_reports/{id}.category stores; the client
+# carries its own labels for them. Free text goes alongside, capped.
+MATCH_REPORT_CATEGORIES = (
+    "stuck_players",   # players standing still / running in place / stuck on a line
+    "ball_physics",    # ball through a player, teleporting, stuck in the net
+    "goalkeeper",      # keeper did something absurd
+    "wrong_score",     # the scoreboard doesn't match what was shown
+    "replay_glitch",   # playback itself: freezes, camera, skipped events
+    "other",
+)
+MATCH_REPORT_MAX_CHARS = 1000
+
 # -- ads ----------------------------------------------------------------------
 
 # The progressive reward path for standard ads. 

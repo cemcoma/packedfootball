@@ -44,6 +44,11 @@ var player_match_stats: Array = []
 
 var return_scene: String = DEFAULT_RETURN_SCENE
 var tournament: Dictionary = {}
+## The games/{id} document this match was recorded under, "" for the demo
+## replay and for a local test match. What a bug report is filed against
+## (MatchResult's Report a Problem -> POST /match/report) -- the seed and
+## both rosters live on that doc, so the id is all a report needs.
+var game_id: String = ""
 ## True for a match simulated on this machine by Play.tscn's TESTING panel
 ## (packedfootball/scripts/local_match.py) rather than by the backend.
 ## Nothing about it was persisted anywhere, so the post-match screens skip
@@ -132,6 +137,9 @@ func set_from_match_response(data: Dictionary) -> void:
 
 	var tournament_raw = data.get("tournament")
 	tournament = tournament_raw if tournament_raw is Dictionary else {}
+
+	var game_id_raw = data.get("game_id")
+	game_id = game_id_raw if game_id_raw is String else ""
 
 
 static func _formation_or_default(formations: Array, side: int) -> String:
@@ -273,6 +281,7 @@ func clear() -> void:
 	credits_earned = 0
 	player_match_stats = []
 	tournament = {}
+	game_id = ""
 	is_local = false
 	# Back to the default, or a tournament return would leak into the next
 	# Quick Match and send it somewhere it never came from.

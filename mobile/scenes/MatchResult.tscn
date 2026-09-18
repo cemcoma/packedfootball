@@ -135,6 +135,97 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Continue"
 
+[node name="ReportButton" type="Button" parent="CenterContainer/Contraster/Margin/VBoxContainer" unique_id=1900000020]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Something went wrong? Report it"
+flat = true
+
+[node name="ReportOverlay" type="Control" parent="." unique_id=1900000021]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="ReportOverlay" unique_id=1900000022]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.7)
+
+[node name="Center" type="CenterContainer" parent="ReportOverlay" unique_id=1900000023]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="ReportOverlay/Center" unique_id=1900000024]
+custom_minimum_size = Vector2(440, 0)
+layout_mode = 2
+
+[node name="PanelMargin" type="MarginContainer" parent="ReportOverlay/Center/Panel" unique_id=1900000025]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
+
+[node name="ReportVBox" type="VBoxContainer" parent="ReportOverlay/Center/Panel/PanelMargin" unique_id=1900000026]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ReportTitle" type="Label" parent="ReportOverlay/Center/Panel/PanelMargin/ReportVBox" unique_id=1900000027]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "What went wrong?"
+horizontal_alignment = 1
+
+[node name="ReportCategory" type="OptionButton" parent="ReportOverlay/Center/Panel/PanelMargin/ReportVBox" unique_id=1900000028]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ReportText" type="TextEdit" parent="ReportOverlay/Center/Panel/PanelMargin/ReportVBox" unique_id=1900000029]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
+placeholder_text = "When did it happen, and what did you see? (optional)"
+wrap_mode = 1
+
+[node name="ReportFootnote" type="Label" parent="ReportOverlay/Center/Panel/PanelMargin/ReportVBox" unique_id=1900000030]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "The replay is attached automatically -- no need to describe the whole match."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ReportButtons" type="HBoxContainer" parent="ReportOverlay/Center/Panel/PanelMargin/ReportVBox" unique_id=1900000031]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="ReportCancelButton" type="Button" parent="ReportOverlay/Center/Panel/PanelMargin/ReportVBox/ReportButtons" unique_id=1900000032]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Cancel"
+
+[node name="ReportSendButton" type="Button" parent="ReportOverlay/Center/Panel/PanelMargin/ReportVBox/ReportButtons" unique_id=1900000033]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Send report"
+
 [node name="LoadingPopup" parent="." unique_id=1900000009 instance=ExtResource("3")]
 unique_name_in_owner = true
 layout_mode = 1

@@ -101,6 +101,16 @@ autowrap_mode = 2
 layout_mode = 2
 size_flags_vertical = 3
 
+[node name="TestingToggleButton" type="Button" parent="Margin/RootVBox" unique_id=1950000120]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 0
+theme_override_font_sizes/font_size = 12
+toggle_mode = true
+text = "TESTING"
+flat = true
+
 [node name="TestingPanel" type="VBoxContainer" parent="Margin/RootVBox" unique_id=1950000100]
 unique_name_in_owner = true
 visible = false
@@ -112,6 +122,11 @@ layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.7, 0.3, 1)
 theme_override_font_sizes/font_size = 14
 text = "TESTING (editor only, runs the engine on this machine -- nothing leaves it)"
+
+[node name="LocalTitle" type="Label" parent="Margin/RootVBox/TestingPanel" unique_id=1950000121]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Run a local match"
 
 [node name="TestingRow" type="HBoxContainer" parent="Margin/RootVBox/TestingPanel" unique_id=1950000102]
 layout_mode = 2
@@ -143,6 +158,36 @@ layout_mode = 2
 text = "Run local match"
 
 [node name="TestingStatus" type="Label" parent="Margin/RootVBox/TestingPanel" unique_id=1950000108]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+autowrap_mode = 2
+
+[node name="CheckSpacer" type="Control" parent="Margin/RootVBox/TestingPanel" unique_id=1950000122]
+custom_minimum_size = Vector2(0, 6)
+layout_mode = 2
+
+[node name="CheckTitle" type="Label" parent="Margin/RootVBox/TestingPanel" unique_id=1950000123]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Check a reported match (re-simulated from its game doc, read-only)"
+
+[node name="CheckRow" type="HBoxContainer" parent="Margin/RootVBox/TestingPanel" unique_id=1950000124]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="CheckGameIdField" type="LineEdit" parent="Margin/RootVBox/TestingPanel/CheckRow" unique_id=1950000125]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+placeholder_text = "game id from a report (list_match_reports.py)"
+
+[node name="CheckLoadButton" type="Button" parent="Margin/RootVBox/TestingPanel/CheckRow" unique_id=1950000126]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Load replay"
+
+[node name="CheckStatus" type="Label" parent="Margin/RootVBox/TestingPanel" unique_id=1950000127]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 12

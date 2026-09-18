@@ -40,24 +40,39 @@ extends Control
 @onready var _energy_bar: EnergyBar = %EnergyBar
 @onready var _matchmaking_popup: Control = %MatchmakingPopup
 
+@onready var _testing_toggle_button: Button = %TestingToggleButton
 @onready var _testing_panel: VBoxContainer = %TestingPanel
 @onready var _interval_option: OptionButton = %IntervalOption
 @onready var _opponent_option: OptionButton = %OpponentOption
 @onready var _run_local_button: Button = %RunLocalButton
 @onready var _testing_status: Label = %TestingStatus
+@onready var _check_game_id_field: LineEdit = %CheckGameIdField
+@onready var _check_load_button: Button = %CheckLoadButton
+@onready var _check_status: Label = %CheckStatus
 
 var _matchmaking_active: bool = false
 
 # -- TESTING panel (editor only) ---------------------------------------------
 #
-# Runs packedfootball/scripts/local_match.py as a child process and plays
-# the result through the normal MatchSession path. For A/B-ing the engine's
-# decision interval by feel, against the CPU seconds each setting costs --
-# see that script's docstring. Only ever shown under the editor
-# (OS.has_feature("editor")): it needs this repo's Python engine on disk,
-# which no exported build has, and nothing about it belongs on a phone.
+# Behind a TESTING toggle that only exists under the editor
+# (OS.has_feature("editor")): both tools need this repo's Python engine on
+# disk, which no exported build has, and nothing about them belongs on a
+# phone. The engine is Python, so it can't run inside Godot; it runs
+# beside it, as a child process polled from _process, and the result is
+# played through the normal MatchSession path with is_local set so the
+# post-match screens don't reload a profile nothing touched.
 #
-# The engine is Python, so it can't run inside Godot; it runs beside it.
+# Two tools:
+#   - Run a local match: packedfootball/scripts/local_match.py. For A/B-ing
+#     the engine's decision interval by feel against the CPU seconds each
+#     setting costs -- see that script's docstring.
+#   - Check a reported match: packedfootball/scripts/replay_game.py. Paste
+#     the game id from a bug report (match_reports/, or backend/scripts/
+#     list_match_reports.py) and the match is re-simulated from its
+#     games/{id} doc -- seed and both rosters as played -- fetched with your
+#     own Application Default Credentials, read-only. The status line shows
+#     the report text and flags an engine-version or score mismatch, the
+#     two signs the replay isn't the one the reporter saw.
 # Nothing leaves this machine: no backend call, no Firestore write, and
 # MatchSession.is_local keeps the post-match screens from reloading the
 # profile afterwards.
@@ -75,9 +90,15 @@ const LOCAL_MATCH_DIR := "user://local_match"
 ## installs, so bare "python3" is the last resort rather than the first.
 const PYTHON_CANDIDATES := ["/usr/local/bin/python3", "/opt/homebrew/bin/python3", "/usr/bin/python3", "python3"]
 
+const REPLAY_GAME_SCRIPT := "res://../packedfootball/scripts/replay_game.py"
+
 var _local_pid: int = -1
 var _local_out_path: String = ""
 var _local_started_msec: int = 0
+
+var _check_pid: int = -1
+var _check_out_path: String = ""
+var _check_started_msec: int = 0
 
 
 func _ready() -> void:
@@ -199,7 +220,11 @@ func _on_back_pressed() -> void:
 func _setup_testing_panel() -> void:
 	if not OS.has_feature("editor"):
 		return
-	_testing_panel.visible = true
+	_testing_toggle_button.visible = true
+	_testing_toggle_button.toggled.connect(func(on: bool) -> void: _testing_panel.visible = on)
+	_testing_panel.visible = false
+	_check_load_button.pressed.connect(_on_check_load_pressed)
+	_check_game_id_field.text_submitted.connect(func(_text: String) -> void: _on_check_load_pressed())
 	for interval in TEST_INTERVALS:
 		_interval_option.add_item(interval + (" (live)" if interval == "adaptive" else ""))
 	for tier in TEST_OPPONENT_TIERS:
@@ -282,14 +307,20 @@ func _on_run_local_pressed() -> void:
 
 
 func _process(_delta: float) -> void:
-	if _local_pid == -1:
-		return
-	if OS.is_process_running(_local_pid):
-		_testing_status.text = "Simulating locally... %.0fs" % ((Time.get_ticks_msec() - _local_started_msec) / 1000.0)
-		return
-	_local_pid = -1
-	_run_local_button.disabled = false
-	_on_local_match_finished()
+	if _local_pid != -1:
+		if OS.is_process_running(_local_pid):
+			_testing_status.text = "Simulating locally... %.0fs" % ((Time.get_ticks_msec() - _local_started_msec) / 1000.0)
+		else:
+			_local_pid = -1
+			_run_local_button.disabled = false
+			_on_local_match_finished()
+	if _check_pid != -1:
+		if OS.is_process_running(_check_pid):
+			_check_status.text = "Re-simulating... %.0fs" % ((Time.get_ticks_msec() - _check_started_msec) / 1000.0)
+		else:
+			_check_pid = -1
+			_check_load_button.disabled = false
+			_on_check_finished()
 
 
 func _on_local_match_finished() -> void:
@@ -315,4 +346,78 @@ func _on_local_match_finished() -> void:
 	print("[local match] interval=%s  decisions=%s  cpu=%ss  wall=%ss  score=%s" % [
 		parsed.get("decision_interval"), parsed.get("decisions"), parsed.get("sim_seconds"), parsed.get("wall_seconds"), parsed.get("score")
 	])
+	get_tree().change_scene_to_file("res://scenes/Match.tscn")
+
+
+# -- check a reported match ---------------------------------------------------
+
+
+func _on_check_load_pressed() -> void:
+	if _check_pid != -1 or _local_pid != -1:
+		return
+	var game_id := _check_game_id_field.text.strip_edges()
+	if game_id == "":
+		_check_status.text = "Enter a game id first."
+		return
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(LOCAL_MATCH_DIR))
+	_check_out_path = ProjectSettings.globalize_path(LOCAL_MATCH_DIR + "/check.json")
+	if FileAccess.file_exists(_check_out_path):
+		DirAccess.remove_absolute(_check_out_path)
+
+	var args: PackedStringArray = [
+		ProjectSettings.globalize_path(REPLAY_GAME_SCRIPT),
+		"--out", _check_out_path,
+		"--game-id", game_id,
+	]
+	_check_pid = OS.create_process(_python_path(), args)
+	if _check_pid == -1:
+		_check_status.text = "Could not start python3 -- see PYTHON_CANDIDATES in Play.gd."
+		return
+	_check_started_msec = Time.get_ticks_msec()
+	_check_load_button.disabled = true
+	_check_status.text = "Fetching games/%s and re-simulating..." % game_id
+
+
+func _on_check_finished() -> void:
+	if not FileAccess.file_exists(_check_out_path):
+		_check_status.text = "The script wrote nothing -- run replay_game.py from a terminal to see why."
+		return
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(_check_out_path))
+	if not (parsed is Dictionary):
+		_check_status.text = "Unreadable output from replay_game.py."
+		return
+	if parsed.has("error"):
+		_check_status.text = "Error: %s" % parsed["error"]
+		push_error(parsed.get("traceback", parsed["error"]))
+		return
+
+	# Not localized -- dev-only text, and the details are the point. Printed
+	# as well as shown, since this screen is left the moment the match opens.
+	var notes: Array = []
+	notes.append("Checking %s (%s)  seed %s" % [parsed.get("game_id", "?"), parsed.get("mode", "?"), parsed.get("seed", "?")])
+	if bool(parsed.get("engine_mismatch", false)):
+		notes.append("ENGINE MISMATCH: recorded %s, this build runs %s -- the replay may differ from what was reported." % [
+			parsed.get("recorded_engine_version", "?"), parsed.get("engine_version", "?")
+		])
+	if bool(parsed.get("score_mismatch", false)):
+		notes.append("Score now %s, recorded %s." % [parsed.get("score"), parsed.get("recorded_score")])
+	var reports = parsed.get("reports")
+	if reports is Array and not reports.is_empty():
+		for r in reports:
+			if r is Dictionary:
+				var text := str(r.get("description", ""))
+				notes.append("Report [%s]: %s" % [r.get("category", "?"), text if text != "" else "(no text)"])
+	else:
+		notes.append("No reports filed against this match.")
+	_check_status.text = "\n".join(notes)
+	for line in notes:
+		print("[check replay] " + line)
+
+	MatchSession.clear()
+	MatchSession.set_from_match_response(parsed)
+	if not MatchSession.has_pending():
+		_check_status.text = "Re-simulated, but the replay couldn't be decoded."
+		return
+	MatchSession.is_local = true
+	MatchSession.return_scene = "res://scenes/Play.tscn"
 	get_tree().change_scene_to_file("res://scenes/Match.tscn")

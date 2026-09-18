@@ -1,8 +1,9 @@
-"""Playing a match: the casual Quick Match, and a direct challenge.
+"""Playing a match: the casual Quick Match, a direct challenge, and
+reporting one that went wrong.
 
-Both are thin -- picking an opponent, running the simulation and recording
-what happened live in services/match.py, so these two read as the sequence
-of steps they are rather than as the engine plumbing underneath.
+The first two are thin -- picking an opponent, running the simulation and
+recording what happened live in services/match.py, so they read as the
+sequence of steps they are rather than as the engine plumbing underneath.
 """
 
 from __future__ import annotations
@@ -14,7 +15,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from firebase_admin import firestore
 from pydantic import BaseModel
 
-from config import QUICK_MATCH_ENERGY_COST, QUICK_MATCH_REWARD_CREDITS
+from config import (
+    MATCH_REPORT_CATEGORIES,
+    MATCH_REPORT_MAX_CHARS,
+    QUICK_MATCH_ENERGY_COST,
+    QUICK_MATCH_REWARD_CREDITS,
+)
 from admin_firestore_client import AdminFirestoreClient
 from deps import game_state_for, verify_id_token
 from engine import ENGINE_VERSION, GameState, Midfielder, PLAYER_CLASS_MAP, REPLAY_FORMAT_VERSION
@@ -238,3 +244,59 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
         "kits": result["kits"],
         "formations": result["formations"],
     }
+
+
+# -- bug reports ----------------------------------------------------------------
+
+
+class ReportMatchRequest(BaseModel):
+    game_id: str
+    category: str
+    description: str = ""
+
+
+@router.post("/match/report")
+async def report_match(req: ReportMatchRequest, uid: str = Depends(verify_id_token)):
+    """Files a bug report against a match the caller played.
+
+    The report itself is small -- who, which game, a category, some words --
+    because everything needed to reproduce the match is ALREADY on the
+    games/{id} doc: the seed, the engine and replay-format versions, and the
+    `teams` snapshot of both rosters exactly as played. The seed and versions
+    are copied onto the report so a triage listing (scripts/
+    list_match_reports.py) can show them without a second read; the rosters
+    stay where they are.
+
+    One report per player per game: the doc id is game_id + uid, so sending
+    again replaces the earlier text rather than piling up duplicates.
+    Anyone who wasn't in the match gets a 404, not a 403 -- no confirming
+    that a guessed game id exists.
+    """
+    if req.category not in MATCH_REPORT_CATEGORIES:
+        raise HTTPException(400, f"Unknown category: {req.category!r}")
+    description = " ".join(req.description.split())[:MATCH_REPORT_MAX_CHARS]
+
+    client = AdminFirestoreClient(uid)
+    game = await client.get_document(f"games/{req.game_id}")
+    if game is None or uid not in (game.get("participants") or []):
+        raise HTTPException(404, "No such match")
+
+    report_id = f"{req.game_id}_{uid}"
+    await client.set_document(
+        f"match_reports/{report_id}",
+        {
+            "uid": uid,
+            "game_id": req.game_id,
+            "category": req.category,
+            "description": description,
+            "mode": game.get("mode"),
+            "score": game.get("score"),
+            "seed": game.get("seed"),
+            "engine_version": game.get("engine_version"),
+            "replay_format_version": game.get("replay_format_version"),
+            "status": "open",
+            "created_at": firestore.SERVER_TIMESTAMP,
+        },
+        merge=False,
+    )
+    return {"reported": True, "report_id": report_id}

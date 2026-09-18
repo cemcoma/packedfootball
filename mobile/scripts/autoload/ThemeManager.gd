@@ -39,9 +39,10 @@ const PALETTES := {
 		"warning": Color(1.0, 0.7, 0.3),
 	},
 	"light": {
-		# Deeper, more saturated than their dark counterparts on purpose --
-		# the pale gold/green that reads well on near-black is nearly
-		# invisible on near-white.
+		# The currency and surface colours are deeper, more saturated than
+		# their dark counterparts on purpose: they go on the near-white
+		# tiles components build from "surface", where the pale gold/green
+		# that reads on near-black is nearly invisible.
 		"credits": Color(0.72, 0.52, 0.08),
 		"bucks": Color(0.13, 0.55, 0.33),
 		"medals": Color(0.32, 0.38, 0.72),
@@ -50,29 +51,39 @@ const PALETTES := {
 		"surface_border": Color(0.6, 0.6, 0.66),
 		"text_muted": Color(0.35, 0.35, 0.42),
 		"accent": Color(0.85, 0.6, 0.05),
-		"text_hint": Color(0.1, 0.1, 0.13),
-		"heading": Color(0.13, 0.28, 0.6),
-		"heading_away": Color(0.6, 0.22, 0.16),
-		"positive": Color(0.1, 0.5, 0.22),
-		"warning": Color(0.72, 0.42, 0.0),
+		# The naked-text keys are NOT dark, though, and that is the part
+		# that's easy to get wrong: "light" mode is a light PHOTO behind
+		# dark translucent panels (see AppThemeLight.tres -- its Label
+		# colour is white with a shadow), not a white page. Text drawn
+		# straight onto that photo, or inside one of those panels, has to
+		# be as light as in dark mode; the theme's shadow is what keeps it
+		# readable over the brighter parts of the picture. Dark values here
+		# put near-black text on a mid-tone photo and inside black panels.
+		"text_hint": Color(0.96, 0.96, 0.98),
+		"heading": Color(0.8, 0.88, 1.0),
+		"heading_away": Color(1.0, 0.82, 0.78),
+		"positive": Color(0.65, 1.0, 0.65),
+		"warning": Color(1.0, 0.72, 0.32),
 	},
 }
 
-## The five keys above `text_hint` and below exist for ONE situation: text
-## drawn straight onto the screen background, with no panel behind it.
+## The five keys from `text_hint` down are for text that carries a MEANING
+## by colour -- a heading, a hint, good news, a warning -- whether it sits
+## on the bare screen background or inside a themed panel. In both modes
+## the background is a photo and the panels are dark and translucent, so
+## every one of them is a light colour in both palettes; what changes
+## between modes is only the tint, tuned to each photo. (The theme's own
+## Label colour, white with a shadow, is what plain text gets without any
+## override at all.)
 ##
-## Anything inside a themed Panel is already handled -- the Theme resource
-## swaps that Label color wholesale. Anything inside a DELIBERATELY dark
-## panel (Match.tscn's overlay scrims, MatchResult's contrast panel) must
-## stay light in both modes and should hardcode white, NOT read from here.
-## These are only for the naked case, where a pale grey/blue/green that reads
-## on a dark photo background is invisible on a light one:
-##
-##   text_hint     muted secondary text ("Tap to skip") -- black in light mode
+##   text_hint     muted secondary text ("Tap to skip")
 ##   heading       a section/column heading (the cool blue one)
 ##   heading_away  its warm counterpart, so two squad lists stay tellable apart
 ##   positive      "Saved!", clean sheet, anything good
 ##   warning       "Unsaved changes", out of position, anything that wants a look
+##
+## text_muted is the odd one out: it goes on the near-white tiles built
+## from "surface" (currency and deal tiles), so it IS dark in light mode.
 ##
 ## Screens using these must rebuild on theme_changed -- an
 ## add_theme_color_override is a one-time write, not a live binding.

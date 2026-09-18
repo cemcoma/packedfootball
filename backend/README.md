@@ -114,6 +114,7 @@ Credentials automatically -- no key file.
 | `GET /leaderboard/users` | Ranks `users/{uid}` by `wins`. |
 | `POST /match/quick` | Finds an opponent (real account or bot), spends energy, simulates, rewards, persists. |
 | `POST /match/simulate` | Ranked challenge against a named `opponent_uid`. |
+| `POST /match/report` | Files a bug report against a match the caller played: `game_id`, a `category` from `MATCH_REPORT_CATEGORIES`, optional text. One `match_reports/{game_id}_{uid}` doc per player per match, carrying the game's seed and engine version; the rosters as played are already on `games/{id}.teams`, so the match can be re-run exactly. Triage with `scripts/list_match_reports.py`. |
 | `GET /tournament/today` | Everything the tournament screen needs in one response; settles any overdue day first and carries yesterday's result in `pending_results`. |
 | `POST /tournament/join` | Joins today's group in the caller's tier. Refused in the last hour of the day. |
 | `POST /tournament/match` | One of the day's `TOURNAMENT_MATCHES_PER_DAY` matches against someone in the same tier's pool (or a tier-appropriate bot). |
@@ -127,7 +128,7 @@ on a nested path like `statistics.goals`.
 
 ### Tiers
 
-A card's `tier` is `"<family>"` or `"<family>_<variant>"`: `special_camp`
+A card's `tier` is `"<family>"` or `"<family>_<variant>"`: `special_champ`
 is a special, a future `diamond_turkish` would be a diamond.
 `packEngine.tier_family()` (mirrored by `PlayerCard.tier_family()` on the
 client) is the collapse, and everything that treats a tier as a rarity --
@@ -405,6 +406,7 @@ python3 backend/scripts/<script>.py [--dry-run]
 | `rename_tiers.py` | Rewrites `tier` on `players/{id}` after a `TIER_RANGES` key is renamed (its `RENAMES` map). Run `sync_pack_definitions.py` too, for the pack rates. |
 | `list_packs.py` | Read-only dump of live `packs/{id}` docs. `--pack-id N` for one. |
 | `list_deals.py` | Read-only dump of live `deals/{id}` docs. |
+| `list_match_reports.py` | Read-only. Open bug reports newest first, with seed and engine version; `--dump-dir` writes each report's `games/{id}` doc as JSON. `--all` includes reports whose `status` you've changed by hand. To watch one: paste its game id into Play.tscn's TESTING panel (editor only, "Check a reported match"), which runs `packedfootball/scripts/replay_game.py` -- re-simulates the match on your Mac from the game doc and plays it back, showing the report text and flagging an engine-version mismatch. |
 | `list_accounts.py` | Read-only. Lists every `users/{uid}` and whether its roster is Quick-Match complete (`roster_player_ids` length == 11). |
 | `settle_tournaments.py` | Settles tournaments by hand when a day is stuck; `--dry-run` to see why it failed (or why it will work). |
 

@@ -110,7 +110,6 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 text = "Delete Account"
-flat = true
 
 [node name="DeleteConfirmOverlay" type="Control" parent="." unique_id=1658000310]
 unique_name_in_owner = true

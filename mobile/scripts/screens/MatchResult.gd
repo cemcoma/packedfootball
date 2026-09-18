@@ -12,8 +12,26 @@ extends Control
 ## Play.gd's /match/quick response populated it with. It is NOT cleared here
 ## -- "Detailed Stats" opens MatchStats.tscn, which reads the same data --
 ## so clearing happens on the way back to the Menu instead.
+##
+## "Something went wrong? Report it" files a bug report against this match
+## (POST /match/report): a category, a few optional words, and the game id
+## -- which is all the server needs, because the seed and both rosters as
+## played are already on the games/{id} doc, so the match can be re-run
+## exactly. Hidden for the demo replay and for local test matches, which
+## have no game doc to report against.
 
 const MATCH_STATS_SCENE := "res://scenes/MatchStats.tscn"
+
+## Mirrors backend/config.py's MATCH_REPORT_CATEGORIES, in the order the
+## dropdown shows them: [key the server takes, label].
+const REPORT_CATEGORIES := [
+	["stuck_players", "Players stuck or standing still"],
+	["ball_physics", "Ball went through someone / teleported"],
+	["goalkeeper", "Goalkeeper did something absurd"],
+	["wrong_score", "Score doesn't match what I saw"],
+	["replay_glitch", "Replay froze, skipped or the camera lost the ball"],
+	["other", "Something else"],
+]
 
 ## [label, stat key, format]. "int" renders a plain total, "pct" a
 ## percentage, "rating" one decimal place.
@@ -37,11 +55,29 @@ const SUMMARY_ROWS := [
 @onready var _details_button: Button = %DetailsButton
 @onready var _continue_button: Button = %ContinueButton
 @onready var _loading_popup: Control = %LoadingPopup
+@onready var _report_button: Button = %ReportButton
+@onready var _report_overlay: Control = %ReportOverlay
+@onready var _report_category: OptionButton = %ReportCategory
+@onready var _report_text: TextEdit = %ReportText
+@onready var _report_footnote: Label = %ReportFootnote
+@onready var _report_cancel_button: Button = %ReportCancelButton
+@onready var _report_send_button: Button = %ReportSendButton
+
+var _reporting: bool = false
 
 
 func _ready() -> void:
 	_continue_button.pressed.connect(_on_continue_pressed)
 	_details_button.pressed.connect(_on_details_pressed)
+	_report_button.pressed.connect(_on_report_pressed)
+	_report_cancel_button.pressed.connect(func() -> void: _report_overlay.visible = false)
+	_report_send_button.pressed.connect(_on_report_send_pressed)
+	for entry in REPORT_CATEGORIES:
+		_report_category.add_item(tr(entry[1]))
+	_report_overlay.visible = false
+	# Nothing to report against without a game doc (demo replay, local test).
+	_report_button.visible = MatchSession.game_id != ""
+	_report_footnote.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 
 	var score: Array = MatchSession.score
 	var my_score: int = score[0] if score.size() == 2 else 0
@@ -182,6 +218,54 @@ func _name_label(text: String) -> Label:
 
 func _on_details_pressed() -> void:
 	get_tree().change_scene_to_file(MATCH_STATS_SCENE)
+
+
+# -- bug report ---------------------------------------------------------------
+
+
+func _on_report_pressed() -> void:
+	if _reporting:
+		return
+	_report_overlay.visible = true
+	_report_text.grab_focus()
+
+
+func _on_report_send_pressed() -> void:
+	if _reporting or MatchSession.game_id == "":
+		return
+	var index := _report_category.selected
+	if index < 0 or index >= REPORT_CATEGORIES.size():
+		index = REPORT_CATEGORIES.size() - 1  # "Something else"
+
+	_reporting = true
+	_report_send_button.disabled = true
+	_report_cancel_button.disabled = true
+	_report_send_button.text = tr("Sending...")
+
+	var res: Dictionary = await Backend.call_endpoint(
+		HTTPClient.METHOD_POST,
+		"/match/report",
+		{
+			"game_id": MatchSession.game_id,
+			"category": REPORT_CATEGORIES[index][0],
+			"description": _report_text.text,
+		},
+	)
+
+	_reporting = false
+	_report_cancel_button.disabled = false
+	_report_send_button.disabled = false
+	_report_send_button.text = tr("Send report")
+
+	if not res.ok:
+		_report_footnote.text = tr("Could not send the report -- try again.")
+		_report_footnote.add_theme_color_override("font_color", ThemeManager.color("warning"))
+		return
+
+	# Sent. The button stays so a second, better-worded report can replace
+	# the first (the server keeps one per match per player), but it says so.
+	_report_overlay.visible = false
+	_report_button.text = tr("Reported -- thanks! Tap to add more")
 
 
 ## Re-fetches the squad from Firestore before heading back to Menu --

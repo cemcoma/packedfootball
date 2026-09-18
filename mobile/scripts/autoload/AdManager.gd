@@ -7,7 +7,7 @@ signal ad_reward_completed(track: String, success: bool)
 #  Change test mode before relase!
 #
 
-const TEST_MODE: bool = True
+const TEST_MODE: bool = true
 
 # Google's official Test IDs for Rewarded Video Ads
 const REWARDED_TEST_ID_ANDROID := "ca-app-pub-3940256099942544/5224354917"
