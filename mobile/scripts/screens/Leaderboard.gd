@@ -300,7 +300,7 @@ func _display_name(entry: Dictionary) -> String:
 		name = tr("Unknown Player")
 	var position_raw = entry.get("position")
 	if position_raw is String and position_raw != "":
-		name += "  ·  %s  ·  %s" % [position_raw, owner ]
+		name += "  ·  %s" % position_raw
 	return name
 
 

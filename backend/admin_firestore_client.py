@@ -117,22 +117,6 @@ class AdminFirestoreClient:
         snap = await asyncio.to_thread(self._ref(path).get)
         return snap.to_dict() if snap.exists else None
 
-    async def get_documents(self, paths: list[str]) -> dict[str, dict | None]:
-        """Several docs in ONE round trip, keyed by the path asked for; None
-        where a path doesn't exist. The non-transactional twin of
-        TransactionScope.get_all -- for read-only fan-outs like "the owner
-        of each card on this leaderboard page", where a transaction's locks
-        would be pure cost."""
-        if not paths:
-            return {}
-        refs = [self._ref(p) for p in paths]
-        by_ref_path = {ref.path: p for ref, p in zip(refs, paths)}
-        found: dict[str, dict | None] = {p: None for p in paths}
-        for snap in await asyncio.to_thread(lambda: list(self._db.get_all(refs))):
-            if snap.exists:
-                found[by_ref_path[snap.reference.path]] = snap.to_dict()
-        return found
-
     async def list_collection(self, path: str) -> list[dict]:
         docs = await asyncio.to_thread(lambda: list(self._ref(path).stream()))
         return [{"id": d.id, **(d.to_dict() or {})} for d in docs]

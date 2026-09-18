@@ -54,14 +54,6 @@ async def leaderboard_players(
         raise HTTPException(400, f"stat must be one of {list(PLAYER_LEADERBOARD_STATS)}")
 
     docs, first_rank, has_more = await _page(uid, "players", field_path, page, where=_position_filter(position))
-
-    # The card doc only carries the owner's uid; the name is on users/{uid}.
-    # One batched read of the page's distinct owners, so every row can say
-    # whose player this is without the client fetching each manager.
-    owner_uids = sorted({d.get("owner_uid") for d in docs if d.get("owner_uid")})
-    owners = await AdminFirestoreClient(uid).get_documents([f"users/{o}" for o in owner_uids])
-    owner_names = {o: (owners.get(f"users/{o}") or {}).get("display_name") or "" for o in owner_uids}
-
     return {
         "stat": stat,
         "position": position,
@@ -76,10 +68,8 @@ async def leaderboard_players(
                 "lname": d.get("lname"),
                 "position": d.get("position"),
                 "tier": d.get("tier"),
-                # The manager who owns the card -- what a tap on the row
-                # opens, and whose name sits under the player's.
+                # The manager who owns the card -- what a tap on the row opens.
                 "owner_uid": d.get("owner_uid"),
-                "owner_name": owner_names.get(d.get("owner_uid"), ""),
                 "value": d.get("statistics", {}).get(stat, 0),
                 # So a rating board can say "7.12 over 9 matches".
                 "matches_played": d.get("statistics", {}).get("matches_played", 0),
