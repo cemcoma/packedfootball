@@ -4,7 +4,7 @@ extends RefCounted
 ## GDScript port of packedfootball/formations.py -- same named formations,
 ## same base coordinates/roles for the player's own XI (indices 0-10; unlike
 ## the Python side, this never needs the mirrored opponent half: Team.tscn
-## lays out the signed-in user's own squad, and OpponentSquad.tscn draws the
+## lays out the signed-in user's own squad, and ManagerView.tscn draws the
 ## other side's 11 on its own half-pitch too -- nothing here ever lays out a
 ## match's full 22). Kept in lockstep with the Python source by hand, the
 ## same way FirebaseAuth.gd hand-ports firebase_client.py -- Godot can't

@@ -326,6 +326,12 @@ async def tournament_match(uid: str = Depends(verify_id_token)):
         "score": result["score"],
         "opponent_display_name": opponent_profile["display_name"],
         "opponent_is_bot": is_bot,
+        "opponent_uid": "" if is_bot else opponent_uid,
+        "opponent_record": {
+            "wins": opponent_profile.get("wins", 0),
+            "draws": opponent_profile.get("draws", 0),
+            "losses": opponent_profile.get("losses", 0),
+        },
         "credits_earned": credits_earned,
         "credits_remaining": new_credits,
         "energy": energy_after,

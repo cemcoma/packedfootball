@@ -36,6 +36,7 @@ Deploy rules with:
 
 ```sh
 firebase deploy --only firestore:rules
+firebase deploy --only firestore:indexes   # the leaderboard's position filter needs these
 ```
 
 ## Web test build

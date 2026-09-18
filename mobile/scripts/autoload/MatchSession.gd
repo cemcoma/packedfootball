@@ -35,7 +35,14 @@ var _roster: Dictionary = {}
 var score: Array = [0, 0]
 var opponent_display_name: String = ""
 var opponent_is_bot: bool = false
+
+## The opponent's account-level record {wins, draws, losses}, {} for a bot
+## or a backend older than the field -- the Manager screen's header when
+## "View Opponent" is tapped. opponent_uid is "" for a bot.
+var opponent_record: Dictionary = {}
+var opponent_uid: String = ""
 var credits_earned: int = 0
+
 ## THIS match's per-player numbers, 22 entries, same index order as the
 ## roster (caller's 11 then opponent's 11). Distinct from each card's
 ## `statistics`, which are career totals. Empty for the bundled demo replay
@@ -104,7 +111,7 @@ func set_from_match_response(data: Dictionary) -> void:
 	var kits: Array = kits_raw if kits_raw is Array else []
 
 	# Both sides' formation names, [caller, opponent], same order as "kits".
-	# The opponent's is what OpponentSquad.gd lays their 11 out with -- the
+	# The opponent's is what ManagerView.gd lays their 11 out with -- the
 	# roster's indices 11-21 are in that formation's slot order. A backend
 	# older than this field just means the away side is drawn as a 4-4-2.
 	var formations_raw = data.get("formations")
@@ -128,6 +135,10 @@ func set_from_match_response(data: Dictionary) -> void:
 	score = score_raw if score_raw is Array and score_raw.size() == 2 else [0, 0]
 
 	opponent_is_bot = bool(data.get("opponent_is_bot"))
+	var record_raw = data.get("opponent_record")
+	opponent_record = record_raw if record_raw is Dictionary and not opponent_is_bot else {}
+	var opponent_uid_raw = data.get("opponent_uid")
+	opponent_uid = opponent_uid_raw if opponent_uid_raw is String else ""
 
 	var credits_raw = data.get("credits_earned")
 	credits_earned = credits_raw if typeof(credits_raw) in [TYPE_INT, TYPE_FLOAT] else 0
@@ -278,6 +289,8 @@ func clear() -> void:
 	score = [0, 0]
 	opponent_display_name = ""
 	opponent_is_bot = false
+	opponent_record = {}
+	opponent_uid = ""
 	credits_earned = 0
 	player_match_stats = []
 	tournament = {}

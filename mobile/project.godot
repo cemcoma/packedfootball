@@ -29,6 +29,7 @@ PackSession="*res://scripts/autoload/PackSession.gd"
 IapClient="*res://scripts/autoload/IapClient.gd"
 ThemeManager="*res://scripts/autoload/ThemeManager.gd"
 PlayerSession="*res://scripts/autoload/PlayerSession.gd"
+ManagerSession="*res://scripts/autoload/ManagerSession.gd"
 AdManager="*uid://d1x5ac4vymns1"
 LocaleManager="*res://scripts/autoload/LocaleManager.gd"
 

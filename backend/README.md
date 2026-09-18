@@ -110,8 +110,9 @@ Credentials automatically -- no key file.
 | `POST /ads/reward` | Grants the next step of a rewarded-ad track (`reward` or `energy`), with a daily cap that resets on the tournament day boundary. |
 | `GET /deals/list` | Timed offers, with per-caller availability. |
 | `POST /deals/redeem` | Spends a deal's cost currency, grants its rewards. |
-| `GET /leaderboard/players` | Ranks `players/{id}` by `goals`/`assists`/`matches_played`. |
-| `GET /leaderboard/users` | Ranks `users/{uid}` by `wins`. |
+| `GET /leaderboard/players` | Ranks `players/{id}` by `goals` / `assists` / `avg_rating` / `clean_sheets` / `matches_played`, `LEADERBOARD_PAGE_SIZE` a page (`?page=N`, zero-based), optionally narrowed with `?position=ST` or a family (`attacker`); entries carry their absolute `rank` and the card's `owner_uid`. |
+| `GET /leaderboard/users` | Ranks `users/{uid}` by `wins`, same paging; entries carry `wins`/`draws`/`losses` and `is_me`. |
+| `GET /manager/{uid}` | Another manager as everyone may see them: name, record, tournament tier, kit, and their XI in formation order. What a leaderboard row opens. 404 for an unknown uid, never creates a profile. |
 | `POST /match/quick` | Finds an opponent (real account or bot), spends energy, simulates, rewards, persists. |
 | `POST /match/simulate` | Ranked challenge against a named `opponent_uid`. |
 | `POST /match/report` | Files a bug report against a match the caller played: `game_id`, a `category` from `MATCH_REPORT_CATEGORIES`, optional text. One `match_reports/{game_id}_{uid}` doc per player per match, carrying the game's seed and engine version; the rosters as played are already on `games/{id}.teams`, so the match can be re-run exactly. Triage with `scripts/list_match_reports.py`. |
@@ -121,10 +122,26 @@ Credentials automatically -- no key file.
 | `GET /tournament/results` | A settled day's final table for the caller's group. |
 | `POST /tournament/settle` | Scheduler/admin: settles the lookback window, or one `day_id`. |
 
-Both leaderboard endpoints return `{"stat": ..., "entries": [...]}` already
-in rank order; index + 1 is the rank, there's no explicit rank field. They
-use a plain `order_by(...).limit(...)`, so no composite index is needed even
-on a nested path like `statistics.goals`.
+Both leaderboard endpoints return `{"stat", "page", "page_size",
+"has_more", "entries": [...]}` in rank order, one extra row fetched to
+answer `has_more`. Unfiltered they use a plain
+`order_by(...).offset(...).limit(...)`, which needs no composite index even
+on a nested path like `statistics.goals`; the offset costs the skipped rows
+as reads, which at ten a page is nothing.
+
+The **position filter** (`where position == / in` plus the order) does
+need a composite index per stat. They're declared in the repo-root
+`firestore.indexes.json` (`firebase.json` points at it) and ship with
+`firebase deploy --only firestore:indexes` -- a stat added to
+`PLAYER_LEADERBOARD_STATS` needs an entry there too, or the filtered query
+fails with a link to create the missing index.
+
+`avg_rating` is not a counter: `player.py`'s `record_match` writes
+`statistics.avg_rating` as a plain field once a card has
+`RATED_MATCHES_FOR_AVERAGE` (5) rated matches, because Firestore can't
+order on `rating_sum / rating_count`. Cards under the threshold have no
+field and are simply absent from that board. `scripts/backfill_avg_rating.py`
+fills it in for cards that crossed the line before the field existed.
 
 ### Tiers
 
@@ -402,6 +419,7 @@ python3 backend/scripts/<script>.py [--dry-run]
 | `sync_pack_definitions.py` | Pushes `packEngine.PACK_DATABASE`'s definitional fields onto existing `packs/{id}` docs. Never touches operational fields. `--pack-id N` for one pack. Skips ids with no existing doc. |
 | `sync_deal_definitions.py` | Same for `packedfootball/deal_database.py`'s `DEAL_DATABASE` -> `deals/{id}`. Unlike the pack version it *creates* missing docs, seeded `active: false`; `--activate-new` seeds them `active: true` instead. Never changes an existing doc's `active`. |
 | `sync_player_appearance.py` | Backfills a placeholder `appearance` onto `players/{id}` docs that predate the field. |
+| `backfill_avg_rating.py` | Writes `statistics.avg_rating` onto cards with `RATED_MATCHES_FOR_AVERAGE`+ rated matches that predate the field. Re-runnable. |
 | `sync_display_names.py` | Backfills `display_names/{key}` reservations for accounts created before names were unique. Oldest account keeps a duplicated name; conflicts are printed, never renamed. |
 | `rename_tiers.py` | Rewrites `tier` on `players/{id}` after a `TIER_RANGES` key is renamed (its `RENAMES` map). Run `sync_pack_definitions.py` too, for the pack rates. |
 | `list_packs.py` | Read-only dump of live `packs/{id}` docs. `--pack-id N` for one. |

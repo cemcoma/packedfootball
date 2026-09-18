@@ -35,7 +35,6 @@ const PITCH_HEIGHT := 100.0
 const TICKS_PER_SECOND := 60.0
 const REPLAY_PATH := "res://test_data/sample_match.bin"
 const ROSTER_PATH := "res://test_data/sample_match.json"
-const OPPONENT_SQUAD_SCENE := "res://scenes/OpponentSquad.tscn"
 
 
 const FULL_MODE_BOX_SIZE := Vector2(378.0, 540.0)
@@ -419,7 +418,9 @@ func _reset_state() -> void:
 ## _ready() from the same data and lands on this same popup, with nothing
 ## having started in between. Not offered once the match is under way.
 func _on_view_opponent_pressed() -> void:
-	get_tree().change_scene_to_file(OPPONENT_SQUAD_SCENE)
+	# The Manager screen reads the away side out of MatchSession and comes
+	# back here; this scene rebuilds from the same session on return.
+	ManagerSession.open_match_opponent("res://scenes/Match.tscn")
 
 
 func _on_start_match_pressed() -> void:

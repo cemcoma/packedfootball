@@ -35,61 +35,136 @@ script = ExtResource("3_cnd66")
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="TitleLabel" type="Label" parent="Margin/RootVBox" unique_id=582632043]
+[node name="HeaderRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=582632050]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TitleLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=582632043]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "LEADERBOARD"
 
-[node name="TabRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=293315331]
+[node name="HeaderSpacer" type="Control" parent="Margin/RootVBox/HeaderRow" unique_id=582632051]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Margin/RootVBox/HeaderRow" unique_id=224035501]
+layout_mode = 2
+
+[node name="TabRow" type="HBoxContainer" parent="Margin/RootVBox/HeaderRow/VBoxContainer" unique_id=293315331]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="UsersTabButton" type="Button" parent="Margin/RootVBox/TabRow" unique_id=1794285886]
+[node name="UsersTabButton" type="Button" parent="Margin/RootVBox/HeaderRow/VBoxContainer/TabRow" unique_id=1794285886]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 36)
 layout_mode = 2
 toggle_mode = true
 button_pressed = true
 button_group = SubResource("ButtonGroup_leaderboard_tabs")
-text = "Users"
+text = "Managers"
 
-[node name="PlayersTabButton" type="Button" parent="Margin/RootVBox/TabRow" unique_id=1395513169]
+[node name="GoalsTabButton" type="Button" parent="Margin/RootVBox/HeaderRow/VBoxContainer/TabRow" unique_id=1395513169]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 36)
 layout_mode = 2
 toggle_mode = true
 button_group = SubResource("ButtonGroup_leaderboard_tabs")
-text = "Players"
+text = "Goals"
+
+[node name="AssistsTabButton" type="Button" parent="Margin/RootVBox/HeaderRow/VBoxContainer/TabRow" unique_id=1395513170]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 36)
+layout_mode = 2
+toggle_mode = true
+button_group = SubResource("ButtonGroup_leaderboard_tabs")
+text = "Assists"
+
+[node name="RatingTabButton" type="Button" parent="Margin/RootVBox/HeaderRow/VBoxContainer/TabRow" unique_id=1395513171]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 36)
+layout_mode = 2
+toggle_mode = true
+button_group = SubResource("ButtonGroup_leaderboard_tabs")
+text = "Rating"
+
+[node name="CleanSheetsTabButton" type="Button" parent="Margin/RootVBox/HeaderRow/VBoxContainer/TabRow" unique_id=1395513172]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 36)
+layout_mode = 2
+toggle_mode = true
+button_group = SubResource("ButtonGroup_leaderboard_tabs")
+text = "Clean sheets"
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Margin/RootVBox/HeaderRow/VBoxContainer" unique_id=1475117971]
+layout_mode = 2
+
+[node name="Control" type="Control" parent="Margin/RootVBox/HeaderRow/VBoxContainer/HBoxContainer" unique_id=1931913748]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PositionOption" type="OptionButton" parent="Margin/RootVBox/HeaderRow/VBoxContainer/HBoxContainer" unique_id=1395513173]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(130, 36)
+layout_mode = 2
 
 [node name="StatusLabel" type="Label" parent="Margin/RootVBox" unique_id=1140258818]
 unique_name_in_owner = true
 layout_mode = 2
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1
 
-[node name="UsersScroll" type="ScrollContainer" parent="Margin/RootVBox" unique_id=1671539840]
-unique_name_in_owner = true
+[node name="ListScroll" type="ScrollContainer" parent="Margin/RootVBox" unique_id=1671539840]
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="UsersList" type="VBoxContainer" parent="Margin/RootVBox/UsersScroll" unique_id=1274833684]
-unique_name_in_owner = true
+[node name="ListCenter" type="CenterContainer" parent="Margin/RootVBox/ListScroll" unique_id=1671539841]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 4
-
-[node name="PlayersScroll" type="ScrollContainer" parent="Margin/RootVBox" unique_id=542621335]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
 size_flags_vertical = 3
-horizontal_scroll_mode = 0
 
-[node name="PlayersList" type="VBoxContainer" parent="Margin/RootVBox/PlayersScroll" unique_id=640344121]
+[node name="RowsList" type="VBoxContainer" parent="Margin/RootVBox/ListScroll/ListCenter" unique_id=1274833684]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(520, 0)
 layout_mode = 2
-size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="BackButton" type="Button" parent="Margin/RootVBox" unique_id=146410908]
-unique_name_in_owner = true
+[node name="PagerRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1274833700]
 layout_mode = 2
-size_flags_horizontal = 0
-text = "Back to Menu"
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="BackButton" type="Button" parent="Margin/RootVBox/PagerRow" unique_id=146410908]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 36)
+layout_mode = 2
+size_flags_horizontal = 2
+text = "Back"
+
+[node name="PrevButton" type="Button" parent="Margin/RootVBox/PagerRow" unique_id=1274833701]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 36)
+layout_mode = 2
+text = "Previous"
+
+[node name="PageLabel" type="Label" parent="Margin/RootVBox/PagerRow" unique_id=1274833702]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Page 1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="NextButton" type="Button" parent="Margin/RootVBox/PagerRow" unique_id=1274833703]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 36)
+layout_mode = 2
+text = "Next"
+
+[node name="Control" type="Control" parent="Margin/RootVBox/PagerRow" unique_id=1033655715]
+layout_mode = 2
+size_flags_horizontal = 3

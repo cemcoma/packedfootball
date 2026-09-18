@@ -79,6 +79,11 @@ static func tier_label(tier: String) -> String:
 static func tier_color(tier: String) -> Color:
 	return TIER_COLORS.get(tier_family(tier), Color(0.5, 0.5, 0.5))
 
+## How many rated matches a card needs before it has a career average
+## rating at all (statistics.avg_rating) -- mirrors player.py's
+## RATED_MATCHES_FOR_AVERAGE, which is the end that writes it.
+const RATED_MATCHES_FOR_AVERAGE := 5
+
 ## What releasing a card pays out. Shown on the Release button before the
 ## request; backend/main.py's RELEASE_CREDITS_BY_TIER is what actually pays,
 ## so the two tables have to be kept in step by hand. An unknown tier falls

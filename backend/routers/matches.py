@@ -124,6 +124,15 @@ async def quick_match(uid: str = Depends(verify_id_token)):
         "score": result["score"],
         "opponent_display_name": opponent_profile["display_name"],
         "opponent_is_bot": is_bot,
+
+        # For the Manager screen's header when "View Opponent" is tapped: a
+        # bot has no record and no uid worth showing.
+        "opponent_uid": "" if is_bot else opponent_uid,
+        "opponent_record": {
+            "wins": opponent_profile.get("wins", 0),
+            "draws": opponent_profile.get("draws", 0),
+            "losses": opponent_profile.get("losses", 0),
+        },
         "credits_earned": credits_earned,
         "credits_remaining": new_credits,
         "energy": energy_after, #so the client knows energy without making a seperate req.uest
@@ -134,10 +143,6 @@ async def quick_match(uid: str = Depends(verify_id_token)):
         "replay": result["replay"],
         "roster": result["roster"],
         "added_time": result["added_time"],
-        # Per-player numbers for THIS match, and both sides' shirts. Both
-        # were computed by _run_match from the start and simply never made
-        # it into either response -- so MatchStats.tscn and the kit
-        # rendering had nothing to read.
         "player_match_stats": result["player_match_stats"],
         "kits": result["kits"],
         "formations": result["formations"],
@@ -229,6 +234,14 @@ async def simulate_match(req: SimulateMatchRequest, uid: str = Depends(verify_id
         "engine_version": ENGINE_VERSION,
         "replay_format_version": REPLAY_FORMAT_VERSION,
         "score": result["score"],
+        "opponent_display_name": opponent_profile["display_name"],
+        "opponent_is_bot": False,
+        "opponent_uid": req.opponent_uid,
+        "opponent_record": {
+            "wins": opponent_profile.get("wins", 0),
+            "draws": opponent_profile.get("draws", 0),
+            "losses": opponent_profile.get("losses", 0),
+        },
         "wins": wins,
         "losses": losses,
         "draws": draws,

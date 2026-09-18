@@ -162,11 +162,27 @@ BOT_KIT = "v1;pattern=stripes;primary=c8102e;secondary=121216"
 # Which stats /leaderboard/players will sort on, and the Firestore field path
 # each one lives at. An allow-list, so an arbitrary field path can't be
 # queried by asking for it.
+#
+# avg_rating is a denormalised field player.py's record_match writes once
+# a card has RATED_MATCHES_FOR_AVERAGE rated matches (Firestore can't order
+# on rating_sum / rating_count); a card below that threshold has no such
+# field and so isn't on that board at all. clean_sheets only ever move for
+# keepers, so that board is a keeper board whatever the position filter.
 PLAYER_LEADERBOARD_STATS = {
     "goals": "statistics.goals",
     "assists": "statistics.assists",
+    "avg_rating": "statistics.avg_rating",
+    "clean_sheets": "statistics.clean_sheets",
     "matches_played": "statistics.matches_played",
 }
+
+# The player board can be narrowed to one position ("ST") or one of
+# packEngine.POSITION_CATEGORIES' families ("attacker"). Either way the
+# query is an equality/in on `position` plus the order_by above, which
+# Firestore needs a COMPOSITE index for -- one per stat, declared in the
+# repo-root firestore.indexes.json and deployed with
+# `firebase deploy --only firestore:indexes`. A stat added here needs its
+# index added there, or the filtered query fails with a link to create it.
 
 # Only "wins" for now, by design -- the mobile Leaderboard screen's Users
 # tab is a deliberately minimal first pass (see mobile/README.md). Shaped
@@ -176,6 +192,10 @@ PLAYER_LEADERBOARD_STATS = {
 USER_LEADERBOARD_STATS = {
     "wins": "wins",
 }
+
+# Both leaderboards page by this many rows; the client's Leaderboard screen
+# lays out exactly this many with Prev/Next, podium colours on the top three.
+LEADERBOARD_PAGE_SIZE = 10
 
 # -- daily tournaments --------------------------------------------------------
 

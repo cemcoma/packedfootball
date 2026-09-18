@@ -68,7 +68,6 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 14
 text = "Home"
-clip_text = true
 
 [node name="ScoreLabel" type="Label" parent="ScoreboardPanel/Margin/VBox/NamesScoreRow" unique_id=553138202]
 unique_name_in_owner = true
@@ -84,7 +83,6 @@ size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 14
 text = "Away"
 horizontal_alignment = 2
-clip_text = true
 
 [node name="SwatchRow" type="HBoxContainer" parent="ScoreboardPanel/Margin/VBox" unique_id=331502564]
 layout_mode = 2

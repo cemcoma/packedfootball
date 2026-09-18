@@ -186,3 +186,21 @@ def test_loading_a_card_with_no_statistics_fails_loudly():
     }
     with pytest.raises(KeyError):
         fields_to_player(legacy, PLAYER_CLASS_MAP, Midfielder)
+
+
+def test_average_rating_is_stored_only_once_enough_matches_are_rated():
+    """/leaderboard/players orders on statistics.avg_rating, which
+    record_match writes as a plain field -- but only from the
+    RATED_MATCHES_FOR_AVERAGE-th rated match, so one 9.5 can't top the
+    board. Below that the key is absent, not zero: an absent field keeps
+    the card off an ordered query entirely."""
+    from packEngine import generate_starter_roster
+    from player.player import RATED_MATCHES_FOR_AVERAGE
+
+    p = generate_starter_roster("4-4-2", "gold", seed=3)[5]
+    nothing = {field: 0 for field in MATCH_STAT_FIELDS}
+    for i in range(RATED_MATCHES_FOR_AVERAGE - 1):
+        p.record_match(nothing, 9.5)
+        assert "avg_rating" not in p.statistics
+    p.record_match(nothing, 6.0)
+    assert p.statistics["avg_rating"] == p.average_rating()

@@ -114,6 +114,9 @@ func set_card(card: PlayerCard) -> void:
 	set_badge("")
 	set_celebrating(false)
 
+func set_kit(kit: KitDesign) -> void:
+	_model_view.set_kit(kit)
+
 
 ## Tints the position label amber -- used by Team.gd wherever this card is
 ## shown assigned to (or being considered for) a slot whose role differs

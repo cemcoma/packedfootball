@@ -117,6 +117,22 @@ class AdminFirestoreClient:
         snap = await asyncio.to_thread(self._ref(path).get)
         return snap.to_dict() if snap.exists else None
 
+    async def get_documents(self, paths: list[str]) -> dict[str, dict | None]:
+        """Several docs in ONE round trip, keyed by the path asked for; None
+        where a path doesn't exist. The non-transactional twin of
+        TransactionScope.get_all -- for read-only fan-outs like "the owner
+        of each card on this leaderboard page", where a transaction's locks
+        would be pure cost."""
+        if not paths:
+            return {}
+        refs = [self._ref(p) for p in paths]
+        by_ref_path = {ref.path: p for ref, p in zip(refs, paths)}
+        found: dict[str, dict | None] = {p: None for p in paths}
+        for snap in await asyncio.to_thread(lambda: list(self._db.get_all(refs))):
+            if snap.exists:
+                found[by_ref_path[snap.reference.path]] = snap.to_dict()
+        return found
+
     async def list_collection(self, path: str) -> list[dict]:
         docs = await asyncio.to_thread(lambda: list(self._ref(path).stream()))
         return [{"id": d.id, **(d.to_dict() or {})} for d in docs]
@@ -201,13 +217,38 @@ class AdminFirestoreClient:
 
         return await asyncio.to_thread(_run)
 
-    async def query_top(self, collection: str, order_by: str, limit: int, descending: bool = True) -> list[dict]:
+    async def query_top(
+        self,
+        collection: str,
+        order_by: str,
+        limit: int,
+        descending: bool = True,
+        offset: int = 0,
+        where: tuple[str, str, Any] | None = None,
+    ) -> list[dict]:
         """Top `limit` docs in `collection` ordered by `order_by` (dotted paths
-        into nested map fields, e.g. "statistics.goals", work directly).
-        Firestore auto-indexes every field for a single order_by with no
-        `where` clause, so this needs no manually-defined composite index.
+        into nested map fields, e.g. "statistics.goals", work directly),
+        starting `offset` docs in. Firestore auto-indexes every field for a
+        single order_by with no `where` clause, so on its own this needs no
+        manually-defined composite index.
+
+        `where` is one (field, op, value) filter -- "==" or "in" -- on top.
+        A filter on one field ordered by another DOES need a composite
+        index (see config.PLAYER_LEADERBOARD_STATS / firestore.indexes.json).
+
+        Offset rather than a cursor because the leaderboard pages are
+        numbered and small: Firestore bills the skipped documents as reads,
+        which at ten a page and a handful of pages is nothing, and it lets
+        the client jump to any page without holding a cursor.
         """
         direction = firestore.Query.DESCENDING if descending else firestore.Query.ASCENDING
-        query = self._db.collection(collection).order_by(order_by, direction=direction).limit(limit)
+        query = self._db.collection(collection)
+        if where is not None:
+            field, op, value = where
+            query = query.where(filter=google_firestore.FieldFilter(field, op, value))
+        query = query.order_by(order_by, direction=direction)
+        if offset > 0:
+            query = query.offset(offset)
+        query = query.limit(limit)
         docs = await asyncio.to_thread(lambda: list(query.stream()))
         return [{"id": d.id, **(d.to_dict() or {})} for d in docs]

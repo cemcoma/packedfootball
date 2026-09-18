@@ -46,6 +46,17 @@ PLAYER_CLASS_MAP = {
     "ST": Forward,
 }
 
+# The four position families a pack's pos_rates roll over, and which
+# positions each one picks from (with the weights the roll uses). Also what
+# /leaderboard/players filters by when asked for "defender" rather than one
+# exact position.
+POSITION_CATEGORIES = {
+    "goalkeeper": {"GK": 1.0},
+    "defender": {"CB": 0.40, "LB": 0.20, "RB": 0.20, "WB": 0.20},
+    "midfielder": {"CDM": 0.20, "CM": 0.30, "CAM": 0.20, "LM": 0.15, "RM": 0.15},
+    "attacker": {"ST": 0.50, "LW": 0.25, "RW": 0.25},
+}
+
 ### SUPER IMPORTANT ###
 # Every tier a card can be rolled at, with its overall range.
 #
@@ -407,15 +418,14 @@ class PackManager:
             rolled_tier = self.rng.choices(tiers, weights=weights, k=1)[0]
 
             position_grand_choice = self.rng.choices(pos_choice,weights=pos_weights,k=1)[0]
-            position = "ST"
-            if position_grand_choice == "goalkeeper":
-                position = "GK"
-            elif position_grand_choice == "defender":
-                position = self.rng.choices(["CB", "LB", "RB", "WB"], weights=[0.40, 0.20, 0.20, 0.20], k=1)[0]
-            elif position_grand_choice == "midfielder":
-                position = self.rng.choices(["CDM", "CM", "CAM", "LM", "RM"], weights=[0.20, 0.30, 0.20, 0.15, 0.15], k=1)[0]
-            elif position_grand_choice == "attacker":
-                position = self.rng.choices(["ST", "LW", "RW"], weights=[0.50, 0.25, 0.25], k=1)[0]
+            category = POSITION_CATEGORIES.get(position_grand_choice, POSITION_CATEGORIES["attacker"])
+            # A one-position category (goalkeeper) skips the roll rather
+            # than spending a random draw on a foregone conclusion -- which
+            # keeps every existing pack seed rolling exactly as it did.
+            if len(category) == 1:
+                position = next(iter(category))
+            else:
+                position = self.rng.choices(list(category.keys()), weights=list(category.values()), k=1)[0]
 
             attrs = self._generate_tier_attributes(rolled_tier, position)
 

@@ -69,6 +69,14 @@ DEFAULT_STATISTICS = {
 }
 
 
+# A card's career average rating is rating_sum / rating_count, and Firestore
+# can't order on a quotient -- so once a card has been rated this many
+# times, record_match also writes the average out as statistics.avg_rating,
+# which /leaderboard/players can sort on. Below the threshold the key is
+# absent (not zero): a 9.5 from a single match must not top the board, and
+# a doc without the field is simply left out of an ordered query.
+RATED_MATCHES_FOR_AVERAGE = 5
+
 MATCH_STAT_FIELDS = (
     "shots",
     "shots_on_target",
@@ -470,6 +478,8 @@ class player(ABC):
             self.statistics[field] += int(match_stats[field])
         self.statistics["rating_sum"] += float(rating)
         self.statistics["rating_count"] += 1
+        if int(self.statistics["rating_count"]) >= RATED_MATCHES_FOR_AVERAGE:
+            self.statistics["avg_rating"] = self.average_rating()
 
     def average_rating(self) -> float:
         """Career average match rating, or 0.0 for a card that's never played."""
