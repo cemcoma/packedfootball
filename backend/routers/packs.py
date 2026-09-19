@@ -43,7 +43,7 @@ def _pack_unavailable_reason(config: dict) -> Optional[str]:
     to what's actually purchasable) so the two never disagree.
 
     "max_opens" and "expires_at" are optional Firestore-only fields (see
-    packEngine.PACK_DATABASE's own comment) -- absent means unlimited/never
+    pack_database.py's own docstring) -- absent means unlimited/never
     expires, matching every pack that predates this check.
     """
     if not config.get("active", False):

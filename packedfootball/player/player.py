@@ -1,4 +1,11 @@
-from gameEngine import PITCH_HEIGHT, PITCH_WIDTH
+from game_config import (  # noqa: F401 -- the appearance/career names are re-exported from here
+    APPEARANCE_OPTION_COUNTS,
+    APPEARANCE_SLOTS,
+    DEFAULT_APPEARANCE,
+    PITCH_HEIGHT,
+    PITCH_WIDTH,
+    RATED_MATCHES_FOR_AVERAGE,
+)
 from dataclasses import dataclass, asdict
 from typing import Final
 from abc import ABC, abstractmethod
@@ -69,13 +76,7 @@ DEFAULT_STATISTICS = {
 }
 
 
-# A card's career average rating is rating_sum / rating_count, and Firestore
-# can't order on a quotient -- so once a card has been rated this many
-# times, record_match also writes the average out as statistics.avg_rating,
-# which /leaderboard/players can sort on. Below the threshold the key is
-# absent (not zero): a 9.5 from a single match must not top the board, and
-# a doc without the field is simply left out of an ordered query.
-RATED_MATCHES_FOR_AVERAGE = 5
+# RATED_MATCHES_FOR_AVERAGE: see game_config.py (imported above).
 
 MATCH_STAT_FIELDS = (
     "shots",
@@ -89,36 +90,8 @@ MATCH_STAT_FIELDS = (
     "clean_sheets",
 )
 
-# Layered character appearance: 6 independent slots, each an INDEX into an
-# option list that lives client-side in mobile/scripts/data/
-# PlayerAppearance.gd. This end only rolls the indices -- it has no idea what
-# a hairstyle looks like, and doesn't need to. "celebration" is the goal
-# celebration the client plays for this player after they score -- rolled
-# and stored like any other look, just animated rather than drawn once.
-#
-# The counts below must not exceed what the client actually has options for,
-# or a card gets an index that renders as a fallback. They are per-slot (not
-# one shared number) precisely so a slot can grow on its own: ship N new
-# hairstyles in PlayerAppearance.HAIR_STYLES, raise "hair_style" here, deploy.
-#
-# APPEND ONLY. An index is stored on every players/{id} doc forever, so
-# inserting or reordering options silently restyles every card already out
-# there. New options go on the end of the client's array, and the count here
-# goes up to match.
-#
-# Real players always get one rolled by packEngine.PackManager;
-# DEFAULT_APPEARANCE only backstops a player object built without going
-# through that (e.g. reconstructing a doc saved before this field existed).
-APPEARANCE_SLOTS = ("skin_tone", "hair_style", "hair_color", "face", "shoe_color", "celebration")
-APPEARANCE_OPTION_COUNTS = {
-    "skin_tone": 5,   # PlayerAppearance.SKIN_TONES
-    "hair_style": 5,  # PlayerAppearance.HAIR_STYLES
-    "hair_color": 5,  # PlayerAppearance.HAIR_COLORS
-    "face": 5,        # PlayerAppearance.FACE_STYLES
-    "shoe_color": 5,  # PlayerAppearance.SHOE_COLORS
-    "celebration": 9, # PlayerAppearance.CELEBRATIONS
-}
-DEFAULT_APPEARANCE = {slot: 0 for slot in APPEARANCE_SLOTS}
+# APPEARANCE_SLOTS / APPEARANCE_OPTION_COUNTS / DEFAULT_APPEARANCE: see
+# game_config.py (imported above).
 
 DEFAULT_ACTIONS = {
     "stop", "shoot", "pass", "clear", "cross", "dribble",

@@ -1,12 +1,16 @@
 import os
 import random
-import datetime
 from player.player import Attributes, APPEARANCE_SLOTS, APPEARANCE_OPTION_COUNTS, TENDENCY_FIELDS, PHYSICAL_FIELDS, player
 
 from player.classes.goalkeeper import Goalkeeper
 from player.classes.defender import CenterBack, Fullback, Wingback
 from player.classes.midfielder import Midfielder, DefensiveMid, AttackingMid
 from player.classes.forward import Forward, Winger
+# Re-exported: everything that used to read these from here still can. The
+# tables themselves are in game_config.py (rules) and pack_database.py (the
+# catalog).
+from game_config import POSITION_CATEGORIES, TIER_RANGES, tier_family  # noqa: F401
+from pack_database import PACK_DATABASE  # noqa: F401
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
@@ -35,6 +39,13 @@ PLAYER_CLASS_MAP = {
     "CB": CenterBack,
     "LB": Fullback,
     "RB": Fullback,
+    "LWB": Wingback,
+    "RWB": Wingback,
+    # LEGACY, not rollable (no POSITION_CATEGORIES entry lists it): the name
+    # wing-backs carried before the LWB/RWB split. games/{id} team snapshots
+    # from before it still say "WB", and reading one back should still build
+    # a Wingback rather than the default class. Live cards were renamed by
+    # backend/scripts/rename_positions.py.
     "WB": Wingback,
     "CDM": DefensiveMid,
     "CM": Midfielder,
@@ -45,51 +56,6 @@ PLAYER_CLASS_MAP = {
     "RW": Winger,
     "ST": Forward,
 }
-
-# The four position families a pack's pos_rates roll over, and which
-# positions each one picks from (with the weights the roll uses). Also what
-# /leaderboard/players filters by when asked for "defender" rather than one
-# exact position.
-POSITION_CATEGORIES = {
-    "goalkeeper": {"GK": 1.0},
-    "defender": {"CB": 0.40, "LB": 0.20, "RB": 0.20, "WB": 0.20},
-    "midfielder": {"CDM": 0.20, "CM": 0.30, "CAM": 0.20, "LM": 0.15, "RM": 0.15},
-    "attacker": {"ST": 0.50, "LW": 0.25, "RW": 0.25},
-}
-
-### SUPER IMPORTANT ###
-# Every tier a card can be rolled at, with its overall range.
-#
-# A key is "<family>" or "<family>_<variant>". The family is the RARITY --
-# what release value, card colour, ordering and the pack-odds disclosure go
-# by (tier_family() is that collapse) -- and a variant is a themed edition
-# of it with its own range and its own card art
-# (mobile/sprites/player_cards/<tier>.png). So special_champ is a special,
-# and a future diamond_turkish would be a diamond. A new variant is one
-# entry here plus a sprite, and nothing else needs to know it exists; a new
-# FAMILY also needs a row in the family tables (config.RELEASE_CREDITS_BY_TIER,
-# PlayerCard.TIER_COLORS / RELEASE_CREDITS).
-#
-# Plain "special" is the family's own baseline
-TIER_RANGES = {
-    "bronze": (45, 54),
-    "silver": (55, 64),
-    "gold": (62, 75),
-    "platinum": (72, 80),
-    "diamond": (78, 85),
-    "special": (82, 87),
-    "special_conf": (83, 88),
-    "special_cont": (84, 90),
-    "special_champ": (85, 93),
-    "icon": (95,99)
-}
-
-
-def tier_family(tier: str) -> str:
-    """The rarity a tier string counts as: everything before the first "_",
-    so "special_champ" -> "special", "diamond_turkish" -> "diamond", and a
-    plain tier is itself. Mirrored by PlayerCard.tier_family() on the client."""
-    return str(tier).split("_", 1)[0]
 
 
 TENDENCY_RANGES = {
@@ -121,7 +87,8 @@ HEIGHT_PROFILES = {
     "CAM": (175, 8),
     "LB": (177, 5),
     "RB": (177, 5),
-    "WB": (176, 5),
+    "LWB": (176, 5),
+    "RWB": (176, 5),
     "LM": (177, 6),
     "RM": (177, 6),
     "LW": (175, 6),
@@ -140,8 +107,8 @@ def _roll_height(rng: random.Random, position: str) -> int:
 # "secondary" (full range -- the default for anything not listed here),
 # "tertiary" (bottom half -- a real but secondary-to-that trait), or
 # "nerfed" (this position basically never grows this stat)
-# LB/RB, LM/RM, and LW/RW are mirrored sides -- nothing here distinguishes
-# left from right, so each pair repeats the same profile.
+# LB/RB, LWB/RWB, LM/RM, and LW/RW are mirrored sides -- nothing here
+# distinguishes left from right, so each pair shares one profile.
 POSITION_STAT_TIERS = {
     "GK": {
         "passing": "primary", "agility": "primary", "composure": "primary", "ballcontrol": "primary",
@@ -170,7 +137,7 @@ POSITION_STAT_TIERS = {
         "clear_tendency": "secondary", "pass_tendency": "secondary",
         "drible_tendency": "tertiary", "aggression": "tertiary", "shoot_tendency": "nerfed",
     },
-    "WB": {
+    "LWB": {
         "speed": "primary", "passing": "primary",
         "shooting": "nerfed", "accuracy": "secondary",
         "defending": "secondary", "tackling": "secondary", "dribbiling": "secondary",
@@ -233,6 +200,7 @@ POSITION_STAT_TIERS = {
     },
 }
 POSITION_STAT_TIERS["RB"] = POSITION_STAT_TIERS["LB"]
+POSITION_STAT_TIERS["RWB"] = POSITION_STAT_TIERS["LWB"]
 POSITION_STAT_TIERS["RM"] = POSITION_STAT_TIERS["LM"]
 POSITION_STAT_TIERS["RW"] = POSITION_STAT_TIERS["LW"]
 
@@ -269,123 +237,6 @@ def _roll_tendency_stat(rng: random.Random, stat_type: str, low: int, high: int)
         return rng.randint(low, low + max(1, span // 4))
     return rng.randint(low, high)  # "secondary", and the fallback for anything unrecognized
 
-
-PACK_DATABASE = {
-    1: {
-        "active": True,
-        "name": "Standard Player Pack",
-        "type": "standard",
-        "description": "A reliable pack of everyday talent. Mostly bronze and silver, with a shot at gold.",
-        "price": 100,
-        "cards_per_pack": 3,
-        "rates": {"bronze": 0.60, "silver": 0.30, "gold": 0.075, "platinum": 0.025, "diamond": 0.0},
-        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "price_currency":"credits",
-        "sprite_key":"StandardPack1"
-    },
-    2: {
-        "active": True,
-        "name": "Jumbo Player Pack",
-        "type": "standard",
-        "description": "Ten cards in one pull. Better odds than Standard Player Pack.",
-        "price": 500,
-        "cards_per_pack": 10,
-        "rates": {"bronze": 0.40, "silver": 0.40, "gold": 0.15, "platinum": 0.05, "diamond": 0.0},
-        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "price_currency":"credits",
-        "sprite_key":"StandardPack1"
-    },
-    3: {
-        "active": True,
-        "name": "Icon Forward Pack",
-        "type": "special",
-        "description": "One guaranteed icon-tier forward. Extremely limited -- once they're gone, they're gone.",
-        "price": 50000,
-        "cards_per_pack": 1,
-        "rates": {"icon":1.0},
-        "pos_rates": {"attacker":1},
-        "price_currency":"credits",
-        "sprite_key":"StandardPack1",
-        "visible":True
-    },
-    4: {
-        "active": True,
-        "name": "Small Tournament Player Pack",
-        "type": "standard",
-        "description": "One tournament ready player at your service.",
-        "price": 1,
-        "cards_per_pack": 1,
-        "rates": {"bronze": 0.0, "silver": 0.15, "gold": 0.45, "platinum": 0.35, "diamond": 0.05},
-        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "price_currency":"medals",
-        "sprite_key":"StandardPack2"
-    },
-     # 5 is missing due to it being done at firebase and it takes too long to put here.
-    6: {
-        "active": True,
-        "name": "Medium Tournament Player Pack",
-        "type": "standard",
-        "description": "Medium 3 player pack. Better odds than Small Tournament Winner Player Pack.",
-        "price": 3,
-        "cards_per_pack": 3,
-        "rates": {"bronze": 0.0, "silver": 0.12, "gold": 0.45, "platinum": 0.35, "diamond": 0.08},
-        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "price_currency":"medals",
-        "sprite_key":"StandardPack2"
-    },
-    7: {
-        "active": True,
-        "name": "Premium Tournament Player Pack",
-        "type": "standard",
-        "description": "Premium 3 player pack. Only for the real tournament grinders. Chance to get an icon card!",
-        "price": 5,
-        "cards_per_pack": 3,
-        "rates": {"bronze": 0.0, "silver": 0.145, "gold": 0.35, "platinum": 0.4, "diamond": 0.10, "icon":0.05},
-        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "price_currency":"medals",
-        "sprite_key":"StandardPack3"
-    },
-    8: {
-        "active": False,
-        "name": "Champions Promo Pack",
-        "type": "timed",
-        "description": "The champions season is here! Take your chances for a special Champions player now!",
-        "price": 3000,
-        "cards_per_pack": 5,
-        "rates": {"silver": 0.15, "gold": 0.40, "platinum": 0.30, "diamond": 0.13, "special_champ": 0.02},
-        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "price_currency":"credits",
-        "sprite_key":"CHAMPPack",
-        "available_at": datetime.datetime(2026, 10, 10, 15, 0, tzinfo=datetime.timezone.utc)
-    },
-
-    9: {
-        "active": True,
-        "name": "Continental Promo Pack",
-        "type": "timed",
-        "description": "The continental cup is here! Take your chances for a special Continental player now!",
-        "price": 1500,
-        "cards_per_pack": 5,
-        "rates": {"silver": 0.2, "gold": 0.40, "platinum": 0.30, "diamond": 0.08, "special_cont": 0.02},
-        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "price_currency":"credits",
-        "sprite_key":"CONTPack",
-        "expires_at":datetime.datetime(2026, 9, 18, 15, 0, tzinfo=datetime.timezone.utc)
-    },
-    10: {
-        "active": False,
-        "name": "Conference League Promo Pack",
-        "type": "timed",
-        "description": "Conference League is here! Take your chances for a special Conference Lague player now!",
-        "price": 1000,
-        "cards_per_pack": 3,
-        "rates": {"silver": 0.25, "gold": 0.42, "platinum": 0.25, "diamond": 0.06, "special_conf": 0.02},
-        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "price_currency":"credits",
-        "sprite_key":"CONFPack",
-        "available_at": datetime.datetime(2026, 10, 15, 15, 0, tzinfo=datetime.timezone.utc)
-    },
-}
 
 class PackManager:
     def __init__(self, db: dict, seed=None):

@@ -6,6 +6,10 @@ import numpy as np
 from typing import Final
 
 from replay import ActionType, ReplayRecorder
+# Re-exported: the engine's tests, scripts and the client's comments read
+# the pitch from here. The numbers themselves live in game_config.py.
+from game_config import GOAL_HEIGHT, GOAL_POST_RADIUS, GOAL_WIDTH, PITCH_HEIGHT, PITCH_WIDTH  # noqa: F401
+from formations import get_formation, is_similar_position
 
 # Bump whenever match behaviour changes.
 # Stamped onto every games/{id} doc so a reported match can be read against the engine
@@ -45,11 +49,6 @@ from replay import ActionType, ReplayRecorder
 #          (same rule, same order).
 ENGINE_VERSION: Final[str] = "2.2.0"
 
-PITCH_WIDTH: Final[float] = 70.0
-PITCH_HEIGHT: Final[float] = 100.0
-GOAL_WIDTH: Final = 7.5
-GOAL_HEIGHT: Final = 2.5
-GOAL_POST_RADIUS: Final = 0.25
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
 
@@ -190,12 +189,6 @@ base_speed:Final = 10.0
 possession_radius: Final = 2.0
 final_whistle_delay: Final = 600
 OUT_OF_POSITION_PENALTY: Final = 0.9
-
-# formations.py imports PITCH_WIDTH/PITCH_HEIGHT from this module, so this
-# import must come after they're defined above to avoid a circular-import
-# failure (formations.py is mid-import of a still-partial gameEngine module).
-from formations import get_formation, is_similar_position
-
 
 def _apply_out_of_position_penalty(p):
     """Returns a shallow copy of p with every non-tendency Attributes field
@@ -564,7 +557,7 @@ class game:
             # Same pick _begin_restart makes just after this returns (it
             # snaps the taker to the flag then) -- restart_player itself is
             # still the previous restart's here.
-            taker = self._pick_role_slot(team, ("RW", "LW", "RM", "LM", "WB"), 8)
+            taker = self._pick_role_slot(team, ("RW", "LW", "RM", "LM", "LWB", "RWB"), 8)
             rest = [p for p in (range(0, 11) if team == 0 else range(11, 22)) if p not in a_box and p not in (keeper, taker)]
             rest_y = 50.0 - CORNER_REST_LINE_BEHIND_HALFWAY if team == 0 else 50.0 + CORNER_REST_LINE_BEHIND_HALFWAY
             for k, p in enumerate(rest):
@@ -614,7 +607,7 @@ class game:
             self._set_must_pass_for_player(kickoff_player)
             self.kickoff_timer = 30
         elif restart_type == "corner":
-            corner_player = self._pick_role_slot(self.restart_team, ("RW", "LW", "RM", "LM", "WB"), 8)
+            corner_player = self._pick_role_slot(self.restart_team, ("RW", "LW", "RM", "LM", "LWB", "RWB"), 8)
             self.restart_player = corner_player
             
             # Snap player to the left or right corner flag depending on out_x
@@ -640,7 +633,7 @@ class game:
             # Full-backs and wide players take throw-ins, nearest one first --
             # see _pick_nearest_eligible for why proximity matters here.
             throw_player = self._pick_nearest_eligible(
-                self.restart_team, throw_point, ("LB", "RB", "WB", "LM", "RM", "LW", "RW")
+                self.restart_team, throw_point, ("LB", "RB", "LWB", "RWB", "LM", "RM", "LW", "RW")
             )
             self.restart_player = throw_player
 

@@ -5,7 +5,12 @@ itself: match simulation, pack opening, currency balances, energy, daily
 tournaments, leaderboards, account lifecycle. Imports `gameEngine.py`,
 `packEngine.py` and `game_state.py` from `packedfootball/` unmodified;
 `admin_firestore_client.py` plugs into `GameState` as a service-account-
-backed client, which bypasses `firestore.rules` entirely.
+backed client, which bypasses `firestore.rules` entirely. The game's static
+rules -- pitch, formations, position families, card tiers, appearance
+slots, a new account's balances -- are all in `packedfootball/game_config.py`;
+the pack catalog is `pack_database.py`, the deals catalog `deal_database.py`.
+`backend/config.py` is the service's own tunables (economy, energy,
+tournaments, leaderboards).
 
 Layout: `main.py` mounts one router per area from `routers/`; the work an
 endpoint delegates to lives in `services/` (match simulation, energy,
@@ -155,11 +160,12 @@ fills it in for cards that crossed the line before the field existed.
 
 A card's `tier` is `"<family>"` or `"<family>_<variant>"`: `special_champ`
 is a special, a future `diamond_turkish` would be a diamond.
-`packEngine.tier_family()` (mirrored by `PlayerCard.tier_family()` on the
+`game_config.tier_family()` (mirrored by `PlayerCard.tier_family()` on the
 client) is the collapse, and everything that treats a tier as a rarity --
 release value, card colour, ordering, the pack-odds disclosure -- goes by
-the family. The variant only picks the card art and, in `TIER_RANGES`, the
-overall range. Adding a variant is a `TIER_RANGES` entry plus a sprite; a
+the family. The variant only picks the card art and, in
+`game_config.TIER_RANGES`, the overall range. Adding a variant is a
+`TIER_RANGES` entry plus a sprite; a
 new family also needs rows in `RELEASE_CREDITS_BY_TIER` and the client's
 `PlayerCard.TIER_COLORS` / `RELEASE_CREDITS`. Renaming a key means
 `scripts/rename_tiers.py` for the cards already out there.
@@ -433,13 +439,14 @@ python3 backend/scripts/<script>.py [--dry-run]
 
 | Script | What it does |
 | --- | --- |
-| `sync_pack_definitions.py` | Pushes `packEngine.PACK_DATABASE`'s definitional fields onto existing `packs/{id}` docs. Never touches operational fields. `--pack-id N` for one pack. Skips ids with no existing doc. |
+| `sync_pack_definitions.py` | Pushes `pack_database.PACK_DATABASE`'s definitional fields onto existing `packs/{id}` docs. Never touches operational fields. `--pack-id N` for one pack. Skips ids with no existing doc. |
 | `sync_deal_definitions.py` | Same for `packedfootball/deal_database.py`'s `DEAL_DATABASE` -> `deals/{id}`. Unlike the pack version it *creates* missing docs, seeded `active: false`; `--activate-new` seeds them `active: true` instead. Never changes an existing doc's `active`. |
 | `sync_player_appearance.py` | Backfills a placeholder `appearance` onto `players/{id}` docs that predate the field. |
 | `seed_bots.py` | Creates `bots/{id}` opponents per league tier (`--per-tier`, default 30) and their `bot_pools/{tier}` id lists. Tops up, never rewrites an existing bot. |
 | `backfill_avg_rating.py` | Writes `statistics.avg_rating` onto cards with `RATED_MATCHES_FOR_AVERAGE`+ rated matches that predate the field. Re-runnable. |
 | `sync_display_names.py` | Backfills `display_names/{key}` reservations for accounts created before names were unique. Oldest account keeps a duplicated name; conflicts are printed, never renamed. |
 | `rename_tiers.py` | Rewrites `tier` on `players/{id}` after a `TIER_RANGES` key is renamed (its `RENAMES` map). Run `sync_pack_definitions.py` too, for the pack rates. |
+| `rename_positions.py` | Rewrites `position` on `players/{id}` and on the bots' embedded XIs after a position is split in `game_config.py` (its `RENAMES` map; today `WB` -> `LWB`/`RWB`). A card in a saved XI takes its slot's flank, a benched one is split evenly. Run it right after deploying such a rename: until then a 3-5-2 side built on the old name is refused by `validate_formation_positions`. |
 | `list_packs.py` | Read-only dump of live `packs/{id}` docs. `--pack-id N` for one. |
 | `list_deals.py` | Read-only dump of live `deals/{id}` docs. |
 | `list_match_reports.py` | Read-only. Open bug reports newest first, with seed and engine version; `--dump-dir` writes each report's `games/{id}` doc as JSON. `--all` includes reports whose `status` you've changed by hand. To watch one: paste its game id into Play.tscn's TESTING panel (editor only, "Check a reported match"), which runs `packedfootball/scripts/replay_game.py` -- re-simulates the match on your Mac from the game doc and plays it back, showing the report text and flagging an engine-version mismatch. |

@@ -12,7 +12,7 @@ import pytest
 
 from conftest import PITCH_HEIGHT, PITCH_WIDTH, launch_ball, tick_until
 
-WIDE_ROLES = {"LB", "RB", "WB", "LM", "RM", "LW", "RW"}
+WIDE_ROLES = {"LB", "RB", "LWB", "RWB", "LM", "RM", "LW", "RW"}
 
 
 def _force_throw_in(g, out_side="left", y=30.0, toucher=20):

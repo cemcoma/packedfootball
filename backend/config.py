@@ -61,7 +61,7 @@ DISPLAY_NAME_MAX_LENGTH = 16
 
 # -- what things cost, what they pay ------------------------------------------
 
-# What releasing a card pays, by tier FAMILY -- packEngine.TIER_RANGES'
+# What releasing a card pays, by tier FAMILY -- game_config.TIER_RANGES'
 # keys after tier_family(), so the three special_* variants share the one
 # "special" row. mobile/scripts/data/PlayerCard.gd carries the same table so
 # the Release button can show the amount BEFORE the request; this end is

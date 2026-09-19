@@ -79,7 +79,7 @@ var _matchmaking_active: bool = false
 ## interval on everyone, 2 being the old behaviour. Passed straight through
 ## as --decision-interval.
 const TEST_INTERVALS := ["adaptive", "2", "3", "4", "6"]
-## Bot tiers, same keys as packEngine.TIER_RANGES.
+## Bot tiers, same keys as game_config.TIER_RANGES.
 const TEST_OPPONENT_TIERS := ["bronze", "silver", "gold", "platinum", "diamond", "special_conf", "special_cont", "special_champ", "icon"]
 const LOCAL_MATCH_SCRIPT := "res://../packedfootball/scripts/local_match.py"
 const LOCAL_MATCH_DIR := "user://local_match"

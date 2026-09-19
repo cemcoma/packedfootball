@@ -155,7 +155,7 @@ unsaved changes**, reverting to the last saved state.
 
 A bench card can fill a slot whose role isn't its exact position if the two
 are similar. `Formations.POSITION_GROUPS` defines this as named groups:
-`{CDM, CM}`, `{CM, CAM}`, `{LB, WB, LM, LW}`, `{RB, WB, RM, RW}`,
+`{CDM, CM}`, `{CM, CAM}`, `{LB, LWB, LM, LW}`, `{RB, RWB, RM, RW}`,
 `{LW, RW, ST}`. Deliberately not transitive (a CDM can play CM, a CM can
 play CAM, but a CDM can't play CAM) and not exhaustive (`GK` and `CB` are in
 no group, so neither ever substitutes).

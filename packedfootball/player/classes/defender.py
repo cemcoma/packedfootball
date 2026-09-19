@@ -1,5 +1,5 @@
 from player.player import _norm2, player, ActionProfile
-from gameEngine import PITCH_HEIGHT,PITCH_WIDTH
+from game_config import PITCH_HEIGHT, PITCH_WIDTH
 import numpy as np
 
 # Where a full-back stands in to cover the middle when no centre-back is
@@ -9,7 +9,7 @@ import numpy as np
 # collapses onto the six-yard box.
 COVER_DEPTH = 22.0
 COVER_HALF_GAP = 7.0
-COVER_ROLES = ("LB", "RB", "WB")
+COVER_ROLES = ("LB", "RB", "LWB", "RWB")
 
 class CenterBackActionProfile(ActionProfile):
     role_name = "center_back"

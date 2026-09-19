@@ -22,7 +22,7 @@ extends RefCounted
 ##
 ## Two ends have to agree on how many options exist, because the CLIENT
 ## draws them but the SERVER rolls them: raise the matching entry in
-## packedfootball/player/player.py's APPEARANCE_OPTION_COUNTS and redeploy,
+## packedfootball/game_config.py's APPEARANCE_OPTION_COUNTS and redeploy,
 ## or newly generated cards will never be given the new option.
 
 # --------------------------------------------------------------- colours

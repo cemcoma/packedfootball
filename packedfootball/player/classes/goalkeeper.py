@@ -1,4 +1,5 @@
-from gameEngine import PITCH_WIDTH, GOAL_WIDTH, PITCH_HEIGHT, possession_radius
+from game_config import GOAL_WIDTH, PITCH_HEIGHT, PITCH_WIDTH
+from gameEngine import possession_radius
 from player.player import _norm2, player, ActionProfile
 import numpy as np
 

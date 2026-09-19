@@ -59,7 +59,7 @@ def _state_for(match, index, **overrides):
 def _fullback(match, team=0):
     base = 0 if team == 0 else 11
     for i in range(base, base + 11):
-        if match.formation[i]["role"] in ("LB", "RB", "WB"):
+        if match.formation[i]["role"] in ("LB", "RB", "LWB", "RWB"):
             return i
     raise AssertionError("fixture formation has no full-back")
 

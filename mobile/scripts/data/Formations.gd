@@ -1,7 +1,7 @@
 class_name Formations
 extends RefCounted
 
-## GDScript port of packedfootball/formations.py -- same named formations,
+## GDScript port of packedfootball/game_config.py's FORMATIONS -- same named formations,
 ## same base coordinates/roles for the player's own XI (indices 0-10; unlike
 ## the Python side, this never needs the mirrored opponent half: Team.tscn
 ## lays out the signed-in user's own squad, and ManagerView.tscn draws the
@@ -45,10 +45,10 @@ const _BASES := {
 		{"pos": Vector2(35.0, 12.0), "role": "CB"},
 		{"pos": Vector2(52.0, 15.0), "role": "CB"},
 		{"pos": Vector2(35.0, 22.0), "role": "CDM"},
-		{"pos": Vector2(10.0, 32.0), "role": "WB"},
+		{"pos": Vector2(10.0, 32.0), "role": "LWB"},
 		{"pos": Vector2(25.0, 32.0), "role": "CM"},
 		{"pos": Vector2(45.0, 32.0), "role": "CM"},
-		{"pos": Vector2(60.0, 32.0), "role": "WB"},
+		{"pos": Vector2(60.0, 32.0), "role": "RWB"},
 		{"pos": Vector2(27.0, 47.0), "role": "ST"},
 		{"pos": Vector2(43.0, 47.0), "role": "ST"},
 	],
@@ -83,13 +83,13 @@ static func get_formation(name: String) -> Array:
 ## transitive across groups (CDM and CAM share no group -- both border CM,
 ## but CDM->CAM is a bigger stretch than either individual step) and NOT
 ## exhaustive (GK and CB are in no group at all, so neither ever substitutes
-## for anything). Mirrors packedfootball/formations.py's own POSITION_GROUPS
+## for anything). Mirrors packedfootball/game_config.py's own POSITION_GROUPS
 ## -- keep the two in lockstep if either changes.
 const POSITION_GROUPS: Array = [
 	["CDM", "CM"],
 	["CM", "CAM"],
-	["LB", "WB", "LM", "LW"],
-	["RB", "WB", "RM", "RW"],
+	["LB", "LWB", "LM", "LW"],
+	["RB", "RWB", "RM", "RW"],
 	["LW", "RW", "ST"],
 	["RM", "CM"],
 	["LM", "CM"],

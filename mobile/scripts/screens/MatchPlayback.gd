@@ -71,22 +71,24 @@ const CAMERA_MARGIN_UNITS := 4.5
 # is far too short to read as anything. PlayerFigure's, because the
 # celebration timelines are written to fit it.
 const GOAL_CELEBRATION_SECONDS := PlayerFigure.CELEBRATE_DURATION
-# Once the replay resumes, the scoring side keeps its arms up for the rest
-# of the engine's own dead-ball window rather than snapping straight back to
-# running -- otherwise there's a stretch of players milling about around a
-# ball sitting in the net before the kickoff reset.
 const GOAL_CELEBRATION_FRAMES := 90.0
-# How fast the scorer runs off during their celebration, pitch units per
-# real second -- about a real sprint (a player covers ~9 units/s in the
-# engine). The recipe says how long they run for; this says how far that
-# gets them.
 const CELEBRATION_RUN_SPEED := 7.0
 # How far back toward halfway the run-off angles, per unit of sideways --
 # the scorer heads for the corner flag, not straight into the touchline.
 const CELEBRATION_RUN_BACK := 0.6
-# Teammates' arm waves are offset by this many seconds each so ten figures
-# don't wave in lockstep.
 const CELEBRATION_TEAMMATE_STAGGER := 0.13
+# The net the ball runs into during a celebration: the goal's footprint as
+# _draw_goal draws it (GOAL_WIDTH = 7.5 centred on x = 35, 2 units deep,
+# GOAL_POST_RADIUS = 0.25), and the engine's own friction for the last
+# yard of the shot (gameEngine.py: 0.5 ** dt per second).
+const GOAL_DEPTH_UNITS := 2.0
+const GOAL_HALF_WIDTH_UNITS := 3.75
+const GOAL_CENTRE_X := 35.0
+const GOAL_POST_RADIUS_UNITS := 0.25
+const BALL_FRICTION_PER_SECOND := 0.5
+# How fast a ball stopped in the netting settles to the turf (a plain fall,
+# no bounce -- the net has all its pace), in units per second.
+const BALL_NET_DROP_UNITS_PER_SECOND := 5.0
 
 # Home / away shirts when the roster carries no kit (demo replay, or a
 # backend older than kits).
@@ -141,11 +143,7 @@ var _pending_result_transition: bool = false
 var _team_kits: Array = []
 var _team_colors: Array = DEFAULT_TEAM_COLORS.duplicate()
 
-# Goal celebration, entirely a playback concern -- the engine doesn't stop
-# the players, it only stops the BALL (tick() early-returns during the goal
-# pause while step() keeps running), so left alone they just carry on
-# milling about while the net bulges. These pin the scoring side where they
-# stood when the goal went in, arms up, until the pause is over.
+# Goal celebration, entirely a playback concern 
 var _celebration_until_tick: float = -1.0
 var _celebration_team: int = -1
 var _celebration_positions: Array = []
@@ -162,6 +160,19 @@ var _celebration_stage: String = PlayerFigure.STAGE_POSE
 # while everything else is frozen.
 var goal_pause_remaining: float = 0.0
 var _celebration_phase: float = 0.0
+
+# The ball's last yard. The engine freezes the ball the instant it crosses
+# the line (tick() early-returns for the whole goal pause), so the recording
+# has it stopped ON the line for the celebration -- which reads as a shot
+# that never went in. These carry it on from where and how fast it crossed,
+# with the engine's friction, until it meets the netting, and hold it there
+# for as long as the celebration lasts. Latched from the interpolated state
+# on the first celebration frame, like _celebration_positions.
+var _goal_ball_latched: bool = false
+var _goal_ball_pos: Vector2 = Vector2.ZERO
+var _goal_ball_vel: Vector2 = Vector2.ZERO
+var _goal_ball_height: float = 0.0
+var _goal_ball_in_net: bool = false
 
 var camera_mode: String = "zoom"  # "zoom" | "full" -- matches gameEngine.py's render()
 
@@ -404,6 +415,7 @@ func _reset_state() -> void:
 	_celebration_team = -1
 	_celebration_positions = []
 	_celebration_scorer = -1
+	_goal_ball_latched = false
 	goal_pause_remaining = 0.0
 	_celebration_phase = 0.0
 	for i in range(player_flash_timers.size()):
@@ -500,6 +512,7 @@ func _jump_to_event(action_type: int) -> void:
 			_celebration_team = -1
 			_celebration_positions = []
 			_celebration_scorer = -1
+			_goal_ball_latched = false
 			has_started = true
 			return
 
@@ -537,6 +550,7 @@ func _process(delta: float) -> void:
 	if goal_pause_remaining > 0.0:
 		goal_pause_remaining = maxf(0.0, goal_pause_remaining - delta)
 		_celebration_phase += delta
+		_advance_goal_ball(delta)
 		banner_timer = maxf(0.0, banner_timer - delta)
 		queue_redraw()
 		return
@@ -545,6 +559,7 @@ func _process(delta: float) -> void:
 	# the hold) keeps animating rather than freezing mid-wave.
 	if _celebrating():
 		_celebration_phase += delta
+		_advance_goal_ball(delta)
 
 	playback_tick += effective_delta * TICKS_PER_SECOND
 	var last_tick: float = samples[-1]["tick"]
@@ -567,6 +582,67 @@ func _process(delta: float) -> void:
 
 	_update_timer_label()
 	queue_redraw()
+
+## Carries the ball on into the net for one frame of REAL time: the same
+## step the engine would have taken (velocity, then friction) had it not
+## frozen the ball at the line. Stops dead at the first touch of netting --
+## the back of the goal or a side -- and then drops to the turf, since a net
+## holds a ball where it hits but not up in the air. Which goal is the one
+## the ball is in: it crossed the line, so it is within a unit of one of them.
+##
+## The first call after a goal latches the ball from the LAST RECORDED
+## SAMPLE before it, not from the interpolated state: gameEngine.tick()
+## snapshots at its very end, after the goal's early return and after the
+## pause's, so neither the crossing frame nor the pause is ever in the file.
+## The last sample is up to one interval before the crossing -- ball still
+## in front of the line, carrying its real flight velocity -- and the next
+## is the kickoff, so anything interpolated between them is a curve toward
+## the centre spot. From that sample the ball flies its last yard here.
+func _advance_goal_ball(delta: float) -> void:
+	if not _goal_ball_latched:
+		var before: Dictionary = _find_bracket(replay["samples"], playback_tick)[0]
+		var b: Dictionary = before["ball"]
+		_goal_ball_pos = Vector2(b["x"], b["y"])
+		_goal_ball_vel = Vector2(b["vx"], b["vy"])
+		_goal_ball_height = maxf(0.0, float(b["height"]))
+		_goal_ball_latched = true
+		# Only a ball heading for the goal it went into gets carried; a
+		# recording that says otherwise (a dead ball, a velocity pointing
+		# back up the pitch) is left where it is rather than animated wrong.
+		var toward_goal := _goal_ball_vel.y < 0.0 if _goal_ball_pos.y < PITCH_HEIGHT / 2.0 else _goal_ball_vel.y > 0.0
+		_goal_ball_in_net = not toward_goal
+	if _goal_ball_in_net:
+		_goal_ball_height = maxf(0.0, _goal_ball_height - BALL_NET_DROP_UNITS_PER_SECOND * delta)
+		return
+
+	var into_top := _goal_ball_pos.y < PITCH_HEIGHT / 2.0
+	var line_y := 0.0 if into_top else PITCH_HEIGHT
+	var back_y := line_y + (-GOAL_DEPTH_UNITS if into_top else GOAL_DEPTH_UNITS)
+	var left_x := GOAL_CENTRE_X - GOAL_HALF_WIDTH_UNITS + GOAL_POST_RADIUS_UNITS
+	var right_x := GOAL_CENTRE_X + GOAL_HALF_WIDTH_UNITS - GOAL_POST_RADIUS_UNITS
+
+	var next := _goal_ball_pos + _goal_ball_vel * delta
+	var hit := false
+	if (into_top and next.y <= back_y) or (not into_top and next.y >= back_y):
+		next.y = back_y
+		hit = true
+	# The side netting only exists beyond the line. Clamping there also
+	# repairs a recording whose last sample would carry the ball past a
+	# post: the scoreboard says it went in, so in it goes -- off the post.
+	var beyond_line := next.y < line_y if into_top else next.y > line_y
+	if beyond_line and next.x <= left_x:
+		next.x = left_x
+		hit = true
+	elif beyond_line and next.x >= right_x:
+		next.x = right_x
+		hit = true
+	_goal_ball_pos = next
+	_goal_ball_vel *= pow(BALL_FRICTION_PER_SECOND, delta)
+	# A trickle that dies before the net just stops where it is, as the
+	# engine's own ball would.
+	if hit or _goal_ball_vel.length() < 0.1:
+		_goal_ball_in_net = true
+
 
 ## Which body pose an action reads as. Several actions share one -- a pass, a
 ## shot and a clearance are all "boot the ball" as far as a 48px figure is
@@ -646,8 +722,9 @@ func _process_events(current_tick: float) -> void:
 			_celebration_phase = 0.0
 			# Cleared, not filled: _draw_players latches the positions on the
 			# first frame it actually draws the celebration, which is the
-			# only place the interpolated state exists.
+			# only place the interpolated state exists. Same for the ball.
 			_celebration_positions = []
+			_goal_ball_latched = false
 			var scorer := _player_name(idx)
 			banner_text = "GOAL: %s" % scorer if scorer != "" else "GOAL"
 			# Matched to the hold, so the scorer's name is on screen for the
@@ -863,7 +940,7 @@ func _draw_pitch_lines(cam: Dictionary) -> void:
 
 # Goal frame + netting. goal_y is 0 (top) or PITCH_HEIGHT (bottom); depth_dir
 # is which way the goal extends beyond the pitch boundary (-1 for the top
-# goal, +1 for the bottom one). GOAL_WIDTH/depth match gameEngine.py's own
+# goal, +1 for the bottom one). GOAL_WIDTH/depth match game_config.py's own
 # goal-mouth dimensions (GOAL_WIDTH=7.5, centered on x=35).
 func _draw_goal(cam: Dictionary, goal_y: float, depth_dir: float) -> void:
 	var half_width := 3.75
@@ -934,6 +1011,12 @@ func _draw() -> void:
 	var font_size: int = ThemeDB.fallback_font_size
 
 	var state := _interpolated_state()
+	if _celebrating() and _goal_ball_latched:
+		# During a celebration the ball is wherever _advance_goal_ball has
+		# carried it, not on the line where the recording froze it. The
+		# camera follows the shown ball.
+		state["ball"] = _goal_ball_pos
+		state["ball_height"] = _goal_ball_height
 	var players: Array = state["players"]
 	var controller: int = state["ball_controller"]
 	var cam := _compute_camera(state["ball"])

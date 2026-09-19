@@ -27,27 +27,12 @@ _PACKEDFOOTBALL_DIR = Path(__file__).resolve().parent.parent / "packedfootball"
 if str(_PACKEDFOOTBALL_DIR) not in sys.path:
     sys.path.insert(0, str(_PACKEDFOOTBALL_DIR))
 
-# THE ORDER OF THESE IMPORTS IS LOAD-BEARING. DO NOT SORT THEM.
-#
-# packedfootball/formations.py and packedfootball/gameEngine.py import each
-# other at module level: formations does `from gameEngine import
-# PITCH_HEIGHT, PITCH_WIDTH`, and gameEngine does `from formations import
-# get_formation, is_similar_position`. Whichever one Python starts loading
-# FIRST decides whether that resolves -- gameEngine reaches its formations
-# import well after defining its own constants, so formations can finish;
-# but formations loaded first reaches gameEngine before gameEngine has
-# reached ITS import line, and startup dies with "cannot import name
-# 'get_formation' from partially initialized module".
-#
-# game_state therefore comes first: it pulls in player.player, which pulls
-# in gameEngine, so gameEngine is fully loaded before formations is touched.
-# This is the order main.py used before this module existed. Alphabetising
-# it takes the whole service down at boot -- which is exactly what happened
-# when this file was first written with them sorted.
-#
-# The real fix is to break that cycle in packedfootball/; until someone
-# does, this comment is the only thing preventing a tidy-up from breaking
-# the deploy.
+# game_config.py holds the static rules (pitch, formations, tiers,
+# appearance, starting balances) and imports nothing from the package, so
+# there is no longer an import cycle to order these around: formations.py
+# and player/ read the pitch from game_config, not from gameEngine. Each
+# module still re-exports what it used to define, which is why these
+# imports read exactly as they did before the move.
 #
 # ruff: noqa: E402 -- these cannot move above the sys.path lines above.
 from game_state import GameState, fields_to_player, player_to_fields

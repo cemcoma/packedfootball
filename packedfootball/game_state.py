@@ -39,13 +39,14 @@ from typing import Any
 
 from player.player import Attributes
 
-DEFAULT_STARTING_CREDITS = 1000
-DEFAULT_STARTING_BUCKS = 0
-DEFAULT_STARTING_MEDALS = 0
-DEFAULT_FORMATION = "4-4-2"
-# "" means "no kit chosen, renderer picks" -- see load_or_create_profile's
-# docstring for why this end deliberately doesn't spell out a default shirt.
-DEFAULT_KIT = ""
+# What a brand-new profile starts with -- game_config.py's, re-exported.
+from game_config import (  # noqa: F401
+    DEFAULT_FORMATION,
+    DEFAULT_KIT,
+    DEFAULT_STARTING_BUCKS,
+    DEFAULT_STARTING_CREDITS,
+    DEFAULT_STARTING_MEDALS,
+)
 
 
 def player_to_fields(p) -> dict:

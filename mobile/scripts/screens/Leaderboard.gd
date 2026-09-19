@@ -49,7 +49,7 @@ const POSITION_FILTERS := [
 	["defender", "Defenders"],
 	["midfielder", "Midfielders"],
 	["attacker", "Attackers"],
-	["GK", "GK"], ["CB", "CB"], ["LB", "LB"], ["RB", "RB"], ["WB", "WB"],
+	["GK", "GK"], ["CB", "CB"], ["LB", "LB"], ["RB", "RB"], ["LWB", "LWB"], ["RWB", "RWB"],
 	["CDM", "CDM"], ["CM", "CM"], ["CAM", "CAM"], ["LM", "LM"], ["RM", "RM"],
 	["LW", "LW"], ["RW", "RW"], ["ST", "ST"],
 ]

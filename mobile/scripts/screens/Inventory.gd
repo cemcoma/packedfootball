@@ -26,7 +26,7 @@ const FILTERS: Array = [
 	["Starting XI", []],
 	["Bench", []],
 	["Goalkeepers", ["GK"]],
-	["Defenders", ["CB", "LB", "RB", "WB"]],
+	["Defenders", ["CB", "LB", "RB", "LWB", "RWB"]],
 	["Midfielders", ["CDM", "CM", "CAM", "LM", "RM"]],
 	["Attackers", ["LW", "RW", "ST"]],
 ]

@@ -9,14 +9,14 @@ extends RefCounted
 ##
 ## "type" is a free-form category string (standard/special/timed today,
 ## extendable to more without any code change here -- see
-## packEngine.PACK_DATABASE's own comment). "max_opens"/"remaining_opens"/
+## pack_database.py's own docstring). "max_opens"/"remaining_opens"/
 ## "expires_at"/"available_at"/"description" are all optional on the
 ## Firestore side.
 ##
 ## "rates"/"pos_rates" are the odds-disclosure fields app store policies
 ## require (tier/position -> probability, 0..1) -- shown by
 ## PackInfoPopup.gd, opened from PackView's info button. Always present in
-## practice (packEngine.PACK_DATABASE defines them for every pack), but
+## practice (pack_database.PACK_DATABASE defines them for every pack), but
 ## default to {} here since a pack doc predating this feature would
 ## otherwise have no such field at all.
 ##

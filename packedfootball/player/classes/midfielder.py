@@ -1,5 +1,5 @@
 from player.player import _norm2, player, ActionProfile
-from gameEngine import PITCH_HEIGHT,PITCH_WIDTH
+from game_config import PITCH_HEIGHT, PITCH_WIDTH
 import numpy as np
 
 class MidfielderActionProfile(ActionProfile):
