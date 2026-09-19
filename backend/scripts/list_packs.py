@@ -1,4 +1,5 @@
-"""Fetches and displays pack data currently living in Firestore.
+"""Fetches and displays pack data currently living in Firestore, and the
+pack_types/ docs whose `order` decides the shop's category order.
 
 Useful for verifying that sync_pack_definitions.py worked, checking 
 operational state fields (like available_at, visible, active), or just 
@@ -27,6 +28,17 @@ def main():
     db = firestore.client()
 
     packs_ref = db.collection("packs")
+
+    if not args.pack_id:
+        types = sorted(
+            ((snap.id, snap.to_dict() or {}) for snap in db.collection("pack_types").stream()),
+            key=lambda item: (item[1].get("order") is None, item[1].get("order", 0), item[0]),
+        )
+        print("=== pack_types (shop category order) ===")
+        for pack_type, doc in types:
+            print(f"  {doc.get('order')!r:>6}  {pack_type}")
+        if not types:
+            print("  (none -- run seed_packs.py; every type sorts as unordered until then)")
 
     if args.pack_id:
         doc = packs_ref.document(args.pack_id).get()

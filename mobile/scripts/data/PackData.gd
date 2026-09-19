@@ -7,9 +7,10 @@ extends RefCounted
 ## pack is a real-money-adjacent, server-validated operation (see Shop.gd
 ## calling Backend.call_endpoint for POST /pack/open).
 ##
-## "type" is a free-form category string (standard/special/timed today,
-## extendable to more without any code change here -- see
-## pack_database.py's own docstring). "max_opens"/"remaining_opens"/
+## "type" is a free-form category string (standard/tournament/special/timed
+## today, extendable to more without any code change here -- its display
+## order comes from /pack/list's `sections`, i.e. Firestore's
+## pack_types/{type}.order; see pack_database.py's own docstring). "max_opens"/"remaining_opens"/
 ## "expires_at"/"available_at"/"description" are all optional on the
 ## Firestore side.
 ##

@@ -111,7 +111,7 @@ Credentials automatically -- no key file.
 | `POST /account/display_name` | Renames the manager, uniquely: reserves `display_names/{key}` in the same transaction as the name. 400 with a reason code, 409 when taken. |
 | `POST /claim` | One door for every reward that is earned silently and paid on a tap. Body `{"type": ...}` plus what the type needs; today `tournament_full_day` (optional `day_id` + `group_id`, default today's entry). Pays once, returns `rewards` and every `*_remaining` balance. |
 | `DELETE /account` | Deletes the account: profile, inventory, every owned card, games it started, its name reservation, its seat in an unsettled tournament group, then the Firebase Auth user (last, so a failed attempt can be retried). Keeps `iap_transactions` and games it only played in as the opponent. Backfill old accounts' name reservations with `scripts/sync_display_names.py`. |
-| `GET /pack/list` | Live pack catalog, filtered by availability; puts a pack whose `available_at` has passed on sale as a side effect (see Pack availability). |
+| `GET /pack/list` | Live pack catalog, filtered by availability, sorted by the pack type's `pack_types/{type}.order`, then the pack's own `order`, then id; returns `packs` and `sections` (the category order the client's dropdown follows). Puts a pack whose `available_at` has passed on sale as a side effect (see Pack availability). |
 | `POST /pack/open` | Charges the pack's currency, rolls cards, writes them. Refuses when the bench can't hold the whole pack (`INVENTORY_CAP`). |
 | `POST /player/release`, `/player/release/batch` | Sells cards back for credits by tier family (`RELEASE_CREDITS_BY_TIER`); a starting-XI card is refused. Batch is one transaction, at most `RELEASE_BATCH_MAX`. |
 | `POST /player/customize` | Changes appearance slots, `CUSTOMIZE_CREDITS_PER_SLOT` each; indices validated against `APPEARANCE_OPTION_COUNTS`. |
@@ -338,12 +338,11 @@ every run. `tests/test_determinism.py` pins this.
 ### Pack availability
 
 `packs/{slug}` -- the id is the catalog key in `pack_database.py`
-(`standard`, `jumbo`, `promo_champions`, ...), what the client sends to
-`/pack/open`; the shop's display order is the doc's `order` field, not the
-id. Each doc carries definitional fields (order, name, type, description,
-price, `price_currency`, cards_per_pack, rates, pos_rates, sprite_key) plus
-operational fields that live **only** in Firestore and are never written by
-a deploy:
+(`standard_pp`, `jumbo_standard`, `promo_champions`, ...), what the client
+sends to `/pack/open`. Each doc carries definitional fields (order, name,
+type, description, price, `price_currency`, cards_per_pack, rates,
+pos_rates, sprite_key) plus operational fields that live **only** in
+Firestore and are never written by a deploy:
 
 - `active` -- must be `true` or the pack is unavailable. **Absent counts as
   false.**
@@ -357,6 +356,19 @@ a deploy:
   setting `active: false` sticks, because the date that would re-activate
   it is gone.
 - `visible` -- show an unavailable pack grayed out even without a date.
+
+**Storefront order.** Categories are ordered by `pack_types/{type}.order`
+-- one small doc per value a pack's `type` takes (`standard`, `tournament`,
+`special`, `timed`). `seed_packs.py` creates the missing ones from
+`pack_database.PACK_TYPES`; after that the doc is the truth and reordering
+is a console edit, never a deploy (a sync never touches it). Within a type
+packs sort by their own `order`, then id. A type with no doc is not hidden:
+it sorts after every ordered type, and `seed_packs.py` points it out.
+`/pack/list` reads `pack_types/` fresh every call -- deliberately uncached.
+Per-player visibility rules (VIP, a minimum win count, a tier), when they
+come, belong on these docs; the backend applies them in
+`services/storefront.py` and the client never learns the rules.
+
 
 `_pack_unavailable_reason` and `_pack_is_teased` are shared by `/pack/list`
 (filters what's shown) and `/pack/open` (rejects a purchase), so the two
@@ -446,12 +458,12 @@ python3 backend/scripts/<script>.py [--dry-run]
 
 | Script | What it does |
 | --- | --- |
-| `seed_packs.py` | Creates the `packs/{slug}` doc for every catalog pack that has none: definitional fields plus starting state (`active` from the catalog entry, `times_opened` 0, any `visible`/`available_at`/`expires_at`/`max_opens` the entry spells out). Never touches an existing doc. Also lists live packs the catalog doesn't know. |
+| `seed_packs.py` | Creates the `packs/{slug}` doc for every catalog pack that has none (definitional fields plus starting state: `active` from the catalog entry, `times_opened` 0, any `visible`/`available_at`/`expires_at`/`max_opens` the entry spells out) and the `pack_types/{type}` doc for every `PACK_TYPES` entry that has none. Never touches an existing doc. Lists live packs the catalog doesn't know, types with no order anywhere, and type docs no pack uses. |
 | `sync_pack_definitions.py` | Pushes `pack_database.PACK_DATABASE`'s definitional fields onto existing `packs/{slug}` docs. Never touches operational fields. `--pack-id SLUG` for one pack. Skips slugs with no existing doc (`seed_packs.py` creates those). |
 | `sync_deal_definitions.py` | Same for `packedfootball/deal_database.py`'s `DEAL_DATABASE` -> `deals/{id}`. Unlike the pack version it *creates* missing docs, seeded `active: false`; `--activate-new` seeds them `active: true` instead. Never changes an existing doc's `active`. |
 | `seed_bots.py` | Creates `bots/{id}` opponents per league tier (`--per-tier`, default 30) and their `bot_pools/{tier}` id lists. Tops up, never rewrites an existing bot. |
 | `sync_display_names.py` | Backfills `display_names/{key}` reservations for accounts created before names were unique. Oldest account keeps a duplicated name; conflicts are printed, never renamed. |
-| `list_packs.py` | Read-only dump of live `packs/{slug}` docs. `--pack-id SLUG` for one. |
+| `list_packs.py` | Read-only dump of the `pack_types/` order and the live `packs/{slug}` docs. `--pack-id SLUG` for one pack. |
 | `list_deals.py` | Read-only dump of live `deals/{id}` docs. |
 | `list_match_reports.py` | Read-only. Open bug reports newest first, with seed and engine version; `--dump-dir` writes each report's `games/{id}` doc as JSON. `--all` includes reports whose `status` you've changed by hand. To watch one: paste its game id into Play.tscn's TESTING panel (editor only, "Check a reported match"), which runs `packedfootball/scripts/replay_game.py` -- re-simulates the match on your Mac from the game doc and plays it back, showing the report text and flagging an engine-version mismatch. |
 | `list_accounts.py` | Read-only. Lists every `users/{uid}` and whether its roster is Quick-Match complete (`roster_player_ids` length == 11). |

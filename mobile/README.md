@@ -175,11 +175,13 @@ Two tabs, **Packs** and **Currency**, sharing a `ButtonGroup`. The header
 shows all three balances as `CurrencyChip` instances -- an icon plus a
 thousand-separated amount, tinted per currency.
 
-Packs are split by **type** via a dropdown (`standard` / `special` /
-`timed`). The dropdown is built from the types actually present in what
-`/pack/list` returned, never a hardcoded list: `PackData.TYPE_COLORS`' key
-order is only a display-order preference, and unrecognized types are
-appended rather than dropped, so a new type server-side needs no client
+Packs are split by **type** via a dropdown (`standard` / `tournament` /
+`special` / `timed`). Its entries and their order come from `/pack/list`'s
+`sections` -- the backend's `pack_types/{type}.order`, a Firestore doc per
+type, so the storefront is reordered in the console, not in a build. Any
+type the returned packs use but `sections` didn't list is appended rather
+than dropped (and that first-appearance rule is the whole behaviour on a
+backend without `sections`), so a new type server-side needs no client
 change. The selected type survives a refresh.
 
 The catalog is fetched fresh on every scene load and after every purchase,
@@ -211,7 +213,7 @@ left off entirely.
 ### Currency tab
 
 `scenes/components/CurrencyPanel.tscn` is instanced into `Shop.tscn` as
-`CurrencyTabs`. Four sub-tabs, same `ButtonGroup` + lazy-load-once pattern:
+`CurrencyTabs`. Five sub-tabs, same `ButtonGroup` + lazy-load-once pattern:
 
 - **Exchange** -- spend bucks for credits at 4 fixed rates from
   `GET /currency/exchange/list`.
@@ -220,6 +222,8 @@ left off entirely.
   availability, expiry and teasing like packs. `DealView` mirrors `PackView`
   but has no odds popup: a deal's reward is fixed and shown on the tile, so
   there's nothing to disclose.
+- **Energy** -- buy the match bar back with cash (`GET /energy/refill/list`,
+  `POST /energy/refill`); re-fetched on every visit since the bar moves.
 - **Free** -- rewarded ads. **A stub.** The tab and placeholder exist so the
   wiring point is obvious; nothing behind it is real. Doing it properly
   needs an ad SDK, a server-side grant endpoint with its own anti-abuse
@@ -397,7 +401,7 @@ both the unsaved-changes indicator and what `discard_changes()` reverts to.
 | `PitchView` | The Team screen pitch: drawn grass/lines plus real `Button` slot markers. |
 | `PackView` | The pack tile. |
 | `PackInfoPopup` | Paginated odds disclosure. |
-| `CurrencyPanel` | The Currency tab's four sub-tabs. |
+| `CurrencyPanel` | The Currency tab's five sub-tabs. |
 | `CurrencyTileView` | "Pay X, get Y" tile for Exchange and Cash. |
 | `DealView` | The Deals tile. |
 | `CurrencyChip` | One balance as a tinted pill, for screen headers. |
@@ -426,7 +430,7 @@ present-but-null value still returns null, and assigning null to a typed
   `PlayerModelView` renders (5^5 = 3125 looks from 25 stored choices), plus
   `mock_from_id()` as a fallback for cards predating real generation.
 - `PackData.gd` -- pack listing data including `rates`/`pos_rates`,
-  `price_currency`, `type_color()`, `is_limited()`, `tag_text()`.
+  `price_currency`, `get_texture()`, `is_limited()`, `tag_text()`.
 - `ExchangeRateData.gd` / `BucksProductData.gd` / `DealData.gd` -- listing
   data for the Currency sub-tabs.
 - `CurrencyDisplay.gd` -- labels, icons, colors and formatting for all three

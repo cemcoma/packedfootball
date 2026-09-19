@@ -5,8 +5,9 @@ sends to /pack/open. It names what the pack is, not what it is called:
 display names have been renamed before (the promo packs), and a document
 id can only be "renamed" by writing a new doc, carrying the operational
 fields across and deleting the old one (how these replaced the original
-numeric ids). "order" is the shop's display order -- the
-catalog is sorted by it, then by slug -- so the console can list docs
+numeric ids). The shop sorts by the pack TYPE's order first
+(pack_types/{type}.order in Firestore, seeded from PACK_TYPES below), then
+by each pack's own "order", then by slug -- so the console can list docs
 alphabetically without that deciding what a player sees first.
 
 The code-side source of truth for a pack's definitional fields -- name,
@@ -148,7 +149,7 @@ PACK_DATABASE = {
         "description": "Premium 3 player pack. Only for the real tournament grinders. Chance to get an icon card!",
         "price": 5,
         "cards_per_pack": 3,
-        "rates": {"bronze": 0.0, "silver": 0.145, "gold": 0.35, "platinum": 0.4, "diamond": 0.10, "icon":0.05},
+        "rates": {"bronze": 0.0, "silver": 0.145, "gold": 0.35, "platinum": 0.4, "diamond": 0.10, "icon":0.005},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"medals",
         "sprite_key":"TournamentPack2"
@@ -196,4 +197,23 @@ PACK_DATABASE = {
         "sprite_key":"CONFPack",
         "available_at": datetime.datetime(2026, 10, 15, 15, 0, tzinfo=datetime.timezone.utc)
     },
+}
+
+
+# The storefront's categories -- every value a pack's "type" takes -- and the
+# order the shop lists them in, as seeding DEFAULTS only. backend/scripts/
+# seed_packs.py creates pack_types/{type} {"order": n} for any type missing
+# from Firestore and never touches one that exists, so after seeding the
+# live doc's order is the truth and reordering is a console edit, not a
+# deploy. A type used by a pack but absent from both places still shows in
+# the shop, sorted after every ordered one (services/storefront.py).
+#
+# Per-player visibility rules, when they come (VIP, a minimum win count, a
+# tournament tier), belong on these same docs; the backend applies them and
+# the client never learns the rules.
+PACK_TYPES = {
+    "standard": 10,
+    "tournament": 20,
+    "special": 30,
+    "timed": 40,
 }

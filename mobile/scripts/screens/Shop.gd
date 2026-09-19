@@ -58,6 +58,10 @@ var _confirming_pack: PackData = null
 
 var _packs: Array = []  # PackData, every pack the backend returned
 var _pack_types: Array[String] = []  # dropdown item index -> pack type
+## /pack/list's `sections`: [{"type", "order"}, ...] in the order the
+## backend wants the categories shown (pack_types/{type}.order in
+## Firestore). Empty on a backend that predates it.
+var _sections: Array = []
 
 ## The pack type last looked at, remembered ACROSS scene loads.
 ##
@@ -192,28 +196,39 @@ func _load_packs() -> void:
 	_packs = []
 	for fields in pack_fields:
 		_packs.append(PackData.from_fields(fields))
+	_sections = []
+	var sections_raw = res.data.get("sections")
+	if sections_raw is Array:
+		for entry in sections_raw:
+			if entry is Dictionary and entry.get("type") is String:
+				_sections.append(entry)
 
 	_status_label.text = ""
 	_rebuild_pack_type_dropdown()
 	_populate_packs_grid()
 
 
-## The dropdown's entries come from the types actually present in what the
-## backend returned, NOT a hardcoded list -- add a fourth pack type
-## server-side
+## The dropdown's entries and their order come from the backend, not a
+## hardcoded list: `sections` is the category order the storefront wants
+## (a Firestore doc per type, editable without a deploy), and any type the
+## returned packs use but `sections` didn't list is appended in order of
+## first appearance -- which is also the whole rule on a backend that
+## predates `sections`. Adding a pack type server-side needs nothing here.
 func _rebuild_pack_type_dropdown() -> void:
 	var previous_type := _selected_pack_type()
 	if previous_type == "":
 		previous_type = _last_pack_type
 
-	var present: Dictionary = {}
-	for pack in _packs:
-		present[(pack as PackData).type] = true
-
 	var unique_types: Array[String] = []
-	for pack_type in present.keys():
-		unique_types.append(pack_type)
-				
+	for section in _sections:
+		var section_type: String = section["type"]
+		if not unique_types.has(section_type):
+			unique_types.append(section_type)
+	for pack in _packs:
+		var pack_type: String = (pack as PackData).type
+		if not unique_types.has(pack_type):
+			unique_types.append(pack_type)
+
 	_pack_types = unique_types
 
 	_pack_type_dropdown.clear()

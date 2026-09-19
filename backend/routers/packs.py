@@ -18,6 +18,7 @@ from config import INVENTORY_CAP, PACK_PRICE_CURRENCIES
 from admin_firestore_client import AdminFirestoreClient
 from deps import game_state_for, verify_id_token
 from engine import PackManager, player_to_fields
+from services import storefront
 
 router = APIRouter(tags=["packs"])
 
@@ -116,9 +117,15 @@ async def list_packs(uid: str = Depends(verify_id_token)):
     _pack_unavailable_reason independently regardless of what this
     returned, so a teased pack's Buy button being disabled client-side
     isn't the only thing stopping someone from opening it early.
+
+    Order is two-level and comes from Firestore on every call (see
+    services/storefront.py): the pack TYPE's pack_types/{type}.order first,
+    then the pack's own `order`, then its id. `sections` is the resulting
+    category list, which the client's dropdown follows verbatim.
     """
     client = AdminFirestoreClient(uid)
     docs = await client.list_collection("packs")
+    orders = storefront.type_orders(await client.list_collection("pack_types"))
     packs = []
     for doc in docs:
         doc = await _activate_if_due(client, f"packs/{doc['id']}", doc)
@@ -151,10 +158,9 @@ async def list_packs(uid: str = Depends(verify_id_token)):
                 "sprite_key":doc.get("sprite_key"),
             }
         )
-    # Shop order is the catalog's own `order` field (pack_database.py), not
-    # the document id -- ids are slugs, and alphabetical is not a shop.
-    packs.sort(key=lambda p: (p["order"], p["pack_id"]))
-    return {"packs": packs}
+    # Never the document id -- ids are slugs, and alphabetical is not a shop.
+    packs.sort(key=lambda p: storefront.shop_sort_key(p, orders))
+    return {"packs": packs, "sections": storefront.sections(packs, orders)}
 
 
 class OpenPackRequest(BaseModel):
