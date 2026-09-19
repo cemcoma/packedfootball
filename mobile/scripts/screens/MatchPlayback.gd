@@ -54,6 +54,7 @@ const BALL_SHADOW_FADE_UNITS := 6.0 # height at which it's fully faded/tight
 # much taller than its footprint without the sim changing. ~48px at the
 # zoom camera below.
 const FIGURE_HEIGHT_UNITS := 3.2
+const DIVE_STRAIGHT_UNITS := 1.0
 const FIGURE_FULL_DETAIL_PX := 26.0
 const FACING_MIN_SPEED := 0.6
 const RUN_CYCLE_SPEED := 0.09
@@ -100,21 +101,33 @@ const TEAM_COLOR_MIN_DISTANCE := 0.42
 # near-white and near-black, nothing can clash with both.
 const CHANGE_KIT_FALLBACKS := [Color(0.95, 0.95, 0.96), Color(0.12, 0.12, 0.14)]
 
+# The BALL flashes for the three things worth a colour; what a player does
+# is shown by the player doing it (PlayerFigure.ACTIONS), not by a colour
+# under their feet.
 const ACTION_COLOR_GOAL := Color(1.0, 0.85, 0.15)          # gold
 const ACTION_COLOR_SHOOT := Color(1.0, 0.45, 0.1)          # orange
 const ACTION_COLOR_SAVE := Color(0.25, 0.85, 1.0)          # cyan
-const ACTION_COLOR_TACKLE := Color(1.0, 0.25, 0.25)        # red
-const ACTION_COLOR_ANKLEBREAKER := Color(0.85, 0.35, 1.0)  # violet
-const ACTION_COLOR_PASS := Color(1.0, 1.0, 1.0)            # white
-const ACTION_COLOR_RECEIVED := Color(0.6, 1.0, 0.75)       # mint
-const ACTION_COLOR_CROSS := Color(0.55, 0.75, 1.0)         # pale blue
-const ACTION_COLOR_CLEARANCE := Color(0.95, 0.75, 0.45)    # sand
-const ACTION_COLOR_RESTART := Color(0.85, 0.9, 0.95)       # pale grey
-
-const ACTION_COLOR_DEFAULT := Color(1.0, 1.0, 0.2)
 
 # Size of one color chip in the pause screen's key (see _build_legend).
 const LEGEND_SWATCH_SIZE := Vector2(14.0, 14.0)
+
+# Which replay event plays which PlayerFigure.ACTIONS timeline on the player
+# it names. A goal is left out: the ball was already struck, and the
+# celebration takes the scorer over.
+const EVENT_ACTIONS := {
+	ReplayReader.ActionType.SHOOT: "shoot",
+	ReplayReader.ActionType.PASS: "pass",
+	ReplayReader.ActionType.CROSS: "pass",
+	ReplayReader.ActionType.CORNER: "pass",
+	ReplayReader.ActionType.KICKOFF: "pass",
+	ReplayReader.ActionType.CLEARANCE: "clear",
+	ReplayReader.ActionType.GOAL_KICK: "clear",
+	ReplayReader.ActionType.THROW_IN: "throw",
+	ReplayReader.ActionType.RECEIVED_PASS: "trap",
+	ReplayReader.ActionType.TACKLE: "tackle",
+	ReplayReader.ActionType.ANKLEBREAKER: "tackle",
+	ReplayReader.ActionType.SAVE: "dive",
+}
 
 # The scorer's card in the lower-third panel: the shared card template,
 # drawn at this fraction of its 110x150 (ScorerCardSlot's minimum size in
@@ -126,10 +139,12 @@ var replay: Dictionary = {}
 var roster: Dictionary = {}
 var playback_tick: float = 0.0
 var next_event_index: int = 0
-var player_flash_timers: Array = []
-var player_flash_colors: Array = []
 var player_facings: Array = []
-var player_poses: Array = []
+# Per player: {} or {"action": <PlayerFigure.ACTIONS key>, "elapsed": seconds
+# (negative while waiting for its start), "aim": -1/0/+1 for a dive}. Armed
+# by _arm_actions ahead of the event, ticked on match time in _process.
+var player_actions: Array = []
+var next_action_index: int = 0
 var ball_flash_timer: float = 0.0
 var ball_flash_color: Color = ACTION_COLOR_GOAL
 var home_score: int = 0
@@ -239,17 +254,13 @@ func _ready() -> void:
 		push_error("No replay loaded -- run packedfootball/scripts/dump_test_replay.py first.")
 		return
 
-	player_flash_timers.resize(ReplayReader.NUM_PLAYERS)
-	player_flash_timers.fill(0.0)
-	player_flash_colors.resize(ReplayReader.NUM_PLAYERS)
-	player_flash_colors.fill(ACTION_COLOR_DEFAULT)
 	player_facings.resize(ReplayReader.NUM_PLAYERS)
-	player_poses.resize(ReplayReader.NUM_PLAYERS)
+	player_actions.resize(ReplayReader.NUM_PLAYERS)
 	# Each side starts facing the goal it's attacking: team A up the pitch
 	# (screen north), team B down it.
 	for i in range(ReplayReader.NUM_PLAYERS):
 		player_facings[i] = PlayerFigure.FACING_S if i < 11 else PlayerFigure.FACING_N
-		player_poses[i] = ""
+		player_actions[i] = {}
 	_goals_this_match.resize(ReplayReader.NUM_PLAYERS)
 	_goals_this_match.fill(0)
 
@@ -293,18 +304,13 @@ func _setup_scoreboard() -> void:
 	_away_color_swatch.color = _team_color(1)
 	_update_score_label()
 
+## The ball's flash colours -- all the key there is now that players act
+## out what they do.
 func _legend_entries() -> Array:
 	return [
 		[ReplayReader.ActionType.GOAL, "Goal"],
 		[ReplayReader.ActionType.SHOOT, "Shot"],
 		[ReplayReader.ActionType.SAVE, "Save"],
-		[ReplayReader.ActionType.TACKLE, "Tackle"],
-		[ReplayReader.ActionType.ANKLEBREAKER, "Skill move"],
-		[ReplayReader.ActionType.PASS, "Pass"],
-		[ReplayReader.ActionType.RECEIVED_PASS, "Received"],
-		[ReplayReader.ActionType.CROSS, "Cross"],
-		[ReplayReader.ActionType.CLEARANCE, "Clearance"],
-		[ReplayReader.ActionType.THROW_IN, "Restart"],
 	]
 
 func _build_legend() -> void:
@@ -333,12 +339,7 @@ func _build_legend() -> void:
 ## Works out what each side wears, once, at load. Called before anything
 ## draws; _team_color() just reads the answer.
 ##
-## The pitch dots are small circles, so only ONE color per side survives to
-## the screen -- the kit's primary. Pattern and secondary still matter
-## (they're what the Customize Kit preview and, later, anything bigger than
-## a dot will show), they just can't be rendered at this size.
-##
-## Hence the clash rule. Two managers who both picked royal blue would
+## Two managers who both picked royal blue would
 ## otherwise be indistinguishable for 90 minutes, and real football solves
 ## exactly this with a change kit: the AWAY side is the one that changes,
 ## the home side always wears what it picked.
@@ -444,10 +445,9 @@ func _reset_state() -> void:
 	_celebration_phase = 0.0
 	_goals_this_match.fill(0)
 	_goal_scorer_panel.visible = false
-	for i in range(player_flash_timers.size()):
-		player_flash_timers[i] = 0.0
-		player_flash_colors[i] = ACTION_COLOR_DEFAULT
-		player_poses[i] = ""
+	next_action_index = 0
+	for i in range(player_actions.size()):
+		player_actions[i] = {}
 	_update_score_label()
 
 
@@ -540,6 +540,8 @@ func _jump_to_event(action_type: int) -> void:
 			_celebration_scorer = -1
 			_goal_ball_latched = false
 			_goal_scorer_panel.visible = false
+			for i in range(player_actions.size()):
+				player_actions[i] = {}
 			has_started = true
 			return
 
@@ -596,11 +598,15 @@ func _process(delta: float) -> void:
 		playback_tick = last_tick  # hold on the final frame rather than loop/crash
 
 	_process_events(playback_tick)
+	_arm_actions(playback_tick)
 
-	for i in range(player_flash_timers.size()):
-		player_flash_timers[i] = maxf(0.0, player_flash_timers[i] - effective_delta)
-		if player_flash_timers[i] <= 0.0:
-			player_poses[i] = ""  # back to run/idle, chosen by speed at draw time
+	for i in range(player_actions.size()):
+		var action: Dictionary = player_actions[i]
+		if action.is_empty():
+			continue
+		action["elapsed"] += effective_delta
+		if action["elapsed"] >= PlayerFigure.action_duration(action["action"]):
+			player_actions[i] = {}
 	ball_flash_timer = maxf(0.0, ball_flash_timer - effective_delta)
 	banner_timer = maxf(0.0, banner_timer - effective_delta)
 
@@ -673,22 +679,46 @@ func _advance_goal_ball(delta: float) -> void:
 		_goal_ball_in_net = true
 
 
-## Which body pose an action reads as. Several actions share one -- a pass, a
-## shot and a clearance are all "boot the ball" as far as a 48px figure is
-## concerned; the colour flash is what tells them apart.
-func _action_pose(event_type: int) -> String:
-	match event_type:
-		ReplayReader.ActionType.SHOOT, ReplayReader.ActionType.PASS, \
-		ReplayReader.ActionType.CROSS, ReplayReader.ActionType.CLEARANCE, \
-		ReplayReader.ActionType.GOAL, ReplayReader.ActionType.KICKOFF, \
-		ReplayReader.ActionType.THROW_IN, ReplayReader.ActionType.CORNER, \
-		ReplayReader.ActionType.GOAL_KICK:
-			return PlayerFigure.POSE_KICK
-		ReplayReader.ActionType.TACKLE, ReplayReader.ActionType.ANKLEBREAKER:
-			return PlayerFigure.POSE_LUNGE
-		ReplayReader.ActionType.SAVE:
-			return PlayerFigure.POSE_REACH
-	return ""
+## Starts each event's action on its player early enough for the strike
+## to land on the event: an action begins `lead` seconds before its tick
+## (PlayerFigure.action_lead), so a shot winds up before the ball leaves.
+## The replay is all known in advance, which is what makes looking ahead
+## free. Events are walked in order, so an action whose start comes
+## before an earlier event's simply joins a little late -- leads differ by
+## a tenth of a second at most. A new action on a busy player replaces the
+## one they were doing.
+func _arm_actions(current_tick: float) -> void:
+	var events: Array = replay["events"]
+	while next_action_index < events.size():
+		var event: Dictionary = events[next_action_index]
+		var name: String = EVENT_ACTIONS.get(int(event["type"]), "")
+		if name == "":
+			next_action_index += 1
+			continue
+		var start_tick: float = float(event["tick"]) - PlayerFigure.action_lead(name) * TICKS_PER_SECOND
+		if start_tick > current_tick:
+			return
+		var idx: int = event["player_idx"]
+		if idx >= 0 and idx < ReplayReader.NUM_PLAYERS:
+			player_actions[idx] = {
+				"action": name,
+				"elapsed": (current_tick - start_tick) / TICKS_PER_SECOND,
+				"aim": _dive_aim(idx) if name == "dive" else 0.0,
+			}
+		next_action_index += 1
+
+
+## Which way a keeper goes down: toward the ball, -1 for screen left, +1
+## for right, 0 for a ball straight at them (a catch, no tilt).
+func _dive_aim(index: int) -> float:
+	var state := _interpolated_state()
+	var players: Array = state["players"]
+	if index >= players.size():
+		return 0.0
+	var offset: float = float(state["ball"].x) - float(players[index].x)
+	if absf(offset) < DIVE_STRAIGHT_UNITS:
+		return 0.0
+	return signf(offset)
 
 
 func _action_color(event_type: int) -> Color:
@@ -699,21 +729,7 @@ func _action_color(event_type: int) -> Color:
 			return ACTION_COLOR_SHOOT
 		ReplayReader.ActionType.SAVE:
 			return ACTION_COLOR_SAVE
-		ReplayReader.ActionType.TACKLE:
-			return ACTION_COLOR_TACKLE
-		ReplayReader.ActionType.ANKLEBREAKER:
-			return ACTION_COLOR_ANKLEBREAKER
-		ReplayReader.ActionType.PASS:
-			return ACTION_COLOR_PASS
-		ReplayReader.ActionType.RECEIVED_PASS:
-			return ACTION_COLOR_RECEIVED
-		ReplayReader.ActionType.CROSS:
-			return ACTION_COLOR_CROSS
-		ReplayReader.ActionType.CLEARANCE:
-			return ACTION_COLOR_CLEARANCE
-		ReplayReader.ActionType.KICKOFF, ReplayReader.ActionType.THROW_IN, ReplayReader.ActionType.CORNER, ReplayReader.ActionType.GOAL_KICK:
-			return ACTION_COLOR_RESTART
-	return ACTION_COLOR_DEFAULT
+	return Color.WHITE
 
 
 func _process_events(current_tick: float) -> void:
@@ -722,14 +738,6 @@ func _process_events(current_tick: float) -> void:
 		var event: Dictionary = events[next_event_index]
 		var idx: int = event["player_idx"]
 		var event_type: int = event["type"]
-
-		if idx >= 0 and idx < ReplayReader.NUM_PLAYERS:
-			player_flash_timers[idx] = 0.3
-			player_flash_colors[idx] = _action_color(event_type)
-			# Same timer drives the pose, so a shot both flashes orange AND
-			# reads as a kick for those 0.3s -- no replay format change
-			# needed, the event stream already says who did what.
-			player_poses[idx] = _action_pose(event_type)
 
 		if event_type == ReplayReader.ActionType.SHOOT or event_type == ReplayReader.ActionType.SAVE:
 			ball_flash_timer = 0.4
@@ -1115,9 +1123,11 @@ func _draw_ball(state: Dictionary, cam: Dictionary) -> void:
 
 	var radius := BALL_RADIUS_UNITS * scale
 	var color := ball_flash_color if ball_flash_timer > 0.0 else Color(1.0, 1.0, 1.0)
+	var outline := Color(0,0,0)
 
 	if height <= BALL_GROUND_EPSILON:
-		draw_circle(ground, radius, color)
+		draw_circle(ground, radius, outline)
+		draw_circle(ground, 0.8*radius, color)
 		return
 
 	# Shadow first: it tightens and fades as the ball climbs, which is the
@@ -1130,7 +1140,8 @@ func _draw_ball(state: Dictionary, cam: Dictionary) -> void:
 	)
 
 	var lifted := ground - Vector2(0.0, height * scale * BALL_HEIGHT_LIFT)
-	draw_circle(lifted, radius * (1.0 + height * BALL_HEIGHT_GROW), color)
+	draw_circle(lifted, radius * (1.0 + height * BALL_HEIGHT_GROW), outline)
+	draw_circle(lifted, 0.8*(radius * (1.0 + height * BALL_HEIGHT_GROW)), color)
 
 
 ## All 22 figures, back to front.
@@ -1191,23 +1202,18 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 			velocity, int(player_facings[i]), FACING_MIN_SPEED
 		)
 
-		var pose: String = player_poses[i]
+		var action: Dictionary = player_actions[i]
+		var pose: String = action.get("action", "")
+		var aim: float = float(action.get("aim", 0.0))
 		var appearance: Dictionary = _appearance_for(i)
-		# Offset per player so 22 figures don't run in lockstep.
+		# Offset per player so 22 figures don't run in lockstep. An action
+		# runs on its own clock instead: seconds into its timeline.
 		var phase: float = playback_tick * RUN_CYCLE_SPEED + float(i)
+		if pose != "":
+			phase = float(action["elapsed"])
 		if celebrating:
-			# Scorers celebrate; the side that conceded just stands there,
-			# which is its own kind of correct. Only the scorer does THEIR
-			# celebration -- everyone else on the side gets the plain
-			# arms-up, so nobody knee-slides in their own half.
 			pose = PlayerFigure.POSE_CELEBRATE if team == _celebration_team else PlayerFigure.POSE_IDLE
 			if i == _celebration_scorer:
-				# The match clock is stopped dead during the hold, so the
-				# celebration runs on its own real-time clock -- and for
-				# the scorer that clock IS the timeline, so no offset. They
-				# face the way they're running while they run, then turn
-				# to the camera for the pose itself: a shush with the back
-				# of the head to you is nothing.
 				phase = _celebration_phase
 				var running := _celebration_stage in [PlayerFigure.STAGE_RUN, PlayerFigure.STAGE_JUMP]
 				player_facings[i] = _celebration_facing if running else PlayerFigure.FACING_S
@@ -1219,13 +1225,9 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 		elif pose == "":
 			pose = PlayerFigure.POSE_RUN if velocity.length() > FACING_MIN_SPEED else PlayerFigure.POSE_IDLE
 
-		var flash := Color(0, 0, 0, 0)
-		if player_flash_timers[i] > 0.0:
-			flash = player_flash_colors[i]
-		elif i == controller:
-			# The carrier gets a ring on the ground instead of a flash, so
-			# you can always see who has the ball.
-			flash = Color(1.0, 1.0, 1.0, 0.85)
+		# The carrier gets a ring on the ground, so you can always see who
+		# has the ball.
+		var flash := Color(0.718, 1.0, 1.0, 0.851) if i == controller else Color(0, 0, 0, 0)
 
 		PlayerFigure.draw_into(
 			self,
@@ -1246,7 +1248,8 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 			i == 0 or i == 11,
 			# Taller/wider from this card's own height and power, so 22
 			# figures aren't 22 identical blocks.
-			PlayerFigure.build_from(_attributes_for(i))
+			PlayerFigure.build_from(_attributes_for(i)),
+			aim
 		)
 
 

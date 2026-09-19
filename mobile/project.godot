@@ -17,6 +17,8 @@ general/ios/app_id="ca-app-pub-1704438625576029~3392195452"
 config/name="Packed Football Mobile"
 run/main_scene="uid://couux5m12in61"
 config/features=PackedStringArray("4.7", "Forward Plus")
+boot_splash/bg_color=Color(0.34509805, 0.37254903, 0.654902, 1)
+boot_splash/image="uid://bo0n5jbq0pwaa"
 
 [autoload]
 

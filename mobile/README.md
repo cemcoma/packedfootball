@@ -119,6 +119,14 @@ scoreboard, timer, pause/camera/speed buttons, pre-match and pause overlays
   rewind the scoreboard, since `_jump_to_event` replays from kickoff to
   reach a correct score.
 - **Pre-match** starts fully blacked out behind a Start Match button.
+- **Actions** are acted out, not colour-coded: a shot, pass, clearance,
+  throw-in, trap, tackle or save plays a short timeline on the player
+  (`PlayerFigure.ACTIONS` -- durations and amplitudes are the tuning
+  knobs). `_arm_actions` starts each one `lead` seconds before its replay
+  event, so a kick winds up before the ball leaves. A keeper's save is a
+  dive toward the ball, or a catch when it's straight at them. Only the
+  ball still flashes (goal / shot / save), which is all the pause-screen
+  key lists.
 - **Goals** hold the picture for the celebration and show the scorer's card
   (the shared `PlayerCardView`, scaled down, in the kit that side is
   wearing) with their name and their goals so far this match, counted off

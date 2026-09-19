@@ -138,8 +138,8 @@ const NUMBER_MIN_PX := 7.0
 # -- ground shadow ----------------------------------------------------------
 const SHADOW_W := 0.80
 const SHADOW_H := 0.10
-const SHADOW_W_FLASH := 1.6      # wider when an action colour is on it
-const SHADOW_H_FLASH := 0.3      # wider when an action colour is on it
+const SHADOW_W_FLASH := 0.8      # wider when an action colour is on it
+const SHADOW_H_FLASH := 0.10      # wider when an action colour is on it
 const SHADOW_COLOR := Color(0, 0, 0, 0.20)
 
 # -- motion -----------------------------------------------------------------
@@ -259,6 +259,33 @@ const LEGS_KNEEL := "kneel"
 const LEGS_STEP := "step"
 
 const SOCK_DARKEN := 0.55         # how much darker the sock is than the boot
+
+# -- actions ------------------------------------------------------------------
+# What a player does when the replay says they shot, passed, cleared, tackled
+# or saved: a short timeline, one recipe each. draw_into gets the recipe's
+# name as the pose and seconds into it as the phase; MatchPlayback arms the
+# action `lead` seconds BEFORE the event's tick, so a kick winds up before
+# the ball leaves and the strike lands on the event.
+#
+#   kind    kick    lead: backswing   strike: back -> through   recover: -> stand
+#           tackle  lead: lunge out   hold                        recover
+#           throw   lead: arms up     strike: arms come over      recover
+#           dive    lead: go down     hold: on the ground         recover: up
+#   leg     how high the kicking / lunging foot comes (fraction of height)
+#   reach   how far it goes fore/aft, side on (multiple of PROFILE_STRIDE)
+#   arm     how far the arms counter-swing (fraction of height)
+#   drop    how far the body crouches (fraction of height)
+#   angle   a dive's tilt from upright, degrees, toward the ball
+#   lift    how far a dive leaves the ground (fraction of height)
+const ACTIONS := {
+	"shoot":  {"kind": "kick", "lead": 1.5, "strike": 0.20, "recover": 1.20, "leg": 0.30, "reach": 2.0, "arm": 0.10},
+	"pass":   {"kind": "kick", "lead": 0.50, "strike": 0.06, "recover": 0.20, "leg": 0.09, "reach": 1.0, "arm": 0.05},
+	"clear":  {"kind": "kick", "lead": 1.00, "strike": 0.9, "recover": 0.35, "leg": 0.22, "reach": 1.7, "arm": 0.12},
+	"trap":   {"kind": "kick", "lead": 0.00, "strike": 0.06, "recover": 0.14, "leg": 0.06, "reach": 0.6, "arm": 0.00},
+	"throw":  {"kind": "throw", "lead": 0.20, "strike": 0.50, "recover": 0.20},
+	"tackle": {"kind": "tackle", "lead": 0.10, "hold": 0.15, "recover": 0.25, "leg": 0.14, "reach": 1.8, "drop": 0.20, "arm": 0.08},
+	"dive":   {"kind": "dive", "lead": 0.12, "hold": 0.30, "recover": 0.35, "angle": 75.0, "lift": 0.10, "drop": 0.06},
+}
 
 # ===========================================================================
 # BUILD -- per-player variation
@@ -447,6 +474,61 @@ static func celebration_state(recipe: Dictionary, t: float) -> Dictionary:
 ## (see celebration_state); `flash` is the action colour from the replay
 ## event stream, drawn as a ground marker so the legend still means what it
 ## says without repainting the whole shirt.
+## Whether `pose` names one of the ACTIONS timelines.
+static func is_action(pose: String) -> bool:
+	return ACTIONS.has(pose)
+
+
+## How long an action runs, in seconds -- its lead plus the rest of it.
+static func action_duration(name: String) -> float:
+	var act: Dictionary = ACTIONS.get(name, {})
+	return float(act.get("lead", 0.0)) + float(act.get("strike", 0.0)) + float(act.get("hold", 0.0)) + float(act.get("recover", 0.0))
+
+
+## Seconds before the event's tick the action has to start so its strike
+## lands on the event.
+static func action_lead(name: String) -> float:
+	return float(ACTIONS.get(name, {}).get("lead", 0.0))
+
+
+## Where an action is `t` seconds in, as one number:
+##   kick    -1 at the top of the backswing, +1 at full follow-through, 0 standing
+##   tackle  0 standing .. 1 fully out
+##   throw   0 .. 1 arms overhead, back to 0 as the ball goes
+##   dive    0 upright .. 1 flat out
+## Before the start (t < 0) and after the end it is 0 -- the figure stands.
+static func action_amount(name: String, t: float) -> float:
+	var act: Dictionary = ACTIONS.get(name, {})
+	if act.is_empty() or t < 0.0:
+		return 0.0
+	var lead: float = act.get("lead", 0.0)
+	var strike: float = act.get("strike", 0.0)
+	var hold: float = act.get("hold", 0.0)
+	var recover: float = act.get("recover", 0.0)
+	if act.get("kind", "kick") == "kick":
+		var back := -1.0 if lead > 0.0 else 0.0  # no lead, no backswing to come through from
+		if t < lead:
+			return -_ease_out(t / lead)
+		if t < lead + strike:
+			return lerpf(back, 1.0, (t - lead) / strike)
+		if t < lead + strike + recover:
+			return 1.0 - _ease_out((t - lead - strike) / recover)
+		return 0.0
+	# tackle / throw / dive: out, hold, back.
+	if t < lead:
+		return _ease_out(t / lead) if lead > 0.0 else 1.0
+	if t < lead + strike + hold:
+		return 1.0
+	if t < lead + strike + hold + recover:
+		return 1.0 - _ease_out((t - lead - strike - hold) / recover)
+	return 0.0
+
+
+static func _ease_out(x: float) -> float:
+	x = clampf(x, 0.0, 1.0)
+	return 1.0 - (1.0 - x) * (1.0 - x)
+
+
 static func draw_into(
 	canvas: CanvasItem,
 	feet: Vector2,
@@ -461,7 +543,8 @@ static func draw_into(
 	flash: Color = Color(0, 0, 0, 0),
 	font: Font = null,
 	is_keeper: bool = false,
-	build: Vector2 = Vector2.ONE
+	build: Vector2 = Vector2.ONE,
+	aim: float = 0.0
 ) -> void:
 	if height_px <= 1.0:
 		return
@@ -526,13 +609,54 @@ static func draw_into(
 		# The held pose's sways run off the faster clock.
 		phase = clock
 
+	# An action (pose names an ACTIONS recipe, phase is seconds into it)
+	# becomes limb amplitudes, and the pose itself a plain stand. The old
+	# single-frame poses are the same amplitudes held at full.
+	var act: Dictionary = ACTIONS.get(pose, {})
+	var amount := action_amount(pose, phase) if not act.is_empty() else 0.0
+	var kick := 0.0      # -1 back .. +1 through
+	var lunge := 0.0     # 0 .. 1 out
+	var drop := 0.0      # crouch, fraction of height
+	var tilt := 0.0      # dive: radians about the feet, signed toward the ball
+	var motion := act    # which recipe's amplitudes the limbs read
+	match act.get("kind", ""):
+		"kick":
+			kick = amount
+		"tackle":
+			lunge = amount
+			drop = amount * float(act.get("drop", 0.0))
+		"throw":
+			arms = "up" if amount > 0.0 else arms
+		"dive":
+			var toward := signf(aim)
+			tilt = toward * deg_to_rad(float(act.get("angle", 75.0))) * amount
+			drop = amount * float(act.get("drop", 0.0)) if toward == 0.0 else 0.0
+			body.y -= h * float(act.get("lift", 0.0)) * sin(PI * amount)
+			arms = "up" if amount > 0.0 else arms
+			facing = FACING_S
+	if pose == POSE_KICK:
+		kick = 1.0
+		motion = ACTIONS["shoot"]
+	elif pose == POSE_LUNGE:
+		lunge = 1.0
+		motion = ACTIONS["tackle"]
+	if not act.is_empty() or pose in [POSE_KICK, POSE_LUNGE]:
+		pose = POSE_IDLE
+
+	# A dive: the whole figure pivots about the feet toward the ball, the
+	# shadow staying where it was. Everything below draws in that frame.
+	if tilt != 0.0:
+		canvas.draw_set_transform(body, tilt, Vector2.ONE)
+		body = Vector2.ZERO
+
 	# Side on: its own drawing, not the front view shifted. A dive stays
 	# front-on -- both arms thrown out along the dive is the picture.
 	var side := _side_for(facing)
 	if side != 0.0 and pose != POSE_REACH:
 		_draw_profile(
 			canvas, body + Vector2(rock, 0.0), w, h, side, pose, swing, arms, legs, phase,
-			skin, hair, boots, shirt, trim, pattern, appearance, detail, is_keeper
+			skin, hair, boots, shirt, trim, pattern, appearance, detail, is_keeper,
+			kick, lunge, drop, motion
 		)
 		return
 
@@ -540,21 +664,28 @@ static func draw_into(
 	# most of what sells a direction on a figure this blocky.
 	var lean := _lean_for(facing) * w * LEAN + rock
 
-	_draw_legs(canvas, body, w, h, boots, trim, pose, swing, lean, legs)
+	var kick_lift := maxf(0.0, kick) * float(motion.get("leg", LIFT_KICK))
+	var lunge_lift := lunge * float(motion.get("leg", LIFT_LUNGE_FRONT))
+	_draw_legs(canvas, body, w, h, boots, trim, pose, swing, lean, legs, kick_lift, lunge_lift, drop)
 	# Kneeling folds the legs under, so everything above them sits lower.
 	if legs == LEGS_KNEEL:
 		body.y += h * CELEBRATE_KNEEL_DROP
-	_draw_torso(canvas, body, w, h, shirt, trim, pattern, pose, lean, detail)
+	body.y += h * drop
+	_draw_torso(canvas, body, w, h, shirt, trim, pattern, lunge * TORSO_LUNGE_TILT, lean, detail)
 	# Arms under the head, except when the hand is ON the face.
+	var arm_lift := (kick + lunge) * float(motion.get("arm", 0.0))
 	if arms == "shush":
 		_draw_head(canvas, body, w, h, skin, hair, appearance, facing, lean, detail)
-		_draw_arms(canvas, body, w, h, trim, skin, pose, swing, lean, phase, is_keeper, arms)
+		_draw_arms(canvas, body, w, h, trim, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
 	else:
-		_draw_arms(canvas, body, w, h, trim, skin, pose, swing, lean, phase, is_keeper, arms)
+		_draw_arms(canvas, body, w, h, trim, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
 		_draw_head(canvas, body, w, h, skin, hair, appearance, facing, lean, detail)
 
 	if detail == DETAIL_FULL and number > 0 and faces_away(facing) and font != null:
 		_draw_number(canvas, body, w, h, number, trim, shirt, font, lean)
+
+	if tilt != 0.0:
+		canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 # ------------------------------------------------------------------ layers
@@ -565,19 +696,21 @@ static func draw_into(
 static func _draw_legs(
 	canvas: CanvasItem, feet: Vector2, w: float, h: float,
 	boots: Color, shorts: Color, pose: String, swing: float, lean: float,
-	legs: String = LEGS_STAND
+	legs: String = LEGS_STAND, kick_lift: float = 0.0, lunge_lift: float = 0.0, drop: float = 0.0
 ) -> void:
 	var leg_w := w * LEG_W
 	var spread := LEG_SPREAD + (CELEBRATE_WIDE_STANCE if legs == LEGS_WIDE else 0.0)
 	var left_x := -w * spread
 	var right_x := w * spread - leg_w
-	# Kneeling: the legs are folded under, so the band is shorter and the
-	# shorts (and everything draw_into stacks above them) come down with it.
-	var leg_h := LEG_H - (CELEBRATE_KNEEL_DROP if legs == LEGS_KNEEL else 0.0)
-	var shorts_y := SHORTS_Y - (CELEBRATE_KNEEL_DROP if legs == LEGS_KNEEL else 0.0)
+	# Kneeling folds the legs under and a crouch bends them: the band is
+	# shorter and the shorts (and everything draw_into stacks above them)
+	# come down with it.
+	var fold := (CELEBRATE_KNEEL_DROP if legs == LEGS_KNEEL else 0.0) + drop
+	var leg_h := LEG_H - fold
+	var shorts_y := SHORTS_Y - fold
 
-	var left_lift := 0.0
-	var right_lift := 0.0
+	var left_lift := kick_lift + lunge_lift
+	var right_lift := lunge_lift * LIFT_LUNGE_BACK / LIFT_LUNGE_FRONT
 	match pose:
 		POSE_RUN:
 			left_lift = swing
@@ -586,11 +719,6 @@ static func _draw_legs(
 			if legs == LEGS_STEP:
 				left_lift = swing
 				right_lift = -swing
-		POSE_KICK:
-			left_lift = LIFT_KICK
-		POSE_LUNGE:
-			left_lift = LIFT_LUNGE_FRONT
-			right_lift = LIFT_LUNGE_BACK
 		POSE_REACH:
 			left_lift = LIFT_REACH
 			right_lift = LIFT_REACH
@@ -608,13 +736,13 @@ static func _draw_legs(
 
 static func _draw_torso(
 	canvas: CanvasItem, feet: Vector2, w: float, h: float,
-	shirt: Color, trim: Color, pattern: String, pose: String, lean: float, detail: int,
+	shirt: Color, trim: Color, pattern: String, tilt: float, lean: float, detail: int,
 	torso_w_frac: float = TORSO_W
 ) -> void:
 	var torso_w := w * torso_w_frac
 	var torso_h := h * TORSO_H
 	var x := -torso_w / 2.0 + lean
-	var base_y := TORSO_Y + (TORSO_LUNGE_TILT if pose == POSE_LUNGE else 0.0)
+	var base_y := TORSO_Y + tilt
 
 	# The shirt is always painted solid first and the stripes go ON it. That
 	# is what makes the layout symmetric: the torso is divided into
@@ -650,7 +778,8 @@ static func _draw_torso(
 static func _draw_arms(
 	canvas: CanvasItem, feet: Vector2, w: float, h: float,
 	sleeve: Color, skin: Color, pose: String, swing: float, lean: float,
-	phase: float = 0.0, is_keeper: bool = false, celebration_arms: String = "up"
+	phase: float = 0.0, is_keeper: bool = false, celebration_arms: String = "",
+	arm_lift: float = 0.0
 ) -> void:
 	var arm_w := w * ARM_W
 	var hand := GLOVE_COLOR if is_keeper else skin
@@ -669,12 +798,12 @@ static func _draw_arms(
 
 	# "swing" is the ordinary run-cycle arms, driven by the leg swing
 	# draw_into computed for a LEGS_STEP celebration; every other arm pose
-	# is its own gesture.
-	if pose == POSE_CELEBRATE and celebration_arms != "swing":
-		_draw_celebrating_arms(canvas, feet, w, h, sleeve, hand, celebration_arms, lean, phase)
+	# is its own gesture. A throw or a dive borrows the raised arms.
+	if (pose == POSE_CELEBRATE and celebration_arms != "swing") or celebration_arms == "up":
+		_draw_celebrating_arms(canvas, feet, w, h, sleeve, hand, celebration_arms, lean, phase if pose == POSE_CELEBRATE else 0.0)
 		return
 
-	var lift := swing * ARM_SWING
+	var lift := swing * ARM_SWING + arm_lift
 	var spread := arm_spread()
 	for side in [[-w * spread + lean, -lift], [w * spread - arm_w + lean, lift]]:
 		var x: float = side[0]
@@ -778,7 +907,8 @@ static func _draw_profile(
 	canvas: CanvasItem, body: Vector2, w: float, h: float, side: float,
 	pose: String, swing: float, arms: String, legs: String, phase: float,
 	skin: Color, hair: Color, boots: Color, shirt: Color, trim: Color, pattern: String,
-	appearance: Dictionary, detail: int, is_keeper: bool
+	appearance: Dictionary, detail: int, is_keeper: bool,
+	kick: float = 0.0, lunge: float = 0.0, drop: float = 0.0, motion: Dictionary = {}
 ) -> void:
 	var hand := GLOVE_COLOR if is_keeper else skin
 	var sock := boots.lerp(Color.BLACK, SOCK_DARKEN)
@@ -799,23 +929,25 @@ static func _draw_profile(
 		near_lift = maxf(0.0, -stride) * PROFILE_TRAIL_LIFT
 		far_lift = maxf(0.0, stride) * PROFILE_TRAIL_LIFT
 		arm_swing = -stride * PROFILE_ARM_SWING
-	elif pose == POSE_KICK:
-		near_fwd = PROFILE_STRIDE * PROFILE_KICK_REACH
-		near_lift = LIFT_KICK
-		far_fwd = -PROFILE_STRIDE * 0.4
-		arm_swing = -PROFILE_ARM_SWING * 0.6
-	elif pose == POSE_LUNGE:
-		near_fwd = PROFILE_STRIDE * PROFILE_LUNGE_REACH
-		far_fwd = -PROFILE_STRIDE * 0.6
-		far_lift = LIFT_LUNGE_BACK
-		arm_swing = PROFILE_ARM_SWING
+	elif kick != 0.0:
+		# Back through the backswing, forward and up through the strike.
+		near_fwd = kick * PROFILE_STRIDE * float(motion.get("reach", PROFILE_KICK_REACH))
+		near_lift = maxf(0.0, kick) * float(motion.get("leg", LIFT_KICK))
+		far_fwd = -PROFILE_STRIDE * 0.4 * absf(kick)
+		arm_swing = -kick * PROFILE_ARM_SWING * 0.6
+	elif lunge > 0.0:
+		near_fwd = lunge * PROFILE_STRIDE * float(motion.get("reach", PROFILE_LUNGE_REACH))
+		far_fwd = -lunge * PROFILE_STRIDE * 0.6
+		far_lift = lunge * LIFT_LUNGE_BACK
+		arm_swing = lunge * PROFILE_ARM_SWING
 	elif pose == POSE_CELEBRATE and legs == LEGS_WIDE:
 		near_fwd = PROFILE_STRIDE * 0.8
 		far_fwd = -PROFILE_STRIDE * 0.8
 
 	var kneel := legs == LEGS_KNEEL
-	var leg_h := LEG_H - (CELEBRATE_KNEEL_DROP if kneel else 0.0)
-	var shorts_y := SHORTS_Y - (CELEBRATE_KNEEL_DROP if kneel else 0.0)
+	var fold := (CELEBRATE_KNEEL_DROP if kneel else 0.0) + drop
+	var leg_h := LEG_H - fold
+	var shorts_y := SHORTS_Y - fold
 	var leg_w := w * PROFILE_LEG_W
 	var toe := w * PROFILE_BOOT_TOE
 	var arm_w := w * PROFILE_ARM_W
@@ -823,16 +955,16 @@ static func _draw_profile(
 	# Far leg, then far arm: both behind the body.
 	_profile_leg(canvas, body, w, h, side, far_fwd - PROFILE_LEG_OFFSET, far_lift, leg_w, leg_h, toe,
 		boots.lerp(far, PROFILE_FAR_SHADE), sock.lerp(far, PROFILE_FAR_SHADE))
-	_profile_arm(canvas, body, w, h, side, -side * arm_swing * w - arm_w / 2.0, arm_w, arms if pose == POSE_CELEBRATE else "hang",
+	var gesture := arms if (pose == POSE_CELEBRATE or arms == "up") else "hang"
+	_profile_arm(canvas, body, w, h, side, -side * arm_swing * w - arm_w / 2.0, arm_w, gesture,
 		trim.lerp(far, PROFILE_FAR_SHADE), hand.lerp(far, PROFILE_FAR_SHADE), phase, false)
 
 	_profile_leg(canvas, body, w, h, side, near_fwd, near_lift, leg_w, leg_h, toe, boots, sock)
 	_rect(canvas, body, w, h, -w * PROFILE_SHORTS_W / 2.0, shorts_y, w * PROFILE_SHORTS_W, h * SHORTS_H, trim)
-	if kneel:
-		body.y += h * CELEBRATE_KNEEL_DROP
+	body.y += h * fold
 
-	_draw_torso(canvas, body, w, h, shirt, trim, pattern, pose, 0.0, detail, PROFILE_TORSO_W)
-	_profile_arm(canvas, body, w, h, side, side * arm_swing * w - arm_w / 2.0, arm_w, arms if pose == POSE_CELEBRATE else "hang",
+	_draw_torso(canvas, body, w, h, shirt, trim, pattern, lunge * TORSO_LUNGE_TILT, 0.0, detail, PROFILE_TORSO_W)
+	_profile_arm(canvas, body, w, h, side, side * arm_swing * w - arm_w / 2.0, arm_w, gesture,
 		trim, hand, phase, true)
 	_profile_head(canvas, body, w, h, side, skin, hair, appearance, detail)
 
