@@ -75,6 +75,10 @@ extends Control
 const KEYBOARD_CLEARANCE := 16.0
 var _keyboard_shift: float = 0.0
 
+## Set by Splash when it resumed a session but the squad wouldn't load;
+## shown once on the status line, then cleared.
+static var startup_notice: String = ""
+
 
 func _ready() -> void:
 	_sign_in_button.pressed.connect(_on_sign_in_pressed)
@@ -88,17 +92,23 @@ func _ready() -> void:
 	# A saved session resumes silently: no form on screen while it's being
 	# checked, just the spinner -- testers kept typing their credentials
 	# into a form that was about to disappear on its own. The form only
-	# appears once we know there's nothing to resume.
+	# appears once we know there's nothing to resume. Splash normally does
+	# this check before we're reached; it's only repeated when it hasn't
+	# (e.g. running this scene directly from the editor).
 	_show_form(false)
-	_status_label.text = tr("Checking for a saved session...")
-	_set_busy(true)
-	var resumed: bool = await FirebaseAuth.try_resume_session()
-	if resumed:
-		_go_to_menu()
-		return
+	if not FirebaseAuth.resume_attempted:
+		_status_label.text = tr("Checking for a saved session...")
+		_set_busy(true)
+		var resumed: bool = await FirebaseAuth.try_resume_session()
+		if resumed:
+			_go_to_menu()
+			return
 	_status_label.text = ""
 	_set_busy(false)
 	_show_form(true)
+	if startup_notice != "":
+		_status_label.text = startup_notice
+		startup_notice = ""
 
 
 func _process(_delta: float) -> void:

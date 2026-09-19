@@ -52,6 +52,9 @@ var uid: String = ""
 var id_token: String = ""
 var refresh_token: String = ""
 
+## True once try_resume_session() has run this launch (Splash does it first).
+var resume_attempted: bool = false
+
 var is_signed_in: bool:
 	get:
 		return id_token != ""
@@ -174,6 +177,7 @@ func send_password_reset(email: String) -> Dictionary:
 
 
 func try_resume_session() -> bool:
+	resume_attempted = true
 	var stored := _load_persisted_refresh_token()
 	if stored == "":
 		return false

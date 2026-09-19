@@ -64,6 +64,9 @@ const ZOOM_VISIBLE_Y_SPAN := 36.0
 # of overhang, since a keeper on their line is drawn FIGURE_HEIGHT_UNITS
 # upward from it.
 const CAMERA_MARGIN_UNITS := 4.5
+# ...and past each touchline, so a ball rolling out for a throw-in stays
+# in frame instead of stopping at the screen's edge.
+const CAMERA_SIDE_MARGIN_UNITS := 2.0
 
 # A goal STOPS the replay -- playback_tick does not advance -- for this many
 # REAL seconds, so there is time to actually watch the celebration. The
@@ -129,6 +132,68 @@ const EVENT_ACTIONS := {
 	ReplayReader.ActionType.SAVE: "dive",
 }
 
+# Ball trails: after a kick the ball drags a ribbon of colour. How long it
+# keeps trailing, and how wide and bright the ribbon is, scale with how hard
+# the ball was struck -- its speed in the first recorded sample after the
+# event, mapped from TRAIL_MIN_SPEED (nothing) to TRAIL_MAX_SPEED (full).
+# `seconds` and `width` here are the values at full strength.
+const TRAIL_ACTIONS := {
+	ReplayReader.ActionType.SHOOT: {"color": ACTION_COLOR_SHOOT, "seconds": 1.4, "width": 1.0, "rings": true},
+	ReplayReader.ActionType.CLEARANCE: {"color": Color(0.95, 0.75, 0.45), "seconds": 1.0, "width": 0.7},
+	ReplayReader.ActionType.PASS: {"color": Color(1.0, 1.0, 1.0), "seconds": 0.6, "width": 0.45},
+	ReplayReader.ActionType.CROSS: {"color": Color(0.55, 0.75, 1.0), "seconds": 0.9, "width": 0.6},
+}
+const TRAIL_MIN_SPEED := 6.0          # pitch units/s
+const TRAIL_MAX_SPEED := 30.0
+const TRAIL_WIDTH_UNITS := 1.2        # ribbon width at the ball, full strength, pitch units
+const TRAIL_ALPHA := 0.85             # ribbon opacity at the ball, full strength
+const TRAIL_HISTORY_SECONDS := 0.9    # how much of the path stays lit behind a full-strength kick...
+const TRAIL_HISTORY_MIN := 0.4        # ...and the fraction of that a tap keeps
+const TRAIL_MIN_STEP_UNITS := 0.05    # a new point needs the ball to have moved this far
+
+# Power-shot shockwaves: a kick with "rings" in its recipe that leaves the
+# boot at POWER_SHOT_SPEED or more leaves a hoop AROUND the trail every
+# RING_SPACING_UNITS of travel -- a ring standing across the flight path,
+# seen edge-on from above, so it draws as an ellipse squashed along the
+# direction of travel (RING_SQUASH is the minor axis as a fraction of the
+# major). One more hoop inside it for every RING_EXTRA_PER_SPEED above that
+# speed (capped). A hoop swells from RING_RADIUS_UNITS to RING_GROWTH times
+# that over RING_LIFE_SECONDS of match time while it fades: the shockwave
+# spreading out from the ball's path.
+const POWER_SHOT_SPEED := 24.0
+const RING_SPACING_UNITS := 5.0
+const RING_EXTRA_PER_SPEED := 5.0
+const RING_MAX_PER_SPOT := 3
+const RING_RADIUS_UNITS := 1.6        # half the hoop's width across the trail, at birth
+const RING_SQUASH := 0.32             # how flat the hoop looks from above
+const RING_STEP_UNITS := 0.55         # radius between one hoop and the next inside it
+const RING_GROWTH := 2.2
+const RING_LIFE_SECONDS := 0.8
+const RING_ALPHA := 0.85
+const RING_WIDTH_PX := 2.0
+const RING_SEGMENTS := 28
+# Samples lag the event by up to half an interval, so right after a kick the
+# interpolated state can still show the kicker holding the ball. A trail
+# isn't ended by "someone has it" until this many ticks in.
+const TRAIL_GRACE_TICKS := 6.0
+
+# Dead-ball stoppages. The engine records no samples during its restart
+# hold, so the recording slides straight from the last in-play frame into
+# the restart shape and you never see where the ball went out. These hold
+# that last frame for STOPPAGE_HOLD_SECONDS of REAL time first, with the
+# restart named in the banner. Goals have the celebration, half time its
+# own pause; kickoffs follow one or the other.
+const STOPPAGE_HOLD_SECONDS := 1.0
+# The ball is carried on from that frame -- out over the line, as it really
+# went -- and keeps rolling until it is this far off the pitch.
+const STOPPAGE_BALL_RUNOUT_UNITS := 1.5
+const BALL_DESCENT_UNITS_PER_SECOND := 5.0  # gameEngine.BALL_GRAVITY: a linear drop, not an arc
+const STOPPAGE_EVENTS := {
+	ReplayReader.ActionType.THROW_IN: "THROW-IN",
+	ReplayReader.ActionType.CORNER: "CORNER",
+	ReplayReader.ActionType.GOAL_KICK: "GOAL KICK",
+}
+
 # The scorer's card in the lower-third panel: the shared card template,
 # drawn at this fraction of its 110x150 (ScorerCardSlot's minimum size in
 # Match.tscn is that, scaled -- containers lay out by the unscaled size).
@@ -145,6 +210,20 @@ var player_facings: Array = []
 # by _arm_actions ahead of the event, ticked on match time in _process.
 var player_actions: Array = []
 var next_action_index: int = 0
+
+# The live ball trail: where the ball has been since the kick, in pitch
+# units with height, plus the tick each point was taken at (that is what
+# ages them). Empty when nothing is trailing.
+var _trail_points: Array = []
+var _trail_color: Color = Color.WHITE
+var _trail_strength: float = 0.0
+var _trail_start_tick: float = 0.0
+var _trail_until_tick: float = -1.0
+# Power-shot rings: rings per spot for this kick (0 = none), the distance
+# travelled since the last spot, and the spots themselves.
+var _trail_rings_per_spot: int = 0
+var _trail_ring_distance: float = 0.0
+var _trail_rings: Array = []
 var ball_flash_timer: float = 0.0
 var ball_flash_color: Color = ACTION_COLOR_GOAL
 var home_score: int = 0
@@ -153,6 +232,20 @@ var banner_text: String = ""
 var banner_timer: float = 0.0
 var banner_color: Color = Color.WHITE
 var halftime_pause_remaining: float = 0.0
+# Real seconds left on a dead-ball hold, and the hold _process_events has
+# asked for but the live path hasn't started yet ({} when none) -- kept
+# apart so a skip's event catch-up can't rewind the playback tick.
+var stoppage_remaining: float = 0.0
+var _pending_stoppage: Dictionary = {}
+# The ball of a stoppage: latched from the held frame and flown on out of
+# play (the engine froze it at the line), shown in place of the recorded
+# ball until the recording has it at the restart point (_out_ball_until_tick,
+# the first sample after the event).
+var _out_ball_latched: bool = false
+var _out_ball_pos: Vector2 = Vector2.ZERO
+var _out_ball_vel: Vector2 = Vector2.ZERO
+var _out_ball_height: float = 0.0
+var _out_ball_until_tick: float = -1.0
 const HALFTIME_PAUSE_SECONDS := 3.0  # matches gameEngine.py's halftime_pause_timer=180 ticks @ 60/sec
 
 var has_started: bool = false
@@ -433,6 +526,10 @@ func _reset_state() -> void:
 	banner_timer = 0.0
 	banner_color = Color.WHITE
 	halftime_pause_remaining = 0.0
+	stoppage_remaining = 0.0
+	_pending_stoppage = {}
+	_out_ball_latched = false
+	_out_ball_until_tick = -1.0
 	ball_flash_timer = 0.0
 	ball_flash_color = ACTION_COLOR_GOAL
 	_pending_result_transition = false
@@ -448,6 +545,9 @@ func _reset_state() -> void:
 	next_action_index = 0
 	for i in range(player_actions.size()):
 		player_actions[i] = {}
+	_trail_points = []
+	_trail_rings = []
+	_trail_until_tick = -1.0
 	_update_score_label()
 
 
@@ -542,6 +642,9 @@ func _jump_to_event(action_type: int) -> void:
 			_goal_scorer_panel.visible = false
 			for i in range(player_actions.size()):
 				player_actions[i] = {}
+			_pending_stoppage = {}
+			_out_ball_latched = false
+			_out_ball_until_tick = -1.0
 			has_started = true
 			return
 
@@ -584,6 +687,20 @@ func _process(delta: float) -> void:
 		queue_redraw()
 		return
 
+	# A dead ball: the last in-play frame, held so the eye can catch where
+	# it went out before everyone slides into the restart shape.
+	if stoppage_remaining > 0.0:
+		stoppage_remaining = maxf(0.0, stoppage_remaining - delta)
+		_advance_out_ball(delta)
+		banner_timer = maxf(0.0, banner_timer - delta)
+		queue_redraw()
+		return
+	# Once play resumes the out ball keeps rolling to a stop while everyone
+	# slides into the restart shape, until the recording hands the ball to
+	# the taker.
+	if _showing_out_ball():
+		_advance_out_ball(delta)
+
 	# The tail of the celebration (the engine's own dead-ball frames after
 	# the hold) keeps animating rather than freezing mid-wave.
 	if _celebrating():
@@ -599,6 +716,17 @@ func _process(delta: float) -> void:
 
 	_process_events(playback_tick)
 	_arm_actions(playback_tick)
+	if not _pending_stoppage.is_empty():
+		# Back to the last recorded in-play frame -- at most a sample
+		# interval, and events already passed can't fire twice.
+		playback_tick = minf(playback_tick, float(_pending_stoppage["tick"]))
+		stoppage_remaining = STOPPAGE_HOLD_SECONDS
+		_out_ball_latched = false
+		_out_ball_until_tick = float(_pending_stoppage["until"])
+		banner_text = tr(_pending_stoppage["label"])
+		banner_timer = STOPPAGE_HOLD_SECONDS + 0.8  # solid through the hold, fading after
+		banner_color = Color.WHITE
+		_pending_stoppage = {}
 
 	for i in range(player_actions.size()):
 		var action: Dictionary = player_actions[i]
@@ -679,6 +807,38 @@ func _advance_goal_ball(delta: float) -> void:
 		_goal_ball_in_net = true
 
 
+## Whether the stoppage ball stands in for the recorded one this frame.
+func _showing_out_ball() -> bool:
+	return _out_ball_latched and playback_tick < _out_ball_until_tick
+
+
+## Flies the ball on out of play for one frame of REAL time, the same step
+## the engine would have taken (velocity, friction, the linear descent) had
+## it not frozen the ball at the line. Latched from the held frame's sample
+## on the first call, like the goal ball. Runs on until it is well off the
+## pitch or rolls to a stop; no netting to meet out here.
+func _advance_out_ball(delta: float) -> void:
+	if not _out_ball_latched:
+		var before: Dictionary = _find_bracket(replay["samples"], playback_tick)[0]
+		var b: Dictionary = before["ball"]
+		_out_ball_pos = Vector2(b["x"], b["y"])
+		_out_ball_vel = Vector2(b["vx"], b["vy"])
+		_out_ball_height = maxf(0.0, float(b["height"]))
+		_out_ball_latched = true
+	if _out_ball_vel.length() < 0.1:
+		_out_ball_height = maxf(0.0, _out_ball_height - BALL_DESCENT_UNITS_PER_SECOND * delta)
+		return
+	_out_ball_pos += _out_ball_vel * delta
+	_out_ball_height = maxf(0.0, _out_ball_height - BALL_DESCENT_UNITS_PER_SECOND * delta)
+	_out_ball_vel *= pow(BALL_FRICTION_PER_SECOND, delta)
+	var outside := maxf(
+		maxf(-_out_ball_pos.x, _out_ball_pos.x - PITCH_WIDTH),
+		maxf(-_out_ball_pos.y, _out_ball_pos.y - PITCH_HEIGHT)
+	)
+	if outside >= STOPPAGE_BALL_RUNOUT_UNITS:
+		_out_ball_vel = Vector2.ZERO
+
+
 ## Starts each event's action on its player early enough for the strike
 ## to land on the event: an action begins `lead` seconds before its tick
 ## (PlayerFigure.action_lead), so a shot winds up before the ball leaves.
@@ -742,6 +902,10 @@ func _process_events(current_tick: float) -> void:
 		if event_type == ReplayReader.ActionType.SHOOT or event_type == ReplayReader.ActionType.SAVE:
 			ball_flash_timer = 0.4
 			ball_flash_color = _action_color(event_type)
+		if TRAIL_ACTIONS.has(event_type):
+			_start_trail(event_type, float(event["tick"]))
+		elif event_type == ReplayReader.ActionType.SAVE:
+			_trail_until_tick = -1.0  # the shot is dealt with; what's lit fades out
 
 		if event_type == ReplayReader.ActionType.GOAL:
 			ball_flash_timer = 1.0
@@ -781,6 +945,15 @@ func _process_events(current_tick: float) -> void:
 			banner_color = ACTION_COLOR_GOAL
 			if known:
 				_show_goal_scorer(idx, own_goal)
+		elif STOPPAGE_EVENTS.has(event_type) and current_tick - float(event["tick"]) < TICKS_PER_SECOND:
+			# Only for an event playback has just reached -- a catch-up after
+			# a skip walks through hours of old ones, none of which is a hold.
+			var bracket := _find_bracket(replay["samples"], float(event["tick"]))
+			_pending_stoppage = {
+				"tick": float(bracket[0]["tick"]),
+				"until": float(bracket[1]["tick"]),
+				"label": STOPPAGE_EVENTS[event_type],
+			}
 		elif event_type == ReplayReader.ActionType.HALFTIME:
 			banner_text = tr("HALF TIME")
 			banner_timer = HALFTIME_PAUSE_SECONDS
@@ -922,7 +1095,11 @@ func _compute_camera(ball_pos: Vector2) -> Dictionary:
 	if visible_x_span >= PITCH_WIDTH:
 		cam_x = (PITCH_WIDTH - visible_x_span) / 2.0
 	else:
-		cam_x = clampf(ball_pos.x - visible_x_span / 2.0, 0.0, PITCH_WIDTH - visible_x_span)
+		cam_x = clampf(
+			ball_pos.x - visible_x_span / 2.0,
+			-CAMERA_SIDE_MARGIN_UNITS,
+			PITCH_WIDTH + CAMERA_SIDE_MARGIN_UNITS - visible_x_span
+		)
 	# The vertical clamp used to stop dead on the goal lines, which meant the
 	# top of the screen WAS y=0: a keeper standing on their line had their
 	# whole figure drawn above it and off-screen, and the goal (which lives
@@ -1067,6 +1244,9 @@ func _draw() -> void:
 		# camera follows the shown ball.
 		state["ball"] = _goal_ball_pos
 		state["ball_height"] = _goal_ball_height
+	elif _showing_out_ball():
+		state["ball"] = _out_ball_pos
+		state["ball_height"] = _out_ball_height
 	var players: Array = state["players"]
 	var controller: int = state["ball_controller"]
 	var cam := _compute_camera(state["ball"])
@@ -1087,6 +1267,9 @@ func _draw() -> void:
 	_draw_corner_quarter(cam, Vector2(PITCH_WIDTH, PITCH_HEIGHT), PI, 3.0 * PI / 2.0)
 	_draw_corner_quarter(cam, Vector2(0, PITCH_HEIGHT), -PI / 2.0, 0.0)
 
+	_update_trail(state)
+	_draw_trail(cam)
+	_draw_rings(cam)
 	_draw_players(state, cam, font)
 
 	if controller != -1:
@@ -1106,6 +1289,119 @@ func _draw() -> void:
 	_draw_ball(state, cam)
 
 	_draw_banner(font, font_size)
+
+
+## Arms a trail for a kick at `tick`: colour from the action, strength from
+## how fast the ball left. A tap below TRAIL_MIN_SPEED leaves nothing; a
+## new kick replaces whatever was trailing.
+func _start_trail(event_type: int, tick: float) -> void:
+	var recipe: Dictionary = TRAIL_ACTIONS[event_type]
+	var speed := _ball_speed_after(tick)
+	var strength := clampf((speed - TRAIL_MIN_SPEED) / (TRAIL_MAX_SPEED - TRAIL_MIN_SPEED), 0.0, 1.0)
+	_trail_points = []
+	if strength <= 0.0:
+		_trail_until_tick = -1.0
+		return
+	_trail_color = recipe["color"]
+	_trail_strength = strength * float(recipe["width"])
+	_trail_start_tick = tick
+	_trail_until_tick = tick + float(recipe["seconds"]) * strength * TICKS_PER_SECOND
+	_trail_rings_per_spot = 0
+	_trail_ring_distance = 0.0
+	if recipe.get("rings", false) and speed >= POWER_SHOT_SPEED:
+		_trail_rings_per_spot = mini(RING_MAX_PER_SPOT, 1 + int((speed - POWER_SHOT_SPEED) / RING_EXTRA_PER_SPEED))
+
+
+## The ball's speed in the first sample at or after `tick` -- the kick as
+## recorded, before friction has had more than a few ticks at it.
+func _ball_speed_after(tick: float) -> float:
+	var samples: Array = replay["samples"]
+	var after: Dictionary = _find_bracket(samples, tick)[1]
+	var ball: Dictionary = after["ball"]
+	return Vector2(float(ball["vx"]), float(ball["vy"])).length()
+
+
+## Records where the ball is this frame while a trail is live, and lets the
+## tail go. Recording stops the moment someone has the ball, or when the
+## kick's time is up; what is already lit still fades out behind it.
+func _update_trail(state: Dictionary) -> void:
+	if _trail_points.is_empty() and _trail_rings.is_empty() and playback_tick >= _trail_until_tick:
+		return
+	# During a goal hold the sampled controller is already the kickoff
+	# taker, but the shown ball is still flying into the net -- keep going.
+	var into_net := _celebrating() and _goal_ball_latched
+	var held := int(state["ball_controller"]) != -1 and playback_tick >= _trail_start_tick + TRAIL_GRACE_TICKS and not into_net
+	var trailing := playback_tick < _trail_until_tick and not held
+	if trailing:
+		var pos: Vector2 = state["ball"]
+		var height := float(state.get("ball_height", 0.0))
+		if _trail_points.is_empty() or pos.distance_to(_trail_points[-1]["pos"]) >= TRAIL_MIN_STEP_UNITS:
+			if not _trail_points.is_empty():
+				_trail_ring_distance += pos.distance_to(_trail_points[-1]["pos"])
+			_trail_points.append({"pos": pos, "height": height, "tick": playback_tick})
+			if _trail_rings_per_spot > 0 and _trail_ring_distance >= RING_SPACING_UNITS:
+				_trail_ring_distance -= RING_SPACING_UNITS
+				# The hoop stands across the flight, so it needs the heading here.
+				var heading: Vector2 = (pos - _trail_points[-2]["pos"]).normalized() if _trail_points.size() >= 2 else Vector2.UP
+				_trail_rings.append({"pos": pos, "height": height, "tick": playback_tick, "count": _trail_rings_per_spot, "dir": heading})
+	else:
+		_trail_until_tick = -1.0
+	var history := TRAIL_HISTORY_SECONDS * lerpf(TRAIL_HISTORY_MIN, 1.0, _trail_strength)
+	var oldest := playback_tick - history * TICKS_PER_SECOND
+	while not _trail_points.is_empty() and float(_trail_points[0]["tick"]) < oldest:
+		_trail_points.pop_front()
+	var ring_oldest := playback_tick - RING_LIFE_SECONDS * TICKS_PER_SECOND
+	while not _trail_rings.is_empty() and float(_trail_rings[0]["tick"]) < ring_oldest:
+		_trail_rings.pop_front()
+
+
+## The ribbon: one segment per recorded step, thinning and fading toward
+## the tail, lifted off the turf the way the ball is.
+func _draw_trail(cam: Dictionary) -> void:
+	var count := _trail_points.size()
+	if count < 2:
+		return
+	var scale: float = cam.scale
+	var full_width := maxf(1.0, TRAIL_WIDTH_UNITS * scale * _trail_strength)
+	var previous := _trail_screen_point(_trail_points[0], cam)
+	for i in range(1, count):
+		var current := _trail_screen_point(_trail_points[i], cam)
+		var t := float(i) / float(count - 1)
+		var color := _trail_color
+		color.a = TRAIL_ALPHA * _trail_strength * t
+		draw_line(previous, current, color, full_width * t, true)
+		previous = current
+
+
+## The hoops a power shot left standing across its path, each swelling and
+## fading on its own clock; the inner ones a step smaller. An ellipse with
+## its long axis across the trail and its short one along it -- a ring
+## around the flight path, seen from above.
+func _draw_rings(cam: Dictionary) -> void:
+	var scale: float = cam.scale
+	for ring in _trail_rings:
+		var age := (playback_tick - float(ring["tick"])) / TICKS_PER_SECOND
+		var life := clampf(age / RING_LIFE_SECONDS, 0.0, 1.0)
+		var centre := _trail_screen_point(ring, cam)
+		var along: Vector2 = ring["dir"]  # pitch and screen axes agree, up to scale
+		var across := Vector2(-along.y, along.x)
+		var color := _trail_color
+		color.a = RING_ALPHA * (1.0 - life)
+		var radius := RING_RADIUS_UNITS * lerpf(1.0, RING_GROWTH, life) * scale
+		for k in range(int(ring["count"])):
+			var r := radius - float(k) * RING_STEP_UNITS * scale
+			if r <= 1.0:
+				break
+			var points := PackedVector2Array()
+			for i in range(RING_SEGMENTS + 1):
+				var a := TAU * float(i) / float(RING_SEGMENTS)
+				points.append(centre + across * (cos(a) * r) + along * (sin(a) * r * RING_SQUASH))
+			draw_polyline(points, color, RING_WIDTH_PX, true)
+
+
+func _trail_screen_point(point: Dictionary, cam: Dictionary) -> Vector2:
+	var ground := _pitch_to_screen(point["pos"], cam)
+	return ground - Vector2(0.0, float(point["height"]) * float(cam.scale) * BALL_HEIGHT_LIFT)
 
 
 ## The ball, lifted off the turf by its recorded height.

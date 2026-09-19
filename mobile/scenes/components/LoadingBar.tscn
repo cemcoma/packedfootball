@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://ck4lhf847k5c3" path="res://scripts/components/LoadingBar.gd" id="1"]
+
+[node name="LoadingBar" type="Control"]
+layout_mode = 3
+custom_minimum_size = Vector2(240, 18)
+mouse_filter = 2
+script = ExtResource("1")

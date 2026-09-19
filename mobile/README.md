@@ -37,7 +37,19 @@ Fixed 960x540 viewport, landscape orientation, fixed-aspect stretch.
 
 5. Open `mobile/` as a project in **Godot 4.7** and run it.
 
-The app opens on Auth (sign in, register, or continue as guest), then Menu.
+The app opens on Splash (resumes a saved session while the logo animates),
+then Auth (sign in / register) or straight to Menu.
+
+**Splash artwork** -- `sprites/splash/` is generated, not hand-edited. After
+changing `sprites/title.png` or `sprites/backgrounds/title_background.jpg`:
+
+```sh
+python3 mobile/tools/make_splash.py   # needs Pillow
+```
+
+It writes the engine boot splash (`boot/boot_splash.png`, also the iOS
+launch image) and the two textures Splash.tscn layers over each other;
+the script and `Splash.gd` share the logo geometry so the two line up.
 
 ## Web test build
 
@@ -127,6 +139,27 @@ scoreboard, timer, pause/camera/speed buttons, pre-match and pause overlays
   dive toward the ball, or a catch when it's straight at them. Only the
   ball still flashes (goal / shot / save), which is all the pause-screen
   key lists.
+- **Trails**: after a shot, clearance, pass or cross the ball drags a
+  coloured ribbon (`TRAIL_ACTIONS` + the `TRAIL_*` constants). Length,
+  width, brightness and how long it keeps trailing all scale with the
+  ball's speed in the first sample after the kick, so a toe-poke leaves
+  nothing and a full-blooded shot draws a line to the goal. It stops when
+  someone takes the ball or the keeper saves, and fades from the tail. A
+  shot struck at `POWER_SHOT_SPEED` or more also leaves a hoop standing
+  across its path every `RING_SPACING_UNITS` of travel -- drawn as an
+  ellipse squashed along the flight (`RING_SQUASH`), swelling outward like
+  a shockwave -- with an extra hoop inside for every `RING_EXTRA_PER_SPEED`
+  above that. Trail and rings age on the
+  match clock, so during a goal hold they stay exactly as they were when
+  the ball went in.
+- **Stoppages**: a throw-in, corner or goal kick holds the last recorded
+  in-play frame for `STOPPAGE_HOLD_SECONDS` of real time (the engine records
+  nothing during its own restart hold, so without this the picture slides
+  straight into the restart shape and you never see where the ball went
+  out), with the restart named in the banner. Playback steps back to that
+  frame -- at most one sample interval; passed events can't fire twice --
+  and the ball is flown on from it out over the line, like the goal ball
+  into the net, and shown there until the recording hands it to the taker.
 - **Goals** hold the picture for the celebration and show the scorer's card
   (the shared `PlayerCardView`, scaled down, in the kit that side is
   wearing) with their name and their goals so far this match, counted off
