@@ -115,7 +115,7 @@ func _availability_text(remaining_opens,expires_at:String) -> void:
 	if remaining_opens != null:
 		remaining_opens_text = tr("Remaining opens: %d") % remaining_opens
 	if expires_at != "":
-		expires_at_text = tr("Expires at: %s") % expires_at
+		expires_at_text = tr("Expires at: %s") % TimeFormat.local_datetime(expires_at)
 		
 	_availability_label.text = "%s\n%s" % [remaining_opens_text,expires_at_text]
 

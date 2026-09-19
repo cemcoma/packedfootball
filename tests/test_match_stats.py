@@ -24,7 +24,7 @@ def finished(request):
     pm = C.PackManager(C.PACK_DATABASE, seed=55)
     pool = []
     while len(pool) < 400:
-        pool += pm.open_pack("jumbo")
+        pool += pm.open_pack("jumbo_standard")
     home, away = C._assemble_xi(pool), C._assemble_xi(pool)
     g = game(C.Team("H", copy.deepcopy(home)), C.Team("A", copy.deepcopy(away)), seed=7)
     g.run_match(max_steps=REGULATION_FRAMES, render=False)

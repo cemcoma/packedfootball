@@ -23,7 +23,7 @@ SCRIPT = textwrap.dedent(
     sys.path.insert(0, %r)
     from packEngine import PACK_DATABASE, PackManager
     pm = PackManager(PACK_DATABASE, seed=1234)
-    cards = pm.open_pack("jumbo")
+    cards = pm.open_pack("jumbo_standard")
     from dataclasses import asdict
     for c in cards:
         print(c.position, sorted(asdict(c.attributes).items()))

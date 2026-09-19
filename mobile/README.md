@@ -119,6 +119,14 @@ scoreboard, timer, pause/camera/speed buttons, pre-match and pause overlays
   rewind the scoreboard, since `_jump_to_event` replays from kickoff to
   reach a correct score.
 - **Pre-match** starts fully blacked out behind a Start Match button.
+- **Goals** hold the picture for the celebration and show the scorer's card
+  (the shared `PlayerCardView`, scaled down, in the kit that side is
+  wearing) with their name and their goals so far this match, counted off
+  the GOAL events as they play. An own goal -- a GOAL event whose
+  `player_idx` is on the other side from its `team`, which is how
+  `gameEngine._award_goal` marks one -- shows the player who put it in,
+  labelled OWN GOAL, with no tally and nobody running off; `MatchSession.
+  scorers()` lists it for the side it counted for as "Name (OG)".
 - Playback interpolates between sparse recorded samples with Hermite curves
   using the recorded velocity as the tangent; the ball is glued to whoever
   is dribbling rather than interpolated separately.

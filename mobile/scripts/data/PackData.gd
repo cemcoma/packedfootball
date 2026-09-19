@@ -57,7 +57,7 @@ static func _dict(fields: Dictionary, key: String, default: Dictionary) -> Dicti
 	return value if value is Dictionary else default
 
 
-var pack_id: String = ""  # the pack's slug, e.g. "jumbo" -- what /pack/open takes
+var pack_id: String = ""  # the pack's slug
 var pack_name: String = ""
 var type: String = "standard"
 var description: String = ""
@@ -121,7 +121,7 @@ func tag_text() -> String:
 	if available:
 		return ""
 	if available_at != "":
-		return TranslationServer.translate("Available %s") % available_at.split("T")[0]
+		return TranslationServer.translate("Available %s") % TimeFormat.local_date(available_at)
 	if unavailable_reason != "":
 		return unavailable_reason
 	return TranslationServer.translate("Not available")

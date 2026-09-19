@@ -6,8 +6,6 @@ import numpy as np
 from typing import Final
 
 from replay import ActionType, ReplayRecorder
-# Re-exported: the engine's tests, scripts and the client's comments read
-# the pitch from here. The numbers themselves live in game_config.py.
 from game_config import GOAL_HEIGHT, GOAL_POST_RADIUS, GOAL_WIDTH, PITCH_HEIGHT, PITCH_WIDTH  # noqa: F401
 from formations import get_formation, is_similar_position
 
@@ -47,7 +45,16 @@ from formations import get_formation, is_similar_position
 #          intervals ON by default (ADAPTIVE_*). Player collisions resolved
 #          from a pairwise distance matrix instead of a 231-pair Python loop
 #          (same rule, same order).
-ENGINE_VERSION: Final[str] = "2.2.0"
+#   2.2.1 goalkeeping own goals: Goalkeepers used the generic outfield block branch in 
+#         _attempt_capture and when the ball wasnt capture and blocked, the goal
+#         could (and did) bounce in the net, resulting in an own goal with attribution
+#         to the gk. Now the keeper never takes the block branch, only the save branch,
+#         once per shot. Attribution: a shot on target when struck that goes in
+#         off a defender is the shooter's goal (last_shot_on_target), not an own
+#         goal; the replay GOAL event carries the credited scorer, and an own
+#         goal is the player who put it in with player_idx on the other side
+#         from team.
+ENGINE_VERSION: Final[str] = "2.2.1"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -97,8 +104,6 @@ ADDED_TIME_MAX_FRAMES: Final = 840   # cap at 8:00
 # how long the whistle can be held so a team knocking it around up there
 # can't stall the match. 200 frames == 1:40 of clock.
 MAX_WHISTLE_HOLD_FRAMES: Final = 200
-
-# How deep into the opponent's half counts as a live attack. The final third
 DANGEROUS_ZONE_Y: Final = PITCH_HEIGHT * 2.0 / 3.0
 
 # Sentinel for "not latched yet", since None legitimately means "ball dead".
@@ -135,30 +140,13 @@ SAVE_COMMIT_MARGIN: Final = 1.0
 SAVE_ENGAGE_DISTANCE: Final = 6.0
 SAVE_ENGAGE_TIME: Final = 0.45
 
-# How fast a ball loses height, in units per second. Deliberately NOT 9.8:
-# ball height shares the pitch's unit scale, where the whole goal is only
-# GOAL_HEIGHT (2.5) tall, so real gravity dropped a ball from crossbar height
-# to the turf in a quarter of a second and nothing ever looked airborne.
-# Applied straight to height rather than to a vertical velocity, so this is a
-# descent RATE, not an acceleration -- balls fall in a straight line, not an
-# arc. Lower means loftier crosses, clearances and chips.
 BALL_GRAVITY: Final = 5.0
 
 base_kick_pow:Final = 20
 
 # --- rest defence ------------------------------------------------------------
-#
-# A side's centre-backs are "home" when at least one of them is inside this
-# box in front of their own goal: within CB_HOME_DEPTH of the goal line
-# and CB_HOME_HALF_WIDTH of the centre. When none is -- both up for a
-# corner, or caught upfield -- the full-backs cover the middle instead of
-# their flank (see defender.py's "cover"), because a clearance to a lone
-# striker with the whole centre empty was a breakaway every single time.
 CB_HOME_DEPTH: Final[float] = 40.0
 CB_HOME_HALF_WIDTH: Final[float] = 20.0
-# Where the attacking side's non-box players stand for their own corner:
-# a line this far behind halfway (toward their own goal), spread this far
-# apart around the centre. They used to be left wherever they were.
 CORNER_REST_LINE_BEHIND_HALFWAY: Final[float] = 5.0
 CORNER_REST_SPACING: Final[float] = 9.0
 
@@ -311,6 +299,7 @@ class game:
         ]
 
         self.last_shot_player = -1
+        self.last_shot_on_target = False
         self.last_pass_player = -1
         # Identifies the shot currently in flight so each keeper gets exactly
         # one save attempt at it. -1 means no live shot.
@@ -1286,6 +1275,13 @@ class game:
             self.ball_capture_cooldown = 8
             return False
 
+        is_keeper = index in self._keeper_indices
+        if is_keeper and self.ball_event == "shot":
+            unattempted = self.active_shot_id >= 0 and self.save_attempted_shot[index] != self.active_shot_id
+            crossing = self.predict_goal_crossing(current_team) if unattempted else None
+            if crossing is not None and crossing["on_target"]:
+                return self._attempt_save(index)
+
         if pass_like_event and self.last_touch_team == current_team:
             control_chance = (
                 0.8
@@ -1316,7 +1312,8 @@ class game:
         
 
         block_threshold = 3.0
-        if (ball_speed >= block_threshold) or (ball_height >= 0.75):
+        can_block = not (is_keeper and self.ball_event == "shot")
+        if can_block and ((ball_speed >= block_threshold) or (ball_height >= 0.75)):
             deflection_bias = self._capture_success_probability(index, ball_speed, ball_height)
             pass_bias = 0.12 if self.ball_event in {"pass", "cross", "clearance", "throw_in"} else 0.04
             block_chance = np.clip(0.22 + (ball_speed * 0.10) + (ball_height * 0.28) + (self.all_players[index].attributes.agility / 100.0) * 0.30 - deflection_bias * 0.20 + pass_bias, 0.15, 0.98)
@@ -1556,6 +1553,20 @@ class game:
         self.last_goal_team = scoring_team
         self.ball_controller = -1
 
+        scorer_idx = -1
+        if self.last_touch_player != -1:
+            touch_team = 0 if self.last_touch_player < 11 else 1
+            if touch_team == scoring_team:
+                scorer_idx = self.last_touch_player
+            elif (
+                self.ball_event == "shot"
+                and self.last_shot_player >= 0
+                and (0 if self.last_shot_player < 11 else 1) == scoring_team
+                and self.last_shot_on_target
+            ):
+                scorer_idx = self.last_shot_player
+        own_goal = scorer_idx == -1
+
         # A goal is by definition on target, for whoever shot it.
         if self.last_shot_player >= 0:
             self.match_stats[self.last_shot_player]["shots_on_target"] += 1
@@ -1566,20 +1577,18 @@ class game:
 
         # --- Evaluate Goal & Assist Statistics ---
         scorer_name = "Own Goal"
-        if self.last_touch_player != -1:
-            touch_team = 0 if self.last_touch_player < 11 else 1
-            if touch_team == scoring_team:
-                scorer = self.all_players[self.last_touch_player]
-                scorer.scored()
-                self._match_goals[self.last_touch_player] += 1
-                scorer_name = scorer.lname
+        if not own_goal:
+            scorer = self.all_players[scorer_idx]
+            scorer.scored()
+            self._match_goals[scorer_idx] += 1
+            scorer_name = scorer.lname
 
-                if self.assist_candidate != -1:
-                    assister = self.all_players[self.assist_candidate]
-                    assister.assisted()
-                    self._match_assists[self.assist_candidate] += 1
-            else:
-                self.assist_candidate = -1
+            # Only for a goal the scorer touched in themselves: a deflection
+            # cleared the candidate when the defender's touch registered.
+            if scorer_idx == self.last_touch_player and self.assist_candidate != -1:
+                assister = self.all_players[self.assist_candidate]
+                assister.assisted()
+                self._match_assists[self.assist_candidate] += 1
 
         team_label = "A" if scoring_team == 0 else "B"
         self._trigger_goal_popup(f"{team_label}: {scorer_name}")
@@ -1587,7 +1596,16 @@ class game:
         self.goal_pause_timer = 90
         self.kickoff_team = 1 - scoring_team
         if self.replay:
-            self.replay.event(self.match_clock_frames, ActionType.GOAL, player_idx=self.last_touch_player, team=scoring_team)
+            # player_idx is the credited scorer -- or, for an own goal, the
+            # player who put it in, whose side then differs from `team`;
+            # that mismatch is how the client tells the two apart
+            # (MatchPlayback._process_events, MatchSession.scorers).
+            self.replay.event(
+                self.match_clock_frames,
+                ActionType.GOAL,
+                player_idx=self.last_touch_player if own_goal else scorer_idx,
+                team=scoring_team,
+            )
         self.last_touch_player = -1
         self.assist_candidate = -1
 
@@ -1730,9 +1748,6 @@ class game:
                     aerial = True
                     power *= 1.15
                 elif pass_type == "throw_in":
-                    # Two thirds of the player's normal passing power -- an
-                    # arm throw, not a leg. Grounded, so a teammate can
-                    # actually control it.
                     aerial = False
                     power *= THROW_IN_POWER_FACTOR
                     event_type = "throw_in"
@@ -1750,9 +1765,6 @@ class game:
                     }.get(pass_type, ActionType.PASS)
                     self.replay.event(self.match_clock_frames, pass_event, player_idx=index, team=0 if index < 11 else 1)
                 unit_vec = self._fuzz_pass_direction(index, unit_vec, pass_type)
-                # event_type (not pass_type) is what _capture_success_probability
-                # and _attempt_capture branch on -- both already special-case
-                # "throw_in" alongside pass/cross/clearance.
                 self._release_ball(index, unit_vec, power, aerial=aerial, event_type=event_type)
 
         elif action_type == "shoot":
@@ -1770,9 +1782,6 @@ class game:
                 aerial = launch_height > 0.2
 
                 self.match_stats[index]["shots"] += 1
-                # On-target is credited later, when the ball actually reaches
-                # the frame (a goal) or is saved -- the real definition, and
-                # better than trusting where the shooter aimed.
                 self.last_shot_player = index
 
                 self.visual_action[index] = "shoot"
@@ -1782,16 +1791,9 @@ class game:
                 self._release_ball(index, unit_xy, shot_speed, aerial=aerial, event_type="shot")
                 self.ball[2] = unit_xy[0] * shot_speed
                 self.ball[3] = unit_xy[1] * shot_speed
-                # Launched at whatever height lets it descend (BALL_GRAVITY is a
-                # linear descent rate -- see its note) to target_z exactly as it
-                # reaches the goal line. This used to be |unit_z| * shot_speed,
-                # i.e. a vertical VELOCITY written into a HEIGHT field, which
-                # made launch height scale with the power stat: the harder the
-                # shooter, the higher the ball started, and an icon's 95 power
-                # put a 12-unit shot at ~6 units high with 2.5 to clear. Power
-                # now only makes a shot faster (harder to save); where it ends
-                # up is the shooting stat's job (see player._calculate_shot).
                 self.ball[4] = launch_height
+                crossing = self.predict_goal_crossing(1 if index < 11 else 0)
+                self.last_shot_on_target = bool(crossing and crossing["on_target"])
 
         elif action_type == "tackle":
             if self.ball_controller == -1 or self.ball_controller == index:

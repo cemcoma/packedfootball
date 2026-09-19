@@ -116,6 +116,12 @@ const ACTION_COLOR_DEFAULT := Color(1.0, 1.0, 0.2)
 # Size of one color chip in the pause screen's key (see _build_legend).
 const LEGEND_SWATCH_SIZE := Vector2(14.0, 14.0)
 
+# The scorer's card in the lower-third panel: the shared card template,
+# drawn at this fraction of its 110x150 (ScorerCardSlot's minimum size in
+# Match.tscn is that, scaled -- containers lay out by the unscaled size).
+const PLAYER_CARD_SCENE := preload("res://scenes/components/PlayerCardView.tscn")
+const SCORER_CARD_SCALE := 0.6
+
 var replay: Dictionary = {}
 var roster: Dictionary = {}
 var playback_tick: float = 0.0
@@ -160,6 +166,12 @@ var _celebration_stage: String = PlayerFigure.STAGE_POSE
 # while everything else is frozen.
 var goal_pause_remaining: float = 0.0
 var _celebration_phase: float = 0.0
+# Credited goals so far, per roster index -- what the scorer panel's "goals
+# this match" reads. Counted off the GOAL events as they play, so it is
+# right at the moment of each goal (the roster's statistics are career
+# totals, player_match_stats the final count). Own goals credit nobody.
+var _goals_this_match: Array = []
+var _scorer_card_view: PlayerCardView = null
 
 # The ball's last yard. The engine freezes the ball the instant it crosses
 # the line (tick() early-returns for the whole goal pause), so the recording
@@ -206,6 +218,12 @@ var _is_real_match: bool = false #for local testing demo replays
 
 @onready var _loading_popup: Control = %LoadingPopup
 
+@onready var _goal_scorer_panel: PanelContainer = %GoalScorerPanel
+@onready var _scorer_card_slot: Control = %ScorerCardSlot
+@onready var _scorer_caption_label: Label = %ScorerCaptionLabel
+@onready var _scorer_name_label: Label = %ScorerNameLabel
+@onready var _scorer_goals_label: Label = %ScorerGoalsLabel
+
 
 func _ready() -> void:
 
@@ -232,6 +250,12 @@ func _ready() -> void:
 	for i in range(ReplayReader.NUM_PLAYERS):
 		player_facings[i] = PlayerFigure.FACING_S if i < 11 else PlayerFigure.FACING_N
 		player_poses[i] = ""
+	_goals_this_match.resize(ReplayReader.NUM_PLAYERS)
+	_goals_this_match.fill(0)
+
+	_scorer_card_view = PLAYER_CARD_SCENE.instantiate()
+	_scorer_card_view.scale = Vector2.ONE * SCORER_CARD_SCALE
+	_scorer_card_slot.add_child(_scorer_card_view)
 
 	_halftime_tick = ReplayReader.halftime_tick(replay)
 
@@ -418,6 +442,8 @@ func _reset_state() -> void:
 	_goal_ball_latched = false
 	goal_pause_remaining = 0.0
 	_celebration_phase = 0.0
+	_goals_this_match.fill(0)
+	_goal_scorer_panel.visible = false
 	for i in range(player_flash_timers.size()):
 		player_flash_timers[i] = 0.0
 		player_flash_colors[i] = ACTION_COLOR_DEFAULT
@@ -513,6 +539,7 @@ func _jump_to_event(action_type: int) -> void:
 			_celebration_positions = []
 			_celebration_scorer = -1
 			_goal_ball_latched = false
+			_goal_scorer_panel.visible = false
 			has_started = true
 			return
 
@@ -560,6 +587,8 @@ func _process(delta: float) -> void:
 	if _celebrating():
 		_celebration_phase += delta
 		_advance_goal_ball(delta)
+	elif _goal_scorer_panel.visible:
+		_goal_scorer_panel.visible = false  # the scorer's card leaves with the celebration
 
 	playback_tick += effective_delta * TICKS_PER_SECOND
 	var last_tick: float = samples[-1]["tick"]
@@ -715,8 +744,16 @@ func _process_events(current_tick: float) -> void:
 			else:
 				away_score += 1
 			_update_score_label()
+			# player_idx is the credited scorer -- or, for an own goal, the
+			# player who put it in, whose side is not the side that scored
+			# (gameEngine._award_goal). Nobody runs off for an own goal; the
+			# side it counts for does the plain arms-up where they stand.
+			var known := idx >= 0 and idx < ReplayReader.NUM_PLAYERS
+			var own_goal := known and (idx < 11) != (team == 0)
+			if known and not own_goal:
+				_goals_this_match[idx] += 1
 			_celebration_team = team
-			_celebration_scorer = idx if idx >= 0 and idx < ReplayReader.NUM_PLAYERS else -1
+			_celebration_scorer = idx if known and not own_goal else -1
 			_celebration_until_tick = float(event["tick"]) + GOAL_CELEBRATION_FRAMES
 			goal_pause_remaining = GOAL_CELEBRATION_SECONDS
 			_celebration_phase = 0.0
@@ -726,11 +763,16 @@ func _process_events(current_tick: float) -> void:
 			_celebration_positions = []
 			_goal_ball_latched = false
 			var scorer := _player_name(idx)
-			banner_text = "GOAL: %s" % scorer if scorer != "" else "GOAL"
+			if own_goal:
+				banner_text = tr("OWN GOAL: %s") % scorer if scorer != "" else tr("OWN GOAL")
+			else:
+				banner_text = tr("GOAL: %s") % scorer if scorer != "" else tr("GOAL")
 			# Matched to the hold, so the scorer's name is on screen for the
 			# whole celebration instead of fading two seconds before it ends.
 			banner_timer = GOAL_CELEBRATION_SECONDS
 			banner_color = ACTION_COLOR_GOAL
+			if known:
+				_show_goal_scorer(idx, own_goal)
 		elif event_type == ReplayReader.ActionType.HALFTIME:
 			banner_text = tr("HALF TIME")
 			banner_timer = HALFTIME_PAUSE_SECONDS
@@ -1256,6 +1298,27 @@ func _roster_entry(index: int) -> Dictionary:
 		return {}
 	var entry = players[index]
 	return entry if entry is Dictionary else {}
+
+func _show_goal_scorer(index: int, own_goal: bool) -> void:
+	var entry := _roster_entry(index)
+	var team: int = 0 if index < 11 else 1
+	var has_card := entry.has("tier")
+	_scorer_card_slot.visible = has_card
+	if has_card:
+		var card := PlayerCard.from_fields(entry, "match_%d" % index)
+		_scorer_card_view.set_card(card)
+		if _team_kits.size() == 2:
+			_scorer_card_view.set_kit(_team_kits[team])
+		_scorer_name_label.text = card.full_name()
+	else:
+		_scorer_name_label.text = _player_name(index)
+	_scorer_caption_label.text = tr("OWN GOAL") if own_goal else tr("GOAL")
+	_scorer_caption_label.add_theme_color_override(
+		"font_color", ThemeManager.color("warning") if own_goal else ThemeManager.color("accent")
+	)
+	_scorer_goals_label.visible = not own_goal
+	_scorer_goals_label.text = tr("Goals this match: %d") % int(_goals_this_match[index])
+	_goal_scorer_panel.visible = true
 
 
 func _draw_banner(font: Font, font_size: int) -> void:

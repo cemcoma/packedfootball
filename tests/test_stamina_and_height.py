@@ -128,7 +128,7 @@ def test_keepers_are_taller_than_wingers_on_average():
     pm = PackManager(PACK_DATABASE, seed=99)
     pool = []
     while len(pool) < 600:
-        pool += pm.open_pack("jumbo")
+        pool += pm.open_pack("jumbo_standard")
     keepers = [p.attributes.height for p in pool if p.position == "GK"]
     wide = [p.attributes.height for p in pool if p.position in ("LW", "RW")]
     assert keepers and wide
@@ -142,7 +142,7 @@ def test_height_does_not_scale_with_card_tier():
     pm = PackManager(PACK_DATABASE, seed=7)
     by_tier = {}
     for _ in range(80):
-        for card in pm.open_pack("jumbo"):
+        for card in pm.open_pack("jumbo_standard"):
             by_tier.setdefault(card.tier, []).append(card.attributes.height)
 
     means = {t: sum(v) / len(v) for t, v in by_tier.items() if len(v) >= 12}

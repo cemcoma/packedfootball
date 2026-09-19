@@ -16,6 +16,10 @@ Wire format:
              -- all positions/velocities as int16 fixed-point (POSITION_SCALE)
     events:  tick(I) type(B) player_idx(b) team(b)
 
+A GOAL event's team is the side that scored and player_idx the credited
+scorer -- or, for an own goal, the player who put it in, whose side then
+differs from team (gameEngine._award_goal; the client reads that mismatch).
+
 Player/team display names are never in this stream -- a client already has
 the roster from the match-start payload and looks names up by index.
 """

@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from admin_firestore_client import AdminFirestoreClient
 from deps import game_state_for, verify_id_token
+from services import storefront
 
 router = APIRouter(tags=["deals"])
 
@@ -37,13 +38,9 @@ async def _deal_unavailable_reason(
     if max_redemptions is not None and times_redeemed >= max_redemptions:
         return "This deal is no longer available"
 
-    expires_at = config.get("expires_at")
-    if expires_at:
-        try:
-            if datetime.now(timezone.utc) > datetime.fromisoformat(expires_at):
-                return "This deal has expired"
-        except ValueError:
-            pass  # malformed expires_at shouldn't block redeeming -- fail open, not closed
+    expires_at = storefront.parse_time(config.get("expires_at"))
+    if expires_at is not None and datetime.now(timezone.utc) > expires_at:
+        return "This deal has expired"
 
     max_per_account = config.get("max_redemptions_per_account")
     if max_per_account is not None:

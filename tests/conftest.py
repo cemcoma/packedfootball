@@ -92,7 +92,7 @@ def _roster_template():
     pm = PackManager(PACK_DATABASE, seed=55)
     pool = []
     while len(pool) < 400:
-        pool += pm.open_pack("jumbo")  # the Jumbo pack: mixed positions (icon_forward is forwards-only)
+        pool += pm.open_pack("jumbo_standard")  # the Jumbo pack: mixed positions (icon_forward is forwards-only)
     return _assemble_xi(pool), _assemble_xi(pool)
 
 

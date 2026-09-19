@@ -86,7 +86,7 @@ func tag_text() -> String:
 	if available:
 		return ""
 	if available_at != "":
-		return TranslationServer.translate("Available %s") % available_at.split("T")[0]
+		return TranslationServer.translate("Available %s") % TimeFormat.local_date(available_at)
 	if unavailable_reason != "":
 		return unavailable_reason
 	return TranslationServer.translate("Not available")

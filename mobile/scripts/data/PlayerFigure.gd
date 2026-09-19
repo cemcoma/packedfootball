@@ -65,7 +65,7 @@ const ASPECT := 0.62
 const BOOT_Y := 0.00
 const BOOT_H := 0.07
 const LEG_Y := 0.07
-const LEG_H := 0.23
+const LEG_H := 0.30
 const SHORTS_Y := 0.28
 const SHORTS_H := 0.2
 const TORSO_Y := 0.42
@@ -152,6 +152,29 @@ const LIFT_KICK := 0.12           # striking leg, other one planted
 const LIFT_LUNGE_FRONT := 0.14
 const LIFT_LUNGE_BACK := 0.05
 const LIFT_REACH := 0.06
+
+# -- side view (FACING_E / FACING_W) ------------------------------------------
+# The body seen edge-on, drawn by _draw_profile instead of the front view
+# shifted sideways: no second arm facing the viewer, legs that scissor fore
+# and aft, one eye. "Forward" below means toward the facing; widths are
+# fractions of the figure's width like everything else.
+const PROFILE_TORSO_W := 0.46
+const PROFILE_SHORTS_W := 0.50
+const PROFILE_LEG_W := 0.26
+const PROFILE_LEG_OFFSET := 0.07  # the far leg stands this far behind the near one
+const PROFILE_BOOT_TOE := 0.10    # boots stick out forward by this much
+const PROFILE_STRIDE := 0.15      # how far each leg travels fore/aft at full swing
+const PROFILE_TRAIL_LIFT := 0.05  # the trailing leg's heel comes up this much
+const PROFILE_KICK_REACH := 1.3   # striking leg, as a multiple of PROFILE_STRIDE
+const PROFILE_LUNGE_REACH := 1.7
+const PROFILE_ARM_W := 0.22
+const PROFILE_ARM_SWING := 0.13   # how far the arms swing fore/aft at full stride
+const PROFILE_FAR_SHADE := 0.30   # how much darker the far arm and leg are
+const PROFILE_HEAD_W := 0.54
+const PROFILE_EYE_X := 0.72       # fraction across the head, from the back
+const PROFILE_HAIR_BACK_X := 0.45 # the back of the head is hair up to here
+const PROFILE_RIDGE_X := 0.12     # a mohawk runs front to back between these
+const PROFILE_RIDGE_W := 0.76
 
 # Keeper at full stretch. Absolute, NOT derived from the torso -- the point
 # of a dive is that the arms are thrown well clear of the body. Keep it
@@ -503,6 +526,16 @@ static func draw_into(
 		# The held pose's sways run off the faster clock.
 		phase = clock
 
+	# Side on: its own drawing, not the front view shifted. A dive stays
+	# front-on -- both arms thrown out along the dive is the picture.
+	var side := _side_for(facing)
+	if side != 0.0 and pose != POSE_REACH:
+		_draw_profile(
+			canvas, body + Vector2(rock, 0.0), w, h, side, pose, swing, arms, legs, phase,
+			skin, hair, boots, shirt, trim, pattern, appearance, detail, is_keeper
+		)
+		return
+
 	# 3/4 lean: shift the upper body toward where they're looking, which is
 	# most of what sells a direction on a figure this blocky.
 	var lean := _lean_for(facing) * w * LEAN + rock
@@ -575,9 +608,10 @@ static func _draw_legs(
 
 static func _draw_torso(
 	canvas: CanvasItem, feet: Vector2, w: float, h: float,
-	shirt: Color, trim: Color, pattern: String, pose: String, lean: float, detail: int
+	shirt: Color, trim: Color, pattern: String, pose: String, lean: float, detail: int,
+	torso_w_frac: float = TORSO_W
 ) -> void:
-	var torso_w := w * TORSO_W
+	var torso_w := w * torso_w_frac
 	var torso_h := h * TORSO_H
 	var x := -torso_w / 2.0 + lean
 	var base_y := TORSO_Y + (TORSO_LUNGE_TILT if pose == POSE_LUNGE else 0.0)
@@ -736,6 +770,154 @@ static func _draw_hanging_arm(
 	_rect(canvas, feet, w, h, x, ARM_Y - HAND_H, arm_w, h * HAND_H, hand)
 
 
+## The side view. `side` is +1 facing east (screen right), -1 west, and
+## multiplies everything that has a forward, so west is east mirrored.
+## Painter's order back to front: far leg, far arm, near leg, shorts, torso,
+## near arm, head -- the far limbs are shaded and only ever peek out.
+static func _draw_profile(
+	canvas: CanvasItem, body: Vector2, w: float, h: float, side: float,
+	pose: String, swing: float, arms: String, legs: String, phase: float,
+	skin: Color, hair: Color, boots: Color, shirt: Color, trim: Color, pattern: String,
+	appearance: Dictionary, detail: int, is_keeper: bool
+) -> void:
+	var hand := GLOVE_COLOR if is_keeper else skin
+	var sock := boots.lerp(Color.BLACK, SOCK_DARKEN)
+	var far := Color.BLACK
+
+	# Stride -1..1: the run cycle's vertical swing becomes fore/aft travel,
+	# the near leg forward at +1 and the arms swinging against the legs.
+	var stride := clampf(swing / RUN_SWING, -1.0, 1.0)
+	var near_fwd := 0.0
+	var far_fwd := 0.0
+	var near_lift := 0.0
+	var far_lift := 0.0
+	var arm_swing := 0.0
+	var stepping := pose == POSE_RUN or (pose == POSE_CELEBRATE and legs == LEGS_STEP)
+	if stepping:
+		near_fwd = stride * PROFILE_STRIDE
+		far_fwd = -stride * PROFILE_STRIDE
+		near_lift = maxf(0.0, -stride) * PROFILE_TRAIL_LIFT
+		far_lift = maxf(0.0, stride) * PROFILE_TRAIL_LIFT
+		arm_swing = -stride * PROFILE_ARM_SWING
+	elif pose == POSE_KICK:
+		near_fwd = PROFILE_STRIDE * PROFILE_KICK_REACH
+		near_lift = LIFT_KICK
+		far_fwd = -PROFILE_STRIDE * 0.4
+		arm_swing = -PROFILE_ARM_SWING * 0.6
+	elif pose == POSE_LUNGE:
+		near_fwd = PROFILE_STRIDE * PROFILE_LUNGE_REACH
+		far_fwd = -PROFILE_STRIDE * 0.6
+		far_lift = LIFT_LUNGE_BACK
+		arm_swing = PROFILE_ARM_SWING
+	elif pose == POSE_CELEBRATE and legs == LEGS_WIDE:
+		near_fwd = PROFILE_STRIDE * 0.8
+		far_fwd = -PROFILE_STRIDE * 0.8
+
+	var kneel := legs == LEGS_KNEEL
+	var leg_h := LEG_H - (CELEBRATE_KNEEL_DROP if kneel else 0.0)
+	var shorts_y := SHORTS_Y - (CELEBRATE_KNEEL_DROP if kneel else 0.0)
+	var leg_w := w * PROFILE_LEG_W
+	var toe := w * PROFILE_BOOT_TOE
+	var arm_w := w * PROFILE_ARM_W
+
+	# Far leg, then far arm: both behind the body.
+	_profile_leg(canvas, body, w, h, side, far_fwd - PROFILE_LEG_OFFSET, far_lift, leg_w, leg_h, toe,
+		boots.lerp(far, PROFILE_FAR_SHADE), sock.lerp(far, PROFILE_FAR_SHADE))
+	_profile_arm(canvas, body, w, h, side, -side * arm_swing * w - arm_w / 2.0, arm_w, arms if pose == POSE_CELEBRATE else "hang",
+		trim.lerp(far, PROFILE_FAR_SHADE), hand.lerp(far, PROFILE_FAR_SHADE), phase, false)
+
+	_profile_leg(canvas, body, w, h, side, near_fwd, near_lift, leg_w, leg_h, toe, boots, sock)
+	_rect(canvas, body, w, h, -w * PROFILE_SHORTS_W / 2.0, shorts_y, w * PROFILE_SHORTS_W, h * SHORTS_H, trim)
+	if kneel:
+		body.y += h * CELEBRATE_KNEEL_DROP
+
+	_draw_torso(canvas, body, w, h, shirt, trim, pattern, pose, 0.0, detail, PROFILE_TORSO_W)
+	_profile_arm(canvas, body, w, h, side, side * arm_swing * w - arm_w / 2.0, arm_w, arms if pose == POSE_CELEBRATE else "hang",
+		trim, hand, phase, true)
+	_profile_head(canvas, body, w, h, side, skin, hair, appearance, detail)
+
+
+## One leg seen from the side, boot toe forward. `fwd` is fore/aft travel as
+## a fraction of width, `lift` height off the ground as a fraction of height.
+static func _profile_leg(
+	canvas: CanvasItem, body: Vector2, w: float, h: float, side: float,
+	fwd: float, lift: float, leg_w: float, leg_h: float, toe: float, boot: Color, sock: Color
+) -> void:
+	var x := side * fwd * w - leg_w / 2.0
+	var boot_x := x - (toe if side < 0.0 else 0.0)
+	_rect(canvas, body, w, h, boot_x, BOOT_Y + lift, leg_w + toe, h * BOOT_H, boot)
+	_rect(canvas, body, w, h, x, LEG_Y + lift, leg_w, h * leg_h, sock)
+
+
+## One arm seen from the side. "hang" is the idle/run arm; a celebration's
+## gesture collapses to "up" (both arms raised, the near one in front) or
+## "wide" (near arm forward, far arm back -- the aeroplane, side on).
+static func _profile_arm(
+	canvas: CanvasItem, body: Vector2, w: float, h: float, side: float,
+	x: float, arm_w: float, gesture: String, sleeve: Color, hand: Color, phase: float, near: bool
+) -> void:
+	match gesture:
+		"wide":
+			var span := arm_w * REACH_SPAN
+			var out := side if near else -side
+			var ax := x + arm_w / 2.0 if out > 0.0 else x + arm_w / 2.0 - span
+			_rect(canvas, body, w, h, ax, CELEBRATE_WIDE_Y, span, h * REACH_H, sleeve)
+			var hand_x := ax + span * (1.0 - CELEBRATE_WIDE_HAND) if out > 0.0 else ax
+			_rect(canvas, body, w, h, hand_x, CELEBRATE_WIDE_Y, span * CELEBRATE_WIDE_HAND, h * REACH_H, hand)
+		"hang", "swing":
+			_rect(canvas, body, w, h, x, ARM_Y, arm_w, h * ARM_H, sleeve)
+			_rect(canvas, body, w, h, x, ARM_Y - HAND_H, arm_w, h * HAND_H, hand)
+		_:
+			# "up" and every other gesture: raised, swaying, the far arm a
+			# touch behind so it shows past the near one.
+			var wave := sin(phase * CELEBRATE_WAVE_SPEED) * w * CELEBRATE_WAVE_W * 0.5
+			var back := 0.0 if near else -side * arm_w * 0.5
+			_draw_raised_arm(canvas, body, w, h, x + wave + back, CELEBRATE_ARM_Y, sleeve, hand)
+
+
+## The head side on: narrower, one eye toward the front, hair as the style's
+## cap with the back of the head filled in (a mohawk becomes a ridge running
+## front to back). Strands hanging in front of the face are left out.
+static func _profile_head(
+	canvas: CanvasItem, body: Vector2, w: float, h: float, side: float,
+	skin: Color, hair: Color, appearance: Dictionary, detail: int
+) -> void:
+	var head_w := w * PROFILE_HEAD_W
+	var head_h := h * HEAD_H
+	var x := -head_w / 2.0
+	_rect(canvas, body, w, h, x, HEAD_Y, head_w, head_h, skin)
+
+	var style := PlayerAppearance.hair_style(int(appearance.get("hair_style", 1)))
+	var has_hair: bool = not style["parts"].is_empty()
+	if detail == DETAIL_LOW:
+		if has_hair:
+			_rect(canvas, body, w, h, x, HEAD_Y + HEAD_H - HEAD_H * HAIR_CAP_H, head_w, head_h * HAIR_CAP_H, hair)
+		return
+
+	if has_hair and not style.get("covers_back", true):
+		# A ridge: the style's height, run the length of the head.
+		for part in style["parts"]:
+			_rect(canvas, body, w, h, x + head_w * PROFILE_RIDGE_X, HEAD_Y + HEAD_H * float(part[1]),
+				head_w * PROFILE_RIDGE_W, head_h * float(part[3]), hair)
+	elif has_hair:
+		for part in style["parts"]:
+			var px := float(part[0])
+			var pw := float(part[2])
+			# A part entirely past the front of the head is the strand that
+			# would hang over the face: skip it. Past the back, it hangs down
+			# the back of the neck, which is right.
+			if (side > 0.0 and px >= 1.0) or (side < 0.0 and px + pw <= 0.0):
+				continue
+			_rect(canvas, body, w, h, x + head_w * px, HEAD_Y + HEAD_H * float(part[1]),
+				head_w * pw, head_h * float(part[3]), hair)
+		var back_x := x if side > 0.0 else x + head_w * (1.0 - PROFILE_HAIR_BACK_X)
+		_rect(canvas, body, w, h, back_x, HEAD_Y + HEAD_H * HAIR_BACK_Y, head_w * PROFILE_HAIR_BACK_X, head_h * HAIR_BACK_H, hair)
+
+	var eye_w := maxf(1.0, head_w * EYE_W)
+	var eye_frac := PROFILE_EYE_X if side > 0.0 else 1.0 - PROFILE_EYE_X
+	_rect(canvas, body, w, h, x + head_w * eye_frac - eye_w / 2.0, HEAD_Y + HEAD_H * EYE_Y, eye_w, eye_w, EYE_COLOR)
+
+
 static func _draw_head(
 	canvas: CanvasItem, feet: Vector2, w: float, h: float,
 	skin: Color, hair: Color, appearance: Dictionary, facing: int, lean: float, detail: int
@@ -849,6 +1031,16 @@ static func _ellipse(canvas: CanvasItem, center: Vector2, width: float, height: 
 
 ## How far, and which way, the upper body leans for a given facing: -1 fully
 ## left (W), +1 fully right (E), 0 straight toward or away from the viewer.
+## +1 for east, -1 for west, 0 for every facing that keeps the front view.
+static func _side_for(facing: int) -> float:
+	match facing:
+		FACING_E:
+			return 1.0
+		FACING_W:
+			return -1.0
+	return 0.0
+
+
 static func _lean_for(facing: int) -> float:
 	match facing:
 		FACING_E:

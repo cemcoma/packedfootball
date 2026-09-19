@@ -238,8 +238,11 @@ func team_summary(team: int) -> Dictionary:
 	return totals
 
 
-## Everyone on `team` who scored, as [{"name", "minute", "goals"}], ordered
-## by when the first goal went in.
+## Every goal `team` was credited with, as [{"name", "goals", "minutes"}]
+## grouped by scorer and ordered by when each one's first went in. An own
+## goal is listed for the side it COUNTED for -- the event's team -- under
+## the name of the player who put it in, marked (OG), on its own row rather
+## than merged with any goals they scored at the right end.
 ##
 ## Minutes come from the replay's GOAL events rather than the stat counters,
 ## since only the replay knows WHEN. The engine's clock runs at two ticks per
@@ -258,25 +261,29 @@ func scorers(team: int) -> Array:
 			continue
 		if int(event.get("type", -1)) != ReplayReader.ActionType.GOAL:
 			continue
+		if int(event.get("team", -1)) != team:
+			continue
 		var idx: int = int(event.get("player_idx", -1))
 		if idx < 0:
-			continue  # own goal / unattributed
-		var scorer_team: int = TEAM_HOME if idx < PLAYERS_PER_TEAM else TEAM_AWAY
-		if scorer_team != team:
-			continue
+			continue  # unattributed
+		# The scorer's side differing from the side that scored is how the
+		# engine marks an own goal (gameEngine._award_goal).
+		var own_goal: bool = (TEAM_HOME if idx < PLAYERS_PER_TEAM else TEAM_AWAY) != team
+		var key: String = ("og_%d" if own_goal else "%d") % idx
 
 		var shown := ReplayReader.display_tick(float(event.get("tick", 0)), halftime)
 		var minute: int = int(shown / 2.0 / 60.0) + 1
-		if by_player.has(idx):
-			by_player[idx]["goals"] += 1
-			by_player[idx]["minutes"].append(minute)
+		if by_player.has(key):
+			by_player[key]["goals"] += 1
+			by_player[key]["minutes"].append(minute)
 		else:
-			by_player[idx] = {"name": player_name(idx), "goals": 1, "minutes": [minute]}
-			order.append(idx)
+			var name := tr("%s (OG)") % player_name(idx) if own_goal else player_name(idx)
+			by_player[key] = {"name": name, "goals": 1, "minutes": [minute]}
+			order.append(key)
 
 	var out: Array = []
-	for idx in order:
-		out.append(by_player[idx])
+	for key in order:
+		out.append(by_player[key])
 	return out
 
 

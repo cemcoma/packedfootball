@@ -28,8 +28,9 @@ DEAL_DATABASE = {
         "description": "A one-time thank-you for new managers -- extra credits for a small bucks spend.",
         "cost_currency": "bucks",
         "cost_amount": 5,
-        "reward_credits": 1500,
+        "reward_credits": 5000,
         "reward_bucks": 0,
+        "max_redemptions_per_account":1
     },
     "2": {
         "name": "Midweek Credits Boost",

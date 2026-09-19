@@ -23,21 +23,6 @@ from services import storefront
 router = APIRouter(tags=["packs"])
 
 
-def _parse_time(value) -> Optional[datetime]:
-    """A pack's expires_at / available_at as an aware datetime, or None when
-    absent or malformed. Firestore hands back a datetime for a timestamp
-    field and a string for one written as ISO text; both are accepted, and
-    a naive value is taken as UTC. Malformed fails OPEN (None), so a typo
-    in an admin-set field never blocks opening."""
-    if not value:
-        return None
-    try:
-        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
-    except (ValueError, TypeError):
-        return None
-    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
-
-
 def _pack_unavailable_reason(config: dict) -> Optional[str]:
     """Why this pack can't be opened right now, or None if it can. Shared by
     /pack/open (to reject one) and /pack/list (to filter the catalog down
@@ -55,7 +40,7 @@ def _pack_unavailable_reason(config: dict) -> Optional[str]:
     if max_opens is not None and times_opened >= max_opens:
         return "This pack has sold out"
 
-    pack_expiry = _parse_time(config.get("expires_at"))
+    pack_expiry = storefront.parse_time(config.get("expires_at"))
     if pack_expiry is not None and datetime.now(timezone.utc) > pack_expiry:
         return "This pack has expired"
 
@@ -66,7 +51,7 @@ def _activation_due(config: dict) -> bool:
     """An inactive pack whose planned on-sale time has come."""
     if config.get("active", False):
         return False
-    available_at = _parse_time(config.get("available_at"))
+    available_at = storefront.parse_time(config.get("available_at"))
     return available_at is not None and datetime.now(timezone.utc) >= available_at
 
 

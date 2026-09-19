@@ -121,6 +121,62 @@ custom_minimum_size = Vector2(36, 6)
 layout_mode = 2
 color = Color(1, 0.35, 0.35, 1)
 
+[node name="GoalScorerPanel" type="PanelContainer" parent="." unique_id=931044201]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = -114.0
+offset_right = 292.0
+offset_bottom = -12.0
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="Margin" type="MarginContainer" parent="GoalScorerPanel" unique_id=931044202]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 6
+
+[node name="Row" type="HBoxContainer" parent="GoalScorerPanel/Margin" unique_id=931044203]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ScorerCardSlot" type="Control" parent="GoalScorerPanel/Margin/Row" unique_id=931044204]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(66, 90)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Text" type="VBoxContainer" parent="GoalScorerPanel/Margin/Row" unique_id=931044205]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_constants/separation = 2
+
+[node name="ScorerCaptionLabel" type="Label" parent="GoalScorerPanel/Margin/Row/Text" unique_id=931044206]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "GOAL"
+
+[node name="ScorerNameLabel" type="Label" parent="GoalScorerPanel/Margin/Row/Text" unique_id=931044207]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "Player"
+clip_text = true
+
+[node name="ScorerGoalsLabel" type="Label" parent="GoalScorerPanel/Margin/Row/Text" unique_id=931044208]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Goals this match: 1"
+
 [node name="CameraToggleButton" type="Button" parent="." unique_id=1267550313]
 unique_name_in_owner = true
 layout_mode = 1

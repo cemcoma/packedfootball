@@ -17,10 +17,16 @@ Extension point: per-player visibility. When pack_types docs grow rules
 where they are applied, and /pack/list drops both the section and its
 packs for that caller -- the client keeps knowing nothing about the rules.
 
+Also home to parse_time, the one reading of a pack's or deal's expires_at /
+available_at, so the two catalogs can never disagree on what a date means.
+
 Pure functions, no Firestore or FastAPI: callable from a script or a REPL.
 """
 
 from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Optional
 
 UNORDERED = float("inf")
 
@@ -61,3 +67,18 @@ def sections(packs_sorted: list[dict], orders: dict[str, float]) -> list[dict]:
         {"type": t, "order": None if orders.get(t, UNORDERED) == UNORDERED else orders[t]}
         for t in seen
     ]
+
+
+def parse_time(value) -> Optional[datetime]:
+    """An expires_at / available_at as an aware datetime, or None when
+    absent or malformed. Firestore hands back a datetime for a timestamp
+    field and a string for one written as ISO text; both are accepted, and
+    a naive value is taken as UTC. Malformed fails OPEN (None), so a typo
+    in an admin-set field never blocks a purchase."""
+    if not value:
+        return None
+    try:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+    except (ValueError, TypeError):
+        return None
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
