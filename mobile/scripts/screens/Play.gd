@@ -83,8 +83,6 @@ const TEST_INTERVALS := ["adaptive", "2", "3", "4", "6"]
 const TEST_OPPONENT_TIERS := ["bronze", "silver", "gold", "platinum", "diamond", "special_conf", "special_cont", "special_champ", "icon"]
 const LOCAL_MATCH_SCRIPT := "res://../packedfootball/scripts/local_match.py"
 const LOCAL_MATCH_DIR := "user://local_match"
-## Tried in order; the editor's PATH on macOS often lacks Homebrew/python.org
-## installs, so bare "python3" is the last resort rather than the first.
 const PYTHON_CANDIDATES := ["/usr/local/bin/python3", "/opt/homebrew/bin/python3", "/usr/bin/python3", "python3"]
 
 const REPLAY_GAME_SCRIPT := "res://../packedfootball/scripts/replay_game.py"

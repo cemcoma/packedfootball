@@ -6,7 +6,7 @@ inspecting the live database without having to click through the
 Firebase Console.
 
 Usage:
-    python3 backend/scripts/list_packs.py [--pack-id N]
+    python3 backend/scripts/list_packs.py [--pack-id SLUG]
 """
 
 import argparse
@@ -35,9 +35,7 @@ def main():
             return
         docs = [doc]
     else:
-        # Sort by document ID (which are strings, so "10" comes before "2")
-        # If you want numeric sorting, you'll need to fetch and sort in memory.
-        docs = packs_ref.stream()
+        docs = packs_ref.stream()  # by document id: the slugs, alphabetical
 
     count = 0
     for doc in docs:

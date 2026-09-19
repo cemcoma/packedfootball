@@ -1,4 +1,13 @@
-"""The pack catalog: what each pack IS, keyed by pack id.
+"""The pack catalog: what each pack IS, keyed by a slug.
+
+The slug is the Firestore document id (packs/{slug}) and what the client
+sends to /pack/open. It names what the pack is, not what it is called:
+display names have been renamed before (the promo packs), and a document
+id can only be "renamed" by writing a new doc, carrying the operational
+fields across and deleting the old one (how these replaced the original
+numeric ids). "order" is the shop's display order -- the
+catalog is sorted by it, then by slug -- so the console can list docs
+alphabetically without that deciding what a player sees first.
 
 The code-side source of truth for a pack's definitional fields -- name,
 type, description, price and currency, cards per pack, tier and position
@@ -18,8 +27,29 @@ keys are game_config.POSITION_CATEGORIES'.
 import datetime
 
 PACK_DATABASE = {
-    1: {
+    # The playtesters' thank-you: one day only, around the release. Sits at
+    # the top of the shop while it is on sale (order 5); the dates below are
+    # the plan, the live doc's available_at/expires_at are what actually
+    # gate it. No art of its own yet -- the client falls back to
+    # StandardPack1 for a "special" with no sprite_key.
+    "early_access": {
+        "active": False,
+        "order": 5,
+        "name": "Ship-a-ton Early Access Pack",
+        "type": "special",
+        "description": "Special rewards to the playtesters and early access users! Only available for a day!",
+        "price": 5000,
+        "cards_per_pack": 5,
+        "rates": {"silver": 0.30, "gold": 0.30, "platinum": 0.20, "diamond": 0.15, "special": 0.04, "icon": 0.01},
+        "pos_rates": {"goalkeeper": 0.1, "defender": 0.25, "midfielder": 0.25, "attacker": 0.4},
+        "price_currency": "credits",
+        "available_at": datetime.datetime(2026, 9, 30, 22, 0, tzinfo=datetime.timezone.utc),
+        "expires_at": datetime.datetime(2026, 10, 1, 22, 0, tzinfo=datetime.timezone.utc),
+        "sprite_key":"EarlyAccessPack"
+    },
+    "standard_pp": {
         "active": True,
+        "order": 10,
         "name": "Standard Player Pack",
         "type": "standard",
         "description": "A reliable pack of everyday talent. Mostly bronze and silver, with a shot at gold.",
@@ -30,8 +60,9 @@ PACK_DATABASE = {
         "price_currency":"credits",
         "sprite_key":"StandardPack1"
     },
-    2: {
+    "jumbo_standard": {
         "active": True,
+        "order": 20,
         "name": "Jumbo Player Pack",
         "type": "standard",
         "description": "Ten cards in one pull. Better odds than Standard Player Pack.",
@@ -42,8 +73,36 @@ PACK_DATABASE = {
         "price_currency":"credits",
         "sprite_key":"StandardPack1"
     },
-    3: {
+    "standard_gold": {
         "active": True,
+        "order": 35,
+        "name": "Gold Player Pack",
+        "type": "standard",
+        "description": "Standard gold pack. Mostly golds with chance to get diamonds",
+        "price": 1000,
+        "cards_per_pack": 3,
+        "rates": {"bronze": 0.00, "silver": 0.40, "gold": 0.50, "platinum": 0.09, "diamond": 0.01},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"credits",
+        "sprite_key":"StandardPack1"
+    },
+    "standard_plat": {
+        "active": True,
+        "order": 40,
+        "name": "Platinum Player Pack",
+        "type": "standard",
+        "description": "Standard platinum pack. High rated players ready for any matchup. Rare chance to get special and icons!",
+        "price": 2000,
+        "cards_per_pack": 3,
+        "rates": {"bronze": 0.0, "silver": 0.15, "gold": 0.35, "platinum": 0.40, "diamond": 0.095, "special": 0.004, "icon":0.001},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"credits",
+        "sprite_key":"StandardPack1"
+    },
+    
+    "icon_forward": {
+        "active": True,
+        "order": 30,
         "name": "Icon Forward Pack",
         "type": "special",
         "description": "One guaranteed icon-tier forward. Extremely limited -- once they're gone, they're gone.",
@@ -55,45 +114,48 @@ PACK_DATABASE = {
         "sprite_key":"StandardPack1",
         "visible":True
     },
-    4: {
+    "tournament_small": {
         "active": True,
+        "order": 40,
         "name": "Small Tournament Player Pack",
-        "type": "standard",
+        "type": "tournament",
         "description": "One tournament ready player at your service.",
         "price": 1,
         "cards_per_pack": 1,
         "rates": {"bronze": 0.0, "silver": 0.15, "gold": 0.45, "platinum": 0.35, "diamond": 0.05},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"medals",
-        "sprite_key":"StandardPack2"
+        "sprite_key":"TorunamentPack1"
     },
-     # 5 is missing due to it being done at firebase and it takes too long to put here.
-    6: {
+    "tournament_medium": {
         "active": True,
+        "order": 50,
         "name": "Medium Tournament Player Pack",
-        "type": "standard",
+        "type": "tournament",
         "description": "Medium 3 player pack. Better odds than Small Tournament Winner Player Pack.",
         "price": 3,
         "cards_per_pack": 3,
         "rates": {"bronze": 0.0, "silver": 0.12, "gold": 0.45, "platinum": 0.35, "diamond": 0.08},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"medals",
-        "sprite_key":"StandardPack2"
+        "sprite_key":"TournamentPack1"
     },
-    7: {
+    "tournament_premium": {
         "active": True,
+        "order": 60,
         "name": "Premium Tournament Player Pack",
-        "type": "standard",
+        "type": "tournament",
         "description": "Premium 3 player pack. Only for the real tournament grinders. Chance to get an icon card!",
         "price": 5,
         "cards_per_pack": 3,
         "rates": {"bronze": 0.0, "silver": 0.145, "gold": 0.35, "platinum": 0.4, "diamond": 0.10, "icon":0.05},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"medals",
-        "sprite_key":"StandardPack3"
+        "sprite_key":"TournamentPack2"
     },
-    8: {
+    "promo_champions": {
         "active": False,
+        "order": 70,
         "name": "Champions Promo Pack",
         "type": "timed",
         "description": "The champions season is here! Take your chances for a special Champions player now!",
@@ -106,8 +168,9 @@ PACK_DATABASE = {
         "available_at": datetime.datetime(2026, 10, 10, 15, 0, tzinfo=datetime.timezone.utc)
     },
 
-    9: {
+    "promo_continental": {
         "active": True,
+        "order": 80,
         "name": "Continental Promo Pack",
         "type": "timed",
         "description": "The continental cup is here! Take your chances for a special Continental player now!",
@@ -119,8 +182,9 @@ PACK_DATABASE = {
         "sprite_key":"CONTPack",
         "expires_at":datetime.datetime(2026, 9, 18, 15, 0, tzinfo=datetime.timezone.utc)
     },
-    10: {
+    "promo_conference": {
         "active": False,
+        "order": 90,
         "name": "Conference Promo Pack",
         "type": "timed",
         "description": "Conference challenge is here! Take your chances for a special Conference player now!",

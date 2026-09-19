@@ -56,7 +56,7 @@ static func _dict(fields: Dictionary, key: String, default: Dictionary) -> Dicti
 	return value if value is Dictionary else default
 
 
-var pack_id: int = 0
+var pack_id: String = ""  # the pack's slug, e.g. "jumbo" -- what /pack/open takes
 var pack_name: String = ""
 var type: String = "standard"
 var description: String = ""
@@ -80,7 +80,7 @@ var available_at: String = ""  # e.g. a not-yet-active pack's planned on-sale da
 
 static func from_fields(fields: Dictionary) -> PackData:
 	var pack := PackData.new()
-	pack.pack_id = _int(fields, "pack_id")
+	pack.pack_id = _str(fields, "pack_id")
 	pack.pack_name = _str(fields, "name")
 	pack.type = _str(fields, "type", "standard")
 	pack.description = _str(fields, "description")

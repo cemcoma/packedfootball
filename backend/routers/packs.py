@@ -131,7 +131,8 @@ async def list_packs(uid: str = Depends(verify_id_token)):
         times_opened = doc.get("times_opened", 0)
         packs.append(
             {
-                "pack_id": int(doc["id"]),
+                "pack_id": doc["id"],
+                "order": doc.get("order", 0),
                 "name": doc.get("name"),
                 "type": doc.get("type", "standard"),
                 "description": doc.get("description", ""),
@@ -150,12 +151,14 @@ async def list_packs(uid: str = Depends(verify_id_token)):
                 "sprite_key":doc.get("sprite_key"),
             }
         )
-    packs.sort(key=lambda p: p["pack_id"])
+    # Shop order is the catalog's own `order` field (pack_database.py), not
+    # the document id -- ids are slugs, and alphabetical is not a shop.
+    packs.sort(key=lambda p: (p["order"], p["pack_id"]))
     return {"packs": packs}
 
 
 class OpenPackRequest(BaseModel):
-    pack_id: int
+    pack_id: str  # the pack's slug, packs/{pack_id} -- see pack_database.py
 
 
 @router.post("/pack/open")

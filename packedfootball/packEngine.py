@@ -44,8 +44,8 @@ PLAYER_CLASS_MAP = {
     # LEGACY, not rollable (no POSITION_CATEGORIES entry lists it): the name
     # wing-backs carried before the LWB/RWB split. games/{id} team snapshots
     # from before it still say "WB", and reading one back should still build
-    # a Wingback rather than the default class. Live cards were renamed by
-    # backend/scripts/rename_positions.py.
+    # a Wingback rather than the default class. Live cards were all renamed
+    # when the split shipped.
     "WB": Wingback,
     "CDM": DefensiveMid,
     "CM": Midfielder,
@@ -251,13 +251,16 @@ class PackManager:
             packs.append(pack_row)
         return packs
 
-    def get_price(self, pack_id: int) -> int:
+    def get_price(self, pack_id: str) -> int:
         return self.db.get(pack_id, {}).get("price", 0)
 
-    def open_pack(self, pack_id: int) -> list: #TODO: add different results in packs, like contract, equipment, rn just player
+    def open_pack(self, pack_id: str) -> list: #TODO: add different results in packs, like contract, equipment, rn just player
         config = self.db.get(pack_id)
         if not config:
-            return []
+            # Loud, not an empty list: every caller that builds a pool with
+            # `while len(pool) < n: pool += open_pack(...)` would otherwise
+            # spin forever on a typo'd slug.
+            raise KeyError(f"unknown pack {pack_id!r}; have {list(self.db)}")
 
         new_cards = []
         tiers = list(config["rates"].keys())

@@ -145,8 +145,7 @@ var attributes: Dictionary = {}
 var statistics: Dictionary = {"goals": 0, "assists": 0, "matches_played": 0}
 ## Layered placeholder-portrait indices (skin_tone/hair_style/hair_color/
 ## face/shoe_color -> 0..4) -- see PlayerAppearance.gd. {} means "not set"
-## (a card whose players/{id} doc predates this field and hasn't been
-## backfilled by backend/scripts/sync_player_appearance.py yet);
+## (a malformed doc -- every live card carries the field);
 ## PlayerModelView.gd falls back to a mock look derived from player_id in
 ## that case rather than rendering nothing.
 var appearance: Dictionary = {}

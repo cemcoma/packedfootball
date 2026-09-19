@@ -13,10 +13,9 @@ boundary PACK_DATABASE already has with main.py's pack endpoints. This
 keeps "what's live right now" strictly a Firestore question, answerable
 without redeploying, exactly like packs.
 
-Unlike PACK_DATABASE's int keys (packs are a small fixed catalog), deal ids
-are descriptive string slugs -- deals are ad-hoc promotional entries with no
-single fixed catalog to key against, and a slug is easier for an admin to
-recognize in the Firestore console than an arbitrary number.
+Deal ids are descriptive string slugs, the same arrangement PACK_DATABASE
+moved to: easier for an admin to recognize in the Firestore console than an
+arbitrary number, and the console lists them in a meaningful order.
 
 Reward scope for now is currency only (reward_credits/reward_bucks) --
 granting a free pack/card as part of a deal is a reasonable future

@@ -11,9 +11,9 @@ extends RefCounted
 ## lives here (see DealView.gd's action_pressed signal / CurrencyPanel.gd's
 ## handler, which calls POST /deals/redeem).
 ##
-## "deal_id" is a string slug (e.g. "welcome_bundle"), not an int like
-## PackData.pack_id -- deals are ad-hoc promotional entries with no single
-## fixed catalog to key against, unlike packs' small fixed PACK_DATABASE.
+## "deal_id" is a string slug (e.g. "welcome_bundle"), the same arrangement
+## as PackData.pack_id -- an id an admin can recognise in the Firestore
+## console, and one the console lists in a meaningful order.
 
 static func _str(fields: Dictionary, key: String, default: String = "") -> String:
 	var value = fields.get(key)

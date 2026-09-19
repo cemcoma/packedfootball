@@ -302,9 +302,9 @@ static func celebration(index: int) -> Dictionary:
 	return CELEBRATIONS[index]
 
 
-## A deterministic look derived from a player_id alone, for a card whose doc
-## predates the appearance field. Real cards carry their own rolled one --
-## run backend/scripts/sync_player_appearance.py to backfill the old ones.
+## A deterministic look derived from a player_id alone, the safety net for
+## a doc with no appearance field. Real cards carry their own rolled one,
+## and every live card has been backfilled, so this is a last resort.
 static func mock_from_id(player_id: String) -> Dictionary:
 	var appearance := {}
 	for slot in SLOTS:

@@ -153,8 +153,8 @@ fails with a link to create the missing index.
 `statistics.avg_rating` as a plain field once a card has
 `RATED_MATCHES_FOR_AVERAGE` (5) rated matches, because Firestore can't
 order on `rating_sum / rating_count`. Cards under the threshold have no
-field and are simply absent from that board. `scripts/backfill_avg_rating.py`
-fills it in for cards that crossed the line before the field existed.
+field and are simply absent from that board. (Cards that crossed the line
+before the field existed were backfilled once; nothing predates it now.)
 
 ### Tiers
 
@@ -167,8 +167,11 @@ the family. The variant only picks the card art and, in
 `game_config.TIER_RANGES`, the overall range. Adding a variant is a
 `TIER_RANGES` entry plus a sprite; a
 new family also needs rows in `RELEASE_CREDITS_BY_TIER` and the client's
-`PlayerCard.TIER_COLORS` / `RELEASE_CREDITS`. Renaming a key means
-`scripts/rename_tiers.py` for the cards already out there.
+`PlayerCard.TIER_COLORS` / `RELEASE_CREDITS`. Renaming a key means a
+one-off sweep over `players/{id}` for the cards already out there (a
+`where("tier", "==", old)` query and a batched update -- the ucl/uel ->
+champ/cont rename was done that way), plus `sync_pack_definitions.py` for
+the pack odds that name it.
 
 ### Daily tournaments
 
@@ -334,9 +337,13 @@ every run. `tests/test_determinism.py` pins this.
 
 ### Pack availability
 
-`packs/{id}` carries definitional fields (name, type, description, price,
-`price_currency`, cards_per_pack, rates, pos_rates) plus operational fields
-that live **only** in Firestore and are never written by a deploy:
+`packs/{slug}` -- the id is the catalog key in `pack_database.py`
+(`standard`, `jumbo`, `promo_champions`, ...), what the client sends to
+`/pack/open`; the shop's display order is the doc's `order` field, not the
+id. Each doc carries definitional fields (order, name, type, description,
+price, `price_currency`, cards_per_pack, rates, pos_rates, sprite_key) plus
+operational fields that live **only** in Firestore and are never written by
+a deploy:
 
 - `active` -- must be `true` or the pack is unavailable. **Absent counts as
   false.**
@@ -439,15 +446,12 @@ python3 backend/scripts/<script>.py [--dry-run]
 
 | Script | What it does |
 | --- | --- |
-| `sync_pack_definitions.py` | Pushes `pack_database.PACK_DATABASE`'s definitional fields onto existing `packs/{id}` docs. Never touches operational fields. `--pack-id N` for one pack. Skips ids with no existing doc. |
+| `seed_packs.py` | Creates the `packs/{slug}` doc for every catalog pack that has none: definitional fields plus starting state (`active` from the catalog entry, `times_opened` 0, any `visible`/`available_at`/`expires_at`/`max_opens` the entry spells out). Never touches an existing doc. Also lists live packs the catalog doesn't know. |
+| `sync_pack_definitions.py` | Pushes `pack_database.PACK_DATABASE`'s definitional fields onto existing `packs/{slug}` docs. Never touches operational fields. `--pack-id SLUG` for one pack. Skips slugs with no existing doc (`seed_packs.py` creates those). |
 | `sync_deal_definitions.py` | Same for `packedfootball/deal_database.py`'s `DEAL_DATABASE` -> `deals/{id}`. Unlike the pack version it *creates* missing docs, seeded `active: false`; `--activate-new` seeds them `active: true` instead. Never changes an existing doc's `active`. |
-| `sync_player_appearance.py` | Backfills a placeholder `appearance` onto `players/{id}` docs that predate the field. |
 | `seed_bots.py` | Creates `bots/{id}` opponents per league tier (`--per-tier`, default 30) and their `bot_pools/{tier}` id lists. Tops up, never rewrites an existing bot. |
-| `backfill_avg_rating.py` | Writes `statistics.avg_rating` onto cards with `RATED_MATCHES_FOR_AVERAGE`+ rated matches that predate the field. Re-runnable. |
 | `sync_display_names.py` | Backfills `display_names/{key}` reservations for accounts created before names were unique. Oldest account keeps a duplicated name; conflicts are printed, never renamed. |
-| `rename_tiers.py` | Rewrites `tier` on `players/{id}` after a `TIER_RANGES` key is renamed (its `RENAMES` map). Run `sync_pack_definitions.py` too, for the pack rates. |
-| `rename_positions.py` | Rewrites `position` on `players/{id}` and on the bots' embedded XIs after a position is split in `game_config.py` (its `RENAMES` map; today `WB` -> `LWB`/`RWB`). A card in a saved XI takes its slot's flank, a benched one is split evenly. Run it right after deploying such a rename: until then a 3-5-2 side built on the old name is refused by `validate_formation_positions`. |
-| `list_packs.py` | Read-only dump of live `packs/{id}` docs. `--pack-id N` for one. |
+| `list_packs.py` | Read-only dump of live `packs/{slug}` docs. `--pack-id SLUG` for one. |
 | `list_deals.py` | Read-only dump of live `deals/{id}` docs. |
 | `list_match_reports.py` | Read-only. Open bug reports newest first, with seed and engine version; `--dump-dir` writes each report's `games/{id}` doc as JSON. `--all` includes reports whose `status` you've changed by hand. To watch one: paste its game id into Play.tscn's TESTING panel (editor only, "Check a reported match"), which runs `packedfootball/scripts/replay_game.py` -- re-simulates the match on your Mac from the game doc and plays it back, showing the report text and flagging an engine-version mismatch. |
 | `list_accounts.py` | Read-only. Lists every `users/{uid}` and whether its roster is Quick-Match complete (`roster_player_ids` length == 11). |

@@ -13,9 +13,9 @@ extends Control
 ## Appearance is real data: packEngine.PackManager rolls one per card at
 ## creation time (pack open / starter roster), it's persisted on
 ## players/{id}, and PlayerCard.appearance reads it back. The
-## PlayerAppearance.mock_from_id() fallback only still matters for a card
-## whose doc predates that -- run backend/scripts/sync_player_appearance.py
-## to backfill those instead of relying on it.
+## PlayerAppearance.mock_from_id() fallback is only a safety net for a doc
+## with the field missing -- every live card has been backfilled, so it
+## should never be what a player actually sees.
 
 var _appearance: Dictionary = {}
 # Idle by default -- a portrait. CustomizePlayer switches this to
