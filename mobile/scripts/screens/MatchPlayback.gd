@@ -130,6 +130,7 @@ const EVENT_ACTIONS := {
 	ReplayReader.ActionType.TACKLE: "tackle",
 	ReplayReader.ActionType.ANKLEBREAKER: "tackle",
 	ReplayReader.ActionType.SAVE: "dive",
+	ReplayReader.ActionType.HEADER: "header",
 }
 
 # Ball trails: after a kick the ball drags a ribbon of colour. How long it
@@ -142,6 +143,7 @@ const TRAIL_ACTIONS := {
 	ReplayReader.ActionType.CLEARANCE: {"color": Color(0.95, 0.75, 0.45), "seconds": 1.0, "width": 0.7},
 	ReplayReader.ActionType.PASS: {"color": Color(1.0, 1.0, 1.0), "seconds": 0.6, "width": 0.45},
 	ReplayReader.ActionType.CROSS: {"color": Color(0.55, 0.75, 1.0), "seconds": 0.9, "width": 0.6},
+	ReplayReader.ActionType.HEADER: {"color": Color(1.0, 0.85, 0.45), "seconds": 0.8, "width": 0.6},
 }
 const TRAIL_MIN_SPEED := 6.0          # pitch units/s
 const TRAIL_MAX_SPEED := 30.0
@@ -187,7 +189,7 @@ const STOPPAGE_HOLD_SECONDS := 1.0
 # The ball is carried on from that frame -- out over the line, as it really
 # went -- and keeps rolling until it is this far off the pitch.
 const STOPPAGE_BALL_RUNOUT_UNITS := 1.5
-const BALL_DESCENT_UNITS_PER_SECOND := 5.0  # gameEngine.BALL_GRAVITY: a linear drop, not an arc
+const BALL_GRAVITY_UNITS_PER_SECOND2 := 9.8  # gameEngine.BALL_GRAVITY: the ball's vertical arc
 const STOPPAGE_EVENTS := {
 	ReplayReader.ActionType.THROW_IN: "THROW-IN",
 	ReplayReader.ActionType.CORNER: "CORNER",
@@ -245,6 +247,7 @@ var _out_ball_latched: bool = false
 var _out_ball_pos: Vector2 = Vector2.ZERO
 var _out_ball_vel: Vector2 = Vector2.ZERO
 var _out_ball_height: float = 0.0
+var _out_ball_vz: float = 0.0
 var _out_ball_until_tick: float = -1.0
 const HALFTIME_PAUSE_SECONDS := 3.0  # matches gameEngine.py's halftime_pause_timer=180 ticks @ 60/sec
 
@@ -807,16 +810,28 @@ func _advance_goal_ball(delta: float) -> void:
 		_goal_ball_in_net = true
 
 
+## The ball's vertical speed at the last sample before `tick`, read off the
+## height change from the sample before that (the replay carries height only).
+func _ball_vz_before(samples: Array, tick: float) -> float:
+	for i in range(1, samples.size()):
+		if float(samples[i]["tick"]) > tick:
+			var a: Dictionary = samples[i - 1]
+			var b: Dictionary = samples[maxi(0, i - 2)]
+			var dt: float = float(a["tick"] - b["tick"]) / TICKS_PER_SECOND
+			return (float(a["ball"]["height"]) - float(b["ball"]["height"])) / dt if dt > 0.0 else 0.0
+	return 0.0
+
+
 ## Whether the stoppage ball stands in for the recorded one this frame.
 func _showing_out_ball() -> bool:
 	return _out_ball_latched and playback_tick < _out_ball_until_tick
 
 
 ## Flies the ball on out of play for one frame of REAL time, the same step
-## the engine would have taken (velocity, friction, the linear descent) had
-## it not frozen the ball at the line. Latched from the held frame's sample
-## on the first call, like the goal ball. Runs on until it is well off the
-## pitch or rolls to a stop; no netting to meet out here.
+## the engine would have taken (velocity, friction, the arc) had it not
+## frozen the ball at the line. Latched from the held frame's sample on the
+## first call, like the goal ball. Runs on until it is well off the pitch
+## or rolls to a stop; no netting to meet out here.
 func _advance_out_ball(delta: float) -> void:
 	if not _out_ball_latched:
 		var before: Dictionary = _find_bracket(replay["samples"], playback_tick)[0]
@@ -824,12 +839,15 @@ func _advance_out_ball(delta: float) -> void:
 		_out_ball_pos = Vector2(b["x"], b["y"])
 		_out_ball_vel = Vector2(b["vx"], b["vy"])
 		_out_ball_height = maxf(0.0, float(b["height"]))
+		_out_ball_vz = _ball_vz_before(replay["samples"], playback_tick)
 		_out_ball_latched = true
+	_out_ball_vz -= BALL_GRAVITY_UNITS_PER_SECOND2 * delta
+	_out_ball_height = maxf(0.0, _out_ball_height + _out_ball_vz * delta)
+	if _out_ball_height <= 0.0:
+		_out_ball_vz = 0.0
 	if _out_ball_vel.length() < 0.1:
-		_out_ball_height = maxf(0.0, _out_ball_height - BALL_DESCENT_UNITS_PER_SECOND * delta)
 		return
 	_out_ball_pos += _out_ball_vel * delta
-	_out_ball_height = maxf(0.0, _out_ball_height - BALL_DESCENT_UNITS_PER_SECOND * delta)
 	_out_ball_vel *= pow(BALL_FRICTION_PER_SECOND, delta)
 	var outside := maxf(
 		maxf(-_out_ball_pos.x, _out_ball_pos.x - PITCH_WIDTH),

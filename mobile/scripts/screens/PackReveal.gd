@@ -38,6 +38,7 @@ const ATTR_ROWS := [
 	["Stamina", "stamina"], ["Speed", "speed"], ["Agility", "agility"], ["Passing", "passing"],
 	["Ball Ctrl", "ballcontrol"], ["Defending", "defending"], ["Tackling", "tackling"], ["Dribbling", "dribbiling"],
 	["Shooting", "shooting"], ["Power", "power"], ["Accuracy", "accuracy"], ["Vision", "vision"],
+	["Heading", "heading"],
 ]
 
 const CARD_SCALE := Vector2(1.0, 1.0)

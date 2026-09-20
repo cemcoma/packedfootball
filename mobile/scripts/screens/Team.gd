@@ -28,6 +28,7 @@ const ATTR_ROWS := [
 	["Stamina", "stamina"], ["Speed", "speed"], ["Agility", "agility"], ["Passing", "passing"],
 	["Ball Ctrl", "ballcontrol"], ["Defending", "defending"], ["Tackling", "tackling"], ["Dribbling", "dribbiling"],
 	["Shooting", "shooting"], ["Power", "power"], ["Accuracy", "accuracy"], ["Vision", "vision"],
+	["Heading", "heading"],
 ]
 
 ## Page 2 of the stats panel: career totals rather than attributes. Keys are

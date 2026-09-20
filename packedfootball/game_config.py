@@ -39,6 +39,13 @@ PITCH_HEIGHT: Final[float] = 100.0
 GOAL_WIDTH: Final = 7.5
 GOAL_HEIGHT: Final = 2.5
 GOAL_POST_RADIUS: Final = 0.25
+# Units/s^2 on the ball's vertical velocity: a kicked ball rises and falls in an arc.
+BALL_GRAVITY: Final = 9.8
+HEAD_CONTACT_HEIGHT: Final = 1.9
+# Speed kept per second: on the ground, and in the air for a lofted ball
+# (cross/clearance -- gameEngine.LOFTED_EVENTS).
+BALL_GROUND_FRICTION: Final = 0.5
+BALL_AIR_FRICTION: Final = 0.85
 
 
 # =============================================================================

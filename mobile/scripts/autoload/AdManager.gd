@@ -25,9 +25,9 @@ func _get_unit_id() -> String:
 
 # Standard Reward Track Steps (credits, bucks)
 const REWARD_STEPS := [
-	{"credits": 50, "bucks": 0},
-	{"credits": 100, "bucks": 0},
-	{"credits": 150, "bucks": 1},
+	{"credits": 200, "bucks": 0},
+	{"credits": 300, "bucks": 0},
+	{"credits": 500, "bucks": 1},
 ]
 
 # Ad tracking state

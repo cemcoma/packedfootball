@@ -6,14 +6,25 @@ class MidfielderActionProfile(ActionProfile):
     role_name = "midfielder"
     allowed_actions = {
         "stop", "shoot", "pass", "clear", "cross", "dribble",
-        "forward_run", "support", "hold_attack", "hold_defense",
+        "forward_run", "attack_box", "support", "hold_attack", "hold_defense",
         "press", "contain", "recover", "recover_slow", "tackle", "capture",
     }
     action_biases = {
         "pass": 1.5, "shoot": 0.8, "cross": 1.1, "dribble": 1.1,
-        "forward_run": 1.2, "support": 1.4, "hold_attack": 1.0,
+        "forward_run": 1.2, "attack_box": 0.6, "support": 1.4, "hold_attack": 1.0,
         "hold_defense": 1.0, "press": 1.1, "contain": 1.0,
         "recover": 1.0, "tackle": 0.9, "capture": 0.8,
+    }
+
+
+class WideMidActionProfile(MidfielderActionProfile):
+    """LM/RM: the 4-4-2's wingers. Runs the line and crosses (see
+    player._decide_wingplay) instead of the central through_ball."""
+    role_name = "wide_mid"
+    allowed_actions = MidfielderActionProfile.allowed_actions | {"wing_run", "wide_run"}
+    action_biases = {
+        **MidfielderActionProfile.action_biases,
+        "cross": 1.5, "wing_run": 1.3, "wide_run": 1.3, "dribble": 1.2,
     }
 
 
@@ -40,11 +51,11 @@ class AttackingMidActionProfile(ActionProfile):
         "stop", "shoot", "pass", "clear", "cross", "dribble",
         "forward_run", "support", "hold_attack", "hold_defense",
         "press", "contain", "recover", "recover_slow", "tackle", "capture",
-        "through_ball",
+        "through_ball", "attack_box",
     }
     action_biases = {
         "pass": 1.3, "shoot": 1.5, "cross": 1.0, "dribble": 1.3,
-        "forward_run": 1.4, "support": 1.2, "hold_attack": 0.6,
+        "forward_run": 1.4, "attack_box": 1.2, "support": 1.2, "hold_attack": 0.6,
         "hold_defense": 0.5, "press": 0.7, "contain": 0.7,
         "recover": 0.6, "tackle": 0.5, "capture": 0.9,
         "through_ball": 1.6,
@@ -55,7 +66,7 @@ class Midfielder(player):
     primary_stats = ("passing", "ballcontrol", "vision")
 
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
-        self.action_profile = MidfielderActionProfile()
+        self.action_profile = WideMidActionProfile() if position in ("LM", "RM") else MidfielderActionProfile()
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
 
     def _choose_through_ball_target(self, state: dict):
@@ -201,27 +212,9 @@ class Midfielder(player):
             return {"type": "capture", "stat": self.attributes.ballcontrol}
 
         elif decision == "chase":
-            ball_pos = state["ball_pos"]
-            ball_vel = state.get("ball_velocity", np.zeros(2, dtype=float))
-            ball_speed = _norm2(ball_vel)
-            dist_to_ball = _norm2(ball_pos - state["my_pos"])
-            
-            if ball_speed < 2.0:
-                target = ball_pos
-            else:
-                # Scale prediction by how long it takes the player to arrive
-                my_speed = max(1.0, (self.attributes.speed / 100.0) * 10.0) 
-                time_to_reach = dist_to_ball / my_speed
-                predict_time = min(time_to_reach * 0.7, 1.5)
-                
-                decay_constant = 0.6931 
-                lead_dist = (ball_speed / decay_constant) * (1.0 - (0.5 ** predict_time))
-                unit_vel = ball_vel / ball_speed
-                target = ball_pos + (unit_vel * lead_dist)
-                
-            return {"type": "move", "target": target, "speed_mod": (self.attributes.speed * 1.0) / 100.0}
-            
-        return None
+            return {"type": "move", "target": self._chase_target(state), "speed_mod": (self.attributes.speed * 1.0) / 100.0}
+
+        return self._build_wing_action(decision, state)
 
     def _decide_on_ball_attack(self, state: dict) -> str:
         if state.get("must_pass_next", False):
@@ -230,7 +223,11 @@ class Midfielder(player):
                 return "cross"
             return "pass"
 
-        actions = ["pass", "shoot", "dribble", "stop", "through_ball"]
+        latched = self._decide_wingplay(state)
+        if latched is not None:
+            return latched
+
+        actions = ["pass", "shoot", "dribble", "stop", "through_ball", "wing_run", "cross"]
         progressive_pass = self._best_progressive_pass_target(state) is not None
         pressure = state.get("pressure_count", 0)
 
@@ -240,6 +237,12 @@ class Midfielder(player):
         t_stop = 10.0
         through_ball_target = self._choose_through_ball_target(state)
         t_through = (self.attributes.vision + self.attributes.passing) * 0.5 * self.get_action_bias("through_ball", 0.0) if through_ball_target is not None else 0.0
+        # Wide mids only (WideMidActionProfile): run the line, cross from the zone.
+        winger = self.get_action_bias("wing_run", 0.0) > 0.0
+        is_wide = self._is_wide(state)
+        in_zone = self._in_crossing_zone(state)
+        t_wing = (self.attributes.speed + self.attributes.dribbiling) * 0.5 * self.get_action_bias("wing_run", 0.0) if (winger and is_wide and not in_zone and not self._beat_marker(state)) else 0.0
+        t_cross = 40.0 * self.get_action_bias("cross", 0.0) if (winger and in_zone) else 0.0
 
         if not progressive_pass:
             t_pass *= 0.08
@@ -279,20 +282,33 @@ class Midfielder(player):
             t_pass += 40.0
             t_dribble *= 0.55
 
+        # Wide-specific alternatives to a straight dribble -- carved out of
+        # t_dribble after its own bonuses.
+        if t_wing > 0.0 or t_cross > 0.0:
+            t_dribble *= 0.3
+        if t_wing > 0.0 and pressure == 0:
+            t_wing += 60.0
+
         t_pass = max(0.0, t_pass)
         t_shoot = max(0.0, t_shoot)
         t_dribble = max(1.0, t_dribble)
         t_stop = max(0.0, t_stop)
         t_through = max(0.0, t_through)
+        t_wing = max(0.0, t_wing)
+        t_cross = max(0.0, t_cross)
 
-        total = t_pass + t_shoot + t_dribble + t_stop + t_through
+        total = t_pass + t_shoot + t_dribble + t_stop + t_through + t_wing + t_cross
         if total <= 0:
             return "dribble"
-        probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total, t_through / total]
+        probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total, t_through / total, t_wing / total, t_cross / total]
         return state["rng"].choice(actions, p=probs)
 
     def _decide_on_ball_defense(self, state: dict) -> str:
-        actions = ["pass", "dribble", "stop", "clear"]
+        latched = self._decide_wingplay(state)
+        if latched is not None:
+            return latched
+
+        actions = ["pass", "dribble", "stop", "clear", "wing_run"]
         progressive_pass = self._best_progressive_pass_target(state) is not None
         pressure = state.get("pressure_count", 0)
 
@@ -300,6 +316,7 @@ class Midfielder(player):
         t_dribble = self.attributes.drible_tendency
         t_stop = 15.0
         t_clear = self.attributes.clear_tendency
+        t_wing = (self.attributes.speed + self.attributes.dribbiling) * 0.5 * self.get_action_bias("wing_run", 0.0) if self._is_wide(state) else 0.0
 
         if not progressive_pass:
             t_pass *= 0.1
@@ -312,12 +329,14 @@ class Midfielder(player):
         if dist_to_own_goal < 25.0:
             t_clear *= 2.5
             t_dribble *= 0.3
+            t_wing *= 0.3
 
         if pressure > 1:
             t_clear += (pressure * 40)
             t_pass += (pressure * 12)
             if not self._goal_lane_is_open(state, lane_width=3.0, lookahead=12.0):
                 t_dribble *= 0.1
+                t_wing *= 0.3
                 t_stop = 0
         elif pressure == 0:
             t_clear *= 0.1
@@ -325,15 +344,21 @@ class Midfielder(player):
             t_pass -= 18.0
             t_stop += 15
 
+        if t_wing > 0.0:
+            t_dribble *= 0.3
+            if pressure == 0:
+                t_wing += 60.0
+
         t_pass = max(0.0, t_pass)
         t_dribble = max(1.0, t_dribble)
         t_clear = max(0.0, t_clear)
         t_stop = max(0.0, t_stop)
+        t_wing = max(0.0, t_wing)
 
-        total = t_pass + t_dribble + t_clear + t_stop
+        total = t_pass + t_dribble + t_clear + t_stop + t_wing
         if total <= 0:
             return "dribble"
-        probs = [t_pass / total, t_dribble / total, t_stop / total, t_clear / total]
+        probs = [t_pass / total, t_dribble / total, t_stop / total, t_clear / total, t_wing / total]
         return state["rng"].choice(actions, p=probs)
 
     def _decide_off_ball_attack(self, state: dict) -> str:
@@ -345,14 +370,20 @@ class Midfielder(player):
             closer_teammates = 0
             if teammates.size > 0:
                 closer_teammates = int(np.sum(np.linalg.norm(teammates - landing_target, axis=1) < my_dist - 0.1))
-                
-            if closer_teammates == 0:
+
+            if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
         
-        actions = ["forward_run", "support", "hold_attack"]
+        actions = ["forward_run", "support", "hold_attack", "wide_run", "attack_box"]
         t_forward = self.attributes.shoot_tendency + (self.attributes.speed * 0.5)
         t_support = self.attributes.pass_tendency + 20.0
         t_hold = self.attributes.defending + 30.0
+        t_wide = (self.attributes.speed + 20.0) * self.get_action_bias("wide_run", 0.0)
+        # A cross is coming: get in the box rather than toward the crosser.
+        t_box = 150.0 * self.get_action_bias("attack_box", 0.0) if self._cross_incoming(state) else 0.0
+        if t_box > 0.0:
+            t_support *= 0.3
+            t_hold *= 0.3
 
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
         ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
@@ -362,6 +393,7 @@ class Midfielder(player):
         if dist_to_ball > 12.0:
             t_support *= 0.4
             t_hold *= 2.5
+            t_wide *= 0.5
         if ball_pressure_count >= 2:
             t_forward *= 0.2
             t_support *= 0.15
@@ -379,9 +411,11 @@ class Midfielder(player):
         t_forward = max(0.0, t_forward)
         t_support = max(0.0, t_support)
         t_hold = max(1.0, t_hold)
+        t_wide = max(0.0, t_wide)
+        t_box = max(0.0, t_box)
 
-        total = t_forward + t_support + t_hold
-        probs = [t_forward / total, t_support / total, t_hold / total]
+        total = t_forward + t_support + t_hold + t_wide + t_box
+        probs = [t_forward / total, t_support / total, t_hold / total, t_wide / total, t_box / total]
         return state["rng"].choice(actions, p=probs)
 
     def _decide_off_ball_defense(self, state: dict) -> str:
@@ -393,8 +427,8 @@ class Midfielder(player):
             closer_teammates = 0
             if teammates.size > 0:
                 closer_teammates = int(np.sum(np.linalg.norm(teammates - landing_target, axis=1) < my_dist - 0.1))
-                
-            if closer_teammates == 0:
+
+            if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
             
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])

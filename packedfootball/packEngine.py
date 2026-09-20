@@ -6,9 +6,6 @@ from player.classes.goalkeeper import Goalkeeper
 from player.classes.defender import CenterBack, Fullback, Wingback
 from player.classes.midfielder import Midfielder, DefensiveMid, AttackingMid
 from player.classes.forward import Forward, Winger
-# Re-exported: everything that used to read these from here still can. The
-# tables themselves are in game_config.py (rules) and pack_database.py (the
-# catalog).
 from game_config import POSITION_CATEGORIES, TIER_RANGES, tier_family  # noqa: F401
 from pack_database import PACK_DATABASE  # noqa: F401
 
@@ -41,12 +38,8 @@ PLAYER_CLASS_MAP = {
     "RB": Fullback,
     "LWB": Wingback,
     "RWB": Wingback,
-    # LEGACY, not rollable (no POSITION_CATEGORIES entry lists it): the name
-    # wing-backs carried before the LWB/RWB split. games/{id} team snapshots
-    # from before it still say "WB", and reading one back should still build
-    # a Wingback rather than the default class. Live cards were all renamed
-    # when the split shipped.
-    "WB": Wingback,
+    "LWB": Wingback,
+    "RWB": Wingback,
     "CDM": DefensiveMid,
     "CM": Midfielder,
     "CAM": AttackingMid,
@@ -114,13 +107,13 @@ POSITION_STAT_TIERS = {
         "passing": "primary", "agility": "primary", "composure": "primary", "ballcontrol": "primary",
         "defending": "nerfed", "tackling": "nerfed", "shooting": "nerfed", "dribbiling": "nerfed",
         "speed": "tertiary", "power": "secondary", "accuracy": "secondary", "vision": "secondary",
-        "stamina": "nerfed",
-        "clear_tendency": "primary", "pass_tendency": "secondary", "aggression": "tertiary",
+        "stamina": "nerfed", "heading": "nerfed",
+        "clear_tendency": "primary", "pass_tendency": "secondary", "aggression": "nerfed",
         "shoot_tendency": "nerfed", "drible_tendency": "nerfed",
     },
     "CB": {
-        "defending": "primary", "tackling": "primary",
-        "shooting": "nerfed", "dribbiling": "nerfed", "speed": "nerfed",
+        "defending": "primary", "tackling": "primary", "heading": "primary",
+        "shooting": "nerfed", "dribbiling": "nerfed", "speed": "secondary",
         "passing": "tertiary", "ballcontrol": "tertiary", "agility": "tertiary", "accuracy": "secondary", "vision": "tertiary",
         "power": "secondary", "composure": "secondary",
         "stamina": "tertiary",
@@ -191,7 +184,7 @@ POSITION_STAT_TIERS = {
         "drible_tendency": "primary", "shoot_tendency": "secondary", "pass_tendency": "tertiary",
     },
     "ST": {
-        "shooting": "primary", "power": "primary", "accuracy": "secondary",
+        "shooting": "primary", "power": "primary", "heading": "primary", "accuracy": "secondary",
         "defending": "nerfed", "tackling": "nerfed", "pass_tendency": "nerfed", "clear_tendency": "nerfed",
         "dribbiling": "secondary", "ballcontrol": "secondary", "speed": "secondary", "agility": "secondary", "composure": "secondary",
         "passing": "tertiary", "vision": "tertiary",

@@ -336,6 +336,8 @@ msgid "Accuracy"
 msgstr "İsabet"
 msgid "Vision"
 msgstr "Görüş"
+msgid "Heading"
+msgstr "Kafa"
 
 # -------- Tendencies --------------------------------------------------
 msgid "Tendencies"

@@ -355,13 +355,13 @@ MATCH_REPORT_MAX_CHARS = 1000
 # -- ads ----------------------------------------------------------------------
 
 # The progressive reward path for standard ads. 
-# Step 0 (1st ad): 50 credits
-# Step 1 (2nd ad): 100 credits
-# Step 2 (3rd ad): 150 credits + 1 buck
+# Step 0 (1st ad): 200 credits
+# Step 1 (2nd ad): 300 credits
+# Step 2 (3rd ad): 500 credits + 1 buck
 AD_REWARD_PATH = [
-    {"credits": 50, "bucks": 0},
-    {"credits": 100, "bucks": 0},
-    {"credits": 150, "bucks": 1},
+    {"credits": 200, "bucks": 0},
+    {"credits": 300, "bucks": 0},
+    {"credits": 500, "bucks": 1},
 ]
 
 # The separate track for energy ads

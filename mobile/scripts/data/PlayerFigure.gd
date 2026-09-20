@@ -285,6 +285,7 @@ const ACTIONS := {
 	"throw":  {"kind": "throw", "lead": 0.20, "strike": 0.50, "recover": 0.20},
 	"tackle": {"kind": "tackle", "lead": 0.10, "hold": 0.15, "recover": 0.25, "leg": 0.14, "reach": 1.8, "drop": 0.20, "arm": 0.08},
 	"dive":   {"kind": "dive", "lead": 0.12, "hold": 0.30, "recover": 0.35, "angle": 75.0, "lift": 0.10, "drop": 0.06},
+	"header": {"kind": "jump", "lead": 0.15, "hold": 0.12, "recover": 0.25, "lift": 0.22},
 }
 
 # ===========================================================================
@@ -634,6 +635,10 @@ static func draw_into(
 			body.y -= h * float(act.get("lift", 0.0)) * sin(PI * amount)
 			arms = "up" if amount > 0.0 else arms
 			facing = FACING_S
+		"jump":
+			# A header: straight up off the ground and back, arms up for balance.
+			body.y -= h * float(act.get("lift", 0.0)) * sin(PI * amount)
+			arms = "up" if amount > 0.0 else arms
 	if pose == POSE_KICK:
 		kick = 1.0
 		motion = ACTIONS["shoot"]

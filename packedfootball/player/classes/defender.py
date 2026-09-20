@@ -177,26 +177,8 @@ class Defender(player):
             return {"type": "capture", "stat": self.attributes.ballcontrol}
         
         elif decision == "chase":
-            ball_pos = state["ball_pos"]
-            ball_vel = state.get("ball_velocity", np.zeros(2, dtype=float))
-            ball_speed = _norm2(ball_vel)
-            dist_to_ball = _norm2(ball_pos - state["my_pos"])
-            
-            if ball_speed < 2.0:
-                target = ball_pos
-            else:
-                # Scale prediction by how long it takes the player to arrive
-                my_speed = max(1.0, (self.attributes.speed / 100.0) * 10.0) 
-                time_to_reach = dist_to_ball / my_speed
-                predict_time = min(time_to_reach * 0.7, 1.5)
-                
-                decay_constant = 0.6931 
-                lead_dist = (ball_speed / decay_constant) * (1.0 - (0.5 ** predict_time))
-                unit_vel = ball_vel / ball_speed
-                target = ball_pos + (unit_vel * lead_dist)
-                
-            return {"type": "move", "target": target, "speed_mod": (self.attributes.speed * 1.0) / 100.0}
-            
+            return {"type": "move", "target": self._chase_target(state), "speed_mod": (self.attributes.speed * 1.0) / 100.0}
+
         return None
 
     def _decide_on_ball_attack(self, state: dict) -> str:
@@ -293,8 +275,8 @@ class Defender(player):
             closer_teammates = 0
             if teammates.size > 0:
                 closer_teammates = int(np.sum(np.linalg.norm(teammates - landing_target, axis=1) < my_dist - 0.1))
-                
-            if closer_teammates == 0:
+
+            if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
 
         if self._should_cover(state):
@@ -330,8 +312,8 @@ class Defender(player):
             closer_teammates = 0
             if teammates.size > 0:
                 closer_teammates = int(np.sum(np.linalg.norm(teammates - landing_target, axis=1) < my_dist - 0.1))
-                
-            if closer_teammates == 0:
+
+            if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
             
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
@@ -397,7 +379,7 @@ class Defender(player):
 
 
 class CenterBack(Defender):
-    primary_stats = ("defending", "tackling")
+    primary_stats = ("defending", "tackling", "heading")
 
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)

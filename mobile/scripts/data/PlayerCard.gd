@@ -12,7 +12,7 @@ extends RefCounted
 ## primary_stats tuple. Keep in lockstep if either changes server-side.
 const PRIMARY_STATS_BY_POSITION := {
 	"GK": ["passing", "agility", "ballcontrol"],
-	"CB": ["defending", "tackling"],
+	"CB": ["defending", "tackling", "heading"],
 	"LB": ["defending", "tackling", "speed", "passing"],
 	"RB": ["defending", "tackling", "speed", "passing"],
 	"LWB": ["speed", "passing", "defending"],
@@ -24,7 +24,7 @@ const PRIMARY_STATS_BY_POSITION := {
 	"RM": ["passing", "ballcontrol", "vision"],
 	"LW": ["dribbiling", "speed", "passing"],
 	"RW": ["dribbiling", "speed", "passing"],
-	"ST": ["shooting", "dribbiling", "speed", "power"],
+	"ST": ["shooting", "dribbiling", "speed", "power", "heading"],
 }
 
 ## Mirrors player.py's TENDENCY_FIELDS -- excluded from the "secondary" stat
@@ -163,6 +163,10 @@ static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
 	card.country = _str(fields, "country", "Unknown")
 	card.hometown = _str(fields, "hometown", "Unknown")
 	card.attributes = _dict(fields, "attributes", {})
+	# Cards from before engine 2.3.0 have no heading; the server defaults
+	# it to 50 (player.py Attributes), so overall() must see the same.
+	if not card.attributes.has("heading"):
+		card.attributes["heading"] = 50
 	card.statistics = _dict(fields, "statistics", {"goals": 0, "assists": 0, "matches_played": 0})
 	card.appearance = _dict(fields, "appearance", {})
 	

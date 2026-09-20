@@ -59,6 +59,7 @@ class ActionType(IntEnum):
     GOAL_KICK = 12
     HALFTIME = 13
     FULLTIME = 14
+    HEADER = 15
 
 
 def _q(value: float) -> int:

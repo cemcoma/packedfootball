@@ -24,6 +24,7 @@ const SKILL_ROWS := [
 	["Passing", "passing"], ["Ball control", "ballcontrol"], ["Defending", "defending"],
 	["Tackling", "tackling"], ["Dribbling", "dribbiling"], ["Shooting", "shooting"],
 	["Power", "power"], ["Accuracy", "accuracy"], ["Vision", "vision"],
+	["Heading", "heading"],
 ]
 
 const TENDENCY_ROWS := [

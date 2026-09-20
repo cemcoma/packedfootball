@@ -336,6 +336,8 @@ msgid "Accuracy"
 msgstr ""
 msgid "Vision"
 msgstr ""
+msgid "Heading"
+msgstr ""
 
 # -------- Tendencies --------------------------------------------------
 msgid "Tendencies"

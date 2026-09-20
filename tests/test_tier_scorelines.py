@@ -29,7 +29,7 @@ from packEngine import generate_starter_roster
 pytestmark = pytest.mark.slow
 
 REGULATION_FRAMES = 10800
-SEEDS = (21, 22, 23, 24)
+SEEDS = (21, 22, 23, 24, 25, 26)
 
 # Ladder order. special_champ stands in for the whole special bucket -- its
 # range sits between the other two specials' and diamond/icon.
@@ -86,9 +86,11 @@ def goals_per_match(ladder):
 
 def test_icon_matches_score_more_than_bronze_ones(goals_per_match):
     """Direction only: the top of the ladder produces more goals per match
-    than the bottom. Nothing about the shape in between, which is what the
-    printed table is for."""
-    assert goals_per_match["icon"] > goals_per_match["bronze"], (
-        f"icon v icon {goals_per_match['icon']:.1f} goals/match, "
-        f"bronze v bronze {goals_per_match['bronze']:.1f}"
+    than the bottom. Three tiers a side (12 matches each) rather than one
+    4-match cell against another, which flipped on seed noise. Nothing
+    about the shape in between, which is what the printed table is for."""
+    bottom = sum(goals_per_match[t] for t in TIERS[:3]) / 3.0
+    top = sum(goals_per_match[t] for t in TIERS[-3:]) / 3.0
+    assert top > bottom, (
+        f"diamond/special/icon {top:.2f} goals/match, bronze/silver/gold {bottom:.2f}"
     )

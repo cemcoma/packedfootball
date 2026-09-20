@@ -12,6 +12,7 @@ class ForwardActionProfile(ActionProfile):
         "cross",
         "dribble",
         "forward_run",
+        "attack_box",
         "support",
         "hold_attack",
         "hold_defense",
@@ -26,6 +27,7 @@ class ForwardActionProfile(ActionProfile):
         "cross": 1.1,
         "dribble": 1.4,
         "forward_run": 1.5,
+        "attack_box": 1.6,
         "support": 1.0,
         "hold_attack": 0.8,
         "press": 0.9,
@@ -43,7 +45,10 @@ class WingerActionProfile(ActionProfile):
         "cross",
         "dribble",
         "cut_inside",
+        "wing_run",
+        "wide_run",
         "forward_run",
+        "attack_box",
         "support",
         "hold_attack",
         "hold_defense",
@@ -58,7 +63,10 @@ class WingerActionProfile(ActionProfile):
         "cross": 1.7,
         "dribble": 1.4,
         "cut_inside": 1.7,
+        "wing_run": 1.6,
+        "wide_run": 1.5,
         "forward_run": 1.6,
+        "attack_box": 1.2,
         "support": 1.0,
         "hold_attack": 0.6,
         "press": 1.0,
@@ -68,7 +76,7 @@ class WingerActionProfile(ActionProfile):
 
 
 class Forward(player):
-    primary_stats = ("shooting", "dribbiling", "speed", "power")
+    primary_stats = ("shooting", "dribbiling", "speed", "power", "heading")
 
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         self.action_profile = ForwardActionProfile()
@@ -173,27 +181,9 @@ class Forward(player):
             return {"type": "capture", "stat": self.attributes.ballcontrol}
 
         elif decision == "chase":
-                ball_pos = state["ball_pos"]
-                ball_vel = state.get("ball_velocity", np.zeros(2, dtype=float))
-                ball_speed = _norm2(ball_vel)
-                dist_to_ball = _norm2(ball_pos - state["my_pos"])
-                
-                if ball_speed < 2.0:
-                    target = ball_pos
-                else:
-                    # Scale prediction by how long it takes the player to arrive
-                    my_speed = max(1.0, (self.attributes.speed / 100.0) * 10.0) 
-                    time_to_reach = dist_to_ball / my_speed
-                    predict_time = min(time_to_reach * 0.7, 1.5)
-                    
-                    decay_constant = 0.6931 
-                    lead_dist = (ball_speed / decay_constant) * (1.0 - (0.5 ** predict_time))
-                    unit_vel = ball_vel / ball_speed
-                    target = ball_pos + (unit_vel * lead_dist)
-                    
-                return {"type": "move", "target": target, "speed_mod": (self.attributes.speed * 1.0) / 100.0}
-            
-        return None
+            return {"type": "move", "target": self._chase_target(state), "speed_mod": (self.attributes.speed * 1.0) / 100.0}
+
+        return self._build_wing_action(decision, state)
 
     def _decide_on_ball_attack(self, state: dict) -> str:
         if state.get("must_pass_next", False):
@@ -202,7 +192,11 @@ class Forward(player):
                 return "cross"
             return "pass"
 
-        actions = ["pass", "shoot", "dribble", "stop", "cut_inside"]
+        latched = self._decide_wingplay(state)
+        if latched is not None:
+            return latched
+
+        actions = ["pass", "shoot", "dribble", "stop", "cut_inside", "wing_run", "cross"]
         progressive_pass = self._best_progressive_pass_target(state) is not None
         pressure = state.get("pressure_count", 0)
 
@@ -210,14 +204,15 @@ class Forward(player):
         t_shoot = self.attributes.shoot_tendency
         t_dribble = self.attributes.drible_tendency
         t_stop = 10.0
-        my_x = state["my_pos"][0]
-        is_wide = my_x < 15.0 or my_x > 55.0
-        t_cut_inside = (self.attributes.dribbiling + self.attributes.agility) * 0.5 * self.get_action_bias("cut_inside", 0.0) if is_wide else 0.0
-        if t_cut_inside > 0.0:
-            # Cutting inside is a wide-specific alternative to a straight
-            # dribble, not an addition to it -- carve its weight out of
-            # t_dribble rather than inflating the total ball-carrying share.
-            t_dribble *= 0.5
+        # Wide players (winger profile): cut inside only after beating the
+        # man; before that, run the line or cross from the zone.
+        winger = self.get_action_bias("wing_run", 0.0) > 0.0
+        is_wide = self._is_wide(state)
+        beaten = self._beat_marker(state)
+        in_zone = self._in_crossing_zone(state)
+        t_cut_inside = (self.attributes.dribbiling + self.attributes.agility) * 0.5 * self.get_action_bias("cut_inside", 0.0) if (is_wide and beaten) else 0.0
+        t_wing = (self.attributes.speed + self.attributes.dribbiling) * 0.5 * self.get_action_bias("wing_run", 0.0) if (winger and is_wide and not in_zone and not beaten) else 0.0
+        t_cross = 40.0 * self.get_action_bias("cross", 0.0) if (winger and in_zone) else 0.0
 
         if not progressive_pass:
             t_pass *= 0.08
@@ -257,26 +252,40 @@ class Forward(player):
             t_pass *= 3.0
             t_dribble *= 0.55
 
+        # Wide-specific alternatives to a straight dribble, not additions to
+        # it -- carve their weight out of t_dribble after its own bonuses.
+        if t_cut_inside > 0.0 or t_wing > 0.0 or t_cross > 0.0:
+            t_dribble *= 0.3
+        if t_wing > 0.0 and pressure == 0:
+            t_wing += 60.0
+
         t_pass = max(0.0, t_pass)
         t_shoot = max(0.0, t_shoot)
         t_dribble = max(1.0, t_dribble)
         t_stop = max(0.0, t_stop)
         t_cut_inside = max(0.0, t_cut_inside)
+        t_wing = max(0.0, t_wing)
+        t_cross = max(0.0, t_cross)
 
-        total = t_pass + t_shoot + t_dribble + t_stop + t_cut_inside
+        total = t_pass + t_shoot + t_dribble + t_stop + t_cut_inside + t_wing + t_cross
         if total <= 0:
             return "dribble"
-        probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total, t_cut_inside / total]
+        probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total, t_cut_inside / total, t_wing / total, t_cross / total]
         return state["rng"].choice(actions, p=probs)
 
     def _decide_on_ball_defense(self, state: dict) -> str:
-        actions = ["pass", "dribble", "stop",]
+        latched = self._decide_wingplay(state)
+        if latched is not None:
+            return latched
+
+        actions = ["pass", "dribble", "stop", "wing_run"]
         progressive_pass = self._best_progressive_pass_target(state) is not None
         pressure = state.get("pressure_count", 0)
 
         t_pass = self.attributes.pass_tendency * 0.45
         t_dribble = self.attributes.drible_tendency
         t_stop = 15.0
+        t_wing = (self.attributes.speed + self.attributes.dribbiling) * 0.5 * self.get_action_bias("wing_run", 0.0) if self._is_wide(state) else 0.0
 
         if not progressive_pass:
             t_pass *= 0.1
@@ -288,25 +297,33 @@ class Forward(player):
 
         if dist_to_own_goal < 25.0:
             t_dribble *= 0.3
+            t_wing *= 0.3
 
         if pressure > 1:
             t_pass += (pressure * 12)
             if not self._goal_lane_is_open(state, lane_width=3.0, lookahead=12.0):
                 t_dribble *= 0.1
+                t_wing *= 0.3
                 t_stop = 0
         elif pressure == 0:
             t_dribble += (self.attributes.speed * 2.0) + 60.0
             t_pass -= 18.0
             t_stop += 15
 
+        if t_wing > 0.0:
+            t_dribble *= 0.3
+            if pressure == 0:
+                t_wing += 60.0
+
         t_pass = max(0.0, t_pass)
         t_dribble = max(10.0, t_dribble)
         t_stop = max(0.0, t_stop)
+        t_wing = max(0.0, t_wing)
 
-        total = t_pass + t_dribble + t_stop
+        total = t_pass + t_dribble + t_stop + t_wing
         if total <= 0:
             return "dribble"
-        probs = [t_pass / total, t_dribble / total, t_stop / total]
+        probs = [t_pass / total, t_dribble / total, t_stop / total, t_wing / total]
         return state["rng"].choice(actions, p=probs)
 
     def _decide_off_ball_attack(self, state: dict) -> str:
@@ -318,14 +335,20 @@ class Forward(player):
             closer_teammates = 0
             if teammates.size > 0:
                 closer_teammates = int(np.sum(np.linalg.norm(teammates - landing_target, axis=1) < my_dist - 0.1))
-                
-            if closer_teammates == 0:
+
+            if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
             
-        actions = ["forward_run", "support", "hold_attack"]
+        actions = ["forward_run", "support", "hold_attack", "wide_run", "attack_box"]
         t_forward = self.attributes.shoot_tendency + (self.attributes.speed * 0.5)
         t_support = self.attributes.pass_tendency + 20.0
         t_hold = self.attributes.defending + 30.0
+        t_wide = (self.attributes.speed + 20.0) * self.get_action_bias("wide_run", 0.0)
+        # A cross is coming: get in the box rather than toward the crosser.
+        t_box = 150.0 * self.get_action_bias("attack_box", 0.0) if self._cross_incoming(state) else 0.0
+        if t_box > 0.0:
+            t_support *= 0.3
+            t_hold *= 0.3
 
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
         ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
@@ -335,6 +358,7 @@ class Forward(player):
         if dist_to_ball > 12.0:
             t_support *= 0.4
             t_hold *= 2.5
+            t_wide *= 0.5
         if ball_pressure_count >= 2:
             t_forward *= 0.2
             t_support *= 0.15
@@ -352,9 +376,11 @@ class Forward(player):
         t_forward = max(0.0, t_forward)
         t_support = max(0.0, t_support)
         t_hold = max(1.0, t_hold)
+        t_wide = max(0.0, t_wide)
+        t_box = max(0.0, t_box)
 
-        total = t_forward + t_support + t_hold
-        probs = [t_forward / total, t_support / total, t_hold / total]
+        total = t_forward + t_support + t_hold + t_wide + t_box
+        probs = [t_forward / total, t_support / total, t_hold / total, t_wide / total, t_box / total]
         return state["rng"].choice(actions, p=probs)
 
     def _decide_off_ball_defense(self, state: dict) -> str:
@@ -366,8 +392,8 @@ class Forward(player):
             closer_teammates = 0
             if teammates.size > 0:
                 closer_teammates = int(np.sum(np.linalg.norm(teammates - landing_target, axis=1) < my_dist - 0.1))
-                
-            if closer_teammates == 0:
+
+            if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
             
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])

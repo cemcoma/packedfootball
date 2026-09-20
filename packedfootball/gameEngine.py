@@ -6,7 +6,17 @@ import numpy as np
 from typing import Final
 
 from replay import ActionType, ReplayRecorder
-from game_config import GOAL_HEIGHT, GOAL_POST_RADIUS, GOAL_WIDTH, PITCH_HEIGHT, PITCH_WIDTH  # noqa: F401
+from game_config import (  # noqa: F401
+    BALL_AIR_FRICTION,
+    BALL_GRAVITY,
+    BALL_GROUND_FRICTION,
+    GOAL_HEIGHT,
+    GOAL_POST_RADIUS,
+    GOAL_WIDTH,
+    HEAD_CONTACT_HEIGHT,
+    PITCH_HEIGHT,
+    PITCH_WIDTH,
+)
 from formations import get_formation, is_similar_position
 
 # Bump whenever match behaviour changes.
@@ -54,7 +64,12 @@ from formations import get_formation, is_similar_position
 #         goal; the replay GOAL event carries the credited scorer, and an own
 #         goal is the player who put it in with player_idx on the other side
 #         from team.
-ENGINE_VERSION: Final[str] = "2.2.1"
+#   2.3.0 heading attribute + header contests (reach from height/jump, balls
+#         above reach fly over), lofted crosses that arrive at head height,
+#         wingplay latch for LW/RW/LM/RM (wing_run/wide_run + open-play crosses).
+#         The ball has a vertical velocity (ball_vz): kicks rise and fall in
+#         an arc instead of starting at their peak and dropping in a line.
+ENGINE_VERSION: Final[str] = "2.3.0"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -140,7 +155,37 @@ SAVE_COMMIT_MARGIN: Final = 1.0
 SAVE_ENGAGE_DISTANCE: Final = 6.0
 SAVE_ENGAGE_TIME: Final = 0.45
 
-BALL_GRAVITY: Final = 5.0
+# BALL_GRAVITY / HEAD_CONTACT_HEIGHT: see game_config.py (imported above).
+
+# A ball this fast can only be blocked from within this distance of it.
+BLOCK_FAST_SPEED: Final = 12.0
+BLOCK_FAST_RADIUS: Final = 1.5
+
+# --- Heading ---------------------------------------------------------------
+# A ball at or above HEAD_MIN_HEIGHT is an aerial ball: it flies over anyone
+# whose reach (_head_reach) is below it, and is headed by anyone it isn't.
+HEAD_MIN_HEIGHT: Final = 1.2
+HEAD_RADIUS: Final = 2.5             # lateral distance to be in a header contest
+HEAD_STANDING_BONUS: Final = 0.25    # standing reach above body height
+HEAD_JUMP_MAX: Final = 0.6           # extra reach at 100 heading/agility
+KEEPER_HAND_REACH: Final = 0.9       # arms up, on top of body height
+HEADER_SHOT_SPEED: Final = (14.0, 24.0)    # at heading 0 / 100
+HEADER_CLEAR_SPEED: Final = (12.0, 20.0)
+HEADER_FLICK_SPEED: Final = 9.0
+HEADER_SHOT_RANGE: Final = 22.0      # units from the enemy goal to head at it
+HEADER_CLEAR_RANGE: Final = 30.0     # units from own goal to head it away
+
+# --- Crosses ---------------------------------------------------------------
+# A cross is flighted to arrive at HEAD_CONTACT_HEIGHT after a flight time
+# of distance / CROSS_FLIGHT_REF_SPEED seconds (clamped); the launch speed
+# is solved from the air friction, capped by the crosser's power.
+# While airborne these events fly on BALL_AIR_FRICTION, not ground friction.
+LOFTED_EVENTS: Final = frozenset({"cross", "clearance"})
+CROSS_ARRIVAL_HEIGHT: Final = HEAD_CONTACT_HEIGHT
+CROSS_FLIGHT_REF_SPEED: Final = 22.0
+CROSS_FLIGHT_MIN: Final = 0.8
+CROSS_FLIGHT_MAX: Final = 1.8
+CROSS_MAX_SPEED: Final = 32.0
 
 base_kick_pow:Final = 20
 
@@ -226,18 +271,7 @@ class game:
         self.teamA = teamA # name, short_name, players
         self.teamB = teamB
         self.seed = seed
-        # How many clock frames pass between decision rounds (step()): every
-        # 2nd frame today. Physics (tick()) still runs every frame regardless.
-        # step() is where the CPU goes -- 22 Python-side decisions -- so a
-        # larger interval is roughly proportionally cheaper to simulate, at
-        # the cost of slower reactions. NB the cooldowns step() decrements
-        # (ball release/capture, stun, visual timers) count steps, not
-        # frames, so they stretch in real time along with it. Exposed for
-        # local experiments (packedfootball/scripts/local_match.py); the
-        # backend never passes it.
         self.decision_interval = max(1, int(decision_interval))
-        # Per-player decision gating -- see ADAPTIVE_* above. The default;
-        # local_match.py turns it off to test a fixed interval.
         self.adaptive_decisions = bool(adaptive_decisions)
         self._last_actions: list = [None] * 22
         self._decision_rounds = np.ones(22, dtype=int)
@@ -269,6 +303,11 @@ class game:
             p if p.position == self.formation[i]["role"] else _apply_out_of_position_penalty(p)
             for i, p in enumerate(raw_players)
         ]
+        # How high each player can get to a ball, fixed for the match.
+        self._reach = np.array([self._head_reach(i) for i in range(22)], dtype=float)
+        # A plan a player is latched onto across decision rounds ("wingplay"),
+        # carried on the action dict's "intent" key; cleared on ball release.
+        self.intent: list = [None] * 22
 
         self.positions = np.zeros((22,2),float) # (x,y) pairs
         self.velocity = np.zeros((22,2),float) # (vx,vy) pairs
@@ -277,7 +316,9 @@ class game:
         self.heading[0:11] = [0.0, 1.0] 
         self.heading[11:22] = [0.0, -1.0] 
 
-        self.ball = np.array([35.0, 50.0, 0.0, 0.0, 0.0,],float) # (x,y,vx,vy,vz)
+        self.ball = np.array([35.0, 50.0, 0.0, 0.0, 0.0,],float) # (x,y,vx,vy,height)
+        # Vertical velocity, units/s. Engine-only: the replay records height.
+        self.ball_vz = 0.0
         self.scores = [0, 0]
         self.last_goal_team = None
         self.post_hits = 0      # woodwork strikes, feeds stoppage time
@@ -392,6 +433,7 @@ class game:
             self.ball[0:2] = self.positions[self.ball_controller]
             self.ball[2:4] = self.velocity[self.ball_controller]
             self.ball[4] = 0.0
+            self.ball_vz = 0.0
 
     def _pick_role_slot(self, team: int, preferred_roles: tuple, fallback_local_index: int) -> int:
         """Finds the first slot on `team` whose formation role matches, in
@@ -482,6 +524,7 @@ class game:
             kickoff_player = self._kickoff_player_for_team()
             self.positions[kickoff_player] = np.array([35.0, 50.0], dtype=float)
             self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+            self.ball_vz = 0.0
             self.ball_controller = kickoff_player
             self._set_must_pass_for_player(kickoff_player)
             if self.kickoff_timer == 0:
@@ -519,12 +562,14 @@ class game:
             kickoff_player = self._kickoff_player_for_team(team)
             self.positions[kickoff_player] = np.array([35.0, 50.0], dtype=float)
             self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+            self.ball_vz = 0.0
             self.ball_controller = kickoff_player
             self._set_must_pass_for_player(kickoff_player)
             return
 
         if restart_type == "throw_in":
             self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+            self.ball_vz = 0.0
             self.ball_controller = -1
             return
 
@@ -556,10 +601,12 @@ class game:
                 self.positions[p] = [35.0 + self.rng.uniform(-12, 12), defending_y + self.rng.uniform(-3, 3)]
 
             self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+            self.ball_vz = 0.0
             self.ball_controller = -1
             return
         if restart_type == "goal_kick":
             self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+            self.ball_vz = 0.0
             self.ball_controller = -1
             return
 
@@ -592,6 +639,7 @@ class game:
             kickoff_player = self._kickoff_player_for_team(self.kickoff_team)
             self.positions[kickoff_player] = np.array([35.0, 50.0], dtype=float)
             self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
+            self.ball_vz = 0.0
             self.ball_controller = kickoff_player
             self._set_must_pass_for_player(kickoff_player)
             self.kickoff_timer = 30
@@ -605,6 +653,7 @@ class game:
             
             self.positions[corner_player] = [corner_x, corner_y]
             self.ball[:] = [corner_x, corner_y, 0.0, 0.0, 0.0]
+            self.ball_vz = 0.0
             self.ball_controller = corner_player
             self._set_must_pass_for_player(corner_player)
             
@@ -612,6 +661,7 @@ class game:
             keeper = 0 if self.restart_team == 0 else 11
             self.restart_player = keeper
             self.ball[:] = [self.positions[keeper][0], self.positions[keeper][1], 0.0, 0.0, 0.0]
+            self.ball_vz = 0.0
             self.ball_controller = keeper
             self._set_must_pass_for_player(keeper)
         elif restart_type == "throw_in":
@@ -629,6 +679,7 @@ class game:
             self._shift_shape_toward(throw_point, self.restart_team)
             self.positions[throw_player] = throw_point.copy()
             self.ball[:] = [throw_x, throw_y, 0.0, 0.0, 0.0]
+            self.ball_vz = 0.0
             self.ball_controller = throw_player
             self._set_must_pass_for_player(throw_player)
             # Survives restart_timer expiring (which clears restart_type), so
@@ -725,6 +776,7 @@ class game:
                 elif act == "anklebreaker": color = (255,0,0)   # Red for broken ankle
                 elif act == "recieved_pass": color = (0,255,0)  # Green for recieving pass
                 elif act == "save": color = (255, 50, 150)      # Pink for saves
+                elif act == "header": color = (255, 220, 120)   # Amber for headers
                 else: color = (200, 200, 200)
             else:
                 color = base_color
@@ -800,6 +852,18 @@ class game:
             popup.set_alpha(alpha)
             screen.blit(popup, popup_rect)
         
+
+    def _head_reach(self, index: int) -> float:
+        """Highest ball this player can get to, in pitch units (1 ~ 1m):
+        body height plus a jump from heading/agility -- or, for a keeper,
+        plus arms up. Keepers never head (see _attempt_capture)."""
+        attrs = self.all_players[index].attributes
+        body = float(getattr(attrs, "height", 180)) / 100.0
+        agility = float(getattr(attrs, "agility", 50))
+        if self.formation[index]["role"] == "GK":
+            return body + KEEPER_HAND_REACH + 0.3 * agility / 100.0
+        head_attr = float(getattr(attrs, "heading", 50))
+        return body + HEAD_STANDING_BONUS + HEAD_JUMP_MAX * (0.5 * head_attr + 0.5 * agility) / 100.0
 
     def _fatigue_factor(self, index: int) -> float:
         """Speed multiplier from current stamina: 1.0 when fresh, down to
@@ -1147,9 +1211,14 @@ class game:
         if self.ball_controller == -1:
             self.ball[0] += self.ball[2] * dt
             self.ball[1] += self.ball[3] * dt
-            self.ball[4] -= BALL_GRAVITY * dt
-            
-            friction = 0.5 ** dt
+            self.ball_vz -= BALL_GRAVITY * dt
+            self.ball[4] += self.ball_vz * dt
+            if self.ball[4] <= 0.0:
+                self.ball[4] = 0.0
+                self.ball_vz = 0.0
+
+            lofted = self.ball[4] > 0.0 and self.ball_event in LOFTED_EVENTS
+            friction = (BALL_AIR_FRICTION if lofted else BALL_GROUND_FRICTION) ** dt
             self.ball[2] *= friction
             self.ball[3] *= friction
             
@@ -1158,7 +1227,8 @@ class game:
         else:
             self.ball[0:2] = self.positions[self.ball_controller]
             self.ball[2:4] = self.velocity[self.ball_controller]
-            self.ball[4] = 0.0 
+            self.ball[4] = 0.0
+            self.ball_vz = 0.0
 
         # Goal frame FIRST. A ball crossing the goal plane is a goal or a
         # rebound off the woodwork; either way the out-of-bounds branch below
@@ -1267,6 +1337,17 @@ class game:
         ball_height = max(0.0, float(self.ball[4]))
         current_team = 0 if index < 11 else 1
         pass_like_event = self.ball_event in {"pass", "cross", "clearance", "throw_in"}
+        is_keeper = index in self._keeper_indices
+
+        # Aerial ball: over their head, or headed -- before the moving-away
+        # check, since a ball dropping onto you is yours whichever way it
+        # travels. A keeper within hand reach takes the save/punch/catch
+        # branches below instead.
+        if ball_height >= HEAD_MIN_HEIGHT:
+            if ball_height > self._reach[index]:
+                return False
+            if not is_keeper:
+                return self._attempt_header(index)
 
         player_to_ball = self.ball[0:2] - self.positions[index]
         ball_motion = np.array(self.ball[2:4], dtype=float)
@@ -1275,7 +1356,6 @@ class game:
             self.ball_capture_cooldown = 8
             return False
 
-        is_keeper = index in self._keeper_indices
         if is_keeper and self.ball_event == "shot":
             unattempted = self.active_shot_id >= 0 and self.save_attempted_shot[index] != self.active_shot_id
             crossing = self.predict_goal_crossing(current_team) if unattempted else None
@@ -1303,6 +1383,7 @@ class game:
                 self.ball[0:2] = self.positions[index]
                 self.ball[2:4] = self.velocity[index]
                 self.ball[4] = 0.0
+                self.ball_vz = 0.0
                 self.visual_action[index] = "recieved_pass"
                 self.visual_action_timer[index] = 15
                 if self.replay:
@@ -1313,49 +1394,16 @@ class game:
 
         block_threshold = 3.0
         can_block = not (is_keeper and self.ball_event == "shot")
+        # A fast ball is only blocked by a body in its path, not one standing
+        # two units to the side of it.
+        if ball_speed >= BLOCK_FAST_SPEED and dist_to_ball > BLOCK_FAST_RADIUS:
+            can_block = False
         if can_block and ((ball_speed >= block_threshold) or (ball_height >= 0.75)):
             deflection_bias = self._capture_success_probability(index, ball_speed, ball_height)
             pass_bias = 0.12 if self.ball_event in {"pass", "cross", "clearance", "throw_in"} else 0.04
             block_chance = np.clip(0.22 + (ball_speed * 0.10) + (ball_height * 0.28) + (self.all_players[index].attributes.agility / 100.0) * 0.30 - deflection_bias * 0.20 + pass_bias, 0.15, 0.98)
             if self.rng.random() < block_chance:
-                current_heading = self.heading[index]
-                if _norm2(current_heading) < 1e-8:
-                    current_heading = np.array([1.0, 0.0], dtype=float)
-                ball_dir = np.array(self.ball[2:4], dtype=float)
-                if _norm2(ball_dir) < 1e-8:
-                    ball_dir = np.array([1.0, 0.0], dtype=float)
-                ball_dir = ball_dir / _norm2(ball_dir)
-
-                normal = np.array([-ball_dir[1], ball_dir[0]], dtype=float)
-                if np.dot(normal, current_heading) < 0.0:
-                    normal *= -1.0
-
-                side_bias = self.rng.uniform(-1.0, 1.0)
-                deflection = normal * side_bias + ball_dir * self.rng.uniform(0.35, 0.8)
-                deflection = deflection / _norm2(deflection)
-
-                self.ball_controller = -1
-                self._register_touch(index)
-                self.ball_capture_player = index
-                self.ball_capture_cooldown = 12
-                self.ball_release_player = index
-                self.ball_release_cooldown = 8
-                self.ball[0:2] = self.positions[index]
-                self.ball[2:4] = deflection * max(3.0, ball_speed * self.rng.uniform(0.5, 0.9))
-                self.ball[4] = max(0.0, ball_height * 0.5)
-                self.velocity[index] *= 0.4         
-
-                if _norm2(self.ball[2:4]) <= max(2.0, self.all_players[index].attributes.speed * 0.12):
-                    self.ball_controller = index
-                    self.ball_capture_player = index
-                    self.ball_event = "neutral"
-                    self._register_touch(index)
-                    self.ball_capture_cooldown = 8
-                    self.ball[0:2] = self.positions[index]
-                    self.ball[2:4] = self.velocity[index]
-                    self.ball[4] = 0.0
-                    return True
-                return False
+                return self._deflect_off(index, ball_speed, ball_height)
 
         success_chance = self._capture_success_probability(index, ball_speed, ball_height)
         success_chance = float(np.clip(success_chance + 0.15, 0.2, 0.98))
@@ -1369,6 +1417,7 @@ class game:
             self.ball[0:2] = self.positions[index]
             self.ball[2:4] = self.velocity[index]
             self.ball[4] = 0.0
+            self.ball_vz = 0.0
             if ball_height > 0.5:
                 self.velocity[index] *= 0.65
             return True
@@ -1380,6 +1429,127 @@ class game:
             self.velocity[index] -= self.heading[index] * 0.6
         else:
             self.velocity[index] *= 0.85
+        return False
+
+    def _deflect_off(self, index: int, ball_speed: float, ball_height: float) -> bool:
+        """The ball comes off this player uncontrolled -- a block, or a
+        mistimed header. True if it drops dead enough for them to keep it."""
+        current_heading = self.heading[index]
+        if _norm2(current_heading) < 1e-8:
+            current_heading = np.array([1.0, 0.0], dtype=float)
+        ball_dir = np.array(self.ball[2:4], dtype=float)
+        if _norm2(ball_dir) < 1e-8:
+            ball_dir = np.array([1.0, 0.0], dtype=float)
+        ball_dir = ball_dir / _norm2(ball_dir)
+
+        normal = np.array([-ball_dir[1], ball_dir[0]], dtype=float)
+        if np.dot(normal, current_heading) < 0.0:
+            normal *= -1.0
+
+        side_bias = self.rng.uniform(-1.0, 1.0)
+        deflection = normal * side_bias + ball_dir * self.rng.uniform(0.35, 0.8)
+        deflection = deflection / _norm2(deflection)
+
+        self.ball_controller = -1
+        self._register_touch(index)
+        self.ball_capture_player = index
+        self.ball_capture_cooldown = 12
+        self.ball_release_player = index
+        self.ball_release_cooldown = 8
+        self.ball[0:2] = self.positions[index]
+        self.ball[2:4] = deflection * max(3.0, ball_speed * self.rng.uniform(0.5, 0.9))
+        self.ball[4] = max(0.0, ball_height * 0.5)
+        self.ball_vz = 0.0
+        self.velocity[index] *= 0.4
+
+        if _norm2(self.ball[2:4]) <= max(2.0, self.all_players[index].attributes.speed * 0.12):
+            self.ball_controller = index
+            self.ball_capture_player = index
+            self.ball_event = "neutral"
+            self._register_touch(index)
+            self.ball_capture_cooldown = 8
+            self.ball[0:2] = self.positions[index]
+            self.ball[2:4] = self.velocity[index]
+            self.ball[4] = 0.0
+            self.ball_vz = 0.0
+            return True
+        return False
+
+    def _attempt_header(self, index: int) -> bool:
+        """An outfield player meeting an aerial ball with their head. One
+        roll to win it (a lost one glances off); a won one is a header at
+        goal, a defensive header, or a flick-on, by where it happens.
+        Always returns False: the ball is never held after a header."""
+        attrs = self.all_players[index].attributes
+        head_attr = float(getattr(attrs, "heading", 50))
+        skill = head_attr / 100.0
+        ball_speed = float(_norm2(self.ball[2:4]))
+        ball_height = max(0.0, float(self.ball[4]))
+
+        win_chance = float(np.clip(0.45 + 0.45 * skill - ball_speed / 100.0, 0.15, 0.95))
+        if self.rng.random() >= win_chance:
+            return self._deflect_off(index, ball_speed, ball_height)
+
+        team = 0 if index < 11 else 1
+        my_pos = np.array(self.positions[index], dtype=float)
+        enemy_goal = self._goal_targets[index]
+        own_goal = self._own_goals[index]
+        forward = 1.0 if team == 0 else -1.0
+        opponents = self.positions[11:22] if team == 0 else self.positions[0:11]
+
+        if _norm2(enemy_goal - my_pos) <= HEADER_SHOT_RANGE and abs(my_pos[0] - PITCH_WIDTH / 2.0) < 21.0:
+            # Header at goal: _calculate_shot's aim, spread from heading.
+            pressure = int(np.sum(np.linalg.norm(opponents - my_pos, axis=1) < 3.0))
+            composure = float(getattr(attrs, "composure", 50))
+            sigma = max(0.9, (100.0 - head_attr) / 10.0 + pressure * (100.0 - composure) / 20.0)
+            aim_x = (32.2 if self.rng.random() < 0.5 else 37.8) + self.rng.normal(0.0, sigma)
+            aim_z = max(0.0, self.rng.uniform(0.2, 1.8) + self.rng.normal(0.0, sigma * 0.3))
+            vec = np.array([aim_x, enemy_goal[1]]) - my_pos
+            dist = _norm2(vec)
+            unit = vec / max(dist, 1e-8)
+            speed = HEADER_SHOT_SPEED[0] + (HEADER_SHOT_SPEED[1] - HEADER_SHOT_SPEED[0]) * skill
+            self.match_stats[index]["shots"] += 1
+            self.last_shot_player = index
+            self._release_ball(index, unit, speed, aerial=True, event_type="shot")
+            self.ball[4] = ball_height
+            self.ball_vz = self._launch_vz(ball_height, aim_z, self._flight_time(dist, speed))
+            crossing = self.predict_goal_crossing(1 - team)
+            self.last_shot_on_target = bool(crossing and crossing["on_target"])
+        elif _norm2(own_goal - my_pos) <= HEADER_CLEAR_RANGE:
+            # Defensive header: away from goal, toward the nearer touchline.
+            away = my_pos - own_goal
+            unit = away / _norm2(away) if _norm2(away) > 1e-8 else np.array([0.0, forward])
+            side = -1.0 if my_pos[0] < PITCH_WIDTH / 2.0 else 1.0
+            unit = unit + np.array([side * 0.6, 0.0])
+            unit = unit / _norm2(unit)
+            angle = self.rng.normal(0.0, 0.1 + 0.35 * (1.0 - skill))
+            c, s = math.cos(angle), math.sin(angle)
+            unit = np.array([unit[0] * c - unit[1] * s, unit[0] * s + unit[1] * c])
+            speed = HEADER_CLEAR_SPEED[0] + (HEADER_CLEAR_SPEED[1] - HEADER_CLEAR_SPEED[0]) * skill
+            self._release_ball(index, unit, speed, aerial=True, event_type="clearance")
+            self.ball[4] = ball_height
+            self.ball_vz = self._launch_vz(ball_height, 0.0, 1.0 + 0.4 * skill)
+        else:
+            # Flick-on to the nearest teammate ahead, else straight on.
+            teammates = self.positions[0:11] if team == 0 else self.positions[11:22]
+            rel = teammates - my_pos
+            ahead = rel[:, 1] * forward > 1.0
+            if ahead.any():
+                cand = rel[ahead]
+                unit = cand[np.argmin(np.einsum("ij,ij->i", cand, cand))]
+                unit = unit / _norm2(unit)
+            else:
+                unit = np.array([0.0, forward])
+            self.match_stats[index]["passes"] += 1
+            self._release_ball(index, unit, HEADER_FLICK_SPEED, aerial=True, event_type="pass")
+            self.ball[4] = ball_height
+            self.ball_vz = self._launch_vz(ball_height, 0.0, 0.5)
+
+        self.velocity[index] *= 0.5
+        self.visual_action[index] = "header"
+        self.visual_action_timer[index] = 15
+        if self.replay:
+            self.replay.event(self.match_clock_frames, ActionType.HEADER, player_idx=index, team=team)
         return False
 
     def display_clock_frames(self) -> int:
@@ -1422,9 +1592,9 @@ class game:
 
         The single source of truth for "is this shot going in" -- the keeper's
         decision, the save roll and the shots-on-target stat all read it, so
-        they can never disagree. Straight-line projection with the same linear
-        height falloff tick() applies (see the gravity term there); the ball
-        has no curve, so this is exact rather than an approximation.
+        they can never disagree. Straight-line projection in the plane, with
+        the same vertical arc tick() integrates (ball_vz under BALL_GRAVITY);
+        the ball has no curve, so this is exact rather than an approximation.
         """
         goal_y = 0.0 if defending_team == 0 else PITCH_HEIGHT
         ball_y = float(self.ball[1])
@@ -1438,7 +1608,7 @@ class game:
             return None
 
         cross_x = float(self.ball[0]) + float(self.ball[2]) * time_to_line
-        cross_z = max(0.0, float(self.ball[4]) - BALL_GRAVITY * time_to_line)
+        cross_z = max(0.0, float(self.ball[4]) + self.ball_vz * time_to_line - 0.5 * BALL_GRAVITY * time_to_line ** 2)
 
         inner_min, inner_max = self.goal_frame_bounds()
         on_target = inner_min <= cross_x <= inner_max and cross_z < GOAL_HEIGHT
@@ -1456,19 +1626,27 @@ class game:
         c, s = math.cos(angle), math.sin(angle)
         return np.array([unit_vec[0] * c - unit_vec[1] * s, unit_vec[0] * s + unit_vec[1] * c])
 
-    def _flight_time(self, distance: float, speed: float) -> float:
+    def _flight_time(self, distance: float, speed: float, friction: float = BALL_GROUND_FRICTION) -> float:
         """Seconds for a loose ball launched at `speed` to cover `distance`,
-        under tick()'s friction (speed halves every second). A ball that
-        would stop short gets the frictionless estimate -- a shot that never
-        reaches the line is a miss either way, and this just needs a finite
-        number to aim by.
+        keeping `friction` of its speed per second (tick()'s rule). A ball
+        that would stop short gets the frictionless estimate -- a shot that
+        never reaches the line is a miss either way, and this just needs a
+        finite number to aim by.
         """
         if speed <= 1e-6:
             return 0.0
-        remaining = 1.0 - distance * math.log(2.0) / speed
+        k = -math.log(friction)
+        remaining = 1.0 - distance * k / speed
         if remaining <= 0.0:
             return distance / speed
-        return -math.log2(remaining)
+        return -math.log(remaining) / k
+
+    @staticmethod
+    def _launch_vz(start_z: float, target_z: float, flight: float) -> float:
+        """Vertical speed that takes a ball from start_z to target_z in
+        `flight` seconds under BALL_GRAVITY."""
+        flight = max(flight, 1e-3)
+        return (target_z - start_z + 0.5 * BALL_GRAVITY * flight * flight) / flight
 
     def _resolve_goal_frame(self, prev_xy: np.ndarray, prev_height: float) -> str | None:
         """Resolves a ball that crossed a goal plane this tick.
@@ -1508,6 +1686,7 @@ class game:
         # frame rather than sailing on through.
         if inner_min <= cross_x <= inner_max and cross_z < GOAL_HEIGHT + GOAL_POST_RADIUS * 2.0:
             self._rebound_off_frame(np.array([cross_x, plane_y]), np.array([0.0, inward]))
+            self.ball_vz = -abs(self.ball_vz) * POST_REBOUND_DAMPING
             return "rebound"
 
         # Either post. Reflect about the outward normal from the post centre,
@@ -1653,7 +1832,8 @@ class game:
         self.ball_event = event_type
         self.ball_controller = -1
         self.ball_release_player = owner_index
-        self.last_pass_player = owner_index if event_type in ("pass", "throw_in") else -1
+        self.intent[owner_index] = None
+        self.last_pass_player = owner_index if event_type in ("pass", "cross", "throw_in") else -1
 
         # A new shot is a new save opportunity. Anything else ends the current
         # one, so a parried or cleared ball can't be "saved" a second time.
@@ -1666,15 +1846,19 @@ class game:
         self._register_touch(owner_index)
         
         if aerial:
-            self.ball_release_cooldown = 40 + int(min(25.0, launch_speed * 1.2))
-            self.ball[4] = 0.8 + min(1.2, launch_speed / 18.0)
+            # Short enough that the kicker's side can still contest a cross on
+            # its way down; a ball over their heads is kept off them by reach.
+            self.ball_release_cooldown = 10 + int(min(15.0, launch_speed * 0.35))
+            # A hop off the ground; lofted kicks overwrite ball_vz after this.
+            self.ball[4] = 0.0
+            self.ball_vz = self._launch_vz(0.0, 0.0, 0.6)
         else:
             self.ball_release_cooldown = 8 + int(min(8.0, launch_speed * 0.08))
             self.ball[4] = 0.0
+            self.ball_vz = 0.0
 
         self.ball[0:2] = self.positions[owner_index]
         self.ball[2:4] = direction * launch_speed
-        self.ball[4] = max(0.0, self.ball[4])
 
     def _resolve_action(self, index: int, action: dict):
         if not action:
@@ -1741,12 +1925,24 @@ class game:
                 power = base_kick_pow * action["power"]
                 aerial = False
                 event_type = "pass"
+                launch_vz = None
                 if pass_type == "clearance":
                     aerial = True
                     power *= 1.2
+                    launch_vz = self._launch_vz(0.0, 0.0, 1.6)
                 elif pass_type == "cross":
+                    # Flighted to drop to head height at the target: solve the
+                    # launch speed from tick()'s friction for the wanted flight
+                    # time, capped by the crosser's power (under-hit falls short).
                     aerial = True
-                    power *= 1.15
+                    event_type = "cross"
+                    flight = min(CROSS_FLIGHT_MAX, max(CROSS_FLIGHT_MIN, dist / CROSS_FLIGHT_REF_SPEED))
+                    needed = dist * -math.log(BALL_AIR_FRICTION) / (1.0 - BALL_AIR_FRICTION ** flight)
+                    max_power = base_kick_pow * float(self.all_players[index].attributes.power) / 40.0
+                    power = min(needed, max_power, CROSS_MAX_SPEED)
+                    if power < needed:  # under-hit: drops short rather than looping higher
+                        flight = min(CROSS_FLIGHT_MAX, self._flight_time(dist, power, BALL_AIR_FRICTION))
+                    launch_vz = self._launch_vz(0.0, CROSS_ARRIVAL_HEIGHT, flight)
                 elif pass_type == "throw_in":
                     aerial = False
                     power *= THROW_IN_POWER_FACTOR
@@ -1766,6 +1962,8 @@ class game:
                     self.replay.event(self.match_clock_frames, pass_event, player_idx=index, team=0 if index < 11 else 1)
                 unit_vec = self._fuzz_pass_direction(index, unit_vec, pass_type)
                 self._release_ball(index, unit_vec, power, aerial=aerial, event_type=event_type)
+                if launch_vz is not None:
+                    self.ball_vz = launch_vz
 
         elif action_type == "shoot":
             if self.ball_controller == index:
@@ -1778,8 +1976,8 @@ class game:
                 unit_xy = vec_xy / dist_xy
                 shot_speed = base_kick_pow * action["power"]
                 target_z = max(0.0, float(target_3d[2]))
-                launch_height = target_z + BALL_GRAVITY * self._flight_time(dist_xy, shot_speed)
-                aerial = launch_height > 0.2
+                launch_vz = self._launch_vz(0.0, target_z, self._flight_time(dist_xy, shot_speed))
+                aerial = launch_vz > 2.0
 
                 self.match_stats[index]["shots"] += 1
                 self.last_shot_player = index
@@ -1791,7 +1989,8 @@ class game:
                 self._release_ball(index, unit_xy, shot_speed, aerial=aerial, event_type="shot")
                 self.ball[2] = unit_xy[0] * shot_speed
                 self.ball[3] = unit_xy[1] * shot_speed
-                self.ball[4] = launch_height
+                self.ball[4] = 0.0
+                self.ball_vz = launch_vz
                 crossing = self.predict_goal_crossing(1 if index < 11 else 0)
                 self.last_shot_on_target = bool(crossing and crossing["on_target"])
 
@@ -1934,6 +2133,7 @@ class game:
             self.ball[0:2] = self.positions[index]
             self.ball[2:4] = self.velocity[index]
             self.ball[4] = 0.0
+            self.ball_vz = 0.0
 
             self.velocity[index] = np.zeros(2, dtype=float)
             self.player_stun_cooldown[index] = 6  # Faster recovery for catching safely
@@ -1959,7 +2159,8 @@ class game:
 
             self.ball[0:2] = self.positions[index]
             self.ball[2:4] = deflect_dir * max(6.0, ball_speed * 0.7)
-            self.ball[4] = self.rng.uniform(1.0, 4.0)
+            self.ball[4] = max(0.5, float(self.ball[4]))
+            self.ball_vz = self.rng.uniform(2.0, 6.0)
 
             self.velocity[index] = np.zeros(2, dtype=float)
             self.player_stun_cooldown[index] = 30  # Longer recovery for diving
@@ -2086,9 +2287,29 @@ class game:
                     nearby_release_zone = np.linalg.norm(self.positions - release_pos, axis=1) < 4.0
                     distances[nearby_release_zone] = np.inf
 
-            closest_idx = int(np.argmin(distances))
-            if distances[closest_idx] < self.possession_radius + 1.5:
-                self._attempt_capture(closest_idx)
+            ball_h = max(0.0, float(self.ball[4]))
+            if ball_h >= HEAD_MIN_HEIGHT:
+                # Aerial: whoever can reach it contests it, best header wins.
+                near = np.flatnonzero((distances < HEAD_RADIUS) & (self._reach >= ball_h))
+                if near.size:
+                    gk_near = [int(i) for i in near if i in self._keeper_indices]
+                    if gk_near and distances[gk_near[0]] <= float(distances[near].min()):
+                        self._attempt_capture(gk_near[0])
+                    else:
+                        outfield = np.array([i for i in near if i not in self._keeper_indices])
+                        if outfield.size:
+                            score = np.array([
+                                0.6 * getattr(self.all_players[i].attributes, "heading", 50)
+                                + 0.2 * self.all_players[i].attributes.agility
+                                + 0.5 * (getattr(self.all_players[i].attributes, "height", 180) - 170)
+                                - 6.0 * distances[i]
+                                for i in outfield
+                            ]) + self.rng.normal(0.0, 8.0, size=outfield.size)
+                            self._attempt_capture(int(outfield[int(np.argmax(score))]))
+            else:
+                closest_idx = int(np.argmin(distances))
+                if distances[closest_idx] < self.possession_radius + 1.5:
+                    self._attempt_capture(closest_idx)
 
             if self.ball_event in {"pass", "cross", "shot", "throw_in"}:
                 possesion = 1 if self.last_touch_team == 0 else -1
@@ -2157,6 +2378,7 @@ class game:
                 "ball_pos": ball_pos,
                 "ball_velocity": ball_velocity,
                 "ball_height": ball_height,
+                "ball_vz": self.ball_vz,
                 "my_pos": self.positions[i],
                 "my_velocity": self.velocity[i],
                 "my_heading": self.heading[i],
@@ -2191,11 +2413,15 @@ class game:
                 # is what lets them tell a shot that's going in from one
                 # drifting wide, instead of diving at everything.
                 "goal_crossing": goal_crossings[0 if home else 1],
+                # The plan this player latched onto last round ("wingplay")
+                # or None; a decision keeps it by returning it on its action.
+                "intent": self.intent[i],
                 "rng": self.rng,
             }
             intended_action = self.all_players[i].step(state)
             actions.append(intended_action)
             self._last_actions[i] = intended_action
+            self.intent[i] = intended_action.get("intent") if intended_action else None
             self._decisions_made += 1
 
         resolve_order = np.argsort(distances)

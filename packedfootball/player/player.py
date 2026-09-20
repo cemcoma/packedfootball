@@ -1,7 +1,10 @@
 from game_config import (  # noqa: F401 -- the appearance/career names are re-exported from here
     APPEARANCE_OPTION_COUNTS,
     APPEARANCE_SLOTS,
+    BALL_AIR_FRICTION,
+    BALL_GRAVITY,
     DEFAULT_APPEARANCE,
+    HEAD_CONTACT_HEIGHT,
     PITCH_HEIGHT,
     PITCH_WIDTH,
     RATED_MATCHES_FOR_AVERAGE,
@@ -35,10 +38,11 @@ class Attributes: #out of 100, can be over
     power: int = 80
     accuracy: int = 80
     vision:int = 60
+    heading: int = 50
 
-    # Centimetres, not a 0-100 skill. Nothing reads it yet -- it's here for
-    # headers, free kicks and shots over players. See PHYSICAL_FIELDS below
-    # for why it is kept out of the overall calculation.
+    # Centimetres, not a 0-100 skill. Standing reach for headers (see
+    # gameEngine._head_reach). See PHYSICAL_FIELDS below for why it is kept
+    # out of the overall calculation.
     height: int = 180
 
     #Tendencies
@@ -271,6 +275,13 @@ class player(ABC):
         ball_height = float(state.get("ball_height", 0.0))
         ball_speed = float(_norm2(ball_vel))
 
+        fall_time = self._head_ball_drop_time(state)
+        if fall_time is not None and ball_speed > 1e-6:
+            decay = -math.log(BALL_AIR_FRICTION)
+            drop_distance = (ball_speed / decay) * (1.0 - (BALL_AIR_FRICTION ** fall_time))
+            future = ball_pos + (ball_vel / ball_speed) * drop_distance
+            return np.clip(future, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])
+
         if not self._is_progressive_ball_move(state):
             return ball_pos.copy()
 
@@ -291,6 +302,129 @@ class player(ABC):
         future = ball_pos + (unit_vel * friction_adjusted_distance)
         
         return np.clip(future, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])
+
+    # --- Wingplay -------------------------------------------------------
+    # A wide player runs the touchline to the crossing zone and crosses.
+    # Choosing "wing_run" latches state["intent"] = "wingplay" (the engine
+    # keeps it until the ball is released) and _decide_wingplay then
+    # narrows the menu to wing_run / cross / pass -- no dribble at goal
+    # unless the marker is genuinely beaten (_beat_marker).
+    def _touchline_x(self, state: dict) -> float:
+        return 3.0 if state["formation_pos"][0] < PITCH_WIDTH / 2.0 else PITCH_WIDTH - 3.0
+
+    def _is_wide(self, state: dict) -> bool:
+        return abs(state["my_pos"][0] - PITCH_WIDTH / 2.0) >= 15.0
+
+    def _in_crossing_zone(self, state: dict) -> bool:
+        enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
+        x, y = state["my_pos"]
+        return abs(x - PITCH_WIDTH / 2.0) >= 18.0 and abs(enemy_goal_y - y) <= 20.0
+
+    def _beat_marker(self, state: dict) -> bool:
+        """A marker (opponent within 5) is now behind me and nobody is
+        goal-side within 7. Unmarked isn't beaten: nobody to go past, run the line."""
+        if state.get("pressure_count", 0) > 0:
+            return False
+        my_pos = np.asarray(state["my_pos"], dtype=float)
+        rel = np.asarray(state["opponents"], dtype=float) - my_pos
+        dists = np.sqrt(np.einsum("ij,ij->i", rel, rel))
+        nearest = int(np.argmin(dists))
+        if dists[nearest] > 5.0:
+            return False
+        goal_vec = np.asarray(state["enemy_goal"], dtype=float) - my_pos
+        goal_dir = goal_vec / max(_norm2(goal_vec), 1e-8)
+        if float(np.dot(rel[nearest], goal_dir)) > -1.0:
+            return False
+        return self._goal_lane_is_open(state, lane_width=4.0, lookahead=7.0)
+
+    def _build_wing_action(self, decision: str, state: dict) -> dict | None:
+        touchline_x = self._touchline_x(state)
+        forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        if decision == "wing_run":
+            enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
+            target = np.array([touchline_x, enemy_goal_y - 6.0 * forward])
+            speed = max(1.0, (self.attributes.dribbiling / 100.0) * 1.25)
+            return {"type": "move", "target": target, "speed_mod": speed, "intent": "wingplay"}
+        if decision == "wide_run":
+            ahead_y = float(np.clip(state["ball_pos"][1] + 12.0 * forward, 0.0, PITCH_HEIGHT))
+            return {"type": "move", "target": np.array([touchline_x, ahead_y]), "speed_mod": (self.attributes.speed * 0.9) / 100.0}
+        if decision == "attack_box":
+            # Get on the end of a cross: near or far post side of the spot,
+            # by which side of the pitch I'm on.
+            enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
+            side = float(np.clip((state["my_pos"][0] - PITCH_WIDTH / 2.0) * 0.5, -8.0, 8.0))
+            target = np.array([PITCH_WIDTH / 2.0 + side, enemy_goal_y - 10.0 * forward])
+            return {"type": "move", "target": target, "speed_mod": (self.attributes.speed * 0.9) / 100.0}
+        return None
+
+    def _cross_incoming(self, state: dict) -> bool:
+        """The ball is wide in the attacking third and I'm close enough to
+        get in the box for it."""
+        enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
+        bx, by = state["ball_pos"]
+        return (
+            abs(bx - PITCH_WIDTH / 2.0) >= 15.0
+            and abs(enemy_goal_y - by) <= 35.0
+            and float(state.get("dist_to_goal", 99.0)) <= 40.0
+        )
+
+    def _decide_wingplay(self, state: dict) -> str | None:
+        """The narrowed on-ball menu while latched; None when not latched or
+        the marker is beaten (back to the full menu, latch drops)."""
+        if state.get("intent") != "wingplay":
+            return None
+        rng = state["rng"]
+        pressure = state.get("pressure_count", 0)
+        progressive = self._best_progressive_pass_target(state) is not None
+        if self._in_crossing_zone(state):
+            t_cross = 70.0 + self.attributes.passing * 0.5
+            t_pass = pressure * 18.0 if progressive else 0.0
+            t_run = 10.0
+            total = t_cross + t_pass + t_run
+            return rng.choice(["cross", "pass", "wing_run"], p=[t_cross / total, t_pass / total, t_run / total])
+        if self._beat_marker(state):
+            return None
+        if pressure >= 2 and progressive:
+            return rng.choice(["pass", "wing_run"], p=[0.6, 0.4])
+        return "wing_run"
+
+    def _head_ball_drop_time(self, state: dict) -> float | None:
+        """Seconds until the ball next comes down through head height, or
+        None if it is on the deck or never gets up there."""
+        h = float(state.get("ball_height", 0.0))
+        vz = float(state.get("ball_vz", 0.0))
+        if h <= 0.0 and vz <= 0.0:
+            return None
+        disc = vz * vz - 2.0 * BALL_GRAVITY * (HEAD_CONTACT_HEIGHT - h)
+        if disc < 0.0:
+            return None
+        t = (vz + math.sqrt(disc)) / BALL_GRAVITY
+        return t if t > 0.0 else None
+
+    def _high_ball_mine(self, state: dict, my_dist: float, closer_teammates: int) -> bool:
+        """A lofted loose ball is attacked by the three nearest teammates,
+        not only the nearest -- a header is a contest, not a collection."""
+        return (
+            self._head_ball_drop_time(state) is not None
+            and closer_teammates <= 2
+            and my_dist < 14.0
+        )
+
+    def _chase_target(self, state: dict) -> np.ndarray:
+        """Where to run for a loose ball: under a high one where it drops
+        to head height, otherwise ahead of it by how long it takes to get there."""
+        ball_pos = state["ball_pos"]
+        ball_vel = state.get("ball_velocity", np.zeros(2, dtype=float))
+        ball_speed = _norm2(ball_vel)
+        if self._head_ball_drop_time(state) is not None:
+            return self._predict_ball_landing_target(state)
+        if ball_speed < 2.0:
+            return ball_pos
+        my_speed = max(1.0, (self.attributes.speed / 100.0) * 10.0)
+        time_to_reach = _norm2(ball_pos - state["my_pos"]) / my_speed
+        predict_time = min(time_to_reach * 0.7, 1.5)
+        lead_dist = (ball_speed / 0.6931) * (1.0 - (0.5 ** predict_time))
+        return ball_pos + (ball_vel / ball_speed) * lead_dist
 
     def _best_progressive_pass_target(self, state: dict) -> np.ndarray | None:
         teammates = np.asarray(state["teammates"], dtype=float)
@@ -422,7 +556,7 @@ class player(ABC):
         else:
             vec_to_goal = np.array([35.0, enemy_goal_y]) - best_target
             dist = _norm2(vec_to_goal)
-            lead_dist = min(4.0, dist * 0.4)
+            lead_dist = min(2.5, dist * 0.25)
             lead = (vec_to_goal / (dist + 1e-5)) * lead_dist
             base_target = best_target + lead
 
@@ -435,6 +569,11 @@ class player(ABC):
         fuzz_y = rng.normal(0, error_scale)
         
         final_target = base_target + np.array([fuzz_x, fuzz_y])
+        # Drops between the penalty spot and the six-yard line, never on the keeper.
+        if goal_dir == 1:
+            final_target[1] = min(final_target[1], PITCH_HEIGHT - 9.0)
+        else:
+            final_target[1] = max(final_target[1], 9.0)
         return np.clip(final_target, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])
 
     #statistic updaters

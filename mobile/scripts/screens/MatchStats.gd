@@ -59,6 +59,7 @@ const ATTR_ROWS := [
 	["Passing", "passing"], ["Ball Ctrl", "ballcontrol"], ["Defending", "defending"],
 	["Tackling", "tackling"], ["Dribbling", "dribbiling"], ["Shooting", "shooting"],
 	["Power", "power"], ["Accuracy", "accuracy"], ["Vision", "vision"],
+	["Heading", "heading"],
 ]
 
 var _selected_index: int = -1
