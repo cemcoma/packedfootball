@@ -137,9 +137,11 @@ const EVENT_ACTIONS := {
 # keeps trailing, and how wide and bright the ribbon is, scale with how hard
 # the ball was struck -- its speed in the first recorded sample after the
 # event, mapped from TRAIL_MIN_SPEED (nothing) to TRAIL_MAX_SPEED (full).
-# `seconds` and `width` here are the values at full strength.
+# `seconds` and `width` here are the values at full strength. `fade`: once
+# the trail stops recording, the whole ribbon fades out over this many
+# seconds (without it the tail just ages out).
 const TRAIL_ACTIONS := {
-	ReplayReader.ActionType.SHOOT: {"color": ACTION_COLOR_SHOOT, "seconds": 1.4, "width": 1.0, "rings": true},
+	ReplayReader.ActionType.SHOOT: {"color": ACTION_COLOR_SHOOT, "seconds": 1.4, "width": 1.0, "rings": true, "fade": 0.3},
 	ReplayReader.ActionType.CLEARANCE: {"color": Color(0.95, 0.75, 0.45), "seconds": 1.0, "width": 0.7},
 	ReplayReader.ActionType.PASS: {"color": Color(1.0, 1.0, 1.0), "seconds": 0.6, "width": 0.45},
 	ReplayReader.ActionType.CROSS: {"color": Color(0.55, 0.75, 1.0), "seconds": 0.9, "width": 0.6},
@@ -164,6 +166,8 @@ const TRAIL_MIN_STEP_UNITS := 0.05    # a new point needs the ball to have moved
 # spreading out from the ball's path.
 const POWER_SHOT_SPEED := 24.0
 const RING_SPACING_UNITS := 5.0
+const RING_MAX_SPOTS := 3             # a power shot leaves this many spots...
+const RING_RUNOUT_UNITS := 4.0        # ...and its trail ends this far past the last one
 const RING_EXTRA_PER_SPEED := 5.0
 const RING_MAX_PER_SPOT := 3
 const RING_RADIUS_UNITS := 1.6        # half the hoop's width across the trail, at birth
@@ -221,10 +225,13 @@ var _trail_color: Color = Color.WHITE
 var _trail_strength: float = 0.0
 var _trail_start_tick: float = 0.0
 var _trail_until_tick: float = -1.0
+var _trail_fade_seconds: float = 0.0  # the recipe's `fade`, 0 = none
+var _trail_stop_tick: float = -1.0    # when recording stopped; -1 while it runs
 # Power-shot rings: rings per spot for this kick (0 = none), the distance
-# travelled since the last spot, and the spots themselves.
+# travelled since the last spot, spots dropped so far, and the spots themselves.
 var _trail_rings_per_spot: int = 0
 var _trail_ring_distance: float = 0.0
+var _trail_ring_spots: int = 0
 var _trail_rings: Array = []
 var ball_flash_timer: float = 0.0
 var ball_flash_color: Color = ACTION_COLOR_GOAL
@@ -551,6 +558,7 @@ func _reset_state() -> void:
 	_trail_points = []
 	_trail_rings = []
 	_trail_until_tick = -1.0
+	_trail_stop_tick = -1.0
 	_update_score_label()
 
 
@@ -923,7 +931,7 @@ func _process_events(current_tick: float) -> void:
 		if TRAIL_ACTIONS.has(event_type):
 			_start_trail(event_type, float(event["tick"]))
 		elif event_type == ReplayReader.ActionType.SAVE:
-			_trail_until_tick = -1.0  # the shot is dealt with; what's lit fades out
+			_stop_trail()  # the shot is dealt with; what's lit fades out
 
 		if event_type == ReplayReader.ActionType.GOAL:
 			ball_flash_timer = 1.0
@@ -1324,8 +1332,11 @@ func _start_trail(event_type: int, tick: float) -> void:
 	_trail_strength = strength * float(recipe["width"])
 	_trail_start_tick = tick
 	_trail_until_tick = tick + float(recipe["seconds"]) * strength * TICKS_PER_SECOND
+	_trail_fade_seconds = float(recipe.get("fade", 0.0))
+	_trail_stop_tick = -1.0
 	_trail_rings_per_spot = 0
 	_trail_ring_distance = 0.0
+	_trail_ring_spots = 0
 	if recipe.get("rings", false) and speed >= POWER_SHOT_SPEED:
 		_trail_rings_per_spot = mini(RING_MAX_PER_SPOT, 1 + int((speed - POWER_SHOT_SPEED) / RING_EXTRA_PER_SPEED))
 
@@ -1357,20 +1368,39 @@ func _update_trail(state: Dictionary) -> void:
 			if not _trail_points.is_empty():
 				_trail_ring_distance += pos.distance_to(_trail_points[-1]["pos"])
 			_trail_points.append({"pos": pos, "height": height, "tick": playback_tick})
-			if _trail_rings_per_spot > 0 and _trail_ring_distance >= RING_SPACING_UNITS:
+			if _trail_rings_per_spot > 0 and _trail_ring_spots < RING_MAX_SPOTS and _trail_ring_distance >= RING_SPACING_UNITS:
 				_trail_ring_distance -= RING_SPACING_UNITS
+				_trail_ring_spots += 1
 				# The hoop stands across the flight, so it needs the heading here.
 				var heading: Vector2 = (pos - _trail_points[-2]["pos"]).normalized() if _trail_points.size() >= 2 else Vector2.UP
 				_trail_rings.append({"pos": pos, "height": height, "tick": playback_tick, "count": _trail_rings_per_spot, "dir": heading})
-	else:
-		_trail_until_tick = -1.0
+		if _trail_rings_per_spot > 0 and _trail_ring_spots >= RING_MAX_SPOTS and _trail_ring_distance >= RING_RUNOUT_UNITS:
+			trailing = false  # a power shot's trail ends just past its last hoop
+	if not trailing:
+		_stop_trail()
 	var history := TRAIL_HISTORY_SECONDS * lerpf(TRAIL_HISTORY_MIN, 1.0, _trail_strength)
 	var oldest := playback_tick - history * TICKS_PER_SECOND
 	while not _trail_points.is_empty() and float(_trail_points[0]["tick"]) < oldest:
 		_trail_points.pop_front()
+	if _trail_fade_left() <= 0.0:
+		_trail_points = []
 	var ring_oldest := playback_tick - RING_LIFE_SECONDS * TICKS_PER_SECOND
 	while not _trail_rings.is_empty() and float(_trail_rings[0]["tick"]) < ring_oldest:
 		_trail_rings.pop_front()
+
+
+## Ends recording (once); what is lit fades from here.
+func _stop_trail() -> void:
+	if _trail_until_tick >= 0.0:
+		_trail_stop_tick = playback_tick
+	_trail_until_tick = -1.0
+
+
+## 1 while recording, down to 0 over the recipe's `fade` seconds after it stops.
+func _trail_fade_left() -> float:
+	if _trail_stop_tick < 0.0 or _trail_fade_seconds <= 0.0:
+		return 1.0
+	return 1.0 - clampf((playback_tick - _trail_stop_tick) / (_trail_fade_seconds * TICKS_PER_SECOND), 0.0, 1.0)
 
 
 ## The ribbon: one segment per recorded step, thinning and fading toward
@@ -1381,12 +1411,13 @@ func _draw_trail(cam: Dictionary) -> void:
 		return
 	var scale: float = cam.scale
 	var full_width := maxf(1.0, TRAIL_WIDTH_UNITS * scale * _trail_strength)
+	var fade := _trail_fade_left()
 	var previous := _trail_screen_point(_trail_points[0], cam)
 	for i in range(1, count):
 		var current := _trail_screen_point(_trail_points[i], cam)
 		var t := float(i) / float(count - 1)
 		var color := _trail_color
-		color.a = TRAIL_ALPHA * _trail_strength * t
+		color.a = TRAIL_ALPHA * _trail_strength * t * fade
 		draw_line(previous, current, color, full_width * t, true)
 		previous = current
 
