@@ -1151,3 +1151,6 @@ msgstr ""
 
 msgid "Release %d player(s) for %s credits?\n\nThis cannot be undone."
 msgstr ""
+
+msgid "Confirming your reward..."
+msgstr ""

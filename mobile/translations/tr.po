@@ -1151,3 +1151,6 @@ msgstr "%d Sat"
 
 msgid "Release %d player(s) for %s credits?\n\nThis cannot be undone."
 msgstr "%d oyuncu %s kredi karşılığında serbest bırakılsın mı?\n\nBu işlem geri alınamaz."
+
+msgid "Confirming your reward..."
+msgstr "Ödülün onaylanıyor..."
