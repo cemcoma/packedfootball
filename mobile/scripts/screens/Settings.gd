@@ -60,6 +60,7 @@ const SUPPORT_URL := "https://cemcoma.github.io/packedfootball/support/"
 @onready var _theme_option: OptionButton = %ThemeOption
 @onready var _privacy_button: Button = %PrivacyButton
 @onready var _support_button: Button = %SupportButton
+@onready var _ad_privacy_button: Button = %AdPrivacyButton
 @onready var _back_button: Button = %BackButton
 @onready var _logout_button: Button = %LogoutButton
 @onready var _delete_account_button: Button = %DeleteAccountButton
@@ -76,6 +77,9 @@ func _ready() -> void:
 	_save_name_button.pressed.connect(_on_save_name_pressed)
 	_privacy_button.pressed.connect(func() -> void: OS.shell_open(PRIVACY_URL))
 	_support_button.pressed.connect(func() -> void: OS.shell_open(SUPPORT_URL))
+	# Google UMP: EEA users must be able to revisit their ad consent.
+	_ad_privacy_button.visible = AdManager.privacy_options_required()
+	_ad_privacy_button.pressed.connect(AdManager.show_privacy_options)
 	_back_button.pressed.connect(_on_back_pressed)
 	_logout_button.pressed.connect(_on_logout_pressed)
 	_delete_account_button.pressed.connect(_on_delete_account_pressed)

@@ -464,28 +464,3 @@ func apply_currency_balances(new_credits = null, new_bucks = null, new_medals = 
 		bucks = new_bucks
 	if typeof(new_medals) in [TYPE_INT, TYPE_FLOAT]:
 		medals = new_medals
-
-## Submits an ad completion to the backend and syncs the local state.
-## `track` must be "reward" or "energy".
-func claim_ad_reward(track: String) -> Dictionary:
-	var res: Dictionary = await Backend.call_endpoint(
-		HTTPClient.METHOD_POST, "/ads/reward", {"track": track}
-	)
-	
-	if res.ok:
-		if track == "reward":
-			reward_ads_watched = _int(res.data, "reward_ads_watched", reward_ads_watched)
-			reward_ads_max = _int(res.data, "reward_ads_max", reward_ads_max)
-			# apply_currency_balances ignores absent keys automatically
-			apply_currency_balances(
-				res.data.get("credits_remaining"),
-				res.data.get("bucks_remaining")
-			)
-		elif track == "energy":
-			energy_ads_watched = _int(res.data, "energy_ads_watched", energy_ads_watched)
-			energy_ads_max = _int(res.data, "energy_ads_max", energy_ads_max)
-			# The backend handles the complex timestamp/anchor logic securely. 
-			# We just trigger a clean re-fetch of the bar to stay perfectly in sync.
-			await refresh_energy()
-			
-	return res

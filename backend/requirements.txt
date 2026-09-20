@@ -3,6 +3,7 @@ uvicorn[standard]>=0.30
 firebase-admin>=6.5
 numpy
 requests
+cryptography>=42  # AdMob SSV signature verification (services/ads.py)
 python-dotenv>=1.0
 
 # Dev only -- the engine test suite in tests/. Not imported by the deployed

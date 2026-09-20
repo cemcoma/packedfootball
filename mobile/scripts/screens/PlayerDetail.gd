@@ -135,6 +135,7 @@ func _populate_career() -> void:
 
 
 func _add_row(grid: GridContainer, label_text: String, value_text: String) -> void:
+	
 	var name_label := Label.new()
 	name_label.text = label_text
 	name_label.add_theme_font_size_override("font_size", 12)

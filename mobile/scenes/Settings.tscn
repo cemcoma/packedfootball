@@ -106,6 +106,14 @@ size_flags_horizontal = 3
 text = "Support"
 flat = true
 
+[node name="AdPrivacyButton" type="Button" parent="Margin/OuterVBox/CenterContainer/RootVBox/LinksRow" unique_id=689277723]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Ad Choices"
+flat = true
+
 [node name="Spacer" type="Control" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=689277706]
 custom_minimum_size = Vector2(0, 12)
 layout_mode = 2

@@ -465,11 +465,17 @@ func _on_watch_ad_pressed(ad: AdData) -> void:
 		_status_label.text = tr("Ad not ready -- try again in a moment.")
 
 
-func _on_ad_completed(_track: String, success: bool) -> void:
-	if success:
-		_status_label.text = tr("Reward claimed!")
-		await _load_ads()
-		currency_changed.emit()
-	else:
-		_status_label.text = tr("Ad was closed early or failed to verify.")
-		await _load_ads()
+func _on_ad_completed(_track: String, status: String) -> void:
+	match status:
+		"granted":
+			_status_label.text = tr("Reward claimed!")
+			await _load_ads()
+			currency_changed.emit()
+		"pending":
+			# AdMob pays through the backend on its own clock; the balance
+			# shows on the next profile load if it hasn't yet.
+			_status_label.text = tr("Reward is on its way -- it lands within a minute.")
+			await _load_ads()
+		_:
+			_status_label.text = tr("Ad was closed early or failed to verify.")
+			await _load_ads()

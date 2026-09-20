@@ -120,7 +120,8 @@ Credentials automatically -- no key file.
 | `GET /currency/bucks/list` | Real-money bucks catalog (product ids for RevenueCat). |
 | `POST /webhooks/revenuecat` | Grants bucks after a verified purchase. Called by RevenueCat, not the client. |
 | `GET /energy`, `GET /energy/refill/list`, `POST /energy/refill` | The energy bar (regenerates `ENERGY_REGEN_SECONDS` per point up to `ENERGY_MAX`), and buying it back. |
-| `POST /ads/reward` | Grants the next step of a rewarded-ad track (`reward` or `energy`), with a daily cap that resets on the tournament day boundary. |
+| `GET /ads/ssv` | AdMob's server-side verification callback, unauthenticated but signed by Google (`services/ads.verify_signature`). Grants the next step of the track the client attached to the ad (`custom_data`: `reward` or `energy`) to `user_id`, once per `transaction_id` (`ad_ssv_grants/{id}`), with a daily cap that resets on the tournament day boundary. Nothing a client can call pays an ad reward. |
+| `GET /ads/status` | Today's ad counters plus balances and energy; the client polls it after an ad until the counter moves. |
 | `GET /deals/list` | Timed offers, with per-caller availability. |
 | `POST /deals/redeem` | Spends a deal's cost currency, grants its rewards. |
 | `GET /leaderboard/players` | Ranks `players/{id}` by `goals` / `assists` / `avg_rating` / `clean_sheets` / `matches_played`, `LEADERBOARD_PAGE_SIZE` a page (`?page=N`, zero-based), optionally narrowed with `?position=ST` or a family (`attacker`); entries carry their absolute `rank` and the card's `owner_uid`. |
