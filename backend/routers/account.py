@@ -13,6 +13,7 @@ from config import INVENTORY_CAP, STARTER_FORMATION, STARTER_TIER
 from deps import admin_client, game_state_for, verify_id_token
 from engine import generate_starter_roster, player_to_fields
 from services import account as account_service
+from services import ads as ads_service
 from services import energy as energy_service
 from services import tournament as tournament_service
 
@@ -30,7 +31,7 @@ async def health():
 # tournament seat) never leaks into the reply by accident.
 PROFILE_FIELDS = (
     "display_name", "credits", "bucks", "medals", "wins", "draws", "losses",
-    "formation", "kit", "roster_player_ids", "reward_ads_watched", "energy_ads_watched",
+    "formation", "kit", "roster_player_ids",
 )
 
 
@@ -78,7 +79,10 @@ async def bootstrap_account(uid: str = Depends(verify_id_token)):
             "created": False,
             "inventory_cap": INVENTORY_CAP,
             "energy": energy_service.describe(current, anchor),
-            "profile": {k: existing[k] for k in PROFILE_FIELDS if k in existing},
+            "profile": {
+                **{k: existing[k] for k in PROFILE_FIELDS if k in existing},
+                "ad_counters": ads_service.counters(existing),
+            },
             "roster": [_card_payload(c) for c in roster],
             "inventory": [_card_payload(c, c.doc_id) for c in inventory],
         }
@@ -101,6 +105,7 @@ async def bootstrap_account(uid: str = Depends(verify_id_token)):
         "energy": energy_service.describe(current, anchor),
         "profile": {
             **{k: profile[k] for k in PROFILE_FIELDS if k in profile},
+            "ad_counters": ads_service.counters(profile),
             "roster_player_ids": [c.player_id for c in profile["roster"]],
         },
         "roster": [_card_payload(c) for c in profile["roster"]],

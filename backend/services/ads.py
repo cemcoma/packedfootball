@@ -28,7 +28,16 @@ from cryptography.hazmat.primitives.serialization import load_pem_public_key
 import config
 from services import energy as energy_service
 
-TRACKS = ("reward", "energy")
+
+def track_caps() -> dict[str, int]:
+    """Each track's daily cap. Read live so config stays the one source."""
+    return {
+        "buck_track": len(config.AD_REWARD_PATH),
+        "energy_track": config.AD_ENERGY_MAX,
+    }
+
+
+TRACKS = tuple(track_caps())
 
 # Google publishes the public keys AdMob signs SSV callbacks with here; they
 # rotate, so an unknown key_id triggers one refetch before it is refused.
@@ -54,16 +63,16 @@ def game_date(now: datetime | None = None) -> str:
 
 
 def counters(profile: dict | None, today: str | None = None) -> dict:
-    """The profile's ad counters as they stand today -- zero once the day
-    has rolled, whatever the doc still says."""
+    """Each track's watched/max as they stand today -- zero once the day has
+    rolled, whatever the doc still says."""
     profile = profile or {}
     today = today or game_date()
+    stored = profile.get("ad_counters")
+    stored = stored if isinstance(stored, dict) else {}
     rolled = profile.get("last_ad_date", "") != today
     return {
-        "reward_ads_watched": 0 if rolled else int(profile.get("reward_ads_watched", 0)),
-        "reward_ads_max": len(config.AD_REWARD_PATH),
-        "energy_ads_watched": 0 if rolled else int(profile.get("energy_ads_watched", 0)),
-        "energy_ads_max": config.AD_ENERGY_MAX,
+        track: {"watched": 0 if rolled else int(stored.get(track, 0) or 0), "max": cap}
+        for track, cap in track_caps().items()
     }
 
 
@@ -79,29 +88,29 @@ def grant_in_tx(tx, user_path: str, track: str, now: datetime | None = None) -> 
     now = now or energy_service.now_utc()
     today = game_date(now)
     state = counters(profile, today)
-    updates: dict = {"last_ad_date": today, "last_ad_grant_at": now.isoformat()}
+    watched = state[track]["watched"]
+    if watched >= state[track]["max"]:
+        raise AdRewardRefused(f"daily {track} ads used up")
+
+    # The whole map is rewritten, so a rolled day zeroes every other track too.
+    new_counts = {name: state[name]["watched"] for name in state}
+    new_counts[track] = watched + 1
+    updates: dict = {
+        "ad_counters": new_counts,
+        "last_ad_date": today,
+        "last_ad_grant_at": now.isoformat(),
+    }
     result: dict = {"track": track}
 
-    if track == "reward":
-        watched = state["reward_ads_watched"]
-        if watched >= len(config.AD_REWARD_PATH):
-            raise AdRewardRefused("daily reward ads used up")
+    if track == "buck_track":
         step = config.AD_REWARD_PATH[watched]
         updates["credits"] = int(profile.get("credits", 0)) + int(step.get("credits", 0))
         updates["bucks"] = int(profile.get("bucks", 0)) + int(step.get("bucks", 0))
-        updates["reward_ads_watched"] = watched + 1
-        # A rolled day starts the other track from zero too.
-        updates["energy_ads_watched"] = state["energy_ads_watched"]
         result.update(
             credits_remaining=updates["credits"],
             bucks_remaining=updates["bucks"],
-            reward_ads_watched=watched + 1,
-            reward_ads_max=len(config.AD_REWARD_PATH),
         )
     else:
-        watched = state["energy_ads_watched"]
-        if watched >= config.AD_ENERGY_MAX:
-            raise AdRewardRefused("daily energy ads used up")
         current, anchor = energy_service.from_profile(profile, now)
         if current >= config.ENERGY_MAX:
             raise AdRewardRefused("energy already full")
@@ -110,14 +119,9 @@ def grant_in_tx(tx, user_path: str, track: str, now: datetime | None = None) -> 
         updates[energy_service.ENERGY_UPDATED_AT_FIELD] = (
             now.isoformat() if new_energy >= config.ENERGY_MAX else anchor.isoformat()
         )
-        updates["energy_ads_watched"] = watched + 1
-        updates["reward_ads_watched"] = state["reward_ads_watched"]
-        result.update(
-            energy=new_energy,
-            energy_ads_watched=watched + 1,
-            energy_ads_max=config.AD_ENERGY_MAX,
-        )
+        result.update(energy=new_energy)
 
+    result["ad_counters"] = counters({**profile, **updates}, today)
     tx.set(user_path, updates, merge=True)
     return result
 

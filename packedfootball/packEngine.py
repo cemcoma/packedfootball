@@ -105,7 +105,7 @@ def _roll_height(rng: random.Random, position: str) -> int:
 POSITION_STAT_TIERS = {
     "GK": {
         "passing": "primary", "agility": "primary", "composure": "primary", "ballcontrol": "primary",
-        "defending": "nerfed", "tackling": "nerfed", "shooting": "nerfed", "dribbiling": "nerfed",
+        "defending": "nerfed", "tackling": "nerfed", "shooting": "nerfed", "dribbling": "nerfed",
         "speed": "tertiary", "power": "secondary", "accuracy": "secondary", "vision": "secondary",
         "stamina": "nerfed", "heading": "nerfed",
         "clear_tendency": "primary", "pass_tendency": "secondary", "aggression": "nerfed",
@@ -113,7 +113,7 @@ POSITION_STAT_TIERS = {
     },
     "CB": {
         "defending": "primary", "tackling": "primary", "heading": "primary",
-        "shooting": "nerfed", "dribbiling": "nerfed", "speed": "secondary",
+        "shooting": "nerfed", "dribbling": "nerfed", "speed": "secondary",
         "passing": "tertiary", "ballcontrol": "tertiary", "agility": "tertiary", "accuracy": "secondary", "vision": "tertiary",
         "power": "secondary", "composure": "secondary",
         "stamina": "tertiary",
@@ -124,7 +124,7 @@ POSITION_STAT_TIERS = {
         "defending": "primary", "tackling": "primary",
         "shooting": "nerfed", "accuracy": "secondary",
         "passing": "secondary", "speed": "secondary",
-        "dribbiling": "tertiary", "ballcontrol": "tertiary", "agility": "tertiary", "power": "tertiary",
+        "dribbling": "tertiary", "ballcontrol": "tertiary", "agility": "tertiary", "power": "tertiary",
         "vision": "tertiary", "composure": "tertiary",
         "stamina": "primary",
         "clear_tendency": "secondary", "pass_tendency": "secondary",
@@ -133,7 +133,7 @@ POSITION_STAT_TIERS = {
     "LWB": {
         "speed": "primary", "passing": "primary",
         "shooting": "nerfed", "accuracy": "secondary",
-        "defending": "secondary", "tackling": "secondary", "dribbiling": "secondary",
+        "defending": "secondary", "tackling": "secondary", "dribbling": "secondary",
         "ballcontrol": "secondary", "agility": "secondary", "vision": "secondary",
         "power": "tertiary", "composure": "tertiary",
         "stamina": "primary",
@@ -144,14 +144,14 @@ POSITION_STAT_TIERS = {
         "defending": "primary", "tackling": "primary", "passing": "primary",
         "shooting": "nerfed", "drible_tendency": "nerfed",
         "ballcontrol": "secondary", "power": "secondary", "vision": "secondary", "composure": "secondary",
-        "dribbiling": "tertiary", "speed": "tertiary", "agility": "tertiary", "accuracy": "primary",
+        "dribbling": "tertiary", "speed": "tertiary", "agility": "tertiary", "accuracy": "primary",
         "stamina": "primary",
         "pass_tendency": "secondary", "clear_tendency": "secondary", "aggression": "secondary",
         "shoot_tendency": "nerfed",
     },
     "CM": {
         "passing": "primary", "ballcontrol": "primary", "vision": "primary",
-        "dribbiling": "secondary", "speed": "secondary", "agility": "secondary", "composure": "secondary",
+        "dribbling": "secondary", "speed": "secondary", "agility": "secondary", "composure": "secondary",
         "defending": "tertiary", "tackling": "tertiary", "shooting": "tertiary", "power": "tertiary", "accuracy": "primary",
         "stamina": "primary",
         "pass_tendency": "primary", "drible_tendency": "secondary",
@@ -160,7 +160,7 @@ POSITION_STAT_TIERS = {
     "CAM": {
         "passing": "primary", "ballcontrol": "primary", "vision": "primary", "shooting": "primary",
         "defending": "nerfed", "tackling": "nerfed",
-        "dribbiling": "secondary", "speed": "secondary", "agility": "secondary", "accuracy": "primary", "composure": "secondary",
+        "dribbling": "secondary", "speed": "secondary", "agility": "secondary", "accuracy": "primary", "composure": "secondary",
         "power": "tertiary",
         "stamina": "tertiary",
         "shoot_tendency": "primary", "pass_tendency": "secondary", "drible_tendency": "secondary",
@@ -168,7 +168,7 @@ POSITION_STAT_TIERS = {
     },
     "LM": {
         "passing": "primary", "ballcontrol": "primary", "speed": "primary",
-        "dribbiling": "secondary", "agility": "secondary", "vision": "secondary",
+        "dribbling": "secondary", "agility": "secondary", "vision": "secondary",
         "defending": "tertiary", "tackling": "tertiary", "shooting": "tertiary", "power": "tertiary",
         "accuracy": "secondary", "composure": "tertiary",
         "stamina": "secondary",
@@ -176,7 +176,7 @@ POSITION_STAT_TIERS = {
         "shoot_tendency": "tertiary", "aggression": "tertiary", "clear_tendency": "tertiary",
     },
     "LW": {
-        "speed": "primary", "agility": "primary", "dribbiling": "primary",
+        "speed": "primary", "agility": "primary", "dribbling": "primary",
         "defending": "nerfed", "tackling": "nerfed", "aggression": "nerfed", "clear_tendency": "nerfed",
         "ballcontrol": "secondary", "shooting": "secondary", "accuracy": "secondary",
         "passing": "tertiary", "power": "tertiary", "vision": "tertiary", "composure": "tertiary",
@@ -186,7 +186,7 @@ POSITION_STAT_TIERS = {
     "ST": {
         "shooting": "primary", "power": "primary", "heading": "primary", "accuracy": "secondary",
         "defending": "nerfed", "tackling": "nerfed", "pass_tendency": "nerfed", "clear_tendency": "nerfed",
-        "dribbiling": "secondary", "ballcontrol": "secondary", "speed": "secondary", "agility": "secondary", "composure": "secondary",
+        "dribbling": "secondary", "ballcontrol": "secondary", "speed": "secondary", "agility": "secondary", "composure": "secondary",
         "passing": "tertiary", "vision": "tertiary",
         "stamina": "tertiary",
         "shoot_tendency": "primary", "drible_tendency": "tertiary", "aggression": "tertiary",

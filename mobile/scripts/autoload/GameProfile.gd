@@ -65,11 +65,25 @@ var all_cards: Dictionary = {}  # player_id -> PlayerCard, every owned card (ros
 var saved_formation: String = DEFAULT_FORMATION
 var saved_slot_assignment: Array = []
 
-# Ad tracking state
-var reward_ads_watched: int = 0
-var reward_ads_max: int = 3
-var energy_ads_watched: int = 0
-var energy_ads_max: int = 3
+# Ad tracking state: track -> {"watched": int, "max": int}, as the backend sends it.
+var ad_counters: Dictionary = {}
+
+
+## One field of a track's counter, tolerating a missing or half-formed map.
+static func ad_counter_field(counters, track: String, field: String, default_val: int = 0) -> int:
+	if counters is Dictionary:
+		var entry = counters.get(track)
+		if entry is Dictionary and typeof(entry.get(field)) in [TYPE_INT, TYPE_FLOAT]:
+			return int(entry.get(field))
+	return default_val
+
+
+func ad_watched(track: String) -> int:
+	return ad_counter_field(ad_counters, track, "watched", 0)
+
+
+func ad_max(track: String) -> int:
+	return ad_counter_field(ad_counters, track, "max", 3)
 
 
 func is_dirty() -> bool:
@@ -191,8 +205,8 @@ func _apply_profile_fields(doc: Dictionary) -> void:
 	draws = _int(doc, "draws")
 	formation = _str(doc, "formation", DEFAULT_FORMATION)
 	kit = _str(doc, "kit", "")
-	reward_ads_watched = _int(doc, "reward_ads_watched")
-	energy_ads_watched = _int(doc, "energy_ads_watched")
+	var counters = doc.get("ad_counters")
+	ad_counters = counters if counters is Dictionary else {}
 
 
 ## An empty lineup for the current formation, and no cards.
@@ -447,10 +461,7 @@ func reset() -> void:
 	all_cards = {}
 	saved_formation = DEFAULT_FORMATION
 	saved_slot_assignment = []
-	reward_ads_watched = 0
-	reward_ads_max = 3
-	energy_ads_watched = 0
-	energy_ads_max = 3
+	ad_counters = {}
 
 func add_purchased_cards(cards: Array) -> void:
 	for card in cards:

@@ -13,8 +13,12 @@ extends Node
 ## status: "granted" | "pending" | "failed"
 signal ad_reward_completed(track: String, status: String)
 
-# Google's test unit ids -- what a debug build loads. A release export
-# (OS.is_debug_build() == false) uses the live unit, so this can't ship wrong.
+# Reward tracks, as custom_data on the ad and as keys in ad_counters.
+const TRACK_BUCK := "buck_track"
+const TRACK_ENERGY := "energy_track"
+
+# Google's test unit ids -- what a debug build loads unless a test device is
+# registered. A release export (OS.is_debug_build() == false) uses the live unit.
 const REWARDED_TEST_ID_IOS := "ca-app-pub-3940256099942544/1712485313"
 const REWARDED_ID_IOS := "ca-app-pub-1704438625576029/5444455793"
 
@@ -48,6 +52,9 @@ static func ads_supported() -> bool:
 
 func _get_unit_id() -> String:
 	if OS.get_name() == "iOS":
+		# A registered test device gets test creatives off the live unit, so SSV fires.
+		if not FirebaseConfig.ADMOB_TEST_DEVICE_IDS.is_empty():
+			return REWARDED_ID_IOS
 		return REWARDED_TEST_ID_IOS if test_mode() else REWARDED_ID_IOS
 	return ""  # Android: no live unit yet
 
@@ -126,6 +133,11 @@ func _start_ads() -> void:
 	if _sdk_started:
 		return
 	_sdk_started = true
+	# Must land before initialize() to cover the first request.
+	if not FirebaseConfig.ADMOB_TEST_DEVICE_IDS.is_empty():
+		var request_config := RequestConfiguration.new()
+		request_config.test_device_ids = FirebaseConfig.ADMOB_TEST_DEVICE_IDS
+		MobileAds.set_request_configuration(request_config)
 	MobileAds.initialize()
 	_create_and_load_ad()
 
@@ -186,36 +198,46 @@ func show_ad_for_track(track: String) -> bool:
 func get_ad_deals() -> Array:
 	var list: Array = []
 
+	var buck_watched := GameProfile.ad_watched(TRACK_BUCK)
+	var buck_max := GameProfile.ad_max(TRACK_BUCK)
+
 	var reward_ad := AdData.new()
-	reward_ad.track = "reward"
+	reward_ad.track = TRACK_BUCK
 	reward_ad.title = tr("Free Reward")
 	reward_ad.description = tr("Watch an ad to progress along your daily reward track.")
-	reward_ad.step_current = GameProfile.reward_ads_watched
-	reward_ad.step_max = GameProfile.reward_ads_max
+	reward_ad.step_current = buck_watched
+	reward_ad.step_max = buck_max
+	reward_ad.steps = REWARD_STEPS.slice(0, buck_max)
 
-	if GameProfile.reward_ads_watched >= GameProfile.reward_ads_max:
+	if buck_watched >= buck_max:
 		reward_ad.available = false
 		reward_ad.unavailable_reason = tr("Limit reached for today")
 	else:
-		var step_index := mini(GameProfile.reward_ads_watched, REWARD_STEPS.size() - 1)
+		var step_index := mini(buck_watched, REWARD_STEPS.size() - 1)
 		var reward: Dictionary = REWARD_STEPS[step_index]
 		reward_ad.reward_credits = int(reward.get("credits", 0))
 		reward_ad.reward_bucks = int(reward.get("bucks", 0))
 		reward_ad.available = true
 	list.append(reward_ad)
 
+	var energy_watched := GameProfile.ad_watched(TRACK_ENERGY)
+	var energy_ad_max := GameProfile.ad_max(TRACK_ENERGY)
+
 	var energy_ad := AdData.new()
-	energy_ad.track = "energy"
+	energy_ad.track = TRACK_ENERGY
 	energy_ad.title = tr("Free Energy")
 	energy_ad.description = tr("Watch an ad to instantly recover 1 match energy.")
-	energy_ad.step_current = GameProfile.energy_ads_watched
-	energy_ad.step_max = GameProfile.energy_ads_max
+	energy_ad.step_current = energy_watched
+	energy_ad.step_max = energy_ad_max
 	energy_ad.reward_energy = 1
+	energy_ad.steps = []
+	for _i in energy_ad_max:
+		energy_ad.steps.append({"energy": 1})
 
 	var cur_energy: int = int(GameProfile.energy.get("energy", 0)) if GameProfile.energy is Dictionary else 0
 	var max_energy: int = int(GameProfile.energy.get("max", 10)) if GameProfile.energy is Dictionary and GameProfile.energy.has("max") else 10
 
-	if GameProfile.energy_ads_watched >= GameProfile.energy_ads_max:
+	if energy_watched >= energy_ad_max:
 		energy_ad.available = false
 		energy_ad.unavailable_reason = tr("Limit reached for today")
 	elif cur_energy >= max_energy:
@@ -234,12 +256,12 @@ func get_ad_deals() -> Array:
 ## applying the balances it reports. "pending" after GRANT_POLL_ATTEMPTS:
 ## the reward still lands, and the next profile load shows it.
 func _await_backend_grant(track: String) -> void:
-	var before := GameProfile.reward_ads_watched if track == "reward" else GameProfile.energy_ads_watched
+	var before := GameProfile.ad_watched(track)
 	for attempt in GRANT_POLL_ATTEMPTS:
 		var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/ads/status")
 		if res.get("ok", false):
 			var data: Dictionary = res.get("data", {})
-			var now := _int(data, "%s_ads_watched" % track, before)
+			var now := GameProfile.ad_counter_field(data.get("ad_counters"), track, "watched", before)
 			if now > before:
 				_apply_status(data)
 				ad_reward_completed.emit(track, "granted")
@@ -249,14 +271,8 @@ func _await_backend_grant(track: String) -> void:
 
 
 func _apply_status(data: Dictionary) -> void:
-	GameProfile.reward_ads_watched = _int(data, "reward_ads_watched", GameProfile.reward_ads_watched)
-	GameProfile.reward_ads_max = _int(data, "reward_ads_max", GameProfile.reward_ads_max)
-	GameProfile.energy_ads_watched = _int(data, "energy_ads_watched", GameProfile.energy_ads_watched)
-	GameProfile.energy_ads_max = _int(data, "energy_ads_max", GameProfile.energy_ads_max)
+	var counters = data.get("ad_counters")
+	if counters is Dictionary:
+		GameProfile.ad_counters = counters
 	GameProfile.apply_currency_balances(data.get("credits_remaining"), data.get("bucks_remaining"))
 	GameProfile.apply_energy(data.get("energy"))
-
-
-static func _int(doc: Dictionary, key: String, default_val: int = 0) -> int:
-	var val = doc.get(key)
-	return int(val) if typeof(val) in [TYPE_INT, TYPE_FLOAT] else default_val

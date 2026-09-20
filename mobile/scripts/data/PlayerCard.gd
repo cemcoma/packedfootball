@@ -8,6 +8,10 @@ extends RefCounted
 ## (the backend does, from a seed), so a card here only ever needs to be
 ## held and displayed, never acted on.
 
+## What a position falls back to when it isn't in the table below --
+## mirrors player.py's default so overall() and the detail screen agree.
+const DEFAULT_PRIMARY_STATS := ["passing", "ballcontrol", "vision"]
+
 ## Mirrors packEngine.py's PLAYER_CLASS_MAP keys and each class's
 ## primary_stats tuple. Keep in lockstep if either changes server-side.
 const PRIMARY_STATS_BY_POSITION := {
@@ -22,9 +26,9 @@ const PRIMARY_STATS_BY_POSITION := {
 	"CAM": ["passing", "vision", "shooting"],
 	"LM": ["passing", "ballcontrol", "vision"],
 	"RM": ["passing", "ballcontrol", "vision"],
-	"LW": ["dribbiling", "speed", "passing"],
-	"RW": ["dribbiling", "speed", "passing"],
-	"ST": ["shooting", "dribbiling", "speed", "power", "heading"],
+	"LW": ["dribbling", "speed", "passing"],
+	"RW": ["dribbling", "speed", "passing"],
+	"ST": ["shooting", "dribbling", "speed", "power", "heading"],
 }
 
 ## Mirrors player.py's TENDENCY_FIELDS -- excluded from the "secondary" stat
@@ -215,8 +219,14 @@ func resolved_appearance() -> Dictionary:
 ## position) averaged with weight `primary_weight` (1.0 for GK, 0.8 for
 ## everyone else -- the only class-level override that exists server-side
 ## today), blended with the average of every other non-tendency attribute.
+## The stats this card's position is actually judged on -- the same list
+## overall() weights, so a screen can highlight exactly what the maths uses.
+func primary_stats() -> Array:
+	return PRIMARY_STATS_BY_POSITION.get(position, DEFAULT_PRIMARY_STATS)
+
+
 func overall() -> int:
-	var primary: Array = PRIMARY_STATS_BY_POSITION.get(position, ["passing", "ballcontrol", "vision"])
+	var primary: Array = primary_stats()
 	var primary_weight: float = 1.0 if position == "GK" else 0.8
 
 	var primary_sum := 0.0

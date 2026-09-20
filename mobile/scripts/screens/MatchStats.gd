@@ -57,7 +57,7 @@ const CAREER_ROWS := [
 const ATTR_ROWS := [
 	["Height", "height"], ["Stamina", "stamina"], ["Speed", "speed"], ["Agility", "agility"],
 	["Passing", "passing"], ["Ball Ctrl", "ballcontrol"], ["Defending", "defending"],
-	["Tackling", "tackling"], ["Dribbling", "dribbiling"], ["Shooting", "shooting"],
+	["Tackling", "tackling"], ["Dribbling", "dribbling"], ["Shooting", "shooting"],
 	["Power", "power"], ["Accuracy", "accuracy"], ["Vision", "vision"],
 	["Heading", "heading"],
 ]

@@ -23,10 +23,14 @@ extends Control
 
 const PLAYER_CARD_SCENE := preload("res://scenes/components/PlayerCardView.tscn")
 
+## How many name/value pairs sit side by side in the stats grid. The list is
+## long enough to run out of vertical room well before horizontal.
+const STAT_GRID_COLUMNS := 2
+
 const ATTR_ROWS := [
 	["Height", "height"],
 	["Stamina", "stamina"], ["Speed", "speed"], ["Agility", "agility"], ["Passing", "passing"],
-	["Ball Ctrl", "ballcontrol"], ["Defending", "defending"], ["Tackling", "tackling"], ["Dribbling", "dribbiling"],
+	["Ball Ctrl", "ballcontrol"], ["Defending", "defending"], ["Tackling", "tackling"], ["Dribbling", "dribbling"],
 	["Shooting", "shooting"], ["Power", "power"], ["Accuracy", "accuracy"], ["Vision", "vision"],
 	["Heading", "heading"],
 ]
@@ -300,12 +304,14 @@ func _populate_stats_panel() -> void:
 
 func _populate_attributes_page(card: PlayerCard) -> void:
 	_stats_page_label.text = tr("Attributes")
+	var entries: Array = []
 	for row in ATTR_ROWS:
 		var key: String = row[1]
 		var value: int = card.attributes.get(key, 0)
 		# Height is centimetres, not a 0-100 skill (see player.py's
 		# PHYSICAL_FIELDS -- it's excluded from the overall for that reason).
-		_add_stat_row(tr(row[0]), "%d cm" % value if key == "height" else str(value))
+		entries.append([tr(row[0]), "%d cm" % value if key == "height" else str(value)])
+	_fill_stat_grid(entries)
 
 	var goals: int = card.statistics.get("goals", 0)
 	var assists: int = card.statistics.get("assists", 0)
@@ -317,11 +323,13 @@ func _populate_attributes_page(card: PlayerCard) -> void:
 
 func _populate_statistics_page(card: PlayerCard) -> void:
 	_stats_page_label.text = tr("Career Statistics")
+	var entries: Array = []
 	for row in STAT_ROWS:
-		_add_stat_row(tr(row[0]), _career_stat_text(card, row[1]))
+		entries.append([tr(row[0]), _career_stat_text(card, row[1])])
 	if card.position == "GK":
 		for row in KEEPER_STAT_ROWS:
-			_add_stat_row(tr(row[0]), _career_stat_text(card, row[1]))
+			entries.append([tr(row[0]), _career_stat_text(card, row[1])])
+	_fill_stat_grid(entries)
 
 	# rating_sum/rating_count are storage rather than a stat -- derive the
 	# average the same way player.py's average_rating() does.
@@ -342,12 +350,32 @@ func _career_stat_text(card: PlayerCard, key: String) -> String:
 	return str(int(card.statistics.get(key, 0)))
 
 
+## Lays the pairs out top-to-bottom and starts a new pair of columns at the
+## bottom, rather than growing one column past the panel.
+func _fill_stat_grid(entries: Array) -> void:
+	_stats_attr_grid.columns = STAT_GRID_COLUMNS * 2
+	var rows := ceili(float(entries.size()) / STAT_GRID_COLUMNS)
+	for r in rows:
+		for c in STAT_GRID_COLUMNS:
+			var i := c * rows + r
+			if i < entries.size():
+				_add_stat_row(entries[i][0], entries[i][1])
+			else:
+				# Keeps the grid rectangular so the filled columns stay aligned.
+				_stats_attr_grid.add_child(Control.new())
+				_stats_attr_grid.add_child(Control.new())
+
+
 func _add_stat_row(label_text: String, value_text: String) -> void:
 	var name_label := Label.new()
 	name_label.text = label_text
 	_stats_attr_grid.add_child(name_label)
 	var value_label := Label.new()
 	value_label.text = value_text
+	# Right-aligned and expanding, so the numbers line up and the gap between
+	# the two column pairs reads as a gap.
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_stats_attr_grid.add_child(value_label)
 
 

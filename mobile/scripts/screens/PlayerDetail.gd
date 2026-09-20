@@ -22,7 +22,7 @@ extends Control
 const SKILL_ROWS := [
 	["Stamina", "stamina"], ["Speed", "speed"], ["Agility", "agility"],
 	["Passing", "passing"], ["Ball control", "ballcontrol"], ["Defending", "defending"],
-	["Tackling", "tackling"], ["Dribbling", "dribbiling"], ["Shooting", "shooting"],
+	["Tackling", "tackling"], ["Dribbling", "dribbling"], ["Shooting", "shooting"],
 	["Power", "power"], ["Accuracy", "accuracy"], ["Vision", "vision"],
 	["Heading", "heading"],
 ]
@@ -85,6 +85,9 @@ func _ready() -> void:
 	_confirm_overlay.visible = false
 
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
+	# The attribute rows accent this position's primary stats, so they carry a
+	# colour override and have to be rebuilt when the palette moves under them.
+	ThemeManager.theme_changed.connect(_refresh_skills)
 
 	_card = PlayerSession.card()
 	if _card == null:
@@ -109,11 +112,28 @@ func _refresh() -> void:
 	]
 	_card_view.set_card(_card)
 
-	_populate(_attributes_grid, SKILL_ROWS, _attribute_text)
+	_refresh_skills()
 	_populate(_tendencies_grid, TENDENCY_ROWS, _attribute_text)
 	_populate_career()
 	_refresh_buttons()
 	_apply_theme_colors()
+
+
+func _refresh_skills() -> void:
+	if _card != null:
+		_populate_skills(_attributes_grid, SKILL_ROWS, _attribute_text)
+
+
+## Accents the stats this card's position is judged on. The lookup goes
+## through the position first -- PRIMARY_STATS_BY_POSITION is keyed by
+## position, so a row pair is never one of its keys.
+func _populate_skills(grid: GridContainer, rows: Array, value_for: Callable) -> void:
+	for child in grid.get_children():
+		grid.remove_child(child)
+		child.queue_free()
+	var primary := _card.primary_stats()
+	for row in rows:
+		_add_row(grid, tr(row[0]), value_for.call(row[1]), row[1] in primary)
 
 
 func _populate(grid: GridContainer, rows: Array, value_for: Callable) -> void:
@@ -122,7 +142,6 @@ func _populate(grid: GridContainer, rows: Array, value_for: Callable) -> void:
 		child.queue_free()
 	for row in rows:
 		_add_row(grid, tr(row[0]), value_for.call(row[1]))
-
 
 func _populate_career() -> void:
 	var rows: Array = STAT_ROWS.duplicate()
@@ -134,11 +153,17 @@ func _populate_career() -> void:
 	_populate(_career_grid, rows, _career_text)
 
 
-func _add_row(grid: GridContainer, label_text: String, value_text: String) -> void:
-	
+## `highlight` marks a primary stat. Every other row takes the Theme's own
+## Label colour -- a hardcoded one goes invisible on the light theme, which
+## is the bug _apply_theme_colors' comment below already describes.
+func _add_row(grid: GridContainer, label_text: String, value_text: String, highlight: bool = false) -> void:
+	var accent := ThemeManager.color("accent")
+
 	var name_label := Label.new()
 	name_label.text = label_text
 	name_label.add_theme_font_size_override("font_size", 12)
+	if highlight:
+		name_label.add_theme_color_override("font_color", accent)
 	grid.add_child(name_label)
 
 	var value_label := Label.new()
@@ -146,6 +171,8 @@ func _add_row(grid: GridContainer, label_text: String, value_text: String) -> vo
 	value_label.add_theme_font_size_override("font_size", 12)
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if highlight:
+		value_label.add_theme_color_override("font_color", accent)
 	grid.add_child(value_label)
 
 

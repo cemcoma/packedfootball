@@ -36,7 +36,7 @@ const PLAYER_CARD_SCENE := preload("res://scenes/components/PlayerCardView.tscn"
 
 const ATTR_ROWS := [
 	["Stamina", "stamina"], ["Speed", "speed"], ["Agility", "agility"], ["Passing", "passing"],
-	["Ball Ctrl", "ballcontrol"], ["Defending", "defending"], ["Tackling", "tackling"], ["Dribbling", "dribbiling"],
+	["Ball Ctrl", "ballcontrol"], ["Defending", "defending"], ["Tackling", "tackling"], ["Dribbling", "dribbling"],
 	["Shooting", "shooting"], ["Power", "power"], ["Accuracy", "accuracy"], ["Vision", "vision"],
 	["Heading", "heading"],
 ]

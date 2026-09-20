@@ -90,7 +90,7 @@ class Defender(player):
             
         elif decision == "dribble":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-            dribble_speed = max(1.0, (self.attributes.dribbiling / 100.0) * 1.25)
+            dribble_speed = max(1.0, (self.attributes.dribbling / 100.0) * 1.25)
             return {"type": "move", "target": np.array([35.0, enemy_goal_y]), "speed_mod": dribble_speed}
             
         elif decision == "forward_run":

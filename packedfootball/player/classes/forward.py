@@ -76,7 +76,7 @@ class WingerActionProfile(ActionProfile):
 
 
 class Forward(player):
-    primary_stats = ("shooting", "dribbiling", "speed", "power", "heading")
+    primary_stats = ("shooting", "dribbling", "speed", "power", "heading")
 
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         self.action_profile = ForwardActionProfile()
@@ -106,7 +106,7 @@ class Forward(player):
             
         elif decision == "dribble":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-            dribble_speed = max(1.0, (self.attributes.dribbiling / 100.0) * 1.25)
+            dribble_speed = max(1.0, (self.attributes.dribbling / 100.0) * 1.25)
             return {"type": "move", "target": np.array([35.0, enemy_goal_y]), "speed_mod": dribble_speed}
 
         elif decision == "cut_inside":
@@ -118,7 +118,7 @@ class Forward(player):
             inside_x = my_x + (35.0 - my_x) * 0.6
             lead_y = state["my_pos"][1] + (18.0 if state.get("a_direction", 1) == 1 else -18.0)
             diagonal_target = np.array([inside_x, np.clip(lead_y, 0.0, PITCH_HEIGHT)])
-            dribble_speed = max(1.0, (self.attributes.dribbiling / 100.0) * 1.3)
+            dribble_speed = max(1.0, (self.attributes.dribbling / 100.0) * 1.3)
             return {"type": "move", "target": diagonal_target, "speed_mod": dribble_speed}
 
         # --- Off-Ball Attacking Movement ---
@@ -210,8 +210,8 @@ class Forward(player):
         is_wide = self._is_wide(state)
         beaten = self._beat_marker(state)
         in_zone = self._in_crossing_zone(state)
-        t_cut_inside = (self.attributes.dribbiling + self.attributes.agility) * 0.5 * self.get_action_bias("cut_inside", 0.0) if (is_wide and beaten) else 0.0
-        t_wing = (self.attributes.speed + self.attributes.dribbiling) * 0.5 * self.get_action_bias("wing_run", 0.0) if (winger and is_wide and not in_zone and not beaten) else 0.0
+        t_cut_inside = (self.attributes.dribbling + self.attributes.agility) * 0.5 * self.get_action_bias("cut_inside", 0.0) if (is_wide and beaten) else 0.0
+        t_wing = (self.attributes.speed + self.attributes.dribbling) * 0.5 * self.get_action_bias("wing_run", 0.0) if (winger and is_wide and not in_zone and not beaten) else 0.0
         t_cross = 40.0 * self.get_action_bias("cross", 0.0) if (winger and in_zone) else 0.0
 
         if not progressive_pass:
@@ -285,7 +285,7 @@ class Forward(player):
         t_pass = self.attributes.pass_tendency * 0.45
         t_dribble = self.attributes.drible_tendency
         t_stop = 15.0
-        t_wing = (self.attributes.speed + self.attributes.dribbiling) * 0.5 * self.get_action_bias("wing_run", 0.0) if self._is_wide(state) else 0.0
+        t_wing = (self.attributes.speed + self.attributes.dribbling) * 0.5 * self.get_action_bias("wing_run", 0.0) if self._is_wide(state) else 0.0
 
         if not progressive_pass:
             t_pass *= 0.1
@@ -449,7 +449,7 @@ class Winger(Forward):
     """LW/RW: rates on dribbling/pace/creativity over raw shooting/power.
     Signature move is "cut_inside" (see Forward._build_action/
     _decide_on_ball_attack above)."""
-    primary_stats = ("dribbiling", "speed", "passing")
+    primary_stats = ("dribbling", "speed", "passing")
 
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         # Forward.__init__ (called via super() below) unconditionally sets

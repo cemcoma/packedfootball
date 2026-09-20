@@ -13,7 +13,7 @@ static func _bool(fields: Dictionary, key: String, default: bool) -> bool:
 	var value = fields.get(key)
 	return value if value is bool else default
 
-var track: String = "" # "reward" or "energy"
+var track: String = "" # AdManager.TRACK_BUCK or TRACK_ENERGY
 var title: String = ""
 var description: String = ""
 var reward_credits: int = 0
@@ -21,6 +21,10 @@ var reward_bucks: int = 0
 var reward_energy: int = 0
 var step_current: int = 0
 var step_max: int = 0
+
+## What each ad along the track pays, in order. Only shown when the steps
+## actually differ -- a flat track says nothing the "n / m" doesn't.
+var steps: Array = []
 
 var available: bool = true
 var unavailable_reason: String = ""
@@ -35,6 +39,8 @@ static func from_fields(fields: Dictionary) -> AdData:
 	ad.reward_energy = _int(fields, "reward_energy")
 	ad.step_current = _int(fields, "step_current")
 	ad.step_max = _int(fields, "step_max")
+	var steps = fields.get("steps")
+	ad.steps = steps if steps is Array else []
 	
 	ad.available = _bool(fields, "available", true)
 	ad.unavailable_reason = _str(fields, "unavailable_reason")

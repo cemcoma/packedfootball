@@ -33,7 +33,7 @@ class Attributes: #out of 100, can be over
     ballcontrol: int = 50
     defending: int = 50
     tackling: int = 70
-    dribbiling: int = 30
+    dribbling: int = 30
     shooting: int = 50
     power: int = 80
     accuracy: int = 80
@@ -343,7 +343,7 @@ class player(ABC):
         if decision == "wing_run":
             enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
             target = np.array([touchline_x, enemy_goal_y - 6.0 * forward])
-            speed = max(1.0, (self.attributes.dribbiling / 100.0) * 1.25)
+            speed = max(1.0, (self.attributes.dribbling / 100.0) * 1.25)
             return {"type": "move", "target": target, "speed_mod": speed, "intent": "wingplay"}
         if decision == "wide_run":
             ahead_y = float(np.clip(state["ball_pos"][1] + 12.0 * forward, 0.0, PITCH_HEIGHT))

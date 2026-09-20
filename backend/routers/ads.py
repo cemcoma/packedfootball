@@ -88,7 +88,7 @@ async def ad_status(uid: str = Depends(verify_id_token)):
     now = energy_service.now_utc()
     energy, anchor = energy_service.from_profile(profile, now)
     return {
-        **ads_service.counters(profile, ads_service.game_date(now)),
+        "ad_counters": ads_service.counters(profile, ads_service.game_date(now)),
         "credits_remaining": int(profile.get("credits", 0)),
         "bucks_remaining": int(profile.get("bucks", 0)),
         "energy": energy_service.describe(energy, anchor, now),

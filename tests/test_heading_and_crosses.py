@@ -72,7 +72,7 @@ def test_client_card_mirrors_heading():
     missing heading the same way the server does."""
     gd = (ROOT / "mobile/scripts/data/PlayerCard.gd").read_text()
     assert '"CB": ["defending", "tackling", "heading"]' in gd
-    assert '"ST": ["shooting", "dribbiling", "speed", "power", "heading"]' in gd
+    assert '"ST": ["shooting", "dribbling", "speed", "power", "heading"]' in gd
     assert 'card.attributes["heading"] = 50' in gd
 
 

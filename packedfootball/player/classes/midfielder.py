@@ -136,7 +136,7 @@ class Midfielder(player):
             
         elif decision == "dribble":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-            dribble_speed = max(1.0, (self.attributes.dribbiling / 100.0) * 1.25)
+            dribble_speed = max(1.0, (self.attributes.dribbling / 100.0) * 1.25)
             return {"type": "move", "target": np.array([35.0, enemy_goal_y]), "speed_mod": dribble_speed}
             
         # --- Off-Ball Attacking Movement ---
@@ -241,7 +241,7 @@ class Midfielder(player):
         winger = self.get_action_bias("wing_run", 0.0) > 0.0
         is_wide = self._is_wide(state)
         in_zone = self._in_crossing_zone(state)
-        t_wing = (self.attributes.speed + self.attributes.dribbiling) * 0.5 * self.get_action_bias("wing_run", 0.0) if (winger and is_wide and not in_zone and not self._beat_marker(state)) else 0.0
+        t_wing = (self.attributes.speed + self.attributes.dribbling) * 0.5 * self.get_action_bias("wing_run", 0.0) if (winger and is_wide and not in_zone and not self._beat_marker(state)) else 0.0
         t_cross = 40.0 * self.get_action_bias("cross", 0.0) if (winger and in_zone) else 0.0
 
         if not progressive_pass:
@@ -316,7 +316,7 @@ class Midfielder(player):
         t_dribble = self.attributes.drible_tendency
         t_stop = 15.0
         t_clear = self.attributes.clear_tendency
-        t_wing = (self.attributes.speed + self.attributes.dribbiling) * 0.5 * self.get_action_bias("wing_run", 0.0) if self._is_wide(state) else 0.0
+        t_wing = (self.attributes.speed + self.attributes.dribbling) * 0.5 * self.get_action_bias("wing_run", 0.0) if self._is_wide(state) else 0.0
 
         if not progressive_pass:
             t_pass *= 0.1
