@@ -130,13 +130,18 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Cancel"
 
-[node name="StatsPanel" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=1161663797]
+[node name="StatsBackdrop" type="PanelContainer" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=1161663900]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="StatsPanel" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop" unique_id=1161663797]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 6
 
-[node name="OutOfPositionLabel" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel" unique_id=1381363994]
+[node name="OutOfPositionLabel" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel" unique_id=1381363994]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -144,19 +149,19 @@ theme_override_colors/font_color = Color(1, 0.7, 0.3, 1)
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 2
 
-[node name="StatsTopRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel" unique_id=1910487448]
+[node name="StatsTopRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel" unique_id=1910487448]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="VBoxContainer" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow" unique_id=1233495138]
+[node name="VBoxContainer" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow" unique_id=1233495138]
 layout_mode = 2
 
-[node name="StatsCard" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/VBoxContainer" unique_id=1961256794 instance=ExtResource("3")]
+[node name="StatsCard" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow/VBoxContainer" unique_id=1961256794 instance=ExtResource("3")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 0
 
-[node name="StatsExtraCountry" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/VBoxContainer" unique_id=1965594442]
+[node name="StatsExtraCountry" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow/VBoxContainer" unique_id=1965594442]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.59919906, 0.59919894, 0.5991992, 1)
@@ -165,51 +170,51 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/font_size = 10
 horizontal_alignment = 1
 
-[node name="StatsExtraGam" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/VBoxContainer" unique_id=1331057644]
+[node name="StatsExtraGam" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow/VBoxContainer" unique_id=1331057644]
 unique_name_in_owner = true
 layout_mode = 2
 horizontal_alignment = 1
 
-[node name="StatsInfoCol" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow" unique_id=592961532]
+[node name="StatsInfoCol" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow" unique_id=592961532]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="StatsPageLabel" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=1920000001]
+[node name="StatsPageLabel" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=1920000001]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.75, 0.85, 1, 1)
 theme_override_font_sizes/font_size = 13
 text = "Attributes"
 
-[node name="StatsAttrGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=803471580]
+[node name="StatsAttrGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=803471580]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 20
 theme_override_constants/v_separation = 2
 columns = 2
 
-[node name="StatsButtonRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel" unique_id=999269672]
+[node name="StatsButtonRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel" unique_id=999269672]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="ReplaceButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsButtonRow" unique_id=642978750]
+[node name="ReplaceButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsButtonRow" unique_id=642978750]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Replace"
 
-[node name="ClearButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsButtonRow" unique_id=464571451]
+[node name="ClearButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsButtonRow" unique_id=464571451]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Clear Slot"
 
-[node name="StatsPageButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsButtonRow" unique_id=1920000003]
+[node name="StatsPageButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsButtonRow" unique_id=1920000003]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "Show Statistics"
 
-[node name="CloseButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsButtonRow" unique_id=2088812848]
+[node name="CloseButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsButtonRow" unique_id=2088812848]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Close"

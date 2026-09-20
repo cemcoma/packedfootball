@@ -23,6 +23,9 @@ extends Control
 
 const PLAYER_CARD_SCENE := preload("res://scenes/components/PlayerCardView.tscn")
 
+## Dark in both modes -- see _apply_theme_colors.
+const STATS_BACKDROP_COLOR := Color(0.05, 0.06, 0.08, 0.78)
+
 ## How many name/value pairs sit side by side in the stats grid. The list is
 ## long enough to run out of vertical room well before horizontal.
 const STAT_GRID_COLUMNS := 2
@@ -81,6 +84,7 @@ var _formation_buttons: Dictionary = {}  # name -> Button
 @onready var _bench_grid: GridContainer = %BenchGrid
 @onready var _cancel_button: Button = %CancelButton
 @onready var _stats_panel: VBoxContainer = %StatsPanel
+@onready var _stats_backdrop: PanelContainer = %StatsBackdrop
 @onready var _out_of_position_label: Label = %OutOfPositionLabel
 @onready var _stats_card_view: PlayerCardView = %StatsCard
 @onready var _stats_extra_country: Label = %StatsExtraCountry
@@ -134,18 +138,33 @@ func _ready() -> void:
 	_refresh_all()
 
 
-## StatsPanel is a plain VBoxContainer -- nothing is drawn behind it -- so
-## everything in it sits directly on the screen background and the Theme's
-## Label color never reaches the labels that carry their own override. The
-## pale blue heading and grey subtitle read fine on the dark backdrop and
-## washed out on the light one. _refresh_bottom() recolors the status label
+## The stats panel's labels carry their own light colours (heading,
+## text_hint), so StatsBackdrop is dark in BOTH modes -- which is also how the
+## light theme works everywhere else: a bright photo behind dark translucent
+## panels. It used to have nothing behind it, and the pale heading washed out
+## against the light background. _refresh_bottom() recolors the status label
 ## on the same palette (it flips between positive and warning).
 func _apply_theme_colors() -> void:
+	_style_stats_backdrop()
 	_stats_page_label.add_theme_color_override("font_color", ThemeManager.color("heading"))
 	_stats_extra_country.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 	_out_of_position_label.add_theme_color_override("font_color", ThemeManager.color("warning"))
 	_refresh_overall()
 	_refresh_bottom()
+
+
+func _style_stats_backdrop() -> void:
+	var border := ThemeManager.color("surface_border")
+	var style := StyleBoxFlat.new()
+	style.bg_color = STATS_BACKDROP_COLOR
+	style.border_color = Color(border.r, border.g, border.b, 0.45)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 10.0
+	style.content_margin_right = 10.0
+	style.content_margin_top = 8.0
+	style.content_margin_bottom = 8.0
+	_stats_backdrop.add_theme_stylebox_override("panel", style)
 
 
 # -- state -> UI --------------------------------------------------------------
@@ -204,7 +223,7 @@ func _refresh_right_panel() -> void:
 	var showing_stats: bool = selected_slot != -1 and not picker_mode
 	var showing_picker: bool = selected_slot != -1 and picker_mode
 
-	_stats_panel.visible = showing_stats
+	_stats_backdrop.visible = showing_stats
 	_bench_scroll.visible = not showing_stats
 	_cancel_button.visible = showing_picker
 

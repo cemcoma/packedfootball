@@ -98,11 +98,37 @@ theme_override_constants/h_separation = 12
 theme_override_constants/v_separation = 12
 columns = 4
 
-[node name="BackButton" type="Button" parent="BrowseLayer/Margin/RootVBox" unique_id=1085272806]
+[node name="FooterRow" type="HBoxContainer" parent="BrowseLayer/Margin/RootVBox" unique_id=1085272900]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BackButton" type="Button" parent="BrowseLayer/Margin/RootVBox/FooterRow" unique_id=1085272806]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 0
 text = "Back to Shop"
+
+[node name="QuickSellButton" type="Button" parent="BrowseLayer/Margin/RootVBox/FooterRow" unique_id=1085272901]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Quick Sell"
+
+[node name="SellActionRow" type="HBoxContainer" parent="BrowseLayer/Margin/RootVBox/FooterRow" unique_id=1085272902]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SellSelectedButton" type="Button" parent="BrowseLayer/Margin/RootVBox/FooterRow/SellActionRow" unique_id=1085272903]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Sell"
+
+[node name="CancelSellButton" type="Button" parent="BrowseLayer/Margin/RootVBox/FooterRow/SellActionRow" unique_id=1085272904]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cancel"
 
 [node name="HeroSound" type="AudioStreamPlayer" parent="." unique_id=3480197255]
 unique_name_in_owner = true
@@ -180,3 +206,66 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 text = "Close"
+
+[node name="SellConfirmOverlay" type="Control" parent="." unique_id=1085272910]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="SellConfirmOverlay" unique_id=1085272911]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.6)
+
+[node name="Center" type="CenterContainer" parent="SellConfirmOverlay" unique_id=1085272912]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="SellConfirmOverlay/Center" unique_id=1085272913]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="SellConfirmOverlay/Center/Panel" unique_id=1085272914]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="SellConfirmOverlay/Center/Panel/Margin" unique_id=1085272915]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="SellConfirmLabel" type="Label" parent="SellConfirmOverlay/Center/Panel/Margin/VBox" unique_id=1085272916]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 0)
+layout_mode = 2
+autowrap_mode = 2
+horizontal_alignment = 1
+
+[node name="ButtonRow" type="HBoxContainer" parent="SellConfirmOverlay/Center/Panel/Margin/VBox" unique_id=1085272917]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="SellCancelButton" type="Button" parent="SellConfirmOverlay/Center/Panel/Margin/VBox/ButtonRow" unique_id=1085272918]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cancel"
+
+[node name="SellConfirmButton" type="Button" parent="SellConfirmOverlay/Center/Panel/Margin/VBox/ButtonRow" unique_id=1085272919]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Sell"

@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://dyr4mha5jhn0d"]
 
-[ext_resource type="Script" path="res://scripts/components/PlayerModelView.gd" id="1"]
+[ext_resource type="Script" uid="uid://c80imai3uyeq" path="res://scripts/components/PlayerModelView.gd" id="1"]
 
-[node name="PlayerModelView" type="Control"]
+[node name="PlayerModelView" type="Control" unique_id=1060305152]
 custom_minimum_size = Vector2(40, 50)
 layout_mode = 3
 anchors_preset = 0

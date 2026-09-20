@@ -33,13 +33,15 @@ const VERSION := "v1"
 
 const PATTERN_SOLID := "solid"
 const PATTERN_STRIPES := "stripes"
+const PATTERN_QUARTERS := "quarters"
 
 ## Add to this and PATTERN_NAMES to ship a new pattern; the Customize Kit
 ## screen builds its buttons from these, so nothing else needs touching.
-const PATTERNS := [PATTERN_SOLID, PATTERN_STRIPES]
+const PATTERNS := [PATTERN_SOLID, PATTERN_STRIPES,PATTERN_QUARTERS]
 const PATTERN_NAMES := {
 	PATTERN_SOLID: "Solid",
 	PATTERN_STRIPES: "Stripes",
+	PATTERN_QUARTERS : "Quarters"
 }
 
 const DEFAULT_PATTERN := PATTERN_SOLID

@@ -766,10 +766,15 @@ static func _draw_torso(
 			for i in range(STRIPE_COUNT):
 				# Odd bands are the stripes, even ones the gaps either side.
 				_rect(canvas, feet, w, h, x + band_w * (i * 2 + 1), base_y, band_w, torso_h, trim)
+	elif pattern == KitDesign.PATTERN_QUARTERS and detail == DETAIL_FULL and h > 0.0:
+		var rect_w := torso_w / 2.0
+		var rect_h := torso_h / 2.0
+		_rect(canvas, feet, w, h, x, base_y, rect_w, rect_h, trim)
+		_rect(canvas, feet, w, h, x + rect_w, base_y + rect_h / h, rect_w, rect_h, trim)
 
 	# Collar, sitting just inside the top of the torso -- it is what makes a
 	# SOLID kit still read as two colours rather than one flat block.
-	if detail == DETAIL_FULL:
+	if detail == DETAIL_FULL and pattern != KitDesign.PATTERN_QUARTERS:
 		_rect(
 			canvas, feet, w, h,
 			x + torso_w * COLLAR_X, base_y + TORSO_H - COLLAR_H,

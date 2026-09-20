@@ -70,6 +70,23 @@ const DEFAULT_HERO_SCALE := 1.25
 @onready var _stats_attr_grid: GridContainer = %StatsAttrGrid
 @onready var _close_stats_button: Button = %CloseStatsButton
 
+@onready var _quick_sell_button: Button = %QuickSellButton
+@onready var _sell_action_row: HBoxContainer = %SellActionRow
+@onready var _sell_selected_button: Button = %SellSelectedButton
+@onready var _cancel_sell_button: Button = %CancelSellButton
+@onready var _sell_confirm_overlay: Control = %SellConfirmOverlay
+@onready var _sell_confirm_label: Label = %SellConfirmLabel
+@onready var _sell_confirm_button: Button = %SellConfirmButton
+@onready var _sell_cancel_button: Button = %SellCancelButton
+
+## Sell mode turns a tap from "inspect this card" into "mark it for release".
+var _sell_mode: bool = false
+var _selected_ids: Array = []
+var _selling: bool = false
+## player_id -> its card in the browse grid, so selecting one restyles just
+## that card instead of rebuilding the grid mid-selection.
+var _browse_views: Dictionary = {}
+
 var _cards: Array = []  # PlayerCard, sorted worst -> best
 var _views: Array = []  # PlayerCardView, same order as _cards, filled in as the reveal reaches each one
 var _skip_requested: bool = false
@@ -81,6 +98,12 @@ func _ready() -> void:
 	_skip_catcher.pressed.connect(_on_skip_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 	_close_stats_button.pressed.connect(_on_close_stats_pressed)
+	_quick_sell_button.pressed.connect(_on_quick_sell_pressed)
+	_cancel_sell_button.pressed.connect(_exit_sell_mode)
+	_sell_selected_button.pressed.connect(_on_sell_selected_pressed)
+	_sell_confirm_button.pressed.connect(_on_sell_confirm_pressed)
+	_sell_cancel_button.pressed.connect(_on_sell_cancel_pressed)
+	_sell_confirm_overlay.visible = false
 
 	# "Tap to skip" is drawn straight over the screen background with no
 	# panel behind it -- its own pale grey override made it invisible in
@@ -226,8 +249,10 @@ func _show_browse_state() -> void:
 		if not already_revealed:
 			view.set_card(card)
 		view.pressed.connect(_on_card_pressed.bind(card.player_id))
+		_browse_views[card.player_id] = view
 
 	_browse_layer.visible = true
+	_exit_sell_mode()
 
 
 ## Bound by player_id rather than by the tapped PlayerCardView itself --
@@ -238,6 +263,15 @@ func _show_browse_state() -> void:
 func _on_card_pressed(player_id: String) -> void:
 	var card: PlayerCard = GameProfile.all_cards.get(player_id)
 	if card == null:
+		return
+
+	if _sell_mode:
+		if _selected_ids.has(player_id):
+			_selected_ids.erase(player_id)
+		else:
+			_selected_ids.append(player_id)
+		_restyle_card(player_id)
+		_update_sell_ui()
 		return
 
 	_stats_card_view.set_card(card)
@@ -271,3 +305,116 @@ func _on_close_stats_pressed() -> void:
 
 func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/Shop.tscn")
+
+
+# -- quick sell ----------------------------------------------------------------
+
+## The selection marker is a badge, not a modulate tint: this screen tweens
+## modulate for the reveal and resets it to white on a recycled card, so a
+## tint here would be fought over (see PlayerCardView.set_badge).
+func _restyle_card(player_id: String) -> void:
+	var view: PlayerCardView = _browse_views.get(player_id)
+	if view == null:
+		return
+	if _sell_mode and _selected_ids.has(player_id):
+		var card: PlayerCard = GameProfile.all_cards.get(player_id)
+		var payout := PlayerCard.release_credits(card.tier) if card != null else 0
+		view.set_badge("+%s" % CurrencyDisplay.format_amount(payout),
+			CurrencyDisplay.color_for("credits"))
+	else:
+		view.set_badge("")
+
+
+func _total_payout() -> int:
+	var total := 0
+	for pid in _selected_ids:
+		var card: PlayerCard = GameProfile.all_cards.get(pid)
+		if card != null:
+			total += PlayerCard.release_credits(card.tier)
+	return total
+
+
+func _on_quick_sell_pressed() -> void:
+	_sell_mode = true
+	_selected_ids.clear()
+	_quick_sell_button.visible = false
+	_sell_action_row.visible = true
+	_update_sell_ui()
+
+
+func _exit_sell_mode() -> void:
+	_sell_mode = false
+	_selected_ids.clear()
+	_quick_sell_button.visible = not _browse_views.is_empty()
+	_sell_action_row.visible = false
+	_sell_confirm_overlay.visible = false
+	for pid in _browse_views.keys():
+		_restyle_card(pid)
+
+
+func _update_sell_ui() -> void:
+	CurrencyDisplay.set_button_price(
+		_sell_selected_button, tr("Sell %d") % _selected_ids.size(), _total_payout()
+	)
+	_sell_selected_button.disabled = _selected_ids.is_empty() or _selling
+
+
+func _on_sell_selected_pressed() -> void:
+	if _selected_ids.is_empty() or _selling:
+		return
+	_sell_confirm_label.text = tr("Release %d player(s) for %s credits?\n\nThis cannot be undone.") % [
+		_selected_ids.size(), CurrencyDisplay.format_amount(_total_payout())
+	]
+	_sell_confirm_overlay.visible = true
+
+
+func _on_sell_cancel_pressed() -> void:
+	if not _selling:
+		_sell_confirm_overlay.visible = false
+
+
+func _on_sell_confirm_pressed() -> void:
+	if _selling or _selected_ids.is_empty():
+		return
+	_selling = true
+	_sell_confirm_button.disabled = true
+	_sell_cancel_button.disabled = true
+
+	var sold := _selected_ids.duplicate()
+	var res: Dictionary = await Backend.call_endpoint(
+		HTTPClient.METHOD_POST, "/player/release/batch", {"player_ids": sold}
+	)
+
+	_selling = false
+	_sell_confirm_button.disabled = false
+	_sell_cancel_button.disabled = false
+	_sell_confirm_overlay.visible = false
+
+	if not res.get("ok", false):
+		print("Pack quick sell failed. Status: ", res.get("status"))
+		_update_sell_ui()
+		return
+
+	for pid in sold:
+		GameProfile.release_card(pid)
+		var view: PlayerCardView = _browse_views.get(pid)
+		if view != null:
+			_cards_grid.remove_child(view)
+			view.queue_free()
+		_browse_views.erase(pid)
+	GameProfile.apply_inventory_cap(res.data.get("inventory_cap"))
+	GameProfile.apply_currency_balances(res.data.get("credits_remaining"))
+
+	# _cards and _views are parallel, so they have to be trimmed together.
+	var kept_cards: Array = []
+	var kept_views: Array = []
+	for i in _cards.size():
+		if sold.has(_cards[i].player_id):
+			continue
+		kept_cards.append(_cards[i])
+		if i < _views.size():
+			kept_views.append(_views[i])
+	_cards = kept_cards
+	_views = kept_views
+
+	_exit_sell_mode()

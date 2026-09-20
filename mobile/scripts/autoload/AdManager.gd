@@ -22,6 +22,11 @@ const TRACK_ENERGY := "energy_track"
 const REWARDED_TEST_ID_IOS := "ca-app-pub-3940256099942544/1712485313"
 const REWARDED_ID_IOS := "ca-app-pub-1704438625576029/5444455793"
 
+const LOADING_POPUP_SCENE := preload("res://scenes/components/LoadingPopup.tscn")
+
+# Above every screen's own UI, so the block covers whatever is on top.
+const GRANT_BLOCKER_LAYER := 128
+
 # How long to wait for AdMob's callback to land before calling it pending.
 const GRANT_POLL_INTERVAL_SECONDS := 2.0
 const GRANT_POLL_ATTEMPTS := 8
@@ -37,6 +42,9 @@ var _current_track: String = ""
 var _rewarded_ad: RewardedAd = null
 var _is_ad_ready: bool = false
 var _sdk_started: bool = false
+
+# LoadingPopup.gd has no class_name, so this stays untyped to reach set_status.
+var _grant_blocker = null
 
 var _full_screen_content_callback := FullScreenContentCallback.new()
 var _user_earned_reward_listener := OnUserEarnedRewardListener.new()
@@ -62,6 +70,12 @@ func _get_unit_id() -> String:
 func _ready() -> void:
 	_full_screen_content_callback.on_ad_dismissed_full_screen_content = func() -> void:
 		_is_ad_ready = false
+		# on_user_earned_reward clears the track, so one still set here means the
+		# viewer closed the ad before earning anything.
+		if _current_track != "":
+			var track := _current_track
+			_current_track = ""
+			_finish(track, "failed")
 		_create_and_load_ad()
 
 	_full_screen_content_callback.on_ad_failed_to_show_full_screen_content = func(ad_error) -> void:
@@ -70,17 +84,54 @@ func _ready() -> void:
 		if _current_track != "":
 			var track := _current_track
 			_current_track = ""
-			ad_reward_completed.emit(track, "failed")
+			_finish(track, "failed")
 
 	_user_earned_reward_listener.on_user_earned_reward = func(rewarded_item) -> void:
 		print("on_user_earned_reward, type: ", rewarded_item.type, ", amount: ", rewarded_item.amount)
 		if _current_track != "":
 			var track := _current_track
 			_current_track = ""
+			_block_for_grant()
 			_await_backend_grant(track)
+
+	_build_grant_blocker()
 
 	if ads_supported():
 		_gather_consent()
+
+
+# -- The grant blocker ---------------------------------------------------------
+
+## A modal on its own CanvasLayer: the reward is settled by AdMob calling the
+## backend, which takes a moment after the ad closes, and a tap that leaves
+## the shop in that window strands the viewer on a reward they earned.
+##
+## It lives here rather than in CurrencyPanel because the wait outlives the
+## panel -- the block has to cover whatever screen is up.
+func _build_grant_blocker() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = GRANT_BLOCKER_LAYER
+	add_child(layer)
+
+	_grant_blocker = LOADING_POPUP_SCENE.instantiate()
+	_grant_blocker.visible = false
+	layer.add_child(_grant_blocker)
+	# Explicit rather than inherited: swallowing the tap is the whole job here.
+	_grant_blocker.mouse_filter = Control.MOUSE_FILTER_STOP
+
+
+func _block_for_grant() -> void:
+	if _grant_blocker == null:
+		return
+	_grant_blocker.set_status(tr("Confirming your reward..."))
+	_grant_blocker.visible = true
+
+
+## The one way out of a rewarded ad, so the blocker can never be left up.
+func _finish(track: String, status: String) -> void:
+	if _grant_blocker != null:
+		_grant_blocker.visible = false
+	ad_reward_completed.emit(track, status)
 
 
 # -- Consent (UMP) -------------------------------------------------------------
@@ -159,7 +210,7 @@ func _create_and_load_ad() -> void:
 		if _current_track != "":
 			var track := _current_track
 			_current_track = ""
-			ad_reward_completed.emit(track, "failed")
+			_finish(track, "failed")
 
 	rewarded_ad_load_callback.on_ad_loaded = func(rewarded_ad: RewardedAd) -> void:
 		_rewarded_ad = rewarded_ad
@@ -175,7 +226,7 @@ func show_ad_for_track(track: String) -> bool:
 		# callback), but the shop's flow can still be walked through.
 		print("No ads on ", OS.get_name(), ": pretending the ad ran for track ", track)
 		_current_track = ""
-		call_deferred("emit_signal", "ad_reward_completed", track, "pending")
+		call_deferred("_finish", track, "pending")
 		return true
 
 	if _is_ad_ready and _rewarded_ad != null:
@@ -264,10 +315,10 @@ func _await_backend_grant(track: String) -> void:
 			var now := GameProfile.ad_counter_field(data.get("ad_counters"), track, "watched", before)
 			if now > before:
 				_apply_status(data)
-				ad_reward_completed.emit(track, "granted")
+				_finish(track, "granted")
 				return
 		await get_tree().create_timer(GRANT_POLL_INTERVAL_SECONDS).timeout
-	ad_reward_completed.emit(track, "pending")
+	_finish(track, "pending")
 
 
 func _apply_status(data: Dictionary) -> void:
