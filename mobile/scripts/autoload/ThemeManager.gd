@@ -22,6 +22,25 @@ const LIGHT_THEME := "res://theme/AppThemeLight.tres"
 
 const SETTINGS_PATH := "user://settings.cfg"
 
+## The app font, as a player-visible choice.
+##
+## "pixel" is Monocraft, which is what the art is drawn for; "rounded" is
+## Arial Rounded Bold, which is plainly easier to read at small sizes. Both
+## fall back to Nunito for the glyphs their base is missing (Turkish ş ğ İ,
+## the lira sign), so neither choice can produce a blank box.
+##
+## Applied by OVERWRITING every font entry in the loaded Theme rather than
+## by shipping two Themes: the two .tres files differ in colours and
+## styleboxes, and keeping four of them in step by hand is how one of them
+## quietly ends up wrong. (The light theme already had its Button font set
+## to the raw .ttf while its Label font was AppFont -- exactly that kind of
+## drift. Overriding both here settles it.)
+const FONTS := {
+	"pixel": "res://theme/fonts/AppFont.tres",
+	"rounded": "res://theme/fonts/AppFontRounded.tres",
+}
+const DEFAULT_FONT := "pixel"
+
 const PALETTES := {
 	"dark": {
 		"credits": Color(0.95, 0.75, 0.25),
@@ -99,10 +118,11 @@ const BACKGROUNDS := {
 }
 
 var mode: String = "dark"
+var font_key: String = DEFAULT_FONT
 
 
 func _ready() -> void:
-	_load_saved_mode()
+	_load_saved_display()
 	_apply_theme_resource()
 
 
@@ -131,7 +151,20 @@ func set_mode(new_mode: String) -> void:
 		return
 	mode = new_mode
 	_apply_theme_resource()
-	_save_mode()
+	_save_display()
+	theme_changed.emit()
+
+
+## Swapping the font needs no scene reload: the root Window's theme is what
+## every Label and Button looks its font up through, so rewriting it there
+## re-renders the lot. theme_changed still fires, for components that
+## measure text when they rebuild.
+func set_font(new_font: String) -> void:
+	if not FONTS.has(new_font) or new_font == font_key:
+		return
+	font_key = new_font
+	_apply_theme_resource()
+	_save_display()
 	theme_changed.emit()
 
 
@@ -145,20 +178,43 @@ func _apply_theme_resource() -> void:
 		return  # light theme not authored yet -- keep whatever's already applied
 	var theme := load(path) as Theme
 	if theme != null:
+		_apply_font(theme)
 		get_tree().root.theme = theme
 
 
-func _save_mode() -> void:
+## Points every font entry in `theme` at the chosen face -- the per-type ones
+## the .tres sets (Button, Label) and `default_font`, which is what every
+## other control falls back to. Walking the type list rather than naming
+## Button and Label means a font added to the theme later is covered without
+## a matching edit here.
+func _apply_font(theme: Theme) -> void:
+	var path: String = FONTS.get(font_key, FONTS[DEFAULT_FONT])
+	if not ResourceLoader.exists(path):
+		return  # keep whatever the theme shipped with rather than blanking text
+	var font := load(path) as Font
+	if font == null:
+		return
+	theme.default_font = font
+	for type_name in theme.get_font_type_list():
+		for entry in theme.get_font_list(type_name):
+			theme.set_font(entry, type_name, font)
+
+
+func _save_display() -> void:
 	var config := ConfigFile.new()
 	config.load(SETTINGS_PATH)  # keep any other settings already in the file
 	config.set_value("display", "theme_mode", mode)
+	config.set_value("display", "font", font_key)
 	config.save(SETTINGS_PATH)
 
 
-func _load_saved_mode() -> void:
+func _load_saved_display() -> void:
 	var config := ConfigFile.new()
 	if config.load(SETTINGS_PATH) != OK:
 		return
-	var saved = config.get_value("display", "theme_mode", "dark")
-	if saved is String and PALETTES.has(saved):
-		mode = saved
+	var saved_mode = config.get_value("display", "theme_mode", "dark")
+	if saved_mode is String and PALETTES.has(saved_mode):
+		mode = saved_mode
+	var saved_font = config.get_value("display", "font", DEFAULT_FONT)
+	if saved_font is String and FONTS.has(saved_font):
+		font_key = saved_font

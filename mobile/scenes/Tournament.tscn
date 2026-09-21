@@ -52,6 +52,15 @@ accent_key = "medals"
 hero = true
 min_height = 96
 
+[node name="WeeklyTile" parent="Margin/RootVBox" unique_id=1998000009 instance=ExtResource("menutile")]
+unique_name_in_owner = true
+layout_mode = 2
+title_text = "Weekly League"
+subtitle_text = "Fifty matches over seven days, in a group of ten. Bigger table, bigger prizes, and a ranking of its own."
+accent_key = "bucks"
+hero = true
+min_height = 96
+
 [node name="ComingSoonBox" type="VBoxContainer" parent="Margin/RootVBox" unique_id=1998000010]
 unique_name_in_owner = true
 layout_mode = 2

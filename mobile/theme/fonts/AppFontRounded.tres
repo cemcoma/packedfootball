@@ -1,0 +1,8 @@
+[gd_resource type="FontVariation" format=3]
+
+[ext_resource type="FontFile" uid="uid://c5devhv8uhf53" path="res://theme/fonts/Arial Rounded Bold.ttf" id="1"]
+[ext_resource type="FontFile" uid="uid://f5f53iypwf41" path="res://theme/fonts/Nunito-Bold.ttf" id="2"]
+
+[resource]
+fallbacks = Array[Font]([ExtResource("2")])
+base_font = ExtResource("1")

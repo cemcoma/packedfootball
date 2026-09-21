@@ -199,7 +199,7 @@ def _generate_bot_opponent(card_tier_rates: dict | None = None) -> tuple[str, di
     `card_tier_rates` ({tier: weight}) makes each card roll its own tier
     from those weights. Quick Match passes nothing and keeps one random
     tier from the full TIER_RANGES spread for the whole squad; a tournament
-    passes its league's TOURNAMENT_BOT_CARD_RATES, because an icon bot in
+    passes its league's bot_card_rates (config.TOURNAMENT_TIERS), since an icon bot in
     the bronze league is not a match, it is a guaranteed loss.
     """
     formation = random.choice(list(FORMATIONS.keys()))

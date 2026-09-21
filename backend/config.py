@@ -135,7 +135,7 @@ BUCKS_IAP_CATALOG = {
 # without waiting. That is deliberate pressure, but it is the dial to turn
 # first if it reads as punishing.
 ENERGY_MAX = 10
-ENERGY_REGEN_SECONDS = 45 * 60
+ENERGY_REGEN_SECONDS = 15 * 60
 ENERGY_COST_PER_MATCH = 1
 
 # Quick Match's own cost, separate from the tournament's so the two can be
@@ -199,12 +199,80 @@ LEADERBOARD_PAGE_SIZE = 10
 
 # -- daily tournaments --------------------------------------------------------
 
-# Three tiers, 1 = top. A player's tier lives on users/{uid} and only moves at
-# settlement. New accounts start at the bottom.
-TOURNAMENT_TOP_TIER = 1
-TOURNAMENT_BOTTOM_TIER = 3
+# ONE ENTRY PER TIER, holding everything that tier decides: what it's called,
+# what its bots are made of, and what each finishing position pays. Reading a
+# league is reading one block top to bottom rather than cross-referencing
+# three tables by number, and adding or removing a tier is one entry rather
+# than an edit in each of them -- the same shape AD_REWARD_PATH uses.
+#
+#   name             what the client shows. Not translated (see mobile's
+#                    README: anything the backend composes stays as sent).
+#   bot_card_rates   what a bot's eleven are made of in this tier -- each
+#                    card rolls its own tier from these weights (a pack's
+#                    "rates" shape), so a bronze-league bot is mostly silver
+#                    with a few golds and the odd platinum rather than eleven
+#                    identical cards. Used both for the stored bots
+#                    scripts/seed_bots.py creates and for the throwaway one
+#                    _generate_bot_opponent rolls when a pool is empty. Quick
+#                    Match bots keep rolling a single random tier from the
+#                    whole spread.
+#   rewards          placement payouts, by finishing POSITION -- not by
+#                    whether the player promoted. The podium carries the
+#                    scarce currencies (medals, and bucks on the tier 1
+#                    podium only -- packs 6 and 7 cost 1 and 3 medals, see
+#                    packedfootball/packEngine.py, so two medals is a real
+#                    prize) and every row down to last carries credits, so a
+#                    bad day still pays something and there is a reason to
+#                    keep playing from 5th. A position missing from the table
+#                    pays nothing.
+#
+# Sized against the per-match credits below: ten wins is 3000, so a bronze
+# win is worth about half a perfect day on top.
+TOURNAMENT_TIERS = {
+    1: {
+        "name": "Gold League",
+        "bot_card_rates": {"gold": 0.2, "platinum": 0.45, "diamond": 0.35},
+        "rewards": {
+            1: {"medals": 5, "bucks": 5, "credits": 3000},
+            2: {"medals": 3, "bucks": 3, "credits": 2000},
+            3: {"medals": 3, "credits": 1500},
+            4: {"medals": 1, "credits": 1000},
+            5: {"credits": 750},
+            6: {"credits": 500},
+        },
+    },
+    2: {
+        "name": "Silver League",
+        "bot_card_rates": {"silver": 0.15, "gold": 0.5, "platinum": 0.3, "diamond": 0.05},
+        "rewards": {
+            1: {"medals": 3, "credits": 2000},
+            2: {"medals": 2, "credits": 1500},
+            3: {"medals": 1, "credits": 1000},
+            4: {"credits": 750},
+            5: {"credits": 500},
+            6: {"credits": 300},
+        },
+    },
+    3: {
+        "name": "Bronze League",
+        "bot_card_rates": {"bronze": 0.1, "silver": 0.45, "gold": 0.4, "platinum": 0.05},
+        "rewards": {
+            1: {"medals": 2, "credits": 1500},
+            2: {"medals": 1, "credits": 1000},
+            3: {"credits": 500},
+            4: {"credits": 400},
+            5: {"credits": 300},
+            6: {"credits": 200},
+        },
+    },
+}
+
+# 1 is the top. Derived from the table's own keys, so a fourth tier is one
+# more entry above and nothing else. A player's tier lives on users/{uid} and
+# only moves at settlement; new accounts start at the bottom.
+TOURNAMENT_TOP_TIER = min(TOURNAMENT_TIERS)
+TOURNAMENT_BOTTOM_TIER = max(TOURNAMENT_TIERS)
 TOURNAMENT_DEFAULT_TIER = TOURNAMENT_BOTTOM_TIER
-TOURNAMENT_TIER_NAMES = {1: "Gold League", 2: "Silver League", 3: "Bronze League"}
 
 TOURNAMENT_GROUP_CAPACITY = 6
 TOURNAMENT_MATCHES_PER_DAY = 10
@@ -252,43 +320,6 @@ TOURNAMENT_RELEGATION_FLOOR = 8
 # this is refused.
 TOURNAMENT_MIN_GROUP_FOR_PROMOTION = 3
 
-# Placement pays EVERY position, by position alone -- not by whether the
-# player promoted. The podium carries the scarce currencies (medals, and
-# bucks on the tier 1 podium only -- packs 6 and 7 cost 1 and 3 medals, see
-# packedfootball/packEngine.py, so two medals is a real prize) and every
-# row down to last carries credits, so a bad day still pays something and
-# there is a reason to keep playing from 5th. A position missing from a
-# tier's table pays nothing.
-#
-# Sized against the per-match credits below: ten wins is 3000, so a
-# bronze win is worth about half a perfect day on top.
-TOURNAMENT_REWARDS = {
-    1: {
-        1: {"medals": 5, "bucks": 5, "credits": 3000},
-        2: {"medals": 3, "bucks": 3, "credits": 2000},
-        3: {"medals": 3, "credits": 1500},
-        4: {"medals": 1, "credits": 1000},
-        5: {"credits": 750},
-        6: {"credits": 500},
-    },
-    2: {
-        1: {"medals": 3, "credits": 2000},
-        2: {"medals": 2, "credits": 1500},
-        3: {"medals": 1, "credits": 1000},
-        4: {"credits": 750},
-        5: {"credits": 500},
-        6: {"credits": 300},
-    },
-    3: {
-        1: {"medals": 2, "credits": 1500},
-        2: {"medals": 1, "credits": 1000},
-        3: {"credits": 500},
-        4: {"credits": 400},
-        5: {"credits": 300},
-        6: {"credits": 200},
-    },
-}
-
 TOURNAMENT_REWARD_MIN_MATCHES = 1
 
 # Playing every one of the day's matches pays this, on top of placement --
@@ -324,18 +355,158 @@ TOURNAMENT_ADMIN_SECRET = os.environ.get("TOURNAMENT_ADMIN_SECRET", "")
 # reads to hydrate its roster, so this bounds the worst case.
 TOURNAMENT_OPPONENT_MAX_ATTEMPTS = 5
 
-# What a tournament bot's cards are made of, per league tier: each of its
-# eleven rolls a card tier from these weights (a pack's "rates" shape), so
-# a bronze-league bot is mostly silver with a few golds and the odd
-# platinum rather than eleven identical cards. Used both for the stored
-# bots scripts/seed_bots.py creates and for the throwaway one
-# _generate_bot_opponent rolls when a pool is empty. Quick Match bots keep
-# rolling a single random tier from the whole spread.
-TOURNAMENT_BOT_CARD_RATES = {
-    1: {"gold": 0.20, "platinum": 0.45, "diamond": 0.35},
-    2: {"silver": 0.15, "gold": 0.50, "platinum": 0.30, "diamond": 0.05},
-    3: {"bronze": 0.10, "silver": 0.45, "gold": 0.40, "platinum": 0.05},
+# -- weekly tournaments -------------------------------------------------------
+#
+# The same machine as the daily league, run over seven days instead of one:
+# services/tournament.py is written against a Mode record and builds one from
+# each of these blocks, so there is a single implementation of ranking,
+# promotion and settlement.
+#
+# Deliberately a SEPARATE set of constants rather than a multiplier on the
+# daily ones. The two formats will drift -- a week is a different kind of
+# commitment from a day -- and when they do, the edit is a number here rather
+# than a new branch in the rules.
+#
+# What weekly does NOT get its own copy of: the bots. Both formats draw
+# opponents from the same bot_pools/{tier} written by scripts/seed_bots.py,
+# so a weekly pool needs no second seeding run.
+
+# Its own tier ladder, stored on users/{uid}.weekly_tournament_tier. Separate
+# from the daily tier on purpose: a player who is gold in the daily grind and
+# bronze over a full week is telling you something true, and sharing one field
+# would let a good week undo a bad month of days.
+#
+# Same per-tier shape as TOURNAMENT_TIERS above. Ten rows instead of six, so
+# a full group pays everyone down to last, and bigger numbers than the daily
+# equivalent throughout, because fifty matches over seven days has to be
+# worth more than ten in one.
+#
+# THE INVARIANT a test holds this to: no position ever pays less here than
+# the same position pays in the daily league.
+#
+# The bot rates are the daily tier's OBJECT, not a copy -- "the same bots as
+# the daily tournament" is then something the file states rather than
+# something two tables happen to agree on.
+WEEKLY_TOURNAMENT_TIERS = {
+    1: {
+        "name": "Gold League",
+        "bot_card_rates": TOURNAMENT_TIERS[1]["bot_card_rates"],
+        "rewards": {
+            1: {"medals": 30, "bucks": 10, "credits": 5000},
+            2: {"medals": 15, "bucks": 5, "credits": 3000},
+            3: {"medals": 10, "bucks": 3, "credits": 2000},
+            4: {"medals": 5, "credits": 2000},
+            5: {"medals": 3, "credits": 1000},
+            6: {"credits": 750},
+            7: {"credits": 500},
+            8: {"credits": 400},
+            9: {"credits": 350},
+            10: {"credits": 300},
+        },
+    },
+    2: {
+        "name": "Silver League",
+        "bot_card_rates": TOURNAMENT_TIERS[2]["bot_card_rates"],
+        "rewards": {
+            1: {"medals": 20, "credits": 4000},
+            2: {"medals": 10, "credits": 2000},
+            3: {"medals": 5, "credits": 1500},
+            4: {"credits": 750},
+            5: {"credits": 500},
+            6: {"credits": 300},
+            7: {"credits": 275},
+            8: {"credits": 250},
+            9: {"credits": 225},
+            10: {"credits": 200},
+        },
+    },
+    3: {
+        "name": "Bronze League",
+        "bot_card_rates": TOURNAMENT_TIERS[3]["bot_card_rates"],
+        "rewards": {
+            1: {"medals": 10, "credits": 3000},
+            2: {"medals": 5, "credits": 1500},
+            3: {"medals": 3, "credits": 1000},
+            4: {"credits": 750},
+            5: {"credits": 500},
+            6: {"credits": 300},
+            7: {"credits": 250},
+            8: {"credits": 150},
+            9: {"credits": 125},
+            10: {"credits": 100},
+        },
+    },
 }
+
+WEEKLY_TOURNAMENT_TOP_TIER = min(WEEKLY_TOURNAMENT_TIERS)
+WEEKLY_TOURNAMENT_BOTTOM_TIER = max(WEEKLY_TOURNAMENT_TIERS)
+WEEKLY_TOURNAMENT_DEFAULT_TIER = WEEKLY_TOURNAMENT_BOTTOM_TIER
+
+# Ten players, fifty matches. Bigger than the daily six because a week gives
+# enough matches for a ten-row table to actually separate people.
+WEEKLY_TOURNAMENT_GROUP_CAPACITY = 10
+WEEKLY_TOURNAMENT_MATCHES_PER_WEEK = 50
+
+WEEKLY_TOURNAMENT_POINTS = {"win": 3, "draw": 1, "loss": 0}
+
+# Seven days, rolling over at the same hour as the daily reset so a player
+# only ever has one reset time to learn (TOURNAMENT_DAY_OFFSET_HOURS == 12:00
+# in Istanbul).
+WEEKLY_TOURNAMENT_PERIOD_DAYS = 7
+WEEKLY_TOURNAMENT_DAY_OFFSET_HOURS = TOURNAMENT_DAY_OFFSET_HOURS
+
+# Which calendar date the seven-day grid counts from -- it fixes WHICH day of
+# the week a week starts on, and nothing else. 2026-01-05 is a Sunday, so a
+# week runs Monday 12:00 Istanbul to the next Monday 12:00. Weeks before this
+# date are still computed correctly; it is an origin, not a start date.
+WEEKLY_TOURNAMENT_PERIOD_ANCHOR = "2026-01-05"
+
+# No joining in the last 12 hours. The daily league's reasoning at weekly
+# scale: fifty matches costs fifty energy, so a join is only worth selling
+# while the remaining time can still regenerate a real share of that.
+# Twelve hours is half a day of regen -- 48 energy at ENERGY_REGEN_SECONDS
+# of 15 minutes -- which is nearly the whole schedule, and a late joiner who
+# wants the rest can buy it. This number and ENERGY_REGEN_SECONDS are paired:
+# slow the bar down and this has to grow.
+WEEKLY_TOURNAMENT_JOIN_CUTOFF_SECONDS = 12 * 60 * 60
+
+# Promotion and relegation, same two-path rule as the daily league (positional
+# in a full group, thresholds in a short one). Scaled to ten rows: three up,
+# three down, four safe -- the daily 2/2/2 shape at this size.
+WEEKLY_TOURNAMENT_PROMOTE_POSITIONS = (1, 2, 3)
+WEEKLY_TOURNAMENT_RELEGATE_POSITIONS = (8, 9, 10)
+
+# The daily floors multiplied by the five-times-longer schedule: 80 is
+# twenty-five wins and five draws out of fifty, 40 is the same share of the
+# week the daily 8 is of the day.
+WEEKLY_TOURNAMENT_PROMOTION_FLOOR = 80
+WEEKLY_TOURNAMENT_RELEGATION_FLOOR = 40
+
+# Same guard as the daily league, for the same reason: promotion out of a
+# group with nobody in it to beat is not promotion.
+WEEKLY_TOURNAMENT_MIN_GROUP_FOR_PROMOTION = 3
+
+WEEKLY_TOURNAMENT_REWARD_MIN_MATCHES = 1
+
+# Playing all fifty pays this, on CLAIM (POST /claim, type
+# "tournament_full_week"), the same way the daily league's full-day reward works.
+WEEKLY_TOURNAMENT_FULL_WEEK_REWARD = {"bucks": 5}
+
+# What one weekly match pays regardless of placement. Same numbers as the
+# daily league for now, separate so the two can be priced apart.
+WEEKLY_TOURNAMENT_MATCH_REWARD_CREDITS = {"loss": 10, "draw": 50, "win": 300}
+
+# What one weekly match costs. Fifty matches is fifty energy across seven
+# days, against a bar that refills about 32 a day -- comfortably affordable
+# alongside a full daily run, and the dial to turn if that stops being true.
+WEEKLY_TOURNAMENT_ENERGY_COST_PER_MATCH = ENERGY_COST_PER_MATCH
+
+# Two weeks of lookback, so a player returning after missing a week still
+# triggers settlement of the week they actually played.
+WEEKLY_TOURNAMENT_SETTLE_LOOKBACK_WEEKS = 2
+
+WEEKLY_TOURNAMENT_MAX_GROUPS_PER_REQUEST = 5
+WEEKLY_TOURNAMENT_OPPONENT_MAX_ATTEMPTS = 5
 
 # -- match bug reports --------------------------------------------------------
 

@@ -3,8 +3,9 @@
 POST /claim with a `type` and whatever that type needs to find the thing
 being claimed. Every reward that is EARNED silently but PAID on a tap goes
 through here, so the client has one call to make and one response shape to
-read, whatever it is claiming -- today the full-day tournament reward,
-later a season pass tier, a daily login streak, an achievement.
+read, whatever it is claiming -- today the daily and weekly tournaments'
+play-everything rewards, later a season pass tier, a login streak, an
+achievement.
 
 Each type is a handler in CLAIM_HANDLERS: it validates its own fields,
 runs its own transaction (the pay-once guarantee lives in the service that
@@ -30,27 +31,32 @@ router = APIRouter(tags=["claims"])
 class ClaimRequest(BaseModel):
     type: str
     # Type-specific. Optional so a client can send only what its type needs.
+    # period_id is the period-neutral name; day_id is what the already-shipped
+    # daily screen sends and means the same thing.
+    period_id: str = ""
     day_id: str = ""
     group_id: str = ""
 
 
-async def _claim_tournament_full_day(client, uid: str, req: ClaimRequest) -> dict:
-    """The play-every-match reward for one tournament entry -- today's by
-    default, or any day's given day_id + group_id (the results screen
-    knows both), so a reward earned late last night is still collectable
-    from the results popup the next morning."""
-    day_id, group_id = req.day_id, req.group_id
-    if not day_id or not group_id:
+async def _claim_tournament_full_period(client, uid: str, req: ClaimRequest, mode) -> dict:
+    """The play-every-match reward for one tournament entry -- the current
+    period's by default, or any period's given period_id + group_id (the
+    results screen knows both), so a reward earned in a period's last hour
+    is still collectable from the results popup afterwards."""
+    period_id, group_id = (req.period_id or req.day_id), req.group_id
+    if not period_id or not group_id:
         profile = await client.get_document(f"users/{uid}")
-        today = tournament_service.day_id_for(energy_service.now_utc())
-        if (profile or {}).get("tournament_day_id") != today:
-            raise HTTPException(409, "You are not in today's tournament")
-        day_id, group_id = today, (profile or {}).get("tournament_group_id") or ""
+        current = tournament_service.period_id_for(energy_service.now_utc(), mode)
+        if not tournament_service.is_entered(profile, current, mode):
+            raise HTTPException(409, f"You are not in this {mode.label}'s tournament")
+        period_id, group_id = current, tournament_service.entered_group(profile, mode)
         if not group_id:
-            raise HTTPException(409, "You are not in today's tournament")
+            raise HTTPException(409, f"You are not in this {mode.label}'s tournament")
 
     try:
-        return await tournament_service.claim_full_day(client, uid, day_id, group_id)
+        return await tournament_service.claim_full_period(
+            client, uid, period_id, group_id, mode
+        )
     except tournament_service.NotClaimable as exc:
         raise HTTPException(
             {"no_entry": 404, "already_claimed": 409, "not_earned": 409}[exc.reason],
@@ -62,8 +68,17 @@ async def _claim_tournament_full_day(client, uid: str, req: ClaimRequest) -> dic
         ) from exc
 
 
+async def _claim_tournament_full_day(client, uid: str, req: ClaimRequest) -> dict:
+    return await _claim_tournament_full_period(client, uid, req, tournament_service.DAILY)
+
+
+async def _claim_tournament_full_week(client, uid: str, req: ClaimRequest) -> dict:
+    return await _claim_tournament_full_period(client, uid, req, tournament_service.WEEKLY)
+
+
 CLAIM_HANDLERS: dict[str, Callable[..., Awaitable[dict]]] = {
     "tournament_full_day": _claim_tournament_full_day,
+    "tournament_full_week": _claim_tournament_full_week,
 }
 
 

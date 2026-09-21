@@ -1,13 +1,13 @@
-[gd_scene format=3 uid="uid://uh75urberwt3"]
+[gd_scene format=3 uid="uid://bp4g8hkmqipxc"]
 
-[ext_resource type="Script" path="res://scripts/screens/DailyTournament.gd" id="1"]
+[ext_resource type="Script" uid="uid://cor3d48luf4r1" path="res://scripts/screens/TournamentScreen.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_vojua"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="5"]
 [ext_resource type="Script" uid="uid://l3fnvnqxw6uh" path="res://scripts/components/StandingsTable.gd" id="6"]
 [ext_resource type="PackedScene" path="res://scenes/components/CurrencyAmount.tscn" id="7"]
 
-[node name="DailyTournament" type="Control" unique_id=1999000001]
+[node name="TournamentScreen" type="Control" unique_id=1999000001]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -108,6 +108,7 @@ layout_mode = 2
 theme_override_constants/separation = 6
 
 [node name="FullDayPanel" type="PanelContainer" parent="Margin/RootVBox/Body/FullDayColumn" unique_id=1999000041]
+unique_name_in_owner = true
 unique_name_in_owner = true
 layout_mode = 2
 

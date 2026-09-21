@@ -44,6 +44,23 @@ func codes() -> Array:
 	return LANGUAGES.keys()
 
 
+## Uppercase for DISPLAY, in the current language's rules.
+##
+## Turkish has two i's and they uppercase to different letters: dotted i ->
+## İ, dotless ı -> I. Godot's String.to_upper() is locale-independent and
+## maps both to I, which turns "Haftalık Lig" into "HAFTALIK LIG" -- a word
+## a Turkish reader sees as misspelled, not merely as a font quirk. The
+## font itself is fine: AppFont falls back to Nunito for İ.
+##
+## Only for text shown to a person. A comparison (Settings' DELETE
+## confirmation) must keep plain to_upper(), or what the player has to type
+## would change with the language.
+func display_upper(text: String) -> String:
+	if language.begins_with("tr"):
+		return text.replace("i", "İ").replace("ı", "I").to_upper()
+	return text.to_upper()
+
+
 func set_language(code: String) -> void:
 	if not LANGUAGES.has(code) or code == language:
 		return

@@ -88,7 +88,7 @@ This is a gameplay test build, not a shipping target.
 | --- | --- | --- |
 | `Auth.tscn` | `Auth.gd` | Sign in / register / guest. Register also takes a manager name. |
 | `Menu.tscn` | `Menu.gd` | Navigation hub plus an account panel (name, squad overall, W/D/L) and currency chips. |
-| `Play.tscn` | `Play.gd` | Mode select: Quick Match (real) and Tournament (stub). |
+| `Play.tscn` | `Play.gd` | Mode select: Quick Match and Tournament. |
 | `Match.tscn` | `MatchPlayback.gd` | Replay playback with a HUD. |
 | `MatchResult.tscn` | `MatchResult.gd` | Post-match recap. |
 | `Team.tscn` | `Team.gd` | Squad management. |
@@ -96,7 +96,34 @@ This is a gameplay test build, not a shipping target.
 | `PackReveal.tscn` | `PackReveal.gd` | Pack-opening reveal animation. |
 | `Leaderboard.tscn` | `Leaderboard.gd` | Users (by wins) and Players (by goals) tabs, each lazy-loaded once and cached. |
 | `Settings.tscn` | `Settings.gd` | Rename, color theme, language, log out. |
-| `Tournament.tscn` | `StubScene.gd` | Placeholder. |
+| `Tournament.tscn` | `TournamentHub.gd` | Tournament hub: pick a format. Daily and Weekly are live; Monthly and Seasonal are disabled roadmap tiles. |
+| `TournamentScreen.tscn` | `TournamentScreen.gd` | **Both** leagues -- tier, group table, the play button, the play-everything reward. Which one it shows comes from `TournamentSession`. |
+
+### Tournaments
+
+`Tournament.tscn` is a hub of format tiles; both live ones open the SAME
+screen, `TournamentScreen.tscn`. A scene can't take arguments, so
+`TournamentSession` (autoload) carries which format was picked -- the same
+hand-off pattern as `ManagerSession` and `PlayerSession`, and it survives
+the trip out to a match and back, which is what makes Continue return to
+the league the player was actually playing.
+
+The daily and weekly leagues return the **same payload shape** from the
+backend, so one screen renders both. Only three things differ, and all
+three live in `TournamentSession.FORMATS`: the URL prefix
+(`/tournament` vs `/tournament/weekly`), the `POST /claim` type, and the
+handful of sentences that say "today" where the other says "this week".
+
+Nothing else is written down on this end. How many matches, how big a
+group, how many go up or down, what each position pays, how long is left --
+all of it arrives in the payload, so retuning the backend's config never
+needs a client release. That is why the rules line counts
+`promote_positions` rather than saying "the top 2": the daily league
+promotes two and the weekly three.
+
+`ENERGY_REGEN_SECONDS` is likewise never mirrored here -- every energy
+block carries `regen_seconds`, and `EnergyBar` reads it. Its `900.0`
+default covers only the frames before the first response.
 
 ### Play / Quick Match
 
@@ -361,10 +388,25 @@ Godot's built-in translation system, keyed on the English text:
   script filled with `tr()` was worded in the old language.
 - Not translated, by design: anything the **backend** composes -- pack,
   deal and tournament-tier names, HTTP error details.
-- The font: `Arial Rounded Bold` lacks `ş ğ İ` (and `₺`), so
-  `theme/fonts/AppFont.tres` is a `FontVariation` over it with
-  `Nunito-Bold.ttf` (OFL, `Nunito-OFL.txt`) as the fallback for any glyph
-  it's missing. Both theme files point at that, not the raw `.ttf`.
+- **Uppercase** for display goes through `LocaleManager.display_upper()`,
+  not `String.to_upper()`. Turkish has two i's that uppercase to different
+  letters (`i` -> `İ`, `ı` -> `I`) and Godot's `to_upper()` maps both to
+  `I`, which turns "Haftalık Lig" into the misspelled "HAFTALIK LIG".
+  `MenuTile` titles are the one place that uppercases display text. A
+  *comparison* (Settings' DELETE confirmation) keeps plain `to_upper()` --
+  what the player has to type must not change with the language.
+- **The fonts** are a player choice, in Settings, persisted by
+  `ThemeManager` (`FONTS`): **Pixel** (`Monocraft.ttf`, the default, what
+  the art is drawn for) and **Rounded** (`Arial Rounded Bold.ttf`, plainly
+  easier to read small). Each is a `FontVariation` -- `AppFont.tres` and
+  `AppFontRounded.tres` -- with `Nunito-Bold.ttf` (OFL, `Nunito-OFL.txt`)
+  as the fallback for glyphs the base is missing (`ş ğ İ`, `₺`), so no
+  choice can produce a blank box.
+  `ThemeManager._apply_font()` overwrites **every** font entry in the
+  loaded Theme plus its `default_font`, rather than shipping a Theme per
+  font -- four `.tres` files differing only in a font is how one of them
+  quietly ends up wrong, which had already happened (the light theme's
+  Button font was the raw `.ttf` while its Label font was `AppFont`).
 
 ## Theming (dark / light)
 
@@ -431,6 +473,7 @@ files never requires touching call sites -- only literal path strings
 | `GameProfile.gd` | The live squad model: profile fields, formation, slot assignment, every owned card, dirty-checking. |
 | `MatchSession.gd` | One just-played match's result, `Play.gd` -> `MatchPlayback.gd` -> `MatchResult.gd`. |
 | `PackSession.gd` | One just-opened pack's cards, `Shop.gd` -> `PackReveal.gd`. |
+| `TournamentSession.gd` | Which tournament format `TournamentScreen.gd` should show, `TournamentHub.gd` -> the screen -- and back again after a match. |
 | `IapClient.gd` | Wrapper around the RevenueCat plugin singleton. |
 | `ThemeManager.gd` | Dark/light mode, palettes, background selection; persists the choice. |
 | `LocaleManager.gd` | UI language: applies the locale, persists the choice, defaults to the device language. |
@@ -494,9 +537,7 @@ present-but-null value still returns null, and assigning null to a typed
 Every screen is real Control nodes -- layout/anchoring, hover/press
 feedback, real scrolling, no manual `Rect2.has_point()` hit-testing.
 
-Two things stay hand-drawn, for different reasons. `Tournament.tscn`
-(`StubScene.gd`) simply isn't built yet and should get real Controls when it
-is. The pitch itself -- `MatchPlayback.gd`'s `PitchCanvas` and
+One thing stays hand-drawn, permanently. The pitch -- `MatchPlayback.gd`'s `PitchCanvas` and
 `PitchView.gd`'s markings -- stays custom-drawn permanently: grass, lines,
 and moving players under a panning camera aren't something Controls model
 well. Everything *around* the pitch is real Controls.
@@ -511,7 +552,6 @@ clipping.
 - No real card-frame art or animation assets. The reveal animates the same
   placeholder visuals used everywhere else.
 - No audio anywhere in the project.
-- Tournament mode is a stub, so medals have no earning path.
 - `packedfootball/formations.py`'s `4-2-3-1` still uses `LCB`/`RCB`/`LDM`/
   `RDM` labels while the other three formations use `CB`/`CDM`/`CM`. The
   client normalizes it, since cards are only generated with the simplified

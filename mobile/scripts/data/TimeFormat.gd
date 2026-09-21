@@ -37,12 +37,17 @@ static func duration(seconds: int) -> String:
 	return TranslationServer.translate("%ds") % secs
 
 
-## "4h 12m" with no seconds -- for anything measured in hours, where a
-## ticking seconds digit is just a distraction.
+## "3d 06h" / "4h 12m" with no seconds -- for anything measured in hours or
+## longer, where a ticking seconds digit is just a distraction. The days
+## unit exists for the weekly league: a week left would otherwise read
+## "167h 59m", which is a number rather than an answer.
 static func coarse_duration(seconds: int) -> String:
 	seconds = maxi(0, seconds)
+	var days := seconds / 86400
 	var hours := seconds / 3600
 	var minutes := (seconds % 3600) / 60
+	if days > 0:
+		return TranslationServer.translate("%dd %02dh") % [days, hours % 24]
 	if hours > 0:
 		return TranslationServer.translate("%dh %02dm") % [hours, minutes]
 	if minutes > 0:

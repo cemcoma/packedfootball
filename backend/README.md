@@ -109,7 +109,7 @@ Credentials automatically -- no key file.
 | `POST /account/bootstrap` | The one call a sign-in makes. Idempotent: creates the profile plus an 11-card bronze starter roster on a uid's first ever call, then always answers with `profile`, `roster` (cards in lineup order), `inventory` (bench cards with their `doc_id`), `inventory_cap` and `energy`, so the client never fetches cards one by one. |
 | `GET /account/name_available` | Unauthenticated. Whether `?display_name=` passes the rules and is free -- the registration form asks before creating the Auth user. Advisory only. |
 | `POST /account/display_name` | Renames the manager, uniquely: reserves `display_names/{key}` in the same transaction as the name. 400 with a reason code, 409 when taken. |
-| `POST /claim` | One door for every reward that is earned silently and paid on a tap. Body `{"type": ...}` plus what the type needs; today `tournament_full_day` (optional `day_id` + `group_id`, default today's entry). Pays once, returns `rewards` and every `*_remaining` balance. |
+| `POST /claim` | One door for every reward that is earned silently and paid on a tap. Body `{"type": ...}` plus what the type needs; today `tournament_full_day` and `tournament_full_week` (optional `period_id` + `group_id`, default the caller's current entry in that format). Pays once, returns `rewards` and every `*_remaining` balance. |
 | `DELETE /account` | Deletes the account: profile, inventory, every owned card, games it started, its name reservation, its seat in an unsettled tournament group, then the Firebase Auth user (last, so a failed attempt can be retried). Keeps `iap_transactions` and games it only played in as the opponent. Backfill old accounts' name reservations with `scripts/sync_display_names.py`. |
 | `GET /pack/list` | Live pack catalog, filtered by availability, sorted by the pack type's `pack_types/{type}.order`, then the pack's own `order`, then id; returns `packs` and `sections` (the category order the client's dropdown follows). Puts a pack whose `available_at` has passed on sale as a side effect (see Pack availability). |
 | `POST /pack/open` | Charges the pack's currency, rolls cards, writes them. Refuses when the bench can't hold the whole pack (`INVENTORY_CAP`). |
@@ -134,7 +134,11 @@ Credentials automatically -- no key file.
 | `POST /tournament/join` | Joins today's group in the caller's tier. Refused in the last hour of the day. |
 | `POST /tournament/match` | One of the day's `TOURNAMENT_MATCHES_PER_DAY` matches against someone in the same tier's pool (or a tier-appropriate bot). |
 | `GET /tournament/results` | A settled day's final table for the caller's group. |
-| `POST /tournament/settle` | Scheduler/admin: settles the lookback window, or one `day_id`. |
+| `GET /tournament/weekly/today` | The weekly league, same payload shape as `/tournament/today`. |
+| `POST /tournament/weekly/join` | Joins this week's group in the caller's **weekly** tier. Refused in the last `WEEKLY_TOURNAMENT_JOIN_CUTOFF_SECONDS` of the week. |
+| `POST /tournament/weekly/match` | One of the week's `WEEKLY_TOURNAMENT_MATCHES_PER_WEEK` matches, from the same bot pools as the daily league. |
+| `GET /tournament/weekly/results` | A settled week's final table for the caller's group. |
+| `POST /tournament/settle` | Scheduler/admin: settles every format's lookback window. Optional `mode` (`daily`/`weekly`) and `period_id` to narrow it. |
 
 Both leaderboard endpoints return `{"stat", "page", "page_size",
 "has_more", "entries": [...]}` in rank order, one extra row fetched to
@@ -174,7 +178,63 @@ one-off sweep over `players/{id}` for the cards already out there (a
 champ/cont rename was done that way), plus `sync_pack_definitions.py` for
 the pack odds that name it.
 
-### Daily tournaments
+### Tournaments
+
+Two formats -- a **daily** league and a **weekly** one -- off **one
+implementation**. `services/tournament.py` is written against a `Mode`
+record (`DAILY`, `WEEKLY`), which is nothing but the config block that
+format was built from: its Firestore root, its period length, and the
+`users/{uid}` fields it owns. A third format is a new block in `config.py`
+and a new `Mode`, not a new module. `tests/test_weekly_tournament_rules.py`
+asserts the two cannot share a user-document field, because one shared name
+would let a weekly settlement move a player's daily tier.
+
+The weekly league is the daily one at a different scale, and every number is
+its own constant (`WEEKLY_TOURNAMENT_*`) rather than a multiplier: ten
+players a group, `WEEKLY_TOURNAMENT_MATCHES_PER_WEEK` matches, a week
+running Monday noon to Monday noon Istanbul
+(`WEEKLY_TOURNAMENT_PERIOD_ANCHOR` fixes the weekday, nothing else), three
+up and three down, and a ten-row payout table that never pays less than the
+daily one for the same position (a test holds it to that). The one thing it
+does **not** get its own copy of is the bots: both
+formats draw from the same `bot_pools/{tier}`, so adding a format needs no
+second seeding run.
+
+The rest of this section describes the daily league; the weekly one works
+the same way with `weekly_tournaments/{week}` in place of
+`tournaments/{day}`.
+
+A player's tournament state lives in three **maps on `users/{uid}`**, each
+keyed by format -- the shape `ad_counters` already uses:
+
+```
+tournament_tiers    {"daily": 2, "weekly": 3}
+tournament_entries  {"daily": {"period_id": ..., "group_id": ...}, ...}
+tournament_last     {"daily": {"period_id": ..., "group_id": ...}, ...}
+```
+
+One map per QUESTION rather than one field per format-and-question: a third
+format adds keys, never columns, and "what is this player's tournament
+state" is three fields in the console instead of fifteen scattered ones.
+Read it through `tier_of()` / `entered_period()` / `entered_group()` /
+`last_period()` / `last_group()` / `is_entered()`, write it through
+`enter_fields()` / `settle_fields()` -- all taking a Mode. Writes land with
+`merge=True`, which merges nested maps rather than replacing them, so
+settling one league cannot blank the other's seat (a test models that merge
+and holds it).
+
+Accounts written before this carry flat fields (`daily_tournament_tier`,
+`tournament_day_id`, ...). `scripts/migrate_tournament_fields.py` moves
+them; it is safe to run before or after the deploy, since a slot the new
+code already owns is never rewritten.
+
+A **tier** is one entry in `config.TOURNAMENT_TIERS` (and
+`WEEKLY_TOURNAMENT_TIERS`) holding everything that tier decides -- its
+`name`, its `bot_card_rates`, its `rewards` table. One block per league
+rather than three tables keyed by number, so a tier is read top to bottom
+and added or removed in one place; `TOURNAMENT_TOP_TIER` / `BOTTOM_TIER`
+are derived from its keys. Read it through `services.tournament`'s
+`tier_name()` / `rewards_table()` / `bot_card_rates()`, which take a Mode.
 
 Everyone in a tier is grouped into `tournaments/{day}/groups/{id}` of
 `TOURNAMENT_GROUP_CAPACITY` as they join (the tier's *desk* document points
@@ -199,7 +259,8 @@ it punctual. `settle_group` is one idempotent transaction per group: the
 read-compute-write) and the tier moves land together or not at all.
 
 The rules are pure functions in `services/tournament.py`, tested in
-`tests/test_tournament_rules.py`:
+`tests/test_tournament_rules.py` (and, for the weekly league's own grid and
+ten-row table, `tests/test_weekly_tournament_rules.py`):
 
 - **Full group** -- positional: `TOURNAMENT_PROMOTE_POSITIONS` go up if
   they also reach `TOURNAMENT_PROMOTION_FLOOR` (16), `RELEGATE_POSITIONS` go
@@ -207,14 +268,18 @@ The rules are pure functions in `services/tournament.py`, tested in
 - **Short group** -- thresholds: on or over the floor goes up, under
   `TOURNAMENT_RELEGATION_FLOOR` (8) goes down. Promotion needs at least
   `TOURNAMENT_MIN_GROUP_FOR_PROMOTION` players in the group.
-- **Rewards** (`TOURNAMENT_REWARDS`) pay **every position by position**, not
+- **Rewards** (each tier's `rewards` in `TOURNAMENT_TIERS`) pay **every
+  position by position**, not
   by whether the player promoted: medals and, on the tier 1 podium, bucks
   at the top, credits down to last place. A player who played nothing is
   paid nothing.
-- **Full-day bonus** (`TOURNAMENT_FULL_DAY_REWARD`) for playing every match
-  of the day. Earned silently, paid only through `POST /claim`
-  (`type: "tournament_full_day"`), once -- `full_day_claimed` on the entry
-  and the payout flip in one transaction.
+- **Full-day bonus** (`TOURNAMENT_FULL_DAY_REWARD`, and
+  `WEEKLY_TOURNAMENT_FULL_WEEK_REWARD` for the week) for playing every match
+  of the period. Earned silently, paid only through `POST /claim`
+  (`type: "tournament_full_day"` / `"tournament_full_week"`), once --
+  `full_period_claimed` on the entry and the payout flip in one transaction.
+  Entries written before the weekly league carry `full_day_claimed`, and
+  both names are read, so a mid-period deploy cannot re-pay anyone.
 
 `POST /claim` is the one door for anything earned-then-tapped;
 `routers/claims.py`'s `CLAIM_HANDLERS` is where the next claimable type
@@ -389,7 +454,7 @@ profile with that name to both check and deduct.
 guess which one moved. Set `price_currency` in `PACK_DATABASE` and
 `sync_pack_definitions.py` carries it across.
 
-Medals come only from tournament placement (`TOURNAMENT_REWARDS`), which is
+Medals come only from tournament placement (`TOURNAMENT_TIERS`), which is
 what makes a medals-priced pack scarce rather than unbuyable.
 
 ### Currencies
@@ -468,7 +533,8 @@ python3 backend/scripts/<script>.py [--dry-run]
 | `list_deals.py` | Read-only dump of live `deals/{id}` docs. |
 | `list_match_reports.py` | Read-only. Open bug reports newest first, with seed and engine version; `--dump-dir` writes each report's `games/{id}` doc as JSON. `--all` includes reports whose `status` you've changed by hand. To watch one: paste its game id into Play.tscn's TESTING panel (editor only, "Check a reported match"), which runs `packedfootball/scripts/replay_game.py` -- re-simulates the match on your Mac from the game doc and plays it back, showing the report text and flagging an engine-version mismatch. |
 | `list_accounts.py` | Read-only. Lists every `users/{uid}` and whether its roster is Quick-Match complete (`roster_player_ids` length == 11). |
-| `settle_tournaments.py` | Settles tournaments by hand when a day is stuck; `--dry-run` to see why it failed (or why it will work). |
+| `migrate_tournament_fields.py` | Moves each account's flat `daily_tournament_tier` / `tournament_day_id` / ... into the `tournament_tiers` / `tournament_entries` / `tournament_last` maps. `--dry-run` first; `--drop-old` removes the flat fields once the maps look right. Re-runnable. |
+| `settle_tournaments.py` | Settles tournaments by hand when a period is stuck; `--dry-run` to see why it failed (or why it will work), `--mode daily\|weekly` to pick a format. |
 
 A synced deal left `active: false` won't appear in `GET /deals/list` until
 you flip it, in the Firestore console or via `--activate-new` on first sync.

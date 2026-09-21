@@ -115,7 +115,7 @@ func _refresh() -> void:
 	if _title_label == null:
 		return  # set before _ready(); _ready() calls back here
 
-	_title_label.text = tr(title_text).to_upper() if title_text != "" else ""
+	_title_label.text = LocaleManager.display_upper(tr(title_text)) if title_text != "" else ""
 	_title_label.add_theme_font_size_override("font_size", 22 if hero else 15)
 
 	_subtitle_label.text = tr(subtitle_text) if subtitle_text != "" else ""

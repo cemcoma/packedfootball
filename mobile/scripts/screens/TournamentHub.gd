@@ -1,8 +1,12 @@
 extends Control
 
-## Tournament hub: pick a format. Daily is real; the rest are declared but
-## disabled, so the shape of what's coming is visible without pretending it
-## exists.
+## Tournament hub: pick a format. Daily and Weekly are real; the rest are
+## declared but disabled, so the shape of what's coming is visible without
+## pretending it exists.
+##
+## Both live tiles open the SAME screen -- TournamentSession.open() leaves
+## the format there and the screen reads it, because a scene can't take
+## arguments and two copies of a 500-line screen would drift apart.
 
 
 const MENU_TILE_SCENE := preload("res://scenes/components/MenuTile.tscn")
@@ -11,18 +15,19 @@ const MENU_TILE_SCENE := preload("res://scenes/components/MenuTile.tscn")
 ## silent absence reads as a missing feature and a disabled tile with a
 ## label reads as a roadmap.
 const COMING_SOON := [
-	{"name": "Weekly League", "hint": "Seven days, bigger groups, bigger prizes."},
 	{"name": "Monthly Cup", "hint": "A knockout bracket across the whole month."},
 	{"name": "Seasonal", "hint": "Long-form competition with its own ranking."},
 ]
 
 @onready var _daily_button: MenuTile = %DailyTile
+@onready var _weekly_button: MenuTile = %WeeklyTile
 @onready var _coming_soon_box: VBoxContainer = %ComingSoonBox
 @onready var _back_button: Button = %BackButton
 
 
 func _ready() -> void:
 	_daily_button.pressed.connect(_on_daily_pressed)
+	_weekly_button.pressed.connect(_on_weekly_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 
 	_build_coming_soon()
@@ -51,7 +56,11 @@ func _build_coming_soon() -> void:
 
 
 func _on_daily_pressed() -> void:
-	get_tree().change_scene_to_file("res://scenes/DailyTournament.tscn")
+	TournamentSession.open(TournamentSession.DAILY)
+
+
+func _on_weekly_pressed() -> void:
+	TournamentSession.open(TournamentSession.WEEKLY)
 
 
 func _on_back_pressed() -> void:

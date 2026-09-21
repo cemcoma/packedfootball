@@ -1,9 +1,22 @@
-"""Daily tournaments: joining, playing, standings, settlement.
+"""Tournaments: joining, playing, standings, settlement.
 
-Thin on purpose. The day arithmetic, the ranking and the promotion rules live
-in services/tournament.py, where they are pure and unit-tested; the match
-itself reuses services/match.py unchanged. What's left here is the HTTP shape
-and the order things happen in.
+Two formats, one set of handlers. The daily league lives at /tournament/*
+and the weekly league at /tournament/weekly/*; each route is a two-line
+wrapper that names its Mode and calls the shared implementation below, so
+the only thing that differs between a day and a week is the record in
+services/tournament.py that the handler was handed.
+
+Thin on purpose. The period arithmetic, the ranking and the promotion rules
+live in services/tournament.py, where they are pure and unit-tested; the
+match itself reuses services/match.py unchanged. What's left here is the
+HTTP shape and the order things happen in.
+
+WIRE NAMES: the payload carries period-neutral keys (`period_id`,
+`full_period`) AND the daily league's original `day_id` / `full_day`, with
+the same values, for BOTH formats. That is what lets the already-shipped
+Godot tournament screen render the weekly league without an edit; the
+`day_id` alias on a weekly payload is a compatibility shim, not a claim
+about what a week is.
 """
 
 from __future__ import annotations
@@ -20,6 +33,7 @@ from deps import admin_client, game_state_for, verify_id_token
 from engine import ENGINE_VERSION, REPLAY_FORMAT_VERSION
 from services import energy as energy_service
 from services import tournament as tournament_service
+from services.tournament import DAILY, WEEKLY, Mode
 from services.match import (
     persist_player_stats,
     pick_opponent_from_candidates,
@@ -46,32 +60,36 @@ async def verify_tournament_admin(authorization: str = Header(default="")) -> No
         raise HTTPException(401, "Invalid tournament admin authorization")
 
 
-async def _today_payload(client, uid: str, profile_doc: dict | None) -> dict:
-    """Everything the tournament screen needs, in one response.
+async def _period_payload(client, uid: str, profile_doc: dict | None, mode: Mode) -> dict:
+    """Everything a tournament screen needs, in one response.
 
     One call rather than four, because the screen is useless until it has all
     of it and four round trips on a phone is four chances to show a half-built
     page.
     """
     now = energy_service.now_utc()
-    day_id = tournament_service.day_id_for(now)
-    tier = tournament_service.tier_of(profile_doc)
+    period_id = tournament_service.period_id_for(now, mode)
+    tier = tournament_service.tier_of(profile_doc, mode)
 
-    joined = (profile_doc or {}).get("tournament_day_id") == day_id
-    group_id = (profile_doc or {}).get("tournament_group_id") if joined else None
+    joined = tournament_service.is_entered(profile_doc, period_id, mode)
+    group_id = tournament_service.entered_group(profile_doc, mode) if joined else None
 
     standings, played, group_size = [], 0, 0
     my_entry = None
     if group_id:
-        entries = await client.list_collection(tournament_service.entries_path(day_id, group_id))
-        group_doc = await client.get_document(tournament_service.group_path(day_id, group_id))
+        entries = await client.list_collection(
+            tournament_service.entries_path(period_id, group_id, mode)
+        )
+        group_doc = await client.get_document(
+            tournament_service.group_path(period_id, group_id, mode)
+        )
         group_size = len((group_doc or {}).get("member_uids") or entries)
         my_entry = next((e for e in entries if e.get("uid") == uid), None)
-        # "What happens if the day ended now", from the SAME apply_rules
+        # "What happens if the period ended now", from the SAME apply_rules
         # settlement calls -- one implementation is what stops the projection
         # and the payout from ever disagreeing.
         rows = tournament_service.apply_rules(
-            tournament_service.rank_rows(entries), tier, group_size=group_size
+            tournament_service.rank_rows(entries), tier, group_size=group_size, mode=mode
         )
         for row in rows:
             if row["uid"] == uid:
@@ -94,88 +112,108 @@ async def _today_payload(client, uid: str, profile_doc: dict | None) -> dict:
                 }
             )
 
+    full_period = tournament_service.full_period_state(my_entry, mode) if joined else None
     current_energy, anchor = energy_service.from_profile(profile_doc, now)
     return {
-        "day_id": day_id,
-        "seconds_remaining": tournament_service.seconds_remaining(day_id, now),
+        "mode": mode.key,
+        "period_id": period_id,
+        "period_days": mode.period_days,
+        # Compatibility alias -- see the module docstring.
+        "day_id": period_id,
+        "seconds_remaining": tournament_service.seconds_remaining(period_id, now, mode),
         "tier": tier,
-        "tier_name": config.TOURNAMENT_TIER_NAMES.get(tier, f"Tier {tier}"),
+        "tier_name": tournament_service.tier_name(tier, mode),
         # The standings' projected_outcome is the rule's verdict BEFORE the
         # tier edges clamp it (see services.tournament._verdict); these let
         # the client word the top tier's "promote" and the bottom tier's
         # "relegate" the way the result banner already does.
-        "is_top_tier": tier == config.TOURNAMENT_TOP_TIER,
-        "is_bottom_tier": tier == config.TOURNAMENT_BOTTOM_TIER,
+        "is_top_tier": tier == mode.top_tier,
+        "is_bottom_tier": tier == mode.bottom_tier,
         "joined": joined,
-        "join_closed": tournament_service.joining_is_closed(day_id, now),
-        "join_cutoff_seconds": config.TOURNAMENT_JOIN_CUTOFF_SECONDS,
+        "join_closed": tournament_service.joining_is_closed(period_id, now, mode),
+        "join_cutoff_seconds": mode.join_cutoff_seconds,
         "group_id": group_id,
         "group_size": group_size,
-        "group_capacity": config.TOURNAMENT_GROUP_CAPACITY,
-        "settlement_mode": tournament_service.settlement_mode(group_size),
+        "group_capacity": mode.group_capacity,
+        "settlement_mode": tournament_service.settlement_mode(group_size, mode),
         "matches_played": played,
-        "matches_max": config.TOURNAMENT_MATCHES_PER_DAY,
+        "matches_max": mode.matches_per_period,
         "energy": energy_service.describe(current_energy, anchor, now),
         "standings": standings,
         # The play-every-match reward: progress for the bar, and whether
         # the Claim button is live. Claiming goes through POST /claim with
-        # type "tournament_full_day" (routers/claims.py).
-        "full_day": tournament_service.full_day_state(my_entry) if joined else None,
+        # type "tournament_full_day" / "tournament_full_week"
+        # (routers/claims.py).
+        "full_period": full_period,
+        "full_day": full_period,
+        "claim_type": _CLAIM_TYPES[mode.key],
         "rules": {
-            "points_win": config.TOURNAMENT_POINTS["win"],
-            "points_draw": config.TOURNAMENT_POINTS["draw"],
-            "promotion_floor": config.TOURNAMENT_PROMOTION_FLOOR,
-            "relegation_floor": config.TOURNAMENT_RELEGATION_FLOOR,
-            "promote_positions": list(config.TOURNAMENT_PROMOTE_POSITIONS),
-            "relegate_positions": list(config.TOURNAMENT_RELEGATE_POSITIONS),
-            "min_group_for_promotion": config.TOURNAMENT_MIN_GROUP_FOR_PROMOTION,
+            "points_win": mode.points["win"],
+            "points_draw": mode.points["draw"],
+            "promotion_floor": mode.promotion_floor,
+            "relegation_floor": mode.relegation_floor,
+            "promote_positions": list(mode.promote_positions),
+            "relegate_positions": list(mode.relegate_positions),
+            "min_group_for_promotion": mode.min_group_for_promotion,
         },
         "rewards": [
             {"position": pos, **payout}
-            for pos, payout in sorted(config.TOURNAMENT_REWARDS.get(tier, {}).items())
+            for pos, payout in sorted(tournament_service.rewards_table(tier, mode).items())
         ],
     }
 
 
-@router.get("/tournament/today")
-async def tournament_today(uid: str = Depends(verify_id_token)):
-    """Today's tournament, settling anything overdue first.
+# Which POST /claim type pays this format's play-everything reward. Kept
+# beside the payload that advertises it so the two can't drift.
+_CLAIM_TYPES = {DAILY.key: "tournament_full_day", WEEKLY.key: "tournament_full_week"}
+
+
+async def _today(uid: str, mode: Mode) -> dict:
+    """This period's tournament, settling anything overdue first.
 
     Settling here is what makes the whole feature work without a scheduler:
     the day a player comes back, their group is resolved before the screen is
-    built, so the same response can carry yesterday's result.
+    built, so the same response can carry the last period's result.
     """
     client = admin_client(uid)
     now = energy_service.now_utc()
-    await tournament_service.ensure_settled_through(client, tournament_service.day_id_for(now))
+    await tournament_service.ensure_settled_through(
+        client, tournament_service.period_id_for(now, mode), mode
+    )
 
     profile_doc = await client.get_document(f"users/{uid}")
-    payload = await _today_payload(client, uid, profile_doc)
-    payload["pending_results"] = await _pending_results(client, uid, profile_doc, payload["day_id"])
+    payload = await _period_payload(client, uid, profile_doc, mode)
+    payload["pending_results"] = await _pending_results(
+        client, uid, profile_doc, payload["period_id"], mode
+    )
     return payload
 
 
-async def _pending_results(client, uid: str, profile_doc: dict | None, today: str) -> dict | None:
-    """Yesterday's row, if the player has one they haven't been shown.
+async def _pending_results(
+    client, uid: str, profile_doc: dict | None, current_period: str, mode: Mode
+) -> dict | None:
+    """The last period's row, if the player has one they haven't been shown.
 
     There is no notification system, and lazy settlement turns that into an
     advantage: by the time this runs, ensure_settled_through has just settled
     the group, so the result is available in the same breath as the request
     that triggered it.
     """
-    last_day = (profile_doc or {}).get("tournament_last_settled_day")
-    if not last_day or last_day >= today:
+    last_period = tournament_service.last_period(profile_doc, mode)
+    if not last_period or last_period >= current_period:
         return None
-    group_id = (profile_doc or {}).get("tournament_last_group_id")
+    group_id = tournament_service.last_group(profile_doc, mode)
     if not group_id:
         return None
 
-    e_path = tournament_service.entry_path(last_day, group_id, uid)
+    e_path = tournament_service.entry_path(last_period, group_id, uid, mode)
     entry = await client.get_document(e_path)
     if (entry or {}).get("is_shown"):
         return None
 
-    group = await client.get_document(tournament_service.group_path(last_day, group_id))
+    group = await client.get_document(
+        tournament_service.group_path(last_period, group_id, mode)
+    )
     rows = ((group or {}).get("settlement") or {}).get("rows") or []
     mine = next((r for r in rows if r.get("uid") == uid), None)
     if mine is None:
@@ -183,17 +221,21 @@ async def _pending_results(client, uid: str, profile_doc: dict | None, today: st
 
     await client.set_document(e_path, {"is_shown": True}, merge=True)
 
+    full_period = tournament_service.full_period_state(entry, mode)
     return {
-        "day_id": last_day,
+        "mode": mode.key,
+        "period_id": last_period,
+        "day_id": last_period,
         "group_id": group_id,
         "me": mine,
         "rows": rows,
-        "full_day": tournament_service.full_day_state(entry),
+        "full_period": full_period,
+        "full_day": full_period,
     }
 
-@router.post("/tournament/join")
-async def join_tournament(uid: str = Depends(verify_id_token)):
-    """Joins today's tournament in the caller's own tier.
+
+async def _join(uid: str, mode: Mode) -> dict:
+    """Joins this period's tournament in the caller's own tier.
 
     Refuses a roster that couldn't legally play, up front -- being told at
     match time that your lineup is invalid, after joining, is a worse place to
@@ -201,8 +243,8 @@ async def join_tournament(uid: str = Depends(verify_id_token)):
     """
     client = admin_client(uid)
     now = energy_service.now_utc()
-    day_id = tournament_service.day_id_for(now)
-    await tournament_service.ensure_settled_through(client, day_id)
+    period_id = tournament_service.period_id_for(now, mode)
+    await tournament_service.ensure_settled_through(client, period_id, mode)
 
     state = game_state_for(uid)
     profile = await state.load_or_create_profile(default_roster=[], default_display_name=uid[:8])
@@ -211,39 +253,38 @@ async def join_tournament(uid: str = Depends(verify_id_token)):
     validate_formation_positions(profile)
 
     profile_doc = await client.get_document(f"users/{uid}")
-    already = (profile_doc or {}).get("tournament_day_id") == day_id
-    if not already and tournament_service.joining_is_closed(day_id, now):
+    already = tournament_service.is_entered(profile_doc, period_id, mode)
+    if not already and tournament_service.joining_is_closed(period_id, now, mode):
         raise HTTPException(
             409,
-            "Today's tournament is closed to new entries -- it restarts in "
-            f"{tournament_service.seconds_remaining(day_id, now) // 60} minutes",
+            f"This {mode.label}'s tournament is closed to new entries -- it restarts in "
+            f"{tournament_service.seconds_remaining(period_id, now, mode) // 60} minutes",
         )
 
-    tier = tournament_service.tier_of(profile_doc)
-    await tournament_service.join_today(
-        client, uid, profile["display_name"], tier, day_id, now
+    tier = tournament_service.tier_of(profile_doc, mode)
+    await tournament_service.join_period(
+        client, uid, profile["display_name"], tier, period_id, now, mode
     )
 
     profile_doc = await client.get_document(f"users/{uid}")
-    payload = await _today_payload(client, uid, profile_doc)
+    payload = await _period_payload(client, uid, profile_doc, mode)
     payload["pending_results"] = None
     return payload
 
 
-@router.post("/tournament/match")
-async def tournament_match(uid: str = Depends(verify_id_token)):
+async def _match(uid: str, mode: Mode) -> dict:
     """Plays one tournament match.
 
     The energy AND the match slot are claimed in one transaction BEFORE the
-    simulation runs. Enforcing the 10-match cap only on write-back would mean
-    the player has already spent a point and sat through a match that then
-    gets rejected -- and two parallel requests could both pass a check that
-    only looked at the stored count.
+    simulation runs. Enforcing the per-period cap only on write-back would
+    mean the player has already spent a point and sat through a match that
+    then gets rejected -- and two parallel requests could both pass a check
+    that only looked at the stored count.
     """
     client = admin_client(uid)
     now = energy_service.now_utc()
-    day_id = tournament_service.day_id_for(now)
-    await tournament_service.ensure_settled_through(client, day_id)
+    period_id = tournament_service.period_id_for(now, mode)
+    await tournament_service.ensure_settled_through(client, period_id, mode)
 
     caller_state = game_state_for(uid)
     caller_profile = await caller_state.load_or_create_profile(
@@ -254,20 +295,20 @@ async def tournament_match(uid: str = Depends(verify_id_token)):
     validate_formation_positions(caller_profile)
 
     profile_doc = await client.get_document(f"users/{uid}")
-    if (profile_doc or {}).get("tournament_day_id") != day_id:
-        raise HTTPException(409, "Join today's tournament first")
-    group_id = (profile_doc or {}).get("tournament_group_id")
-    tier = tournament_service.tier_of(profile_doc)
+    if not tournament_service.is_entered(profile_doc, period_id, mode):
+        raise HTTPException(409, f"Join this {mode.label}'s tournament first")
+    group_id = tournament_service.entered_group(profile_doc, mode)
+    tier = tournament_service.tier_of(profile_doc, mode)
 
-    claimed = await _claim_slot(client, uid, day_id, group_id, now)
+    claimed = await _claim_slot(client, uid, period_id, group_id, now, mode)
     energy_after = claimed["energy"]
 
-    pool = await client.get_document(tournament_service.pool_path(day_id, tier))
+    pool = await client.get_document(tournament_service.pool_path(period_id, tier, mode))
     opponent_uid, opponent_profile = await pick_opponent_from_candidates(
         uid,
         list((pool or {}).get("uids") or []),
-        max_attempts=config.TOURNAMENT_OPPONENT_MAX_ATTEMPTS,
-        card_tier_rates=config.TOURNAMENT_BOT_CARD_RATES.get(tier),
+        max_attempts=mode.opponent_max_attempts,
+        card_tier_rates=tournament_service.bot_card_rates(tier, mode),
     )
     is_bot = opponent_uid.startswith("bot_")
     seed = secrets.randbits(63)
@@ -277,8 +318,14 @@ async def tournament_match(uid: str = Depends(verify_id_token)):
         "games",
         {
             "status": "in_progress",
-            "mode": "tournament",
-            "tournament": {"day_id": day_id, "group_id": group_id, "tier": tier},
+            "mode": "tournament" if mode is DAILY else f"{mode.key}_tournament",
+            "tournament": {
+                "mode": mode.key,
+                "period_id": period_id,
+                "day_id": period_id,
+                "group_id": group_id,
+                "tier": tier,
+            },
             "participants": [uid, opponent_uid],
             "initiator_uid": uid,
             "opponent_uid": opponent_uid,
@@ -304,15 +351,17 @@ async def tournament_match(uid: str = Depends(verify_id_token)):
     await persist_player_stats(caller_state, caller_profile)
 
     # The slot was already claimed, so folding the result in is a plain merge.
-    entry = await client.get_document(tournament_service.entry_path(day_id, group_id, uid))
+    entry = await client.get_document(
+        tournament_service.entry_path(period_id, group_id, uid, mode)
+    )
     fields, points_earned, outcome = tournament_service.result_fields(
-        entry or {}, my_score, opp_score, game_id
+        entry or {}, my_score, opp_score, game_id, mode
     )
     await client.set_document(
-        tournament_service.entry_path(day_id, group_id, uid), fields, merge=True
+        tournament_service.entry_path(period_id, group_id, uid, mode), fields, merge=True
     )
 
-    credits_earned = config.TOURNAMENT_MATCH_REWARD_CREDITS[outcome]
+    credits_earned = mode.match_reward_credits[outcome]
     wins, losses, draws = caller_profile["wins"], caller_profile["losses"], caller_profile["draws"]
     wins += outcome == "win"
     draws += outcome == "draw"
@@ -322,7 +371,7 @@ async def tournament_match(uid: str = Depends(verify_id_token)):
     await caller_state.set_credits(new_credits)
 
     profile_doc = await client.get_document(f"users/{uid}")
-    payload = await _today_payload(client, uid, profile_doc)
+    payload = await _period_payload(client, uid, profile_doc, mode)
     position = next((s["position"] for s in payload["standings"] if s["is_me"]), None)
 
     return {
@@ -355,42 +404,45 @@ async def tournament_match(uid: str = Depends(verify_id_token)):
         # only the keys it knows and ignores the rest, so playback and the
         # result screen work with no autoload change.
         "tournament": {
-            "day_id": day_id,
+            "mode": mode.key,
+            "period_id": period_id,
+            "day_id": period_id,
             "group_id": group_id,
             "tier": tier,
             "points_earned": points_earned,
             "points_total": fields["points"],
             "played": claimed["played"],
-            "matches_max": config.TOURNAMENT_MATCHES_PER_DAY,
+            "matches_max": mode.matches_per_period,
             "position": position,
         },
     }
 
 
-async def _claim_slot(client, uid: str, day_id: str, group_id: str, now) -> dict:
-    """Takes one energy and one of the day's ten match slots, atomically.
+async def _claim_slot(client, uid: str, period_id: str, group_id: str, now, mode: Mode) -> dict:
+    """Takes one energy and one of the period's match slots, atomically.
 
     Both live on documents this transaction reads anyway, so claiming them
     together costs nothing extra and closes the race that claiming them
     separately would open.
     """
     user_path = f"users/{uid}"
-    e_path = tournament_service.entry_path(day_id, group_id, uid)
+    e_path = tournament_service.entry_path(period_id, group_id, uid, mode)
 
     def _claim(tx):
         docs = tx.get_all([user_path, e_path])
         user_doc, entry = docs[user_path], docs[e_path]
         if entry is None:
-            raise HTTPException(409, "You have no entry in today's tournament")
+            raise HTTPException(409, f"You have no entry in this {mode.label}'s tournament")
 
         played = entry.get("played", 0)
-        if played >= config.TOURNAMENT_MATCHES_PER_DAY:
+        if played >= mode.matches_per_period:
             raise HTTPException(
-                409, f"You have already played all {config.TOURNAMENT_MATCHES_PER_DAY} matches today"
+                409,
+                f"You have already played all {mode.matches_per_period} matches this {mode.label}",
             )
 
         current, anchor = energy_service.from_profile(user_doc, now)
-        cost = config.ENERGY_COST_PER_MATCH
+        cost = mode.energy_cost_per_match
         if cost > 0 and current < cost:
             raise energy_service.NotEnoughEnergy(
                 current, cost, energy_service.describe(current, anchor, now)["seconds_to_next"]
@@ -415,47 +467,107 @@ async def _claim_slot(client, uid: str, day_id: str, group_id: str, now) -> dict
     return {"played": played, "energy": energy_service.describe(remaining, anchor, now)}
 
 
-@router.get("/tournament/results")
-async def tournament_results(day_id: str = "", uid: str = Depends(verify_id_token)):
-    """A settled day's final table for the caller's group."""
+async def _results(uid: str, period_id: str, mode: Mode) -> dict:
+    """A settled period's final table for the caller's group."""
     client = admin_client(uid)
     profile_doc = await client.get_document(f"users/{uid}")
     now = energy_service.now_utc()
-    target_day = day_id or tournament_service.previous_day_ids(
-        tournament_service.day_id_for(now), 1
+    target = period_id or tournament_service.previous_period_ids(
+        tournament_service.period_id_for(now, mode), 1, mode
     )[0]
 
-    group_id = (profile_doc or {}).get("tournament_last_group_id")
-    if (profile_doc or {}).get("tournament_day_id") == target_day:
-        group_id = (profile_doc or {}).get("tournament_group_id")
+    group_id = tournament_service.last_group(profile_doc, mode)
+    if tournament_service.is_entered(profile_doc, target, mode):
+        group_id = tournament_service.entered_group(profile_doc, mode)
     if not group_id:
-        raise HTTPException(404, "You didn't play that day")
+        raise HTTPException(404, f"You didn't play that {mode.label}")
 
-    group = await client.get_document(tournament_service.group_path(target_day, group_id))
+    group = await client.get_document(tournament_service.group_path(target, group_id, mode))
     settlement = (group or {}).get("settlement") or {}
     if settlement.get("status") != "settled":
-        raise HTTPException(409, "That day hasn't been settled yet")
+        raise HTTPException(409, f"That {mode.label} hasn't been settled yet")
 
     rows = settlement.get("rows") or []
-    entry = await client.get_document(tournament_service.entry_path(target_day, group_id, uid))
+    entry = await client.get_document(
+        tournament_service.entry_path(target, group_id, uid, mode)
+    )
+    full_period = tournament_service.full_period_state(entry, mode) if entry is not None else None
     return {
-        "day_id": target_day,
+        "mode": mode.key,
+        "period_id": target,
+        "day_id": target,
         "group_id": group_id,
-        "mode": settlement.get("mode"),
+        "settlement_mode": settlement.get("mode"),
         "rows": rows,
         "me": next((r for r in rows if r.get("uid") == uid), None),
-        "full_day": tournament_service.full_day_state(entry) if entry is not None else None,
+        "full_period": full_period,
+        "full_day": full_period,
     }
 
 
+# -- routes: the daily league -------------------------------------------------
+
+
+@router.get("/tournament/today")
+async def tournament_today(uid: str = Depends(verify_id_token)):
+    return await _today(uid, DAILY)
+
+
+@router.post("/tournament/join")
+async def join_tournament(uid: str = Depends(verify_id_token)):
+    return await _join(uid, DAILY)
+
+
+@router.post("/tournament/match")
+async def tournament_match(uid: str = Depends(verify_id_token)):
+    return await _match(uid, DAILY)
+
+
+@router.get("/tournament/results")
+async def tournament_results(day_id: str = "", uid: str = Depends(verify_id_token)):
+    return await _results(uid, day_id, DAILY)
+
+
+# -- routes: the weekly league ------------------------------------------------
+
+
+@router.get("/tournament/weekly/today")
+async def weekly_tournament_today(uid: str = Depends(verify_id_token)):
+    return await _today(uid, WEEKLY)
+
+
+@router.post("/tournament/weekly/join")
+async def join_weekly_tournament(uid: str = Depends(verify_id_token)):
+    return await _join(uid, WEEKLY)
+
+
+@router.post("/tournament/weekly/match")
+async def weekly_tournament_match(uid: str = Depends(verify_id_token)):
+    return await _match(uid, WEEKLY)
+
+
+@router.get("/tournament/weekly/results")
+async def weekly_tournament_results(
+    period_id: str = "", day_id: str = "", uid: str = Depends(verify_id_token)
+):
+    return await _results(uid, period_id or day_id, WEEKLY)
+
+
+# -- settlement ---------------------------------------------------------------
+
+
 class SettleRequest(BaseModel):
+    # Empty day_id means "the lookback window"; empty mode means "every
+    # format", so one scheduler job with no body settles the lot.
     day_id: str = ""
+    period_id: str = ""
+    mode: str = ""
 
 
 @router.post("/tournament/settle", dependencies=[Depends(verify_tournament_admin)])
 async def settle_tournaments(req: SettleRequest | None = None):
-    """Settles a day. Called by Cloud Scheduler, and by hand when a day is
-    stuck.
+    """Settles a period. Called by Cloud Scheduler, and by hand when a period
+    is stuck.
 
     Unbounded on purpose, unlike the lazy path: this one is not inside a
     player's request, so it should finish the job rather than leave a
@@ -463,18 +575,37 @@ async def settle_tournaments(req: SettleRequest | None = None):
 
     The body is optional because Cloud Scheduler sends none unless told to,
     and a 422 from a missing `{}` is a miserable thing to debug through
-    scheduler logs. No body means "settle the lookback window", which is what
-    a nightly run wants anyway.
+    scheduler logs. No body means "settle every format's lookback window",
+    which is what a nightly run wants anyway.
     """
     client = admin_client("tournament-admin")
     now = energy_service.now_utc()
-    today = tournament_service.day_id_for(now)
-    requested_day = req.day_id if req is not None else ""
-    days = [requested_day] if requested_day else tournament_service.previous_day_ids(
-        today, config.TOURNAMENT_SETTLE_LOOKBACK_DAYS
-    )
 
-    results = []
-    for day in days:
-        results.append(await tournament_service.settle_day(client, day, max_groups=10_000))
-    return {"today": today, "days": results}
+    requested_mode = (req.mode if req is not None else "") or ""
+    try:
+        modes = [tournament_service.mode_for(requested_mode)] if requested_mode else list(
+            tournament_service.MODES.values()
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    requested_period = (req.period_id or req.day_id) if req is not None else ""
+    # A named period only makes sense against a named format -- the same
+    # string is a day to one and a week to the other.
+    if requested_period and not requested_mode:
+        modes = [DAILY]
+
+    out = {}
+    for mode in modes:
+        current = tournament_service.period_id_for(now, mode)
+        periods = [requested_period] if requested_period else tournament_service.previous_period_ids(
+            current, mode.settle_lookback_periods, mode
+        )
+        out[mode.key] = {
+            "current_period": current,
+            "periods": [
+                await tournament_service.settle_period(client, p, max_groups=10_000, mode=mode)
+                for p in periods
+            ],
+        }
+    return {"modes": out}

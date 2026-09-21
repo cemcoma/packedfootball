@@ -10,8 +10,11 @@ import pytest
 
 import config
 from services import account as a
+from services import tournament as t
 
-CAP = config.TOURNAMENT_GROUP_CAPACITY
+D = t.DAILY
+W = t.WEEKLY
+CAP = D.group_capacity
 
 
 # -- names ----------------------------------------------------------------------
@@ -73,32 +76,42 @@ def group(members, tier=3, settled=False, gid="t3-g0002"):
 
 
 def test_leaver_comes_out_of_the_member_list():
-    fields, desk = a.vacate_group(group(["a", "b", "c"]), {"open_group_id": None}, "b")
+    fields, desk = a.vacate_group(group(["a", "b", "c"]), {"open_group_id": None}, "b", D)
     assert fields == {"member_uids": ["a", "c"], "member_count": 2}
 
 
 def test_gap_is_offered_when_the_desk_has_nowhere_else_to_send_people():
-    _, desk = a.vacate_group(group(["a", "b", "c"]), {"open_group_id": None}, "b")
+    _, desk = a.vacate_group(group(["a", "b", "c"]), {"open_group_id": None}, "b", D)
     assert desk == {"tier": 3, "open_group_id": "t3-g0002"}
 
 
 def test_gap_is_not_offered_over_a_group_already_filling():
     """Pointing the desk back would strand the half-full newer group."""
-    _, desk = a.vacate_group(group(["a", "b", "c"]), {"open_group_id": "t3-g0005"}, "b")
+    _, desk = a.vacate_group(group(["a", "b", "c"]), {"open_group_id": "t3-g0005"}, "b", D)
     assert desk is None
 
 
 def test_leaving_a_full_group_reopens_it_when_the_desk_is_empty():
     full = group([f"u{i}" for i in range(CAP)])
-    fields, desk = a.vacate_group(full, {"open_group_id": None}, "u0")
+    fields, desk = a.vacate_group(full, {"open_group_id": None}, "u0", D)
     assert fields["member_count"] == CAP - 1
     assert desk["open_group_id"] == "t3-g0002"
 
 
 def test_settled_group_is_history_and_untouched():
-    assert a.vacate_group(group(["a", "b"], settled=True), None, "a") == (None, None)
+    assert a.vacate_group(group(["a", "b"], settled=True), None, "a", D) == (None, None)
 
 
 def test_not_a_member_writes_nothing():
-    assert a.vacate_group(group(["a", "b"]), None, "zzz") == (None, None)
-    assert a.vacate_group(None, None, "a") == (None, None)
+    assert a.vacate_group(group(["a", "b"]), None, "zzz", D) == (None, None)
+    assert a.vacate_group(None, None, "a", D) == (None, None)
+
+
+def test_the_capacity_that_reopens_a_seat_is_the_format_s_own():
+    """A daily-sized group is FULL to the daily league and short to the
+    weekly one. Reading one shared capacity here would refuse to reopen a
+    weekly seat that has four still free."""
+    full_for_daily = group([f"u{i}" for i in range(CAP)])
+    _, as_weekly = a.vacate_group(full_for_daily, {"open_group_id": None}, "u0", W)
+    assert as_weekly["open_group_id"] == "t3-g0002"
+    assert CAP - 1 < W.group_capacity

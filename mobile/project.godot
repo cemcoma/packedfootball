@@ -36,6 +36,7 @@ ManagerSession="*res://scripts/autoload/ManagerSession.gd"
 AdManager="*uid://d1x5ac4vymns1"
 LocaleManager="*res://scripts/autoload/LocaleManager.gd"
 CurrencyHud="*res://scripts/autoload/CurrencyHud.gd"
+TournamentSession="*res://scripts/autoload/TournamentSession.gd"
 
 [display]
 

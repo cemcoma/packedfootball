@@ -237,7 +237,7 @@ def test_a_no_show_earns_nothing_even_if_it_somehow_places():
 
 def test_winner_of_a_real_group_collects():
     rows = t.apply_rules(t.rank_rows(full_group([30, 28, 26, 14, 11, 6])), 3)
-    assert rows[0]["rewards"] == config.TOURNAMENT_REWARDS[3][1]
+    assert rows[0]["rewards"] == t.rewards_table(3)[1]
 
 
 def test_placement_pays_by_position_not_by_promotion():
@@ -245,38 +245,39 @@ def test_placement_pays_by_position_not_by_promotion():
     still finished 2nd, and 2nd is what the table pays for."""
     rows = t.apply_rules(t.rank_rows(full_group([FLOOR - 1, 15, 12, 10, 8, 4])), 3)
     assert rows[0]["outcome"] == "stay"
-    assert rows[0]["rewards"] == config.TOURNAMENT_REWARDS[3][1]
-    assert rows[1]["rewards"] == config.TOURNAMENT_REWARDS[3][2]
+    assert rows[0]["rewards"] == t.rewards_table(3)[1]
+    assert rows[1]["rewards"] == t.rewards_table(3)[2]
 
 
 def test_top_tier_winner_collects_despite_the_clamp():
     rows = t.apply_rules(t.rank_rows(full_group([30, 28, 26, 14, 11, 6])), config.TOURNAMENT_TOP_TIER)
     assert rows[0]["to_tier"] == rows[0]["from_tier"]     # went nowhere
-    assert rows[0]["rewards"] == config.TOURNAMENT_REWARDS[1][1]   # paid anyway
+    assert rows[0]["rewards"] == t.rewards_table(config.TOURNAMENT_TOP_TIER)[1]  # paid anyway
 
 
 def test_every_position_in_a_full_group_is_paid():
     """Down to last place: a bad day still pays credits."""
-    for tier in config.TOURNAMENT_REWARDS:
+    for tier in config.TOURNAMENT_TIERS:
         rows = t.apply_rules(t.rank_rows(full_group([30, 28, 26, 14, 11, 6])), tier)
         for row in rows:
             assert row["rewards"].get("credits", 0) > 0, (tier, row["position"])
 
 
 def test_placement_credits_fall_with_position():
-    for tier, table in config.TOURNAMENT_REWARDS.items():
+    for tier in config.TOURNAMENT_TIERS:
+        table = t.rewards_table(tier)
         credits = [table[pos]["credits"] for pos in sorted(table)]
         assert credits == sorted(credits, reverse=True), tier
 
 
 def test_bottom_tier_pays_no_bucks_anywhere():
-    for payout in config.TOURNAMENT_REWARDS[config.TOURNAMENT_BOTTOM_TIER].values():
+    for payout in t.rewards_table(config.TOURNAMENT_BOTTOM_TIER).values():
         assert payout.get("bucks", 0) == 0
 
 
 def test_bucks_exist_only_on_the_top_tier_podium():
-    for tier, table in config.TOURNAMENT_REWARDS.items():
-        for position, payout in table.items():
+    for tier in config.TOURNAMENT_TIERS:
+        for position, payout in t.rewards_table(tier).items():
             if payout.get("bucks", 0):
                 assert tier == config.TOURNAMENT_TOP_TIER
                 assert position in config.TOURNAMENT_PROMOTE_POSITIONS
@@ -291,7 +292,7 @@ def test_rewards_are_copies_not_the_config_table():
     """Settlement must never be able to mutate the config it read from."""
     rows = t.apply_rules(t.rank_rows(full_group([30, 28, 26, 14, 11, 6])), 3)
     rows[0]["rewards"]["medals"] = 999
-    assert config.TOURNAMENT_REWARDS[3][1]["medals"] != 999
+    assert config.TOURNAMENT_TIERS[3]["rewards"][1]["medals"] != 999
 
 
 # ------------------------------------------------------------- match results
@@ -320,7 +321,7 @@ def test_result_fields_accumulate():
 
 
 def test_a_day_is_exactly_24_hours():
-    assert t.day_end("2026-09-15") - t.day_start("2026-09-15") == timedelta(days=1)
+    assert t.period_end("2026-09-15") - t.period_start("2026-09-15") == timedelta(days=1)
 
 
 def test_the_day_rolls_over_at_the_configured_offset():
@@ -330,36 +331,36 @@ def test_the_day_rolls_over_at_the_configured_offset():
     changing the reset hour is a config edit and not a test rewrite -- which
     is the whole reason that constant exists.
     """
-    start = t.day_start("2026-09-15")
+    start = t.period_start("2026-09-15")
     assert start.hour == config.TOURNAMENT_DAY_OFFSET_HOURS % 24
     # A moment inside the day belongs to it; a moment before belongs to the
     # previous one.
-    assert t.day_id_for(start) == "2026-09-15"
-    assert t.day_id_for(start + timedelta(hours=23, minutes=59)) == "2026-09-15"
-    assert t.day_id_for(start - timedelta(seconds=1)) == "2026-09-14"
-    assert t.day_id_for(start + timedelta(days=1)) == "2026-09-16"
+    assert t.period_id_for(start) == "2026-09-15"
+    assert t.period_id_for(start + timedelta(hours=23, minutes=59)) == "2026-09-15"
+    assert t.period_id_for(start - timedelta(seconds=1)) == "2026-09-14"
+    assert t.period_id_for(start + timedelta(days=1)) == "2026-09-16"
 
 
 def test_the_reset_lands_at_noon_in_istanbul():
     """Turkey is UTC+3 all year, so the configured offset should put the
     rollover at 12:00 local. If this fails, the reset has drifted off noon."""
     istanbul = timezone(timedelta(hours=3))
-    assert t.day_start("2026-09-15").astimezone(istanbul).hour == 12
+    assert t.period_start("2026-09-15").astimezone(istanbul).hour == 12
 
 
-def test_previous_day_ids_are_oldest_first():
-    assert t.previous_day_ids("2026-09-15", 3) == ["2026-09-12", "2026-09-13", "2026-09-14"]
+def test_previous_period_ids_are_oldest_first():
+    assert t.previous_period_ids("2026-09-15", 3) == ["2026-09-12", "2026-09-13", "2026-09-14"]
 
 
 def test_joining_closes_in_the_final_hour():
-    end = t.day_end("2026-09-15")
+    end = t.period_end("2026-09-15")
     cutoff = timedelta(seconds=config.TOURNAMENT_JOIN_CUTOFF_SECONDS)
     assert t.joining_is_closed("2026-09-15", end - cutoff + timedelta(seconds=1))
     assert not t.joining_is_closed("2026-09-15", end - cutoff - timedelta(seconds=1))
 
 
 def test_seconds_remaining_never_goes_negative():
-    assert t.seconds_remaining("2026-09-15", t.day_end("2026-09-15") + timedelta(hours=5)) == 0
+    assert t.seconds_remaining("2026-09-15", t.period_end("2026-09-15") + timedelta(hours=5)) == 0
 
 
 def test_group_ids_sort_lexically_in_numeric_order():
@@ -367,12 +368,17 @@ def test_group_ids_sort_lexically_in_numeric_order():
     assert ids == sorted(ids)
 
 
+def tiers(**by_format):
+    return {t.TIERS_FIELD: dict(by_format)}
+
+
 def test_tier_defaults_to_the_bottom_and_clamps():
     assert t.tier_of(None) == config.TOURNAMENT_BOTTOM_TIER
     assert t.tier_of({}) == config.TOURNAMENT_BOTTOM_TIER
-    assert t.tier_of({"daily_tournament_tier": 99}) == config.TOURNAMENT_BOTTOM_TIER
-    assert t.tier_of({"daily_tournament_tier": -5}) == config.TOURNAMENT_TOP_TIER
-    assert t.tier_of({"daily_tournament_tier": True}) == config.TOURNAMENT_BOTTOM_TIER
+    assert t.tier_of({t.TIERS_FIELD: "not a map"}) == config.TOURNAMENT_BOTTOM_TIER
+    assert t.tier_of(tiers(daily=99)) == config.TOURNAMENT_BOTTOM_TIER
+    assert t.tier_of(tiers(daily=-5)) == config.TOURNAMENT_TOP_TIER
+    assert t.tier_of(tiers(daily=True)) == config.TOURNAMENT_BOTTOM_TIER
 
 
 def test_settlement_mode_names_the_path_taken():
@@ -384,7 +390,7 @@ def test_settlement_mode_names_the_path_taken():
 
 
 def test_full_day_is_not_claimable_until_every_match_is_played():
-    state = t.full_day_state({"played": config.TOURNAMENT_MATCHES_PER_DAY - 1})
+    state = t.full_period_state({"played": config.TOURNAMENT_MATCHES_PER_DAY - 1})
     assert state["claimable"] is False
     assert state["claimed"] is False
     assert state["played"] == config.TOURNAMENT_MATCHES_PER_DAY - 1
@@ -392,27 +398,27 @@ def test_full_day_is_not_claimable_until_every_match_is_played():
 
 
 def test_full_day_is_claimable_once_complete():
-    state = t.full_day_state({"played": config.TOURNAMENT_MATCHES_PER_DAY})
+    state = t.full_period_state({"played": config.TOURNAMENT_MATCHES_PER_DAY})
     assert state["claimable"] is True
     assert state["reward"] == config.TOURNAMENT_FULL_DAY_REWARD
 
 
 def test_full_day_is_not_claimable_twice():
-    state = t.full_day_state({"played": config.TOURNAMENT_MATCHES_PER_DAY, "full_day_claimed": True})
+    state = t.full_period_state({"played": config.TOURNAMENT_MATCHES_PER_DAY, "full_day_claimed": True})
     assert state["claimable"] is False
     assert state["claimed"] is True
 
 
-def test_full_day_state_of_no_entry_is_empty_not_an_error():
-    assert t.full_day_state(None)["played"] == 0
+def test_full_period_state_of_no_entry_is_empty_not_an_error():
+    assert t.full_period_state(None)["played"] == 0
 
 
 def test_full_day_reward_is_a_copy():
-    t.full_day_state({})["reward"]["credits"] = 999
+    t.full_period_state({})["reward"]["credits"] = 999
     assert config.TOURNAMENT_FULL_DAY_REWARD["credits"] != 999
 
 
 def test_a_blank_entry_starts_unclaimed():
     from datetime import datetime, timezone
     entry = t.blank_entry("u", "U", 3, "t3-g0001", datetime(2026, 9, 18, tzinfo=timezone.utc))
-    assert entry["full_day_claimed"] is False
+    assert entry["full_period_claimed"] is False

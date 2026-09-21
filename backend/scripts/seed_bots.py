@@ -1,12 +1,13 @@
 """Creates the stored bots that fill a tournament tier's matchmaking pool
 before real players do -- bots/{id} plus the per-tier id list bot_pools/{tier}
-that services.tournament.join_today seeds a new day's pool from.
+that services.tournament.join_period seeds a new period's pool from --
+shared by every tournament format, so one seeding run covers them all.
 
 A stored bot is a permanent opponent: a manager name from
 bots_sample_names.txt next to this script (one per line, "#" for a
 comment -- the kind of handle a real player would pick, so the pool reads
 as people), a formation, a kit, and a full XI whose cards each roll their tier from
-TOURNAMENT_BOT_CARD_RATES for its league (a bronze-league bot is mostly
+its league's bot_card_rates in config.TOURNAMENT_TIERS (a bronze-league bot is mostly
 silver with a few golds and the odd platinum) -- the same squad every time
 it comes up, so the striker who scored against you yesterday is the same
 striker today, and View Opponent shows a real team. The XI is
@@ -52,7 +53,11 @@ from game_state import player_to_fields
 from packEngine import COUNTRIES, generate_starter_roster  # noqa: E402
 from services.account import DisplayNameError, display_name_key, validate_display_name  # noqa: E402
 from services.match import BOT_UID_PREFIX  # noqa: E402
-from services.tournament import bot_pool_path 
+from services.tournament import (  # noqa: E402
+    bot_card_rates as tournament_bot_card_rates,
+    bot_pool_path,
+    tier_name as tournament_tier_name,
+)
 
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "packedfootball")
 NAMES_FILE = Path(__file__).resolve().parent / "bots_sample_names.txt"
@@ -97,7 +102,7 @@ def load_names(db, rng: random.Random) -> list[str]:
 def make_bot(rng: random.Random, tier: int, display_name: str) -> tuple[str, dict]:
     country = rng.choice(COUNTRIES)
     formation = rng.choice(list(FORMATIONS.keys()))
-    rates = config.TOURNAMENT_BOT_CARD_RATES.get(tier) or {"silver": 1.0}
+    rates = tournament_bot_card_rates(tier) or {"silver": 1.0}
     roster = generate_starter_roster(formation, seed=rng.getrandbits(63), tier_rates=rates)
     primary, secondary = rng.choice(KIT_PALETTES)
     pattern = rng.choice(("solid", "stripes","quarters"))
@@ -135,7 +140,7 @@ def main() -> int:
         if missing > len(names):
             print(f"  only {len(names)} name(s) left for {missing} bot(s) -- add more to {NAMES_FILE.name}")
             missing = len(names)
-        print(f"{config.TOURNAMENT_TIER_NAMES.get(tier, tier)}: {len(existing)} bot(s), creating {missing}")
+        print(f"{tournament_tier_name(tier)}: {len(existing)} bot(s), creating {missing}")
         if missing == 0 or args.dry_run:
             if args.dry_run:    
                 print("Dry run, nothing changed.")

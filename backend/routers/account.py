@@ -166,13 +166,19 @@ async def set_display_name(req: DisplayNameRequest, uid: str = Depends(verify_id
 
         old_name = profile.get("display_name") or ""
         old_path = account_service.reservation_path(old_name) if old_name else None
-        entry_path = None
-        day_id, group_id = profile.get("tournament_day_id"), profile.get("tournament_group_id")
-        if day_id and group_id:
-            entry_path = tournament_service.entry_path(day_id, group_id, uid)
-            entry = tx.get(entry_path)
-            if entry is None:
-                entry_path = None
+
+        # The name is copied onto every live tournament entry, so a rename
+        # has to reach all of them or the standings show the old one until
+        # the period settles -- a week, in the weekly league.
+        entry_paths = []
+        for mode in tournament_service.MODES.values():
+            period_id = tournament_service.entered_period(profile, mode)
+            group_id = tournament_service.entered_group(profile, mode)
+            if not period_id or not group_id:
+                continue
+            e_path = tournament_service.entry_path(period_id, group_id, uid, mode)
+            if tx.get(e_path) is not None:
+                entry_paths.append(e_path)
 
         if old_path and old_path != new_path:
             old_reservation = tx.get(old_path)
@@ -181,8 +187,8 @@ async def set_display_name(req: DisplayNameRequest, uid: str = Depends(verify_id
 
         tx.set(new_path, {"uid": uid}, merge=False)
         tx.set(user_path, {"display_name": name}, merge=True)
-        if entry_path:
-            tx.set(entry_path, {"display_name": name}, merge=True)
+        for e_path in entry_paths:
+            tx.set(e_path, {"display_name": name}, merge=True)
         return name
 
     stored = await client.run_transaction(_rename)

@@ -36,7 +36,8 @@ async def manager_profile(manager_uid: str, uid: str = Depends(verify_id_token))
     profile = await state.load_or_create_profile(
         default_roster=[], default_display_name=doc.get("display_name") or manager_uid[:8]
     )
-    tier = tournament_service.tier_of(doc)
+    tier = tournament_service.tier_of(doc, tournament_service.DAILY)
+    weekly_tier = tournament_service.tier_of(doc, tournament_service.WEEKLY)
     return {
         "uid": manager_uid,
         "display_name": profile["display_name"],
@@ -46,7 +47,13 @@ async def manager_profile(manager_uid: str, uid: str = Depends(verify_id_token))
         "formation": profile["formation"],
         "kit": profile.get("kit", ""),
         "tier": tier,
-        "tier_name": config.TOURNAMENT_TIER_NAMES.get(tier, f"Tier {tier}"),
+        "tier_name": tournament_service.tier_name(tier, tournament_service.DAILY),
+        # The two leagues rank independently, so a card that showed only one
+        # would be half the answer to "how good is this manager".
+        "weekly_tier": weekly_tier,
+        "weekly_tier_name": tournament_service.tier_name(
+            weekly_tier, tournament_service.WEEKLY
+        ),
         # In formation slot order, same as a match response's roster halves.
         "roster": [player_to_fields(p) for p in profile["roster"]],
         "is_me": manager_uid == uid,

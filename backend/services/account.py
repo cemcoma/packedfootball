@@ -89,9 +89,12 @@ def reservation_path(name: str) -> str:
 # -- tournaments ----------------------------------------------------------------
 
 
-def vacate_group(group: dict | None, desk: dict | None, uid: str) -> tuple[dict | None, dict | None]:
+def vacate_group(group: dict | None, desk: dict | None, uid: str, mode) -> tuple[dict | None, dict | None]:
     """What to write when `uid` leaves `group`: (group fields, desk fields),
-    either None when nothing needs writing.
+    either None when nothing needs writing. `mode` is the format the group
+    belongs to -- its capacity is what decides whether the seat is worth
+    reopening, and six is a full group in one league and a short one in the
+    other.
 
     Only an UNSETTLED group is touched -- a settled one is history, and its
     member list is what the results screen was built from. The leaver comes
@@ -117,36 +120,36 @@ def vacate_group(group: dict | None, desk: dict | None, uid: str) -> tuple[dict 
 
     group_fields = {"member_uids": members, "member_count": len(members)}
     desk_fields = None
-    if (desk or {}).get("open_group_id") is None and len(members) < config.TOURNAMENT_GROUP_CAPACITY:
-        desk_fields = {"tier": int(group.get("tier", config.TOURNAMENT_DEFAULT_TIER)), "open_group_id": group.get("group_id")}
+    if (desk or {}).get("open_group_id") is None and len(members) < mode.group_capacity:
+        desk_fields = {"tier": int(group.get("tier", mode.default_tier)), "open_group_id": group.get("group_id")}
     return group_fields, desk_fields
 
 
-async def leave_tournament(client, uid: str, profile: dict | None) -> bool:
-    """Takes `uid` out of the tournament group their profile says they're
-    in (today's, or an earlier day's that hasn't settled yet -- settlement
-    is what clears these fields), and out of that tier's matchmaking pool.
-    One transaction, so a joiner racing for the same seat sees a consistent
-    group. Returns whether there was a group to leave."""
+async def leave_one_tournament(client, uid: str, profile: dict | None, mode) -> bool:
+    """Takes `uid` out of the group their profile says they're in for ONE
+    format (the current period's, or an earlier one that hasn't settled yet
+    -- settlement is what clears these fields), and out of that tier's
+    matchmaking pool. One transaction, so a joiner racing for the same seat
+    sees a consistent group. Returns whether there was a group to leave."""
     from firebase_admin import firestore  # local, as services.tournament does
     from services import tournament as t
 
-    day_id = (profile or {}).get("tournament_day_id")
-    group_id = (profile or {}).get("tournament_group_id")
-    if not day_id or not group_id:
+    period_id = t.entered_period(profile, mode)
+    group_id = t.entered_group(profile, mode)
+    if not period_id or not group_id:
         return False
 
-    g_path = t.group_path(day_id, group_id)
-    e_path = t.entry_path(day_id, group_id, uid)
+    g_path = t.group_path(period_id, group_id, mode)
+    e_path = t.entry_path(period_id, group_id, uid, mode)
 
     def _leave(tx):
         group = tx.get(g_path)
-        tier = int((group or {}).get("tier", config.TOURNAMENT_DEFAULT_TIER))
-        dk_path = t.desk_path(day_id, tier)
-        p_path = t.pool_path(day_id, tier)
+        tier = int((group or {}).get("tier", mode.default_tier))
+        dk_path = t.desk_path(period_id, tier, mode)
+        p_path = t.pool_path(period_id, tier, mode)
         docs = tx.get_all([dk_path, p_path])
 
-        group_fields, desk_fields = vacate_group(group, docs[dk_path], uid)
+        group_fields, desk_fields = vacate_group(group, docs[dk_path], uid, mode)
         if group_fields is None:
             return False
         tx.set(g_path, group_fields, merge=True)
@@ -158,6 +161,23 @@ async def leave_tournament(client, uid: str, profile: dict | None) -> bool:
         return True
 
     return await client.run_transaction(_leave)
+
+
+async def leave_tournament(client, uid: str, profile: dict | None) -> bool:
+    """Vacates the account's seat in EVERY format. A seat left behind in one
+    of them is a ghost row in a table for the rest of that period, and the
+    weekly league makes that a week rather than a day.
+
+    One transaction per format, not one across both: they are separate
+    documents with no invariant between them, and a deletion that cleared
+    the daily seat should not be undone by the weekly one failing.
+    """
+    from services import tournament as t
+
+    left = False
+    for mode in t.MODES.values():
+        left = await leave_one_tournament(client, uid, profile, mode) or left
+    return left
 
 
 # -- deletion --------------------------------------------------------------------

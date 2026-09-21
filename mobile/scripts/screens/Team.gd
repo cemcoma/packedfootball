@@ -140,8 +140,6 @@ func _apply_theme_colors() -> void:
 	_stats_page_label.add_theme_color_override("font_color", ThemeManager.color("heading"))
 	_stats_extra_country.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 	_out_of_position_label.add_theme_color_override("font_color", ThemeManager.color("warning"))
-	# The attribute rows bake the accent in, so they have to be rebuilt when
-	# the palette moves under them -- same as PlayerDetail._refresh_skills.
 	if selected_slot != -1 and not picker_mode:
 		_populate_stats_panel()
 	_refresh_overall()
@@ -317,8 +315,7 @@ func _populate_stats_panel() -> void:
 	_stats_card_view.set_out_of_position(out_of_position)
 	_out_of_position_label.visible = out_of_position
 	if out_of_position:
-		_out_of_position_label.text = tr("Out of position: a %s playing %s -- attributes reduced 10%% in matches.") % [card.position, role]
-
+		_out_of_position_label.text = tr("Out of position (%s at %s): -10%% attributes.") % [card.position, role]
 	for child in _stats_attr_grid.get_children():
 		_stats_attr_grid.remove_child(child)
 		child.queue_free()
@@ -337,9 +334,6 @@ func _populate_stats_panel() -> void:
 func _populate_attributes_page(card: PlayerCard) -> void:
 	_stats_page_label.text = tr("Attributes")
 	var entries: Array = []
-	# The stats this position's overall is actually judged on, accented the
-	# same way Player Details accents them -- one card read two ways should
-	# not highlight two different things.
 	var primary := card.primary_stats()
 	for row in ATTR_ROWS:
 		var key: String = row[1]
@@ -352,13 +346,7 @@ func _populate_attributes_page(card: PlayerCard) -> void:
 			key in primary,
 		])
 	_fill_stat_grid(entries)
-
-	var goals: int = card.statistics.get("goals", 0)
-	var assists: int = card.statistics.get("assists", 0)
-	var matches: int = card.statistics.get("matches_played", 0)
-	_stats_extra_gam.text = tr("\nGoals: %d\nAssists: %d\nMatches: %d") % [
-		goals, assists, matches
-	]
+	_stats_extra_gam.text = ""
 
 
 func _populate_statistics_page(card: PlayerCard) -> void:
@@ -511,7 +499,7 @@ func _on_auto_pressed() -> void:
 	else:
 		var after := GameProfile.average_overall()
 		if after > before:
-			status_text = tr("Best XI picked -- overall %d to %d.") % [before, after]
+			status_text = tr("Best XI picked! (OVR %d ➔ %d)") % [before, after]
 		else:
 			status_text = tr("Already the best XI available.")
 

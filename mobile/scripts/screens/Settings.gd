@@ -27,9 +27,10 @@ extends Control
 ## publish anywhere anymore -- leaderboards will read straight from
 ## `users`/`players` docs instead of a separate snapshot.
 ##
-## Color Theme swaps ThemeManager between its dark and light palettes,
-## which restyles every screen (and persists the choice). Language does the
-## same through LocaleManager, then reloads this scene: auto-translated
+## Color Theme swaps ThemeManager between its dark and light palettes, and
+## Font swaps the face every screen renders in; both restyle the whole app
+## on the spot and persist the choice. Language does the same through
+## LocaleManager, then reloads this scene: auto-translated
 ## scene text follows the locale on its own, but the dropdown entries and
 ## anything a script filled via tr() were worded in the old language and
 ## need rebuilding -- and this is the one screen open at the moment of the
@@ -38,6 +39,12 @@ extends Control
 ## Dropdown index -> ThemeManager mode key. Keep in step with the
 ## add_item() order in _ready().
 const THEME_MODES := ["dark", "light"]
+
+## Dropdown index -> ThemeManager.FONTS key, same rule. "Pixel" is what the
+## art is drawn for and stays the default; "Rounded" is there because it is
+## easier to read at small sizes, which matters more to some players than
+## the look does.
+const FONT_KEYS := ["pixel", "rounded"]
 
 ## What has to be typed into the confirmation field, compared
 ## case-insensitively. Not translated: it's a deliberate speed bump, and a
@@ -58,6 +65,7 @@ const SUPPORT_URL := "https://cemcoma.github.io/packedfootball/support/"
 @onready var _status_label: Label = %StatusLabel
 @onready var _language_option: OptionButton = %LanguageOption
 @onready var _theme_option: OptionButton = %ThemeOption
+@onready var _font_option: OptionButton = %FontOption
 @onready var _privacy_button: Button = %PrivacyButton
 @onready var _support_button: Button = %SupportButton
 @onready var _ad_privacy_button: Button = %AdPrivacyButton
@@ -113,6 +121,12 @@ func _ready() -> void:
 	_theme_option.select(THEME_MODES.find(ThemeManager.mode))
 	_theme_option.item_selected.connect(_on_theme_selected)
 
+	# Index order must match FONT_KEYS.
+	_font_option.add_item(tr("Pixel"))
+	_font_option.add_item(tr("Rounded"))
+	_font_option.select(FONT_KEYS.find(ThemeManager.font_key))
+	_font_option.item_selected.connect(_on_font_selected)
+
 
 func _on_language_selected(index: int) -> void:
 	var codes: Array = LocaleManager.codes()
@@ -125,6 +139,11 @@ func _on_language_selected(index: int) -> void:
 func _on_theme_selected(index: int) -> void:
 	if index >= 0 and index < THEME_MODES.size():
 		ThemeManager.set_mode(THEME_MODES[index])
+
+
+func _on_font_selected(index: int) -> void:
+	if index >= 0 and index < FONT_KEYS.size():
+		ThemeManager.set_font(FONT_KEYS[index])
 
 
 ## The delete button is the one thing on this screen that should NOT look

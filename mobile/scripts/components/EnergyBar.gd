@@ -23,7 +23,10 @@ const BAR_OUTLINE := Color(0.04, 0.04, 0.05)
 var _energy: int = 0
 var _energy_max: int = 1
 var _seconds_to_next: float = 0.0
-var _regen_seconds: float = 2700.0
+## Only until the first energy block arrives -- the server sends
+## `regen_seconds` with every one, so ENERGY_REGEN_SECONDS is never mirrored
+## here, only guessed at for the frame before the first response.
+var _regen_seconds: float = 900.0 # 60 * 15, 15minutes 
 var _compact: bool = false
 
 

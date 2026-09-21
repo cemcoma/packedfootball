@@ -1,6 +1,7 @@
 [gd_resource type="Theme" format=3 uid="uid://v1xtwyuv4i7d"]
 
 [ext_resource type="FontVariation" uid="uid://cappf0ntvar01" path="res://theme/fonts/AppFont.tres" id="1_b06mf"]
+[ext_resource type="FontFile" uid="uid://bsf55571avq3d" path="res://theme/fonts/Monocraft.ttf" id="1_by453"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_disabled"]
 content_margin_left = 16.0
@@ -113,7 +114,7 @@ Button/constants/h_separation = 4
 Button/constants/icon_max_width = 0
 Button/constants/outline_size = 0
 Button/font_sizes/font_size = 16
-Button/fonts/font = ExtResource("1_b06mf")
+Button/fonts/font = ExtResource("1_by453")
 Button/styles/disabled = SubResource("StyleBoxFlat_disabled")
 Button/styles/focus = SubResource("StyleBoxFlat_focus")
 Button/styles/hover = SubResource("StyleBoxFlat_hover")

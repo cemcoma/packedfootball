@@ -272,7 +272,7 @@ RATED_MATCHES_FOR_AVERAGE = 5
 # =============================================================================
 
 DEFAULT_STARTING_CREDITS = 1000
-DEFAULT_STARTING_BUCKS = 0
+DEFAULT_STARTING_BUCKS = 10
 DEFAULT_STARTING_MEDALS = 0
 # "" means "no kit chosen, renderer picks" -- see game_state.GameState.
 # load_or_create_profile's docstring for why this end deliberately doesn't
