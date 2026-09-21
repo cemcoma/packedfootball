@@ -7,6 +7,7 @@ nothing could fly over a head, and a cross from the corner flag was on the
 deck 0.4s later. See gameEngine's HEAD_* / CROSS_* constants.
 """
 
+import collections
 import copy
 from pathlib import Path
 
@@ -308,7 +309,13 @@ def test_header_goal_is_credited_to_the_header(rosters):
 
 # --------------------------------------------------------------- wingplay
 
-def _winger_state(g, idx, x, y, opponents, intent=None, pressure=0):
+# Two runners in the box (gameEngine's in_boxes: 14 < x < 56, y > 82) plus
+# nine bodies nowhere near it -- a cross has somebody to aim at.
+BOX_RUNNERS = np.array([[35.0, 90.0], [42.0, 88.0]] + [[30.0, 40.0]] * 9)
+EMPTY_BOX = np.array([[30.0, 40.0]] * 11)
+
+
+def _winger_state(g, idx, x, y, opponents, intent=None, pressure=0, teammates=None):
     return {
         "has_ball": True,
         "ball_pos": np.array([x, y]),
@@ -326,7 +333,7 @@ def _winger_state(g, idx, x, y, opponents, intent=None, pressure=0):
         "in_penalty_box": False,
         "in_attacking_box": False,
         "pressure_count": pressure,
-        "teammates": np.array(g.positions[0:11], dtype=float),
+        "teammates": np.array(g.positions[0:11] if teammates is None else teammates, dtype=float),
         "opponents": np.array(opponents, dtype=float),
         "formation_pos": [12.0, 40.0],
         "my_role": "LM",
@@ -365,10 +372,49 @@ def test_latched_winger_crosses_from_the_zone(match):
     g = match
     p = _wide_mid(g)
     opponents = np.array([[5.0, 90.0]] + [[35.0, 20.0]] * 10)
-    state = _winger_state(g, 5, 5.0, 86.0, opponents, intent="wingplay")
+    state = _winger_state(g, 5, 5.0, 86.0, opponents, intent="wingplay", teammates=BOX_RUNNERS)
     decisions = [p._decide_on_ball_attack(state) for _ in range(200)]
     assert decisions.count("cross") > 120, decisions.count("cross")
     assert "dribble" not in decisions and "cut_inside" not in decisions
+
+
+def test_winger_goes_at_goal_instead_of_crossing_to_nobody(match):
+    """The zone is only a crossing position if someone is in the box."""
+    g = match
+    p = _wide_mid(g)
+    opponents = np.array([[5.0, 90.0]] + [[35.0, 20.0]] * 10)
+    state = _winger_state(g, 5, 5.0, 86.0, opponents, intent="wingplay", teammates=EMPTY_BOX)
+    assert p._box_runners(state) == 0
+    assert p._decide_wingplay(state) is None
+    decisions = [p._decide_on_ball_attack(state) for _ in range(200)]
+    assert "cross" not in decisions
+    assert decisions.count("dribble") > 150, decisions.count("dribble")
+    assert p._build_action("dribble", state)["target"][1] == PITCH_HEIGHT  # at the goal
+
+
+def test_a_winger_in_the_box_is_not_its_own_cross_target(match):
+    """state["teammates"] holds all eleven, mine included."""
+    g = match
+    p = _wide_mid(g)
+    opponents = np.array([[35.0, 20.0]] * 11)
+    me = np.array([[16.0, 88.0]] + [[30.0, 40.0]] * 10)
+    assert p._box_runners(_winger_state(g, 5, 16.0, 88.0, opponents, teammates=me)) == 0
+
+
+def test_a_winger_who_beats_his_man_cuts_inside(match):
+    """LW/RW: past the marker, angle at the goal rather than run the line."""
+    from packEngine import generate_starter_roster
+
+    lw = generate_starter_roster("4-3-3", tier="gold", seed=3)[8]
+    assert lw.position == "LW"
+    opponents = np.array([[5.0, 57.0]] + [[35.0, 20.0]] * 10)
+    state = _winger_state(match, 8, 5.0, 60.0, opponents, teammates=EMPTY_BOX)
+    assert lw._beat_marker(state)
+    decisions = [lw._decide_on_ball_attack(state) for _ in range(200)]
+    assert decisions.count("cut_inside") > 40, decisions.count("cut_inside")
+    action = lw._build_action("cut_inside", state)
+    assert action["target"][0] > 5.0 and action["target"][1] > 60.0  # inside and forward
+
 
 
 def test_latch_drops_once_the_marker_is_beaten(match):
@@ -431,6 +477,73 @@ def test_wingplay_produces_open_play_crosses():
             if e[1] == ActionType.CROSS and not any(0 <= e[0] - t <= 40 for t in corner_ticks)
         )
     assert open_play >= 3, f"only {open_play} open-play crosses in three matches"
+
+
+# --------------------------------------------------------- attacking shape
+
+def _off_ball_state(g, p, formation, my_pos, ball, teammates):
+    st = _winger_state(g, 0, my_pos[0], my_pos[1], np.array([[35.0, 20.0]] * 11),
+                       teammates=teammates)
+    st["has_ball"] = False
+    st["formation_pos"] = list(formation)
+    st["ball_pos"] = np.array(ball, dtype=float)
+    st["my_role"] = p.position
+    return st
+
+
+def _roster(formation, seed=11):
+    from packEngine import generate_starter_roster
+
+    return generate_starter_roster(formation, tier="gold", seed=seed)
+
+
+def test_a_striker_follows_the_ball_up_the_pitch(match):
+    """hold_attack used to be formation slot + 15, which left the striker on
+    the halfway line while the ball was on the byline."""
+    st = _roster("4-4-2")[9]
+    assert st.position == "ST"
+    state = _off_ball_state(match, st, (27.0, 47.0), (27.0, 62.0), (5.0, 86.0), EMPTY_BOX)
+    x, y = st._build_action("hold_attack", state)["target"]
+    assert y > 82.0, f"striker holds at y={y} with the ball on the byline"
+    assert 14.0 < x < 56.0, f"striker holds at x={x}, outside the box"
+
+
+def test_a_holding_midfielder_stays_home_while_the_attack_goes_up(match):
+    """The CDM is the rest defence -- it follows barely at all."""
+    cdm = _roster("4-3-3")[5]
+    assert cdm.position == "CDM"
+    state = _off_ball_state(match, cdm, (35.0, 23.0), (35.0, 30.0), (5.0, 86.0), EMPTY_BOX)
+    _, y = cdm._build_action("hold_attack", state)["target"]
+    assert y <= 23.0 + cdm.attack_push_limit, f"CDM pushed up to y={y}"
+    assert y < 40.0
+
+
+def test_a_central_midfielder_pushes_up_but_stops_short_of_the_striker(match):
+    cm = _roster("4-4-2")[6]
+    st = _roster("4-4-2")[9]
+    assert cm.position == "CM" and st.position == "ST"
+    ball = (5.0, 86.0)
+    _, cm_y = cm._build_action("hold_attack", _off_ball_state(match, cm, (27.0, 35.0), (27.0, 50.0), ball, EMPTY_BOX))["target"]
+    _, st_y = st._build_action("hold_attack", _off_ball_state(match, st, (27.0, 47.0), (27.0, 62.0), ball, EMPTY_BOX))["target"]
+    assert 60.0 < cm_y < st_y, f"CM at {cm_y}, striker at {st_y}"
+
+
+def test_an_empty_box_pulls_the_forwards_into_it(match):
+    """The ball is in the final third with nobody in the box: go in, don't
+    hold a line thirty units out."""
+    st = _roster("4-4-2")[9]
+    state = _off_ball_state(match, st, (27.0, 47.0), (27.0, 70.0), (5.0, 80.0), EMPTY_BOX)
+    assert st._box_needs_bodies(state)
+    decisions = [st._decide_off_ball_attack(state) for _ in range(300)]
+    assert decisions.count("attack_box") > 120, collections.Counter(decisions)
+    _, y = st._build_action("attack_box", state)["target"]
+    assert y > 82.0
+
+
+def test_nobody_is_pulled_in_when_the_box_is_already_filled(match):
+    st = _roster("4-4-2")[9]
+    state = _off_ball_state(match, st, (27.0, 47.0), (27.0, 70.0), (5.0, 80.0), BOX_RUNNERS)
+    assert not st._box_needs_bodies(state)
 
 
 # ------------------------------------------------------------------ client

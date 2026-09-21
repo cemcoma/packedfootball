@@ -22,6 +22,7 @@ enum ActionType {
 	HALFTIME = 13,
 	FULLTIME = 14,
 	HEADER = 15,
+	SHOT_OFF_TARGET = 16,
 }
 
 const POSITION_SCALE := 100.0

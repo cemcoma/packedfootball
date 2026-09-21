@@ -64,6 +64,9 @@ class AttackingMidActionProfile(ActionProfile):
 
 class Midfielder(player):
     primary_stats = ("passing", "ballcontrol", "vision")
+    # Follows the attack up to the edge of the box.
+    attack_push_trail = 14.0
+    attack_push_limit = 40.0
 
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         self.action_profile = WideMidActionProfile() if position in ("LM", "RM") else MidfielderActionProfile()
@@ -153,9 +156,10 @@ class Midfielder(player):
             return {"type": "move", "target": support_target, "speed_mod": (self.attributes.speed * 0.7) / 100.0}
             
         elif decision == "hold_attack":
-            forward_shift = 15.0 if state.get("a_direction", 1) == 1 else -15.0
-            tactical_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + forward_shift])
-            return {"type": "move", "target": tactical_pos, "speed_mod": (self.attributes.speed * 0.5) / 100.0}
+            # Follow the ball up the pitch instead of sitting on a fixed slot
+            # + 15, so the attack has midfielders in support of it.
+            target = self._attack_shape_target(state)
+            return {"type": "move", "target": target, "speed_mod": (self.attributes.speed * 0.75) / 100.0}
             
         # --- Defensive & Loose Ball Movement ---
         elif decision == "hold_defense":
@@ -242,7 +246,8 @@ class Midfielder(player):
         is_wide = self._is_wide(state)
         in_zone = self._in_crossing_zone(state)
         t_wing = (self.attributes.speed + self.attributes.dribbling) * 0.5 * self.get_action_bias("wing_run", 0.0) if (winger and is_wide and not in_zone and not self._beat_marker(state)) else 0.0
-        t_cross = 40.0 * self.get_action_bias("cross", 0.0) if (winger and in_zone) else 0.0
+        # A cross with nobody in the box is a giveaway -- dribble at goal instead.
+        t_cross = 40.0 * self.get_action_bias("cross", 0.0) if (winger and in_zone and self._box_runners(state) > 0) else 0.0
 
         if not progressive_pass:
             t_pass *= 0.08
@@ -379,9 +384,11 @@ class Midfielder(player):
         t_support = self.attributes.pass_tendency + 20.0
         t_hold = self.attributes.defending + 30.0
         t_wide = (self.attributes.speed + 20.0) * self.get_action_bias("wide_run", 0.0)
-        # A cross is coming: get in the box rather than toward the crosser.
-        t_box = 150.0 * self.get_action_bias("attack_box", 0.0) if self._cross_incoming(state) else 0.0
-        if t_box > 0.0:
+        # A cross is coming, or the box is empty with the ball in the final
+        # third: get in there rather than drift toward the ball.
+        t_box = 0.0
+        if self._cross_incoming(state) or self._box_needs_bodies(state):
+            t_box = 150.0 * self.get_action_bias("attack_box", 0.0)
             t_support *= 0.3
             t_hold *= 0.3
 
@@ -491,6 +498,9 @@ class DefensiveMid(Midfielder):
     """CDM: shields the back line. Signature move is "screen" 
     """
     primary_stats = ("defending", "tackling", "passing")
+    # Barely leaves its post: it's the rest defence.
+    attack_push_trail = 24.0
+    attack_push_limit = 14.0
 
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
@@ -504,6 +514,9 @@ class AttackingMid(Midfielder):
     move is "through_ball" 
     """
     primary_stats = ("passing", "vision", "shooting")
+    # Plays off the striker's shoulder, so it follows further up.
+    attack_push_trail = 6.0
+    attack_push_limit = 45.0
 
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)

@@ -60,6 +60,7 @@ class ActionType(IntEnum):
     HALFTIME = 13
     FULLTIME = 14
     HEADER = 15
+    SHOT_OFF_TARGET = 16
 
 
 def _q(value: float) -> int:
@@ -85,6 +86,21 @@ class ReplayRecorder:
 
     def event(self, tick: int, action_type: ActionType, player_idx: int = -1, team: int = -1) -> None:
         self._events.append((tick, int(action_type), player_idx, team))
+
+    def retype_last_shot_as_on_target(self, player_idx: int) -> None:
+        """Turns that player's most recent strike into a SHOOT if it went
+        down as SHOT_OFF_TARGET. For the one thing the recording cannot know
+        at the time: predict_goal_crossing reads the shot as missing (it
+        projects a straight line and ignores friction) and the ball then
+        puts it in."""
+        strikes = {int(ActionType.SHOOT), int(ActionType.SHOT_OFF_TARGET), int(ActionType.HEADER)}
+        for i in range(len(self._events) - 1, -1, -1):
+            tick, action, idx, team = self._events[i]
+            if idx != player_idx or action not in strikes:
+                continue
+            if action == int(ActionType.SHOT_OFF_TARGET):
+                self._events[i] = (tick, int(ActionType.SHOOT), idx, team)
+            return
 
     def encode(self) -> bytes:
         header = struct.pack(

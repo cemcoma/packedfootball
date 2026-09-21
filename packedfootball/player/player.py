@@ -23,6 +23,26 @@ base_speed:Final = 10.0
 # _calculate_shot.
 SHOT_VARIANCE_FLOOR = 0.9
 
+# The opposition box (14..56, 18 deep), drawn the way gameEngine's in_boxes
+# draws it, plus the depth a cross is actually aimed into: a runner arriving
+# at the edge of the area counts, one loitering further out does not. See
+# _box_runners. 30 reaches 12 units past the box and looked wrong -- balls
+# floated at players who were nowhere near it. 20 is the box alone and is
+# too strict the other way: it cut open-play crosses to 0.4/match, with two
+# thirds of matches having none at all.
+BOX_X_MIN: Final = 14.0
+BOX_X_MAX: Final = 56.0
+CROSS_TARGET_DEPTH: Final = 25.0
+
+# How close to goal a wide player has to be before an open lane inside is
+# worth abandoning the touchline for. See _decide_wingplay. Set it to 0 and
+# a latched winger always runs the line to the crossing zone: that costs
+# about a fifth of the wingers' goals and gains nothing.
+# Anything up to ~26 is inert -- on the touchline you cannot be that close
+# to goal without already being in the crossing zone, which is answered
+# above this check.
+CUT_INSIDE_RANGE: Final = 38.0
+
 @dataclass
 class Attributes: #out of 100, can be over
     #Physical attributes
@@ -138,6 +158,13 @@ class player(ABC):
     # (e.g. a fast defender should rate higher than a slow one), so the rest
     # leaks in at a reduced weight. Override per-class to retune the split.
     primary_weight: float = 0.8
+
+    # Off-ball attacking shape, per role: how far behind the ball's line this
+    # slot stands, how far it will leave its formation slot to get there, and
+    # how much it slides sideways toward the play. See _attack_shape_target.
+    attack_push_trail: float = 14.0
+    attack_push_limit: float = 30.0
+    attack_push_drift: float = 0.3
 
     def __init__(self, fname, lname, tier, position, attributes:Attributes = None, country: str = None, hometown: str = None, appearance: dict = None):
         #cosmetic
@@ -303,12 +330,29 @@ class player(ABC):
         
         return np.clip(future, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])
 
+    # --- Attacking shape ------------------------------------------------
+    def _attack_shape_target(self, state: dict, anchor_x: float | None = None) -> np.ndarray:
+        """My formation slot pushed up to attack_push_trail behind the ball's
+        line (never more than attack_push_limit from the slot), so the team
+        arrives together instead of leaving the carrier alone up front."""
+        forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        fx, fy = float(state["formation_pos"][0]), float(state["formation_pos"][1])
+        bx, by = float(state["ball_pos"][0]), float(state["ball_pos"][1])
+        push = float(np.clip((by - fy) * forward - self.attack_push_trail, 0.0, self.attack_push_limit))
+        ax = bx if anchor_x is None else float(anchor_x)
+        return np.array([
+            float(np.clip(fx + (ax - fx) * self.attack_push_drift, 2.0, PITCH_WIDTH - 2.0)),
+            float(np.clip(fy + push * forward, 2.0, PITCH_HEIGHT - 2.0)),
+        ])
+
     # --- Wingplay -------------------------------------------------------
     # A wide player runs the touchline to the crossing zone and crosses.
     # Choosing "wing_run" latches state["intent"] = "wingplay" (the engine
     # keeps it until the ball is released) and _decide_wingplay then
     # narrows the menu to wing_run / cross / pass -- no dribble at goal
-    # unless the marker is genuinely beaten (_beat_marker).
+    # unless the marker is genuinely beaten (_beat_marker). A cross needs
+    # someone to aim at: with the box empty (_box_runners) the latch drops
+    # and they go at the goal themselves.
     def _touchline_x(self, state: dict) -> float:
         return 3.0 if state["formation_pos"][0] < PITCH_WIDTH / 2.0 else PITCH_WIDTH - 3.0
 
@@ -319,6 +363,32 @@ class player(ABC):
         enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
         x, y = state["my_pos"]
         return abs(x - PITCH_WIDTH / 2.0) >= 18.0 and abs(enemy_goal_y - y) <= 20.0
+
+    def _box_runners(self, state: dict) -> int:
+        """Teammates a cross could actually find: bodies in the opposition
+        box. state["teammates"] holds all eleven, so drop my own row."""
+        teammates = np.asarray(state.get("teammates", []), dtype=float)
+        if teammates.size == 0:
+            return 0
+        my_pos = np.asarray(state["my_pos"], dtype=float)
+        enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
+        inside = (
+            (teammates[:, 0] > BOX_X_MIN)
+            & (teammates[:, 0] < BOX_X_MAX)
+            & (np.abs(enemy_goal_y - teammates[:, 1]) <= CROSS_TARGET_DEPTH)
+            & ~np.all(np.isclose(teammates, my_pos), axis=1)
+        )
+        return int(np.sum(inside))
+
+    def _box_needs_bodies(self, state: dict) -> bool:
+        """Ball in the final third, nobody in the box, and I'm near enough to
+        be the one who goes in."""
+        enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
+        return (
+            abs(enemy_goal_y - float(state["ball_pos"][1])) <= 40.0
+            and float(state.get("dist_to_goal", 99.0)) <= 50.0
+            and self._box_runners(state) == 0
+        )
 
     def _beat_marker(self, state: dict) -> bool:
         """A marker (opponent within 5) is now behind me and nobody is
@@ -354,29 +424,35 @@ class player(ABC):
             enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
             side = float(np.clip((state["my_pos"][0] - PITCH_WIDTH / 2.0) * 0.5, -8.0, 8.0))
             target = np.array([PITCH_WIDTH / 2.0 + side, enemy_goal_y - 10.0 * forward])
-            return {"type": "move", "target": target, "speed_mod": (self.attributes.speed * 0.9) / 100.0}
+            # Faster than dribbling: an unburdened run has to beat the cross
+            # to the box, and a dribbler carries at ~1.0.
+            return {"type": "move", "target": target, "speed_mod": (self.attributes.speed / 100.0) * 1.3}
         return None
 
     def _cross_incoming(self, state: dict) -> bool:
-        """The ball is wide in the attacking third and I'm close enough to
-        get in the box for it."""
+        """The ball is wide and coming up the flank, and I'm close enough to
+        get in the box for it. Deliberately early: a run that only starts
+        once the ball is level with the box arrives after the cross."""
         enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
         bx, by = state["ball_pos"]
         return (
             abs(bx - PITCH_WIDTH / 2.0) >= 15.0
-            and abs(enemy_goal_y - by) <= 35.0
-            and float(state.get("dist_to_goal", 99.0)) <= 40.0
+            and abs(enemy_goal_y - by) <= 45.0
+            and float(state.get("dist_to_goal", 99.0)) <= 50.0
         )
 
     def _decide_wingplay(self, state: dict) -> str | None:
-        """The narrowed on-ball menu while latched; None when not latched or
-        the marker is beaten (back to the full menu, latch drops)."""
+        """The narrowed on-ball menu while latched. None drops the latch and
+        hands back the full menu: the marker is beaten, the box is empty, or
+        the lane inside is open."""
         if state.get("intent") != "wingplay":
             return None
         rng = state["rng"]
         pressure = state.get("pressure_count", 0)
         progressive = self._best_progressive_pass_target(state) is not None
         if self._in_crossing_zone(state):
+            if self._box_runners(state) == 0:
+                return None  # nobody to cross to: go at the goal instead
             t_cross = 70.0 + self.attributes.passing * 0.5
             t_pass = pressure * 18.0 if progressive else 0.0
             t_run = 10.0
@@ -386,6 +462,14 @@ class player(ABC):
             return None
         if pressure >= 2 and progressive:
             return rng.choice(["pass", "wing_run"], p=[0.6, 0.4])
+        # Unmarked with the goal in range and the lane inside open: break off
+        # the line instead of running it to the byline on rails.
+        if (
+            pressure == 0
+            and float(state.get("dist_to_goal", 99.0)) <= CUT_INSIDE_RANGE
+            and self._goal_lane_is_open(state, lane_width=5.0, lookahead=14.0)
+        ):
+            return None
         return "wing_run"
 
     def _head_ball_drop_time(self, state: dict) -> float | None:

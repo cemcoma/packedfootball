@@ -1,7 +1,7 @@
 """Phase 1: the goal frame -- posts, crossbar, and reliable goal detection.
 
-Three separate bugs this pins down, all reported as "sometimes a goal,
-sometimes a kickoff without a goal, sometimes a corner":
+Four separate bugs this pins down. The first three were all reported as
+"sometimes a goal, sometimes a kickoff without a goal, sometimes a corner":
 
 1. A ball leaving through the goal mouth faster than ~48 units/s skipped
    goal detection entirely and restarted as a scoreless kickoff, because
@@ -9,6 +9,9 @@ sometimes a kickoff without a goal, sometimes a corner":
 2. Ball height was never consulted, so a shot sailing over the bar scored.
 3. There were no posts at all -- a ball on the goal-line at the post's exact
    x counted as a goal instead of rebounding.
+4. Then the posts didn't bounce anything: every contact but a dead-centre
+   one kept the ball's vy, so it rattled on the line and died there while
+   the crossbar rebounded properly. See the off-centre test below.
 
 These tests drive physics only (no AI); see conftest.tick_until.
 """
@@ -16,6 +19,7 @@ These tests drive physics only (no AI); see conftest.tick_until.
 import numpy as np
 import pytest
 
+from gameEngine import POST_REBOUND_DAMPING
 from conftest import (
     GOAL_CENTER_X,
     GOAL_X_MAX,
@@ -89,6 +93,51 @@ def test_post_rebound_reverses_the_ball(match):
             break
     assert g.ball[3] < 0, "ball should be travelling back out after hitting the post"
     assert g.ball[1] <= TEAM_B_GOAL_Y
+
+
+@pytest.mark.parametrize("offset", [-0.2, -0.1, 0.1, 0.2])
+def test_an_off_centre_post_hit_deflects_away_instead_of_cushioning(match, offset):
+    """The reported bug: only a shot striking the post dead centre came back.
+    The contact normal was read off the goal-plane crossing, which is level
+    with the post's axis by construction, so the normal was always [+-1, 0]:
+    the bounce flipped vx and kept the vy carrying the ball into the goal.
+    It crossed again, hit the post again, and died on the line -- four post
+    hits in twelve ticks, the "post cushions it" that was reported.
+
+    Where it ends up is the shot's business (back out, in off the post, or
+    wide for a goal kick); what this pins is that it leaves the woodwork
+    once, with real pace, and sideways."""
+    g = _shoot(match, GOAL_X_MAX + offset, 40.0)
+    tick_until(g, lambda gg: gg.post_hits > 0, max_ticks=10)
+    assert g.post_hits == 1
+    vx, vy = float(g.ball[2]), float(g.ball[3])
+    assert abs(vx) > 1.0, f"a glancing post hit has to send the ball sideways (vx={vx:.2f})"
+    # POST_REBOUND_DAMPING bites once, not once per tick on the line.
+    assert np.hypot(vx, vy) > 40.0 * POST_REBOUND_DAMPING * 0.9
+
+    for _ in range(10):
+        g.tick(1 / 60)
+    assert g.post_hits == 1, f"{g.post_hits} post hits -- the ball is rattling on the line"
+
+
+@pytest.mark.parametrize("offset", [-0.1, 0.0, 0.1])
+def test_a_post_rebound_stays_at_the_goal_it_bounced_off(match, offset):
+    """Reported as "after the post + out, the OTHER goal's keeper played it".
+
+    _rebound_off_frame picked the end by testing the contact point's y
+    against 0. That held while the contact was read off the goal-plane
+    crossing (exactly 0.0 or exactly PITCH_HEIGHT), but a post is met just
+    SHORT of the line -- so a contact at the y=0 goal has a small positive
+    y, the test said "far end", and the ball was placed at the other goal,
+    the length of the pitch away. Every post hit at y=0 was affected, not
+    only the ones that went out."""
+    launch_ball(match, GOAL_X_MAX + offset, 1.0, 0.0, -40.0, event="shot", toucher=20)
+    freeze_players_away_from(match, GOAL_X_MAX + offset, 1.0, radius=25.0)
+    tick_until(match, lambda gg: gg.post_hits > 0, max_ticks=10)
+    assert match.post_hits == 1
+    assert match.ball[1] < 5.0, (
+        f"post hit at the y=0 goal left the ball at y={float(match.ball[1]):.2f}"
+    )
 
 
 def test_inside_face_post_rebound_can_still_score(match):

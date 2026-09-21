@@ -166,8 +166,11 @@ scoreboard, timer, pause/camera/speed buttons, pre-match and pause overlays
   dive toward the ball, or a catch when it's straight at them. Only the
   ball still flashes (goal / shot / save), which is all the pause-screen
   key lists.
-- **Trails**: after a shot, clearance, pass or cross the ball drags a
-  coloured ribbon (`TRAIL_ACTIONS` + the `TRAIL_*` constants). Length,
+- **Trails**: after a shot on target, clearance, pass or cross the ball
+  drags a coloured ribbon (`TRAIL_ACTIONS` + the `TRAIL_*` constants). A
+  shot that was never going in is recorded as `SHOT_OFF_TARGET` instead of
+  `SHOOT` and draws no ribbon -- it still flashes the ball and plays the
+  striking animation, so only the line to goal is held back. Length,
   width, brightness and how long it keeps trailing all scale with the
   ball's speed in the first sample after the kick, so a toe-poke leaves
   nothing and a full-blooded shot draws a line to the goal. It stops when

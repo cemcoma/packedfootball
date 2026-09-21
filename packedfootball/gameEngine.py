@@ -69,7 +69,34 @@ from formations import get_formation, is_similar_position
 #         wingplay latch for LW/RW/LM/RM (wing_run/wide_run + open-play crosses).
 #         The ball has a vertical velocity (ball_vz): kicks rise and fall in
 #         an arc instead of starting at their peak and dropping in a line.
-ENGINE_VERSION: Final[str] = "2.3.0"
+#   2.4.0 a cross needs a target. With nobody in the box (player._box_runners)
+#         a wide player drops the wingplay latch and goes at the goal itself,
+#         and it also drops when the lane inside is open rather than running
+#         the line to the byline on rails. Off the ball, hold_attack follows
+#         the ball up the pitch per role (player._attack_shape_target and the
+#         attack_push_* knobs) instead of sitting on a fixed formation slot
+#         + 15; midfielders and forwards fill an empty box in the final third,
+#         not only ahead of a cross; the run into the box is a sprint (it has
+#         to beat the cross there); and the space bonuses on dribbling no
+#         longer swamp shooting once you are in the box. Wide players scored
+#         0.19 goals/match before this and 0.48 after, over 48 matches.
+#         Replays also split the shot event: a strike the goal-crossing
+#         prediction reads as missing records as SHOT_OFF_TARGET rather than
+#         SHOOT, so the client can draw its trail only for shots at goal. A
+#         goal retypes its own strike back to SHOOT (replay.py), since the
+#         prediction projects a straight line and ignores friction. The wire
+#         format is unchanged -- it is one more ActionType value.
+#         Goalposts bounce the ball again. The contact normal came from the
+#         goal-plane crossing, which sits level with the post's axis by
+#         construction, so every rebound but a dead-centre one flipped vx
+#         and kept the vy that was carrying the ball in: it crossed, struck
+#         the post again, and bled out on the line (four hits in twelve
+#         ticks) while the crossbar rebounded correctly. The post is now
+#         intersected as the circle it is (_path_meets_post), so the normal
+#         has a real y component and the ball leaves the woodwork once. A
+#         glancing hit that used to die on the line now goes back into play,
+#         in off the post, or wide for a goal kick.
+ENGINE_VERSION: Final[str] = "2.4.0"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -1685,27 +1712,65 @@ class game:
         # Crossbar: inside the posts but at bar height. Comes down off the
         # frame rather than sailing on through.
         if inner_min <= cross_x <= inner_max and cross_z < GOAL_HEIGHT + GOAL_POST_RADIUS * 2.0:
-            self._rebound_off_frame(np.array([cross_x, plane_y]), np.array([0.0, inward]))
+            self._rebound_off_frame(np.array([cross_x, plane_y]), np.array([0.0, inward]), plane_y)
             self.ball_vz = -abs(self.ball_vz) * POST_REBOUND_DAMPING
             return "rebound"
 
-        # Either post. Reflect about the outward normal from the post centre,
-        # so a ball clipping the inside face deflects goalward and one
-        # clipping the outside face deflects away -- both are then re-tested
-        # next tick by this same function, which is how "in off the post"
-        # works without being special-cased.
-        for post_x in post_centres:
-            if abs(cross_x - post_x) <= GOAL_POST_RADIUS and cross_z < GOAL_HEIGHT:
-                normal = np.array([cross_x - post_x, 0.0], dtype=float)
+        # Either post. A post is a vertical cylinder, so the contact normal is
+        # the horizontal vector from its axis out to where the ball's path
+        # actually meets it -- found by intersecting the path with the post's
+        # circle. Taking the contact from the goal-plane crossing instead put
+        # it exactly level with the axis every time, which forced a normal of
+        # [+-1, 0]: the rebound flipped vx and kept the vy that was carrying
+        # the ball into the goal, so it crossed again, hit the post again, and
+        # bled away on the line instead of coming back out.
+        # A ball clipping the inside face still deflects goalward and one
+        # clipping the outside face away -- both re-tested next tick by this
+        # same function, which is how "in off the post" works uncased.
+        if cross_z < GOAL_HEIGHT:
+            path = (np.asarray(prev_xy, dtype=float), np.array([cur_x, cur_y]))
+            hit_t, hit_post = None, None
+            for post_x in post_centres:
+                t_hit = self._path_meets_post(path[0], path[1], np.array([post_x, plane_y]))
+                if t_hit is not None and (hit_t is None or t_hit < hit_t):
+                    hit_t, hit_post = t_hit, post_x
+            if hit_post is not None:
+                contact = path[0] + hit_t * (path[1] - path[0])
+                normal = contact - np.array([hit_post, plane_y])
                 if _norm2(normal) < 1e-8:
                     normal = np.array([0.0, inward], dtype=float)
-                self._rebound_off_frame(np.array([cross_x, plane_y]), normal)
+                self._rebound_off_frame(contact, normal, plane_y)
                 return "rebound"
 
         return None
 
-    def _rebound_off_frame(self, contact: np.ndarray, normal: np.ndarray) -> None:
-        """Bounces the ball off the woodwork and leaves it in play."""
+    @staticmethod
+    def _path_meets_post(start: np.ndarray, end: np.ndarray, centre: np.ndarray) -> float | None:
+        """How far along start->end the ball first touches the post, as a
+        fraction in [0, 1], or None if it misses. Seen from above the post is
+        a circle of GOAL_POST_RADIUS, so this is a segment against a circle."""
+        d = end - start
+        f = start - centre
+        a = float(np.dot(d, d))
+        if a < 1e-12:
+            return None
+        b = 2.0 * float(np.dot(f, d))
+        c = float(np.dot(f, f)) - GOAL_POST_RADIUS * GOAL_POST_RADIUS
+        disc = b * b - 4.0 * a * c
+        if disc < 0.0:
+            return None
+        root = math.sqrt(disc)
+        for t in ((-b - root) / (2.0 * a), (-b + root) / (2.0 * a)):
+            if 0.0 <= t <= 1.0:
+                return t
+        return None
+
+    def _rebound_off_frame(self, contact: np.ndarray, normal: np.ndarray, plane_y: float) -> None:
+        """Bounces the ball off the woodwork at `plane_y`'s goal and leaves it
+        in play. The goal is passed in rather than read back off the contact
+        point: a post is met just short of the goal line, so a contact at the
+        y=0 goal has a small POSITIVE y and inferring the end from its sign
+        put the ball at the far goal, the length of the pitch away."""
         normal = np.asarray(normal, dtype=float)
         norm = _norm2(normal)
         normal = normal / norm if norm > 1e-8 else np.array([0.0, 1.0])
@@ -1717,9 +1782,8 @@ class game:
         # Nudge the ball back inside along the pitch's long axis so the next
         # tick doesn't immediately re-detect the same crossing.
         inset = 0.35
-        contact_y = float(contact[1])
         self.ball[0] = float(np.clip(contact[0], 0.0, PITCH_WIDTH))
-        self.ball[1] = inset if contact_y <= 0.0 else PITCH_HEIGHT - inset
+        self.ball[1] = inset if plane_y <= 0.0 else PITCH_HEIGHT - inset
 
         self.post_hits += 1
         # The ball is loose and nobody has touched it since the shot -- leave
@@ -1746,9 +1810,12 @@ class game:
                 scorer_idx = self.last_shot_player
         own_goal = scorer_idx == -1
 
-        # A goal is by definition on target, for whoever shot it.
+        # A goal is by definition on target, for whoever shot it -- the
+        # recording follows the same rule, so a goal always has its trail.
         if self.last_shot_player >= 0:
             self.match_stats[self.last_shot_player]["shots_on_target"] += 1
+            if self.replay and not self.last_shot_on_target:
+                self.replay.retype_last_shot_as_on_target(self.last_shot_player)
             self.last_shot_player = -1
         # Charged to the beaten keeper -- index 0 / 11 by formation contract.
         conceding_keeper = 11 if scoring_team == 0 else 0
@@ -1984,8 +2051,6 @@ class game:
 
                 self.visual_action[index] = "shoot"
                 self.visual_action_timer[index] = 15
-                if self.replay:
-                    self.replay.event(self.match_clock_frames, ActionType.SHOOT, player_idx=index, team=0 if index < 11 else 1)
                 self._release_ball(index, unit_xy, shot_speed, aerial=aerial, event_type="shot")
                 self.ball[2] = unit_xy[0] * shot_speed
                 self.ball[3] = unit_xy[1] * shot_speed
@@ -1993,6 +2058,15 @@ class game:
                 self.ball_vz = launch_vz
                 crossing = self.predict_goal_crossing(1 if index < 11 else 0)
                 self.last_shot_on_target = bool(crossing and crossing["on_target"])
+                # Recorded after the ball is away: the crossing above is what
+                # decides which of the two shot events this is.
+                if self.replay:
+                    self.replay.event(
+                        self.match_clock_frames,
+                        ActionType.SHOOT if self.last_shot_on_target else ActionType.SHOT_OFF_TARGET,
+                        player_idx=index,
+                        team=0 if index < 11 else 1,
+                    )
 
         elif action_type == "tackle":
             if self.ball_controller == -1 or self.ball_controller == index:

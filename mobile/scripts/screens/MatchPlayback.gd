@@ -119,6 +119,7 @@ const LEGEND_SWATCH_SIZE := Vector2(14.0, 14.0)
 # celebration takes the scorer over.
 const EVENT_ACTIONS := {
 	ReplayReader.ActionType.SHOOT: "shoot",
+	ReplayReader.ActionType.SHOT_OFF_TARGET: "shoot",
 	ReplayReader.ActionType.PASS: "pass",
 	ReplayReader.ActionType.CROSS: "pass",
 	ReplayReader.ActionType.CORNER: "pass",
@@ -140,6 +141,8 @@ const EVENT_ACTIONS := {
 # `seconds` and `width` here are the values at full strength. `fade`: once
 # the trail stops recording, the whole ribbon fades out over this many
 # seconds (without it the tail just ages out).
+# SHOT_OFF_TARGET is deliberately absent: a shot only draws its line to the
+# goal when it was actually going there.
 const TRAIL_ACTIONS := {
 	ReplayReader.ActionType.SHOOT: {"color": ACTION_COLOR_SHOOT, "seconds": 1.4, "width": 1.0, "rings": true, "fade": 0.3},
 	ReplayReader.ActionType.CLEARANCE: {"color": Color(0.95, 0.75, 0.45), "seconds": 1.0, "width": 0.7},
@@ -911,7 +914,7 @@ func _action_color(event_type: int) -> Color:
 	match event_type:
 		ReplayReader.ActionType.GOAL:
 			return ACTION_COLOR_GOAL
-		ReplayReader.ActionType.SHOOT:
+		ReplayReader.ActionType.SHOOT, ReplayReader.ActionType.SHOT_OFF_TARGET:
 			return ACTION_COLOR_SHOOT
 		ReplayReader.ActionType.SAVE:
 			return ACTION_COLOR_SAVE
@@ -925,7 +928,7 @@ func _process_events(current_tick: float) -> void:
 		var idx: int = event["player_idx"]
 		var event_type: int = event["type"]
 
-		if event_type == ReplayReader.ActionType.SHOOT or event_type == ReplayReader.ActionType.SAVE:
+		if event_type in [ReplayReader.ActionType.SHOOT, ReplayReader.ActionType.SHOT_OFF_TARGET, ReplayReader.ActionType.SAVE]:
 			ball_flash_timer = 0.4
 			ball_flash_color = _action_color(event_type)
 		if TRAIL_ACTIONS.has(event_type):

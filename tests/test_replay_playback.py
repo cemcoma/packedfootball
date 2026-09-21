@@ -125,6 +125,37 @@ def test_replay_wire_format_is_unchanged():
     assert r.POSITION_SCALE == 100.0
 
 
+@pytest.mark.slow
+def test_only_shots_at_goal_are_recorded_as_shoot(replays):
+    """SHOOT vs SHOT_OFF_TARGET: the client trails the first and not the
+    second (mobile MatchPlayback.gd's TRAIL_ACTIONS), so the split has to
+    hold. Both are real shots -- together they are the shots stat, minus
+    headers, which record as HEADER."""
+    seen_off = 0
+    for _seed, _g, d in replays:
+        seen_off += sum(1 for e in d["events"] if e["type"] == int(ActionType.SHOT_OFF_TARGET))
+    assert seen_off, "no shot went off target in any replay -- the split is not being recorded"
+
+
+@pytest.mark.slow
+def test_a_goal_always_has_a_shoot_behind_it(replays):
+    """predict_goal_crossing projects a straight line and ignores friction,
+    so it reads some shots that go in as missing. The recording follows the
+    ball (ReplayRecorder.retype_last_shot_as_on_target) -- otherwise a goal
+    would play with no trail on the shot that scored it."""
+    strikes = {int(ActionType.SHOOT), int(ActionType.SHOT_OFF_TARGET), int(ActionType.HEADER)}
+    for seed, _g, d in replays:
+        events = d["events"]
+        for k, event in enumerate(events):
+            if event["type"] != int(ActionType.GOAL):
+                continue
+            prior = [e for e in events[:k] if e["type"] in strikes]
+            assert prior, f"seed {seed}: goal at {event['tick']} with no strike before it"
+            assert prior[-1]["type"] != int(ActionType.SHOT_OFF_TARGET), (
+                f"seed {seed}: goal at {event['tick']} follows a shot recorded off target"
+            )
+
+
 def test_action_type_values_match_the_client():
     """The Godot enum is hand-mirrored and never validated at runtime."""
     from pathlib import Path

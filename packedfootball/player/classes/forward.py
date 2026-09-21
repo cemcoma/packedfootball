@@ -77,6 +77,10 @@ class WingerActionProfile(ActionProfile):
 
 class Forward(player):
     primary_stats = ("shooting", "dribbling", "speed", "power", "heading")
+    # Stays on the ball's line and comes inside toward goal.
+    attack_push_trail = 2.0
+    attack_push_limit = 45.0
+    attack_push_drift = 0.45
 
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         self.action_profile = ForwardActionProfile()
@@ -135,9 +139,10 @@ class Forward(player):
             return {"type": "move", "target": support_target, "speed_mod": (self.attributes.speed * 0.7) / 100.0}
             
         elif decision == "hold_attack":
-            forward_shift = 15.0 if state.get("a_direction", 1) == 1 else -15.0
-            tactical_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + forward_shift])
-            return {"type": "move", "target": tactical_pos, "speed_mod": (self.attributes.speed * 0.5) / 100.0}
+            # Follow the ball up the pitch and stay central; a fixed slot + 15
+            # left the carrier arriving in the box on their own.
+            target = self._attack_shape_target(state, anchor_x=PITCH_WIDTH / 2.0)
+            return {"type": "move", "target": target, "speed_mod": (self.attributes.speed * 0.8) / 100.0}
             
         # --- Defensive & Loose Ball Movement ---
         elif decision == "hold_defense":
@@ -210,9 +215,11 @@ class Forward(player):
         is_wide = self._is_wide(state)
         beaten = self._beat_marker(state)
         in_zone = self._in_crossing_zone(state)
-        t_cut_inside = (self.attributes.dribbling + self.attributes.agility) * 0.5 * self.get_action_bias("cut_inside", 0.0) if (is_wide and beaten) else 0.0
+        # A cross with nobody in the box is a giveaway -- drive at goal instead.
+        empty_box = is_wide and self._box_runners(state) == 0
+        t_cut_inside = (self.attributes.dribbling + self.attributes.agility) * 0.5 * self.get_action_bias("cut_inside", 0.0) if (is_wide and (beaten or (in_zone and empty_box))) else 0.0
         t_wing = (self.attributes.speed + self.attributes.dribbling) * 0.5 * self.get_action_bias("wing_run", 0.0) if (winger and is_wide and not in_zone and not beaten) else 0.0
-        t_cross = 40.0 * self.get_action_bias("cross", 0.0) if (winger and in_zone) else 0.0
+        t_cross = 40.0 * self.get_action_bias("cross", 0.0) if (winger and in_zone and not empty_box) else 0.0
 
         if not progressive_pass:
             t_pass *= 0.08
@@ -247,6 +254,11 @@ class Forward(player):
             t_dribble += 60.0
             t_pass -= 18.0
             t_stop += 5.0
+
+        # In the box you shoot; the space bonuses above were turning a
+        # chance into another touch.
+        if state.get("in_attacking_box"):
+            t_dribble *= 0.4
 
         if pressure > 0 and not self._goal_lane_is_open(state, lane_width=3.0, lookahead=12.0):
             t_pass *= 3.0
@@ -344,9 +356,11 @@ class Forward(player):
         t_support = self.attributes.pass_tendency + 20.0
         t_hold = self.attributes.defending + 30.0
         t_wide = (self.attributes.speed + 20.0) * self.get_action_bias("wide_run", 0.0)
-        # A cross is coming: get in the box rather than toward the crosser.
-        t_box = 150.0 * self.get_action_bias("attack_box", 0.0) if self._cross_incoming(state) else 0.0
-        if t_box > 0.0:
+        # A cross is coming, or the box is empty with the ball in the final
+        # third: get in there rather than drift toward the ball.
+        t_box = 0.0
+        if self._cross_incoming(state) or self._box_needs_bodies(state):
+            t_box = 150.0 * self.get_action_bias("attack_box", 0.0)
             t_support *= 0.3
             t_hold *= 0.3
 
@@ -450,6 +464,8 @@ class Winger(Forward):
     Signature move is "cut_inside" (see Forward._build_action/
     _decide_on_ball_attack above)."""
     primary_stats = ("dribbling", "speed", "passing")
+    # Pushes up like a striker but holds more width.
+    attack_push_drift = 0.2
 
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         # Forward.__init__ (called via super() below) unconditionally sets
