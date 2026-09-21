@@ -1,36 +1,31 @@
 extends Control
 
-## EA-FC-style pack-opening reveal. PackSession.cards() (an already-decoded
+## EA-FC-style pack opening. PackSession.cards() (an already-decoded
 ## Array[PlayerCard] built by Shop.gd right after a successful POST
-## /pack/open) get shown one at a time via Tween-driven scale/fade, worst
-## tier first, best tier (PlayerCard.tier_rank(), ties broken by overall())
-## saved for last as a bigger, longer "hero" moment -- how much bigger
-## scales with the hero card's own tier (HERO_SCALE_BY_TIER: a modest
-## 1.25x for a bronze hero up to 2x for icon). Then every card is
-## reparented into a scrollable grid (the same disposable-child population
-## pattern Shop.gd's pack grid and Team.gd's bench grid already use) where
-## tapping one reuses PlayerCardView's own existing `pressed` signal
-## (already proven in Team.gd) to show a stats popup mirroring Team.gd's
-## own stats panel content -- same attribute list, deliberately duplicated
-## rather than shared (see the plan this came from: pulling that out into
-## a common component is a reasonable future cleanup once a third call
-## site wants it, not something worth touching Team.gd's already-working
-## code for today).
+## /pack/open) is sorted worst -> best; the BEST card's tier is what
+## colours the whole opening, hinting at what is inside before the pack
+## bursts -- purple for a special, a cycling holo for an icon. Every
+## effect (and the hook for replacing it with a sprite) lives in
+## PackWalkoutStage.gd.
 ##
-## Tapping anywhere while an earlier (non-hero) card is showing skips
-## straight to the browse grid with every card already in its final
-## resting state -- "skip" means skip all of it, not advance one card at a
-## time. A killed Tween never fires `finished` (so `await tween.finished`
-## would hang forever if skip just called `.kill()`), so skipping instead
-## fast-forwards the active Tween to completion via `custom_step()` (a
-## real step, still finishes normally) and force-expires the active hold
-## timer via its `time_left` -- both let whatever's currently `await`-ed
-## resume on the very next frame instead of leaving the reveal loop stuck
-## mid-await.
+## Only the highlight cards are shown at all: anything at least
+## WALKOUT_MIN_TIER rare, plus the best card in the pack whatever its
+## tier. The rare ones get the real WALKOUT -- the player himself comes
+## out of the light and celebrates before his card forms (see
+## PackWalkoutStage.player_walkout()); a best card below that bar just has
+## its card rise out of the beam, no player, no celebration. The rest are never animated at all -- they are already waiting in
+## the browse grid underneath (the same disposable-child population
+## pattern Shop.gd's pack grid and Team.gd's bench grid use), where
+## tapping one reuses PlayerCardView's own existing `pressed` signal to
+## show a stats popup mirroring Team.gd's own stats panel content -- same
+## attribute list, deliberately duplicated rather than shared until a
+## third call site wants it.
 ##
-## The hero card itself doesn't auto-advance at all -- see _wait_for_tap()
-## -- so reaching it always ends in the same explicit tap regardless of
-## whether earlier cards were skipped through or watched in full.
+## Taps drive the sequence: one during the buildup or a walkout
+## fast-forwards it, one on a card that has landed brings out the next
+## (or the grid). Fast-forwarding steps the running Tween to completion
+## rather than killing it -- a killed Tween never fires `finished`, so
+## anything awaiting it would hang forever.
 
 const PLAYER_CARD_SCENE := preload("res://scenes/components/PlayerCardView.tscn")
 
@@ -41,16 +36,21 @@ const ATTR_ROWS := [
 	["Heading", "heading"],
 ]
 
-const CARD_SCALE := Vector2(1.0, 1.0)
-const CARD_HOLD_SECONDS := 0.6
+## A card rare enough for the player to walk out and celebrate. The best
+## card in the pack is always SHOWN even when it doesn't clear this bar --
+## it just doesn't get the player, only the card.
+const WALKOUT_MIN_TIER := "special"
 
-const HERO_SCALE_BY_TIER := {
-	"bronze": 1.25, "silver": 1.35, "gold": 1.45, "platinum": 1.55,
-	"diamond": 1.7, "special": 1.85, "icon": 2.0,
+## How big a card stands once it has walked out -- the rarer it is, the
+## more of the screen it takes.
+const WALKOUT_SCALE_BY_TIER := {
+	"bronze": 0.7, "silver": 0.8, "gold": 1.00, "platinum": 1.10,
+	"diamond": 1.2, "special": 1.3, "icon": 1.5,
 }
-const DEFAULT_HERO_SCALE := 1.25
+const DEFAULT_WALKOUT_SCALE := 1.25
 
 @onready var _reveal_layer: Control = %RevealLayer
+@onready var _stage: PackWalkoutStage = %WalkoutStage
 @onready var _skip_catcher: Button = %SkipCatcher
 @onready var _skip_hint_label: Label = %SkipHintLabel
 
@@ -83,15 +83,12 @@ const DEFAULT_HERO_SCALE := 1.25
 var _sell_mode: bool = false
 var _selected_ids: Array = []
 var _selling: bool = false
-## player_id -> its card in the browse grid, so selecting one restyles just
-## that card instead of rebuilding the grid mid-selection.
+## player_id -> its PlayerCardView. Built by the walkout for the cards that
+## get one and by the grid for the rest, then kept so selecting a card
+## restyles just that one instead of rebuilding the grid mid-selection.
 var _browse_views: Dictionary = {}
 
 var _cards: Array = []  # PlayerCard, sorted worst -> best
-var _views: Array = []  # PlayerCardView, same order as _cards, filled in as the reveal reaches each one
-var _skip_requested: bool = false
-var _active_tween: Tween = null
-var _active_timer: SceneTreeTimer = null
 
 
 func _ready() -> void:
@@ -105,21 +102,23 @@ func _ready() -> void:
 	_sell_cancel_button.pressed.connect(_on_sell_cancel_pressed)
 	_sell_confirm_overlay.visible = false
 
-	# "Tap to skip" is drawn straight over the screen background with no
+	# The tap hint is drawn straight over the screen background with no
 	# panel behind it -- its own pale grey override made it invisible in
 	# light mode. See ThemeManager's note on text_hint.
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
 	_apply_theme_colors()
 
+	var pack_texture: Texture2D = PackSession.pack_texture
 	_cards = PackSession.cards().duplicate()
 	_cards.sort_custom(_is_worse_pull)
 	PackSession.clear()
 
 	if _cards.is_empty():
+		_stage.dismiss()
 		_show_browse_state()  # reached directly with nothing pending -- nothing to animate
 		return
 
-	_play_reveal_sequence()
+	_play_reveal_sequence(pack_texture)
 
 
 func _apply_theme_colors() -> void:
@@ -136,118 +135,95 @@ static func _is_worse_pull(a: PlayerCard, b: PlayerCard) -> bool:
 	return a.overall() < b.overall()
 
 
-static func _hero_scale_for(tier: String) -> Vector2:
-	var s: float = HERO_SCALE_BY_TIER.get(PlayerCard.tier_family(tier), DEFAULT_HERO_SCALE)
+static func _walkout_scale_for(tier: String) -> Vector2:
+	var s: float = WALKOUT_SCALE_BY_TIER.get(PlayerCard.tier_family(tier), DEFAULT_WALKOUT_SCALE)
 	return Vector2(s, s)
 
 
+## Rare enough for the player to walk out and celebrate -- by tier FAMILY,
+## so every special_* edition counts as special.
+static func _is_walkout_tier(tier: String) -> bool:
+	return PlayerCard.tier_rank(tier) >= PlayerCard.tier_rank(WALKOUT_MIN_TIER)
+
+
+## Which cards are shown at all, worst -> best so the best pull lands last.
+func _walkout_cards() -> Array:
+	var out: Array = []
+	for card in _cards:
+		if _is_walkout_tier(card.tier):
+			out.append(card)
+	if out.is_empty() or out[-1] != _cards[-1]:
+		out.append(_cards[-1])
+	return out
+
 func _on_skip_pressed() -> void:
-	_skip_requested = true
-	if _active_tween != null and _active_tween.is_valid():
-		_active_tween.custom_step(9999.0)  # forces real completion -> still fires `finished`, unlike kill()
-	if _active_timer != null:
-		_active_timer.time_left = 0.0  # fires `timeout` next frame instead of after its full duration
+	_stage.fast_forward()
 
 
-func _hold(seconds: float) -> void:
-	_active_timer = get_tree().create_timer(seconds)
-	await _active_timer.timeout
-	_active_timer = null
+func _play_reveal_sequence(pack_texture: Texture2D) -> void:
+	await get_tree().process_frame
 
+	_stage.setup(pack_texture, _cards[-1].tier)
+	_skip_hint_label.text = tr("Tap to speed up")
+	await _stage.play_charge()
 
-## The hero card doesn't auto-advance -- it waits for an actual tap, however
-## long that takes. _skip_catcher is the same full-rect invisible button
-## "tap to skip" already uses elsewhere in this sequence, so this shares its
-## `pressed` signal rather than needing a second input listener; awaiting a
-## signal directly like this is safe to call here specifically because the
-## hero card is always the LAST one (see _is_worse_pull's sort), so nothing
-## checks _skip_requested afterward -- there's nothing left to skip *to*.
-func _wait_for_tap() -> void:
-	await _skip_catcher.pressed
+	if _hero_sound.stream != null:
+		_hero_sound.play()
+	await _stage.play_burst()
 
-
-func _play_reveal_sequence() -> void:
-	for i in range(_cards.size()):
-		if _skip_requested:
-			break
-		var card: PlayerCard = _cards[i]
-		var is_hero: bool = i == _cards.size() - 1
+	var walkouts: Array = _walkout_cards()
+	for i in walkouts.size():
+		var card: PlayerCard = walkouts[i]
 		var view: PlayerCardView = PLAYER_CARD_SCENE.instantiate()
-		_reveal_layer.add_child(view)
+		_stage.add_card(view)
+		# set_card() reaches into %BackgroundTexture/%OverallLabel/etc.,
+		# which stay null until the view is actually in the tree -- so it
+		# has to come after add_child(), not right after instantiate().
 		view.set_card(card)
-		_views.append(view)
+		_browse_views[card.player_id] = view
 
-		var target_scale: Vector2 = _hero_scale_for(card.tier) if is_hero else CARD_SCALE
-		view.pivot_offset = view.custom_minimum_size / 2.0
-		view.position = _reveal_layer.size / 2.0 - view.pivot_offset
-		view.scale = target_scale * 0.4
-		view.modulate.a = 0.0
+		# For a rare card the player walks out and celebrates first; the
+		# card only forms once he's done. A lesser card is just a card.
+		if _is_walkout_tier(card.tier):
+			await _stage.player_walkout(card)
+		await _stage.walk_out(view, _walkout_scale_for(card.tier))
+		# a glow, in the card's own tier colour, that breathes until the
+		# card is put away
+		view.set_celebrating(true, PlayerCard.tier_color(card.tier))
+		_skip_hint_label.text = tr("Tap to continue")
+		await _skip_catcher.pressed
+		view.set_celebrating(false)
+		if i < walkouts.size() - 1:
+			await _stage.put_away(view)
 
-		var in_tween := create_tween()
-		_active_tween = in_tween
-		in_tween.tween_property(view, "scale", target_scale, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		in_tween.parallel().tween_property(view, "modulate:a", 1.0, 0.25)
-		await in_tween.finished
-		_active_tween = null
-		if _skip_requested:
-			break
-
-		if is_hero:
-			view.set_celebrating(true)  # a glow that breathes until the card is put away
-			if _hero_sound.stream != null:
-				_hero_sound.play()
-			_skip_hint_label.text = tr("Tap to continue")
-			await _wait_for_tap()
-		else:
-			await _hold(CARD_HOLD_SECONDS)
-			if _skip_requested:
-				break
-
-		if not is_hero:
-			var out_tween := create_tween()
-			_active_tween = out_tween
-			out_tween.tween_property(view, "modulate:a", 0.0, 0.2)
-			await out_tween.finished
-			_active_tween = null
-
+	_stage.dismiss()
 	_show_browse_state()
 
 
-## Reached either after the sequence above finishes naturally, or (via
-## skip) mid-sequence -- so this has to handle both "this card already got
-## its own PlayerCardView from the loop above" (reparent, don't recreate)
-## and "the loop broke before ever reaching this card" (create it fresh
-## here) for every single card, not just the ones that got a turn.
+## Every card ends up here, walked out or not: the ones that did already
+## have a PlayerCardView (reparent it out of the stage), the ones that
+## didn't get one made now.
 func _show_browse_state() -> void:
-	_skip_requested = false
-	_active_tween = null
-	_active_timer = null
 	_reveal_layer.visible = false
 	_skip_catcher.visible = false
 	_skip_hint_label.visible = false
 
-	for i in range(_cards.size()):
-		var card: PlayerCard = _cards[i]
-		var view: PlayerCardView
-		var already_revealed: bool = i < _views.size()
-		if already_revealed:
-			view = _views[i]
-			if view.get_parent() == _reveal_layer:
-				_reveal_layer.remove_child(view)
+	for card in _cards:
+		var view: PlayerCardView = _browse_views.get(card.player_id)
+		var walked_out: bool = view != null
+		if walked_out:
+			view.get_parent().remove_child(view)
 		else:
 			view = PLAYER_CARD_SCENE.instantiate()
 
 		view.scale = Vector2.ONE
 		view.modulate = Color.WHITE
 		view.pivot_offset = Vector2.ZERO
+		view.position = Vector2.ZERO
 		view.set_celebrating(false)
 		_cards_grid.add_child(view)
-		# set_card() reaches into %Background/%OverallLabel/etc., which stay
-		# null until this node is actually in the tree -- must come after
-		# add_child(), not right after instantiate() (that was the bug: any
-		# card skipped past before its reveal turn crashed here).
-		if not already_revealed:
-			view.set_card(card)
+		if not walked_out:
+			view.set_card(card)  # in the tree first -- see _play_reveal_sequence
 		view.pressed.connect(_on_card_pressed.bind(card.player_id))
 		_browse_views[card.player_id] = view
 
@@ -405,16 +381,10 @@ func _on_sell_confirm_pressed() -> void:
 	GameProfile.apply_inventory_cap(res.data.get("inventory_cap"))
 	GameProfile.apply_currency_balances(res.data.get("credits_remaining"))
 
-	# _cards and _views are parallel, so they have to be trimmed together.
-	var kept_cards: Array = []
-	var kept_views: Array = []
-	for i in _cards.size():
-		if sold.has(_cards[i].player_id):
-			continue
-		kept_cards.append(_cards[i])
-		if i < _views.size():
-			kept_views.append(_views[i])
-	_cards = kept_cards
-	_views = kept_views
+	var kept: Array = []
+	for card in _cards:
+		if not sold.has(card.player_id):
+			kept.append(card)
+	_cards = kept
 
 	_exit_sell_mode()

@@ -692,7 +692,7 @@ msgstr ""
 # -------- Pack reveal -------------------------------------------------
 msgid "PACK OPENED"
 msgstr ""
-msgid "Tap to skip"
+msgid "Tap to speed up"
 msgstr ""
 msgid "Tap to continue"
 msgstr ""

@@ -159,7 +159,11 @@ func set_badge(text: String, color: Color = BADGE_THEME_ACCENT) -> void:
 ## share one hook, which is how a permanent status ended up wearing a
 ## celebration. Runs on its own node, so PackReveal can go on tweening the
 ## card's own scale and modulate underneath without the two colliding.
-func set_celebrating(is_celebrating: bool) -> void:
+##
+## `color` is the glow's own -- a walkout passes the card's tier colour so
+## the celebration matches the pack it came out of. Left unset it follows
+## the badge/theme accent like every other highlight here.
+func set_celebrating(is_celebrating: bool, color: Color = BADGE_THEME_ACCENT) -> void:
 	if _glow == null:
 		return  # called before _ready(); set_card() re-clears it after
 	if _glow_tween != null:
@@ -169,8 +173,9 @@ func set_celebrating(is_celebrating: bool) -> void:
 	if not is_celebrating:
 		return
 
+	var glow_color: Color = _highlight_color() if color == BADGE_THEME_ACCENT else color
 	_glow.add_theme_stylebox_override(
-		"panel", _ring_style(GLOW_WIDTH, CARD_CORNER + GLOW_OUTSET, _highlight_color())
+		"panel", _ring_style(GLOW_WIDTH, CARD_CORNER + GLOW_OUTSET, glow_color)
 	)
 	_glow.pivot_offset = _glow.size / 2.0
 	_glow.scale = Vector2.ONE

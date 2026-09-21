@@ -23,24 +23,16 @@ base_speed:Final = 10.0
 # _calculate_shot.
 SHOT_VARIANCE_FLOOR = 0.9
 
-# The opposition box (14..56, 18 deep), drawn the way gameEngine's in_boxes
-# draws it, plus the depth a cross is actually aimed into: a runner arriving
-# at the edge of the area counts, one loitering further out does not. See
-# _box_runners. 30 reaches 12 units past the box and looked wrong -- balls
-# floated at players who were nowhere near it. 20 is the box alone and is
-# too strict the other way: it cut open-play crosses to 0.4/match, with two
-# thirds of matches having none at all.
+# The opposition box, as gameEngine's in_boxes draws it, plus the depth a
+# cross is aimed into: a runner at the edge of the area counts, one further
+# out does not. See _box_runners.
 BOX_X_MIN: Final = 14.0
 BOX_X_MAX: Final = 56.0
 CROSS_TARGET_DEPTH: Final = 25.0
 
-# How close to goal a wide player has to be before an open lane inside is
-# worth abandoning the touchline for. See _decide_wingplay. Set it to 0 and
-# a latched winger always runs the line to the crossing zone: that costs
-# about a fifth of the wingers' goals and gains nothing.
-# Anything up to ~26 is inert -- on the touchline you cannot be that close
-# to goal without already being in the crossing zone, which is answered
-# above this check.
+# How close to goal a wide player must be before an open lane inside is
+# worth leaving the touchline for. Below ~26 it never fires: that close from
+# the touchline is already the crossing zone. See _decide_wingplay.
 CUT_INSIDE_RANGE: Final = 38.0
 
 @dataclass

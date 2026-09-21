@@ -29,7 +29,9 @@ from packEngine import generate_starter_roster
 pytestmark = pytest.mark.slow
 
 REGULATION_FRAMES = 10800
-SEEDS = (21, 22, 23, 24, 25, 26)
+# Twelve per tier. The ladder's separation is real but small, and six
+# matches a tier sits inside its own noise -- it has landed on an exact tie.
+SEEDS = tuple(range(21, 33))
 
 # Ladder order. special_champ stands in for the whole special bucket -- its
 # range sits between the other two specials' and diamond/icon.
@@ -86,9 +88,13 @@ def goals_per_match(ladder):
 
 def test_icon_matches_score_more_than_bronze_ones(goals_per_match):
     """Direction only: the top of the ladder produces more goals per match
-    than the bottom. Three tiers a side (12 matches each) rather than one
+    than the bottom. Three tiers a side (36 matches each) rather than one
     4-match cell against another, which flipped on seed noise. Nothing
-    about the shape in between, which is what the printed table is for."""
+    about the shape in between, which is what the printed table is for.
+
+    If this fails, check the margin before touching the engine: the table
+    above prints goals/match per tier, and a near-zero margin means the
+    sample is too small rather than the ladder being flat. See SEEDS."""
     bottom = sum(goals_per_match[t] for t in TIERS[:3]) / 3.0
     top = sum(goals_per_match[t] for t in TIERS[-3:]) / 3.0
     assert top > bottom, (

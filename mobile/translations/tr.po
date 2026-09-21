@@ -692,8 +692,8 @@ msgstr "Mevcut değil"
 # -------- Pack reveal -------------------------------------------------
 msgid "PACK OPENED"
 msgstr "PAKET AÇILDI"
-msgid "Tap to skip"
-msgstr "Atlamak için dokun"
+msgid "Tap to speed up"
+msgstr "Hızlandırmak için dokun"
 msgid "Tap to continue"
 msgstr "Devam etmek için dokun"
 

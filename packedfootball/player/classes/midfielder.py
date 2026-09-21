@@ -156,8 +156,7 @@ class Midfielder(player):
             return {"type": "move", "target": support_target, "speed_mod": (self.attributes.speed * 0.7) / 100.0}
             
         elif decision == "hold_attack":
-            # Follow the ball up the pitch instead of sitting on a fixed slot
-            # + 15, so the attack has midfielders in support of it.
+            # Follow the ball up the pitch so the attack has support.
             target = self._attack_shape_target(state)
             return {"type": "move", "target": target, "speed_mod": (self.attributes.speed * 0.75) / 100.0}
             
@@ -384,8 +383,8 @@ class Midfielder(player):
         t_support = self.attributes.pass_tendency + 20.0
         t_hold = self.attributes.defending + 30.0
         t_wide = (self.attributes.speed + 20.0) * self.get_action_bias("wide_run", 0.0)
-        # A cross is coming, or the box is empty with the ball in the final
-        # third: get in there rather than drift toward the ball.
+        # A cross is coming, or the box is empty in the final third: get in
+        # there rather than drift toward the ball.
         t_box = 0.0
         if self._cross_incoming(state) or self._box_needs_bodies(state):
             t_box = 150.0 * self.get_action_bias("attack_box", 0.0)

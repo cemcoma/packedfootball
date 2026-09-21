@@ -197,6 +197,20 @@ PACK_DATABASE = {
         "sprite_key":"CONFPack",
         "available_at": datetime.datetime(2026, 10, 15, 15, 0, tzinfo=datetime.timezone.utc)
     },
+    "promo_testers": {
+        "active": True,
+        "order": 95,
+        "name": "Test Pack",
+        "type": "timed",
+        "description": "Testing walkouts + game balance with this pack...",
+        "price": 1,
+        "cards_per_pack": 5,
+        "rates": {"silver": 0.0, "gold": 0.0, "platinum": 0.4, "diamond": 0.4, "special": 0.05, "special_champ": 0.04,"special_cont": 0.03,"special_conf": 0.03, "icon": 0.05},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"credits",
+        "sprite_key":"CHAMPPack",
+        "available_at": datetime.datetime(2026, 10, 15, 15, 0, tzinfo=datetime.timezone.utc)
+    },
 }
 
 

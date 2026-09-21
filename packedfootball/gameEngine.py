@@ -1716,17 +1716,10 @@ class game:
             self.ball_vz = -abs(self.ball_vz) * POST_REBOUND_DAMPING
             return "rebound"
 
-        # Either post. A post is a vertical cylinder, so the contact normal is
-        # the horizontal vector from its axis out to where the ball's path
-        # actually meets it -- found by intersecting the path with the post's
-        # circle. Taking the contact from the goal-plane crossing instead put
-        # it exactly level with the axis every time, which forced a normal of
-        # [+-1, 0]: the rebound flipped vx and kept the vy that was carrying
-        # the ball into the goal, so it crossed again, hit the post again, and
-        # bled away on the line instead of coming back out.
-        # A ball clipping the inside face still deflects goalward and one
-        # clipping the outside face away -- both re-tested next tick by this
-        # same function, which is how "in off the post" works uncased.
+        # Either post. A post is a vertical cylinder, so the normal runs from
+        # its axis out to where the path meets its circle: the inside face
+        # deflects goalward, the outside face away. Both are re-tested next
+        # tick, which is how "in off the post" works without a special case.
         if cross_z < GOAL_HEIGHT:
             path = (np.asarray(prev_xy, dtype=float), np.array([cur_x, cur_y]))
             hit_t, hit_post = None, None
@@ -1747,8 +1740,8 @@ class game:
     @staticmethod
     def _path_meets_post(start: np.ndarray, end: np.ndarray, centre: np.ndarray) -> float | None:
         """How far along start->end the ball first touches the post, as a
-        fraction in [0, 1], or None if it misses. Seen from above the post is
-        a circle of GOAL_POST_RADIUS, so this is a segment against a circle."""
+        fraction in [0, 1], or None if it misses. From above the post is a
+        circle of GOAL_POST_RADIUS, so this is a segment against a circle."""
         d = end - start
         f = start - centre
         a = float(np.dot(d, d))
@@ -1767,10 +1760,9 @@ class game:
 
     def _rebound_off_frame(self, contact: np.ndarray, normal: np.ndarray, plane_y: float) -> None:
         """Bounces the ball off the woodwork at `plane_y`'s goal and leaves it
-        in play. The goal is passed in rather than read back off the contact
-        point: a post is met just short of the goal line, so a contact at the
-        y=0 goal has a small POSITIVE y and inferring the end from its sign
-        put the ball at the far goal, the length of the pitch away."""
+        in play. Which goal is passed in, never read off the contact point: a
+        post is met short of the line, so a contact at the y=0 goal has a
+        small POSITIVE y."""
         normal = np.asarray(normal, dtype=float)
         norm = _norm2(normal)
         normal = normal / norm if norm > 1e-8 else np.array([0.0, 1.0])
@@ -1810,8 +1802,8 @@ class game:
                 scorer_idx = self.last_shot_player
         own_goal = scorer_idx == -1
 
-        # A goal is by definition on target, for whoever shot it -- the
-        # recording follows the same rule, so a goal always has its trail.
+        # A goal is by definition on target, for whoever shot it; the
+        # recording follows the same rule.
         if self.last_shot_player >= 0:
             self.match_stats[self.last_shot_player]["shots_on_target"] += 1
             if self.replay and not self.last_shot_on_target:
@@ -2058,8 +2050,7 @@ class game:
                 self.ball_vz = launch_vz
                 crossing = self.predict_goal_crossing(1 if index < 11 else 0)
                 self.last_shot_on_target = bool(crossing and crossing["on_target"])
-                # Recorded after the ball is away: the crossing above is what
-                # decides which of the two shot events this is.
+                # The crossing above picks which of the two shot events this is.
                 if self.replay:
                     self.replay.event(
                         self.match_clock_frames,

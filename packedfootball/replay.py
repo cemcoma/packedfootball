@@ -88,11 +88,9 @@ class ReplayRecorder:
         self._events.append((tick, int(action_type), player_idx, team))
 
     def retype_last_shot_as_on_target(self, player_idx: int) -> None:
-        """Turns that player's most recent strike into a SHOOT if it went
-        down as SHOT_OFF_TARGET. For the one thing the recording cannot know
-        at the time: predict_goal_crossing reads the shot as missing (it
-        projects a straight line and ignores friction) and the ball then
-        puts it in."""
+        """Turns that player's most recent strike into a SHOOT if it went down
+        as SHOT_OFF_TARGET -- a goal is on target whatever the crossing
+        prediction said when it was struck."""
         strikes = {int(ActionType.SHOOT), int(ActionType.SHOT_OFF_TARGET), int(ActionType.HEADER)}
         for i in range(len(self._events) - 1, -1, -1):
             tick, action, idx, team = self._events[i]

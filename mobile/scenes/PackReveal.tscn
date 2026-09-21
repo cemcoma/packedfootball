@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://wdo1vcjayvhe" path="res://scripts/screens/PackReveal.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="PackedScene" uid="uid://ulrndvhqpktd" path="res://scenes/components/PlayerCardView.tscn" id="3"]
+[ext_resource type="PackedScene" uid="uid://b8wq3k1pnv2xa" path="res://scenes/components/PackWalkoutStage.tscn" id="4"]
 
 [node name="PackReveal" type="Control" unique_id=1255259700]
 layout_mode = 3
@@ -24,6 +25,11 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
+
+[node name="WalkoutStage" parent="RevealLayer" unique_id=699122103 instance=ExtResource("4")]
+unique_name_in_owner = true
+layout_mode = 1
 
 [node name="SkipCatcher" type="Button" parent="." unique_id=2094010080]
 unique_name_in_owner = true
@@ -51,7 +57,7 @@ grow_horizontal = 0
 grow_vertical = 0
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 12
-text = "Tap to skip"
+text = "Tap to speed up"
 horizontal_alignment = 2
 
 [node name="BrowseLayer" type="Control" parent="." unique_id=2003895313]

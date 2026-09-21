@@ -10,15 +10,19 @@ extends Node
 
 var _cards: Array = []  # PlayerCard
 var pack_name: String = ""
+## The pack art PackReveal.gd shakes open -- the same texture the Shop tile
+## showed, so the reveal opens the pack the player actually tapped.
+var pack_texture: Texture2D = null
 
 
 func has_pending() -> bool:
 	return not _cards.is_empty()
 
 
-func set_pending(name: String, cards: Array) -> void:
+func set_pending(name: String, cards: Array, texture: Texture2D = null) -> void:
 	pack_name = name
 	_cards = cards
+	pack_texture = texture
 
 
 func cards() -> Array:
@@ -31,3 +35,4 @@ func cards() -> Array:
 func clear() -> void:
 	pack_name = ""
 	_cards = []
+	pack_texture = null

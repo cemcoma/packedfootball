@@ -448,7 +448,7 @@ func _on_buy_pressed(pack: PackData) -> void:
 	# Shop.tscn's own _ready() reloads all of that fresh (including
 	# remaining_opens/sold-out state) the next time this scene is entered,
 	# which is exactly when it'll matter again.
-	PackSession.set_pending(pack.pack_name, cards)
+	PackSession.set_pending(pack.pack_name, cards, pack.get_texture())
 	get_tree().change_scene_to_file("res://scenes/PackReveal.tscn")
 
 

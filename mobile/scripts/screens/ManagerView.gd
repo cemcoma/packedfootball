@@ -284,7 +284,7 @@ func _populate_stats_panel() -> void:
 	_stats_card_view.set_out_of_position(out_of_position)
 	_out_of_position_label.visible = out_of_position
 	if out_of_position:
-		_out_of_position_label.text = tr("Out of position: a %s playing %s -- attributes reduced 10%% in matches.") % [card.position, role]
+		_out_of_position_label.text = tr("Out of position (%s at %s): -10%% attributes.") % [card.position, role]
 
 	_stats_extra_country.text = "%s\n%s" % [card.hometown, card.country]
 
