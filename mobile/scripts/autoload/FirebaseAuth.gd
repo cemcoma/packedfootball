@@ -101,6 +101,10 @@ func _post_form(url: String, form_body: String) -> Dictionary:
 
 func _parse_response(result: Array) -> Dictionary:
 	# result = [HTTPRequest.Result, response_code, headers, body: PackedByteArray]
+	# result[0] first: a request that never reached a server has no status, and
+	# reporting that 0 as "HTTP 0" told the player nothing about being offline.
+	if NetError.is_transport_failure(result[0]):
+		return {"ok": false, "error": NetError.message_for(result[0])}
 	var response_code: int = result[1]
 	var body_bytes: PackedByteArray = result[3]
 	var body_text := body_bytes.get_string_from_utf8()

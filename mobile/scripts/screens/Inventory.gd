@@ -37,8 +37,11 @@ var _batch_mode: bool = false
 var _selected_ids: Array = []
 var _is_processing: bool = false
 
+@onready var _title_label: Label = %TitleLabel
+@onready var _hint_label: Label = %HintLabel
+@onready var _grid_backdrop: PanelContainer = %GridBackdrop
+@onready var _confirm_panel: PanelContainer = %Panel
 @onready var _count_label: Label = %CountLabel
-@onready var _credits_chip: CurrencyChip = %CreditsChip
 @onready var _filter_dropdown: OptionButton = %FilterDropdown
 @onready var _grid: GridContainer = %InventoryGrid
 @onready var _empty_label: Label = %EmptyLabel
@@ -61,7 +64,6 @@ var _is_processing: bool = false
 func _ready() -> void:
 	_back_button.pressed.connect(_on_back_pressed)
 	_filter_dropdown.item_selected.connect(_on_filter_selected)
-	_credits_chip.set_currency("credits")
 	
 	_toggle_batch_button.pressed.connect(_on_toggle_batch_pressed)
 	_cancel_batch_button.pressed.connect(_disable_batch_mode)
@@ -81,7 +83,6 @@ func _ready() -> void:
 
 
 func _refresh() -> void:
-	_credits_chip.set_amount(GameProfile.credits)
 	_refresh_count()
 	_populate_grid()
 	_apply_theme_colors()
@@ -103,7 +104,31 @@ func _apply_theme_colors() -> void:
 	_count_label.add_theme_color_override(
 		"font_color", ThemeManager.color("warning") if full else ThemeManager.color("heading")
 	)
-	_empty_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+	_title_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
+	_empty_label.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+	_hint_label.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+	_style_chrome()
+
+
+## The grid sits on the tiles' frame rather than straight on the background
+## photo, which is the worst case for a wall of small cards.
+func _style_chrome() -> void:
+	var accent := ThemeManager.color("accent")
+	var muted := ThemeManager.color("surface_border")
+	_grid_backdrop.add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, muted, 3, true, Vector2(10, 8))
+	)
+	# Opaque, so the grid behind it can't be misread as part of the dialog.
+	_confirm_panel.add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("warning"), 3, true)
+	)
+	MenuTile.style_button(_filter_dropdown, accent)
+	MenuTile.style_popup(_filter_dropdown, accent)
+	MenuTile.style_button(_toggle_batch_button, accent)
+	MenuTile.style_button(_execute_batch_button, ThemeManager.color("warning"))
+	MenuTile.style_button(_confirm_execute_button, ThemeManager.color("warning"))
+	for button in [_back_button, _cancel_batch_button, _confirm_cancel_button]:
+		MenuTile.style_button(button, muted)
 
 
 func _starting_ids() -> Dictionary:

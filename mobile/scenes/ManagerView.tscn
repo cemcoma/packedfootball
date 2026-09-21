@@ -37,45 +37,49 @@ script = ExtResource("4_0j84m")
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="HeaderRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1930000004]
+[node name="HeaderPanel" type="PanelContainer" parent="Margin/RootVBox" unique_id=1930000100]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HeaderRow" type="HBoxContainer" parent="Margin/RootVBox/HeaderPanel" unique_id=1930000004]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="TitleLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1930000005]
+[node name="TitleLabel" type="Label" parent="Margin/RootVBox/HeaderPanel/HeaderRow" unique_id=1930000005]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Manager"
 
-[node name="RecordLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1930000030]
+[node name="RecordLabel" type="Label" parent="Margin/RootVBox/HeaderPanel/HeaderRow" unique_id=1930000030]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 15
 text = "0 W  0 D  0 L"
 
-[node name="LeagueLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1930000031]
+[node name="LeagueLabel" type="Label" parent="Margin/RootVBox/HeaderPanel/HeaderRow" unique_id=1930000031]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = ""
 
-[node name="FormationLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1930000006]
+[node name="FormationLabel" type="Label" parent="Margin/RootVBox/HeaderPanel/HeaderRow" unique_id=1930000006]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "4-4-2"
 
-[node name="HeaderSpacer" type="Control" parent="Margin/RootVBox/HeaderRow" unique_id=1930000007]
+[node name="HeaderSpacer" type="Control" parent="Margin/RootVBox/HeaderPanel/HeaderRow" unique_id=1930000007]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="OverallLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1930000008]
+[node name="OverallLabel" type="Label" parent="Margin/RootVBox/HeaderPanel/HeaderRow" unique_id=1930000008]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Overall --"
 
-[node name="BackButton" type="Button" parent="Margin/RootVBox/HeaderRow" unique_id=1930000009]
+[node name="BackButton" type="Button" parent="Margin/RootVBox/HeaderPanel/HeaderRow" unique_id=1930000009]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(110, 36)
 layout_mode = 2
@@ -97,20 +101,29 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 8
 
-[node name="PanelHeader" type="Label" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=1930000013]
+[node name="SquadBackdrop" type="PanelContainer" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=1930000101]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SquadBox" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/SquadBackdrop" unique_id=1930000102]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PanelHeader" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/SquadBackdrop/SquadBox" unique_id=1930000013]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Starting XI"
 
-[node name="SquadScroll" type="ScrollContainer" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=1930000014]
+[node name="SquadScroll" type="ScrollContainer" parent="Margin/RootVBox/MainRow/RightPanel/SquadBackdrop/SquadBox" unique_id=1930000014]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 vertical_scroll_mode = 3
 
-[node name="SquadGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/SquadScroll" unique_id=1930000015]
+[node name="SquadGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/SquadBackdrop/SquadBox/SquadScroll" unique_id=1930000015]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -119,14 +132,19 @@ theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 10
 columns = 4
 
-[node name="StatsPanel" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=1930000016]
+[node name="StatsBackdrop" type="PanelContainer" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=1930000103]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_vertical = 3
+
+[node name="StatsPanel" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop" unique_id=1930000016]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
 theme_override_constants/separation = 6
 
-[node name="OutOfPositionLabel" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel" unique_id=1930000017]
+[node name="OutOfPositionLabel" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel" unique_id=1930000017]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -134,19 +152,19 @@ theme_override_colors/font_color = Color(1, 0.7, 0.3, 1)
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 2
 
-[node name="StatsTopRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel" unique_id=1930000018]
+[node name="StatsTopRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel" unique_id=1930000018]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="VBoxContainer" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow" unique_id=1930000019]
+[node name="VBoxContainer" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow" unique_id=1930000019]
 layout_mode = 2
 
-[node name="StatsCard" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/VBoxContainer" unique_id=1930000020 instance=ExtResource("3")]
+[node name="StatsCard" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow/VBoxContainer" unique_id=1930000020 instance=ExtResource("3")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 0
 
-[node name="StatsExtraCountry" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/VBoxContainer" unique_id=1930000021]
+[node name="StatsExtraCountry" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow/VBoxContainer" unique_id=1930000021]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.59919906, 0.59919894, 0.5991992, 1)
@@ -154,34 +172,34 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/font_size = 10
 horizontal_alignment = 1
 
-[node name="StatsExtraRating" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/VBoxContainer" unique_id=1930000022]
+[node name="StatsExtraRating" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow/VBoxContainer" unique_id=1930000022]
 unique_name_in_owner = true
 layout_mode = 2
 horizontal_alignment = 1
 
-[node name="StatsInfoCol" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow" unique_id=1930000023]
+[node name="StatsInfoCol" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow" unique_id=1930000023]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="StatsPageLabel" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=1930000024]
+[node name="StatsPageLabel" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=1930000024]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.75, 0.85, 1, 1)
 theme_override_font_sizes/font_size = 13
 text = "Career Statistics"
 
-[node name="StatsAttrGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=1930000025]
+[node name="StatsAttrGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow/StatsInfoCol" unique_id=1930000025]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 20
 theme_override_constants/v_separation = 2
 columns = 2
 
-[node name="StatsButtonRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel" unique_id=1930000026]
+[node name="StatsButtonRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel" unique_id=1930000026]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="CloseButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsPanel/StatsButtonRow" unique_id=1930000027]
+[node name="CloseButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsButtonRow" unique_id=1930000027]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Close"

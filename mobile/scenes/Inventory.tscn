@@ -2,7 +2,6 @@
 
 [ext_resource type="Script" uid="uid://dm3nvhbtob4ti" path="res://scripts/screens/Inventory.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
-[ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="3"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_njucy"]
 
 [node name="Inventory" type="Control" unique_id=1960000001]
@@ -39,6 +38,7 @@ layout_mode = 2
 theme_override_constants/separation = 16
 
 [node name="TitleLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=1960000006]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "INVENTORY"
@@ -56,32 +56,37 @@ custom_minimum_size = Vector2(150, 0)
 layout_mode = 2
 size_flags_vertical = 4
 
-[node name="CreditsChip" parent="Margin/RootVBox/HeaderRow" unique_id=1960000009 instance=ExtResource("3")]
+[node name="GridBackdrop" type="PanelContainer" parent="Margin/RootVBox" unique_id=1960000100]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 4
+size_flags_vertical = 3
 
-[node name="HintLabel" type="Label" parent="Margin/RootVBox" unique_id=1960000010]
+[node name="GridBox" type="VBoxContainer" parent="Margin/RootVBox/GridBackdrop" unique_id=1960000101]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="HintLabel" type="Label" parent="Margin/RootVBox/GridBackdrop/GridBox" unique_id=1960000010]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Tap a player for their full details, to release them, or to restyle them. Cards badged XI are in your starting lineup."
 
-[node name="GridScroll" type="ScrollContainer" parent="Margin/RootVBox" unique_id=1960000011]
+[node name="GridScroll" type="ScrollContainer" parent="Margin/RootVBox/GridBackdrop/GridBox" unique_id=1960000011]
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="GridWrap" type="VBoxContainer" parent="Margin/RootVBox/GridScroll" unique_id=1960000012]
+[node name="GridWrap" type="VBoxContainer" parent="Margin/RootVBox/GridBackdrop/GridBox/GridScroll" unique_id=1960000012]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="EmptyLabel" type="Label" parent="Margin/RootVBox/GridScroll/GridWrap" unique_id=1960000013]
+[node name="EmptyLabel" type="Label" parent="Margin/RootVBox/GridBackdrop/GridBox/GridScroll/GridWrap" unique_id=1960000013]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "No players."
 
-[node name="InventoryGrid" type="GridContainer" parent="Margin/RootVBox/GridScroll/GridWrap" unique_id=1960000014]
+[node name="InventoryGrid" type="GridContainer" parent="Margin/RootVBox/GridBackdrop/GridBox/GridScroll/GridWrap" unique_id=1960000014]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 8
@@ -148,6 +153,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Panel" type="PanelContainer" parent="BatchConfirmOverlay/Center" unique_id=394720973]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(420, 0)
 layout_mode = 2
 

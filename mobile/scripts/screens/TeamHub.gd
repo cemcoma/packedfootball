@@ -11,12 +11,9 @@ extends Control
 ## second has a size limit, which is why the counter belongs here and not on
 ## the squad screen.
 
-@onready var _squad_button: Button = %SquadButton
-@onready var _inventory_button: Button = %InventoryButton
+@onready var _squad_button: MenuTile = %SquadTile
+@onready var _inventory_button: MenuTile = %InventoryTile
 @onready var _back_button: Button = %BackButton
-
-@onready var _squad_hint: Label = %SquadHint
-@onready var _inventory_hint: Label = %InventoryHint
 
 
 func _ready() -> void:
@@ -29,30 +26,34 @@ func _ready() -> void:
 	_refresh_hints()
 
 
-## Both hints sit straight on the screen background with no panel behind
-## them, so the Theme's Label color doesn't reach them -- see ThemeManager's
-## note on text_hint. The inventory one goes amber once the club is full,
-## since that's the point it stops being a fact and starts being a blocker.
+## The hints are the tiles' own subtitles now, so they sit on the tile's dark
+## frame and take its colour -- they used to sit straight on the background
+## photo, where they were barely readable. The inventory one still goes amber
+## once the club is full, since that's the point it stops being a fact and
+## starts being a blocker.
 func _apply_theme_colors() -> void:
-	var hint := ThemeManager.color("text_hint")
-	_squad_hint.add_theme_color_override("font_color", hint)
+	# A plain Button beside the tiles, so it needs the frame applied by hand.
+	# It used to carry MenuTile's SCRIPT without MenuTile's scene, which left
+	# it with no title label to fill and no styling at all -- see MenuTile.
+	MenuTile.style_button(_back_button, ThemeManager.color("surface_border"))
 	var full: bool = GameProfile.inventory_space() <= 0
-	_inventory_hint.add_theme_color_override(
-		"font_color", ThemeManager.color("warning") if full else hint
-	)
+	if full:
+		_inventory_button.set_subtitle_color(ThemeManager.color("warning"))
+	else:
+		_inventory_button.set_subtitle_color(MenuTile.SUBTITLE_COLOR)
 
 
 func _refresh_hints() -> void:
 	var count := GameProfile.inventory_count()
 	var owned: int = GameProfile.all_cards.size()
-	_squad_hint.text = tr("Pick your formation, choose who starts, and design your kit.")
+	_squad_button.subtitle_text = tr("Pick your formation, choose who starts, and design your kit.")
 	if count >= GameProfile.inventory_cap:
-		_inventory_hint.text = (
+		_inventory_button.subtitle_text = (
 			tr("Full: %d / %d. Release players here to open packs again. %d owned in total.")
 			% [count, GameProfile.inventory_cap, owned]
 		)
 	else:
-		_inventory_hint.text = (
+		_inventory_button.subtitle_text = (
 			tr("Every player you own -- %d of them. Release or restyle any of them. Bench space %d / %d.")
 			% [owned, count, GameProfile.inventory_cap]
 		)

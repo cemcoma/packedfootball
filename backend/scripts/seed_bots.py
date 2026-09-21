@@ -100,7 +100,7 @@ def make_bot(rng: random.Random, tier: int, display_name: str) -> tuple[str, dic
     rates = config.TOURNAMENT_BOT_CARD_RATES.get(tier) or {"silver": 1.0}
     roster = generate_starter_roster(formation, seed=rng.getrandbits(63), tier_rates=rates)
     primary, secondary = rng.choice(KIT_PALETTES)
-    pattern = rng.choice(("solid", "stripes"))
+    pattern = rng.choice(("solid", "stripes","quarters"))
     bot_id = f"{BOT_UID_PREFIX}{secrets.token_hex(6)}"
     return bot_id, {
         "display_name": display_name,

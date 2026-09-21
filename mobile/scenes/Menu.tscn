@@ -5,8 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://dqqqu4co1ircr" path="res://sprites/title.png" id="3_11y2r"]
 [ext_resource type="Texture2D" uid="uid://ckueuenwg424p" path="res://sprites/backgrounds/general_background_light_medium.jpg" id="3_jmdev"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="4_aaywf"]
-[ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="5"]
-[ext_resource type="PackedScene" uid="uid://d3yxqql70v6n8" path="res://scenes/components/EnergyBar.tscn" id="energybar"]
+[ext_resource type="PackedScene" path="res://scenes/components/MenuTile.tscn" id="menutile"]
 
 [node name="Menu" type="Control" unique_id=2071876182]
 layout_mode = 3
@@ -30,73 +29,28 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("4_aaywf")
 
-[node name="CenterContainer" type="CenterContainer" parent="MarginContainer" unique_id=1563356626]
+[node name="RootRow" type="HBoxContainer" parent="MarginContainer" unique_id=25832800]
 layout_mode = 2
+theme_override_constants/separation = 20
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/CenterContainer" unique_id=331694469]
-custom_minimum_size = Vector2(320, 0)
-layout_mode = 2
-theme_override_constants/separation = 16
-
-[node name="TextureRect" type="TextureRect" parent="MarginContainer/CenterContainer/VBoxContainer" unique_id=979432027]
-custom_minimum_size = Vector2(200, 120)
-layout_mode = 2
-size_flags_horizontal = 4
-texture = ExtResource("3_11y2r")
-expand_mode = 1
-
-[node name="PlayButton" type="Button" parent="MarginContainer/CenterContainer/VBoxContainer" unique_id=1258583257]
+[node name="AccountPanel" type="PanelContainer" parent="MarginContainer/RootRow" unique_id=575644052]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-text = "Play"
-
-[node name="ShopButton" type="Button" parent="MarginContainer/CenterContainer/VBoxContainer" unique_id=53832653]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-text = "Shop"
-
-[node name="TeamButton" type="Button" parent="MarginContainer/CenterContainer/VBoxContainer" unique_id=1876668730]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-text = "Team"
-
-[node name="LeaderboardButton" type="Button" parent="MarginContainer/CenterContainer/VBoxContainer" unique_id=731302606]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-text = "Leaderboard"
-
-[node name="SettingsButton" type="Button" parent="MarginContainer/CenterContainer/VBoxContainer" unique_id=2136365341]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-theme_override_font_sizes/font_size = 18
-text = "Settings"
-
-[node name="AccountPanel" type="PanelContainer" parent="MarginContainer" unique_id=575644052]
 layout_mode = 2
 size_flags_horizontal = 0
 size_flags_vertical = 4
 
-[node name="Margin" type="MarginContainer" parent="MarginContainer/AccountPanel" unique_id=1572266967]
+[node name="Margin" type="MarginContainer" parent="MarginContainer/RootRow/AccountPanel" unique_id=1572266967]
 layout_mode = 2
 theme_override_constants/margin_left = 14
 theme_override_constants/margin_top = 14
 theme_override_constants/margin_right = 14
 theme_override_constants/margin_bottom = 14
 
-[node name="VBox" type="VBoxContainer" parent="MarginContainer/AccountPanel/Margin" unique_id=994809262]
+[node name="VBox" type="VBoxContainer" parent="MarginContainer/RootRow/AccountPanel/Margin" unique_id=994809262]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="AccountNameLabel" type="Label" parent="MarginContainer/AccountPanel/Margin/VBox" unique_id=1227703727]
+[node name="AccountNameLabel" type="Label" parent="MarginContainer/RootRow/AccountPanel/Margin/VBox" unique_id=1227703727]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
@@ -104,52 +58,93 @@ text = "Manager"
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="AccountDivider" type="HSeparator" parent="MarginContainer/AccountPanel/Margin/VBox" unique_id=1731579856]
+[node name="AccountDivider" type="HSeparator" parent="MarginContainer/RootRow/AccountPanel/Margin/VBox" unique_id=1731579856]
 layout_mode = 2
 
-[node name="AccountOverallLabel" type="Label" parent="MarginContainer/AccountPanel/Margin/VBox" unique_id=183895737]
+[node name="AccountOverallLabel" type="Label" parent="MarginContainer/RootRow/AccountPanel/Margin/VBox" unique_id=183895737]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Squad Overall: 0"
 horizontal_alignment = 1
 
-[node name="AccountWinsLabel" type="Label" parent="MarginContainer/AccountPanel/Margin/VBox" unique_id=1780616385]
+[node name="AccountWinsLabel" type="Label" parent="MarginContainer/RootRow/AccountPanel/Margin/VBox" unique_id=1780616385]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Wins: 0"
 horizontal_alignment = 1
 
-[node name="AccountDrawsLabel" type="Label" parent="MarginContainer/AccountPanel/Margin/VBox" unique_id=525650991]
+[node name="AccountDrawsLabel" type="Label" parent="MarginContainer/RootRow/AccountPanel/Margin/VBox" unique_id=525650991]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Draws: 0"
 horizontal_alignment = 1
 
-[node name="AccountLossesLabel" type="Label" parent="MarginContainer/AccountPanel/Margin/VBox" unique_id=2042400648]
+[node name="AccountLossesLabel" type="Label" parent="MarginContainer/RootRow/AccountPanel/Margin/VBox" unique_id=2042400648]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Losses: 0"
 horizontal_alignment = 1
 
-[node name="AccountCurrencyDivider" type="HSeparator" parent="MarginContainer/AccountPanel/Margin/VBox" unique_id=1837256662]
+[node name="MenuColumn" type="VBoxContainer" parent="MarginContainer/RootRow" unique_id=25832801]
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_constants/separation = 12
 
-[node name="AccountCreditsChip" parent="MarginContainer/AccountPanel/Margin/VBox" unique_id=477518366 instance=ExtResource("5")]
+[node name="LogoRect" type="TextureRect" parent="MarginContainer/RootRow/MenuColumn" unique_id=979432027]
+texture_filter = 1
+custom_minimum_size = Vector2(0, 104)
+layout_mode = 2
+texture = ExtResource("3_11y2r")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="PlayTile" parent="MarginContainer/RootRow/MenuColumn" unique_id=1258583257 instance=ExtResource("menutile")]
 unique_name_in_owner = true
 layout_mode = 2
+title_text = "Play"
+subtitle_text = "Jump into a match"
+accent_key = "positive"
+hero = true
 
-[node name="AccountBucksChip" parent="MarginContainer/AccountPanel/Margin/VBox" unique_id=906343529 instance=ExtResource("5")]
+[node name="TileGrid" type="GridContainer" parent="MarginContainer/RootRow/MenuColumn" unique_id=25832802]
+layout_mode = 2
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 12
+columns = 2
+
+[node name="ShopTile" parent="MarginContainer/RootRow/MenuColumn/TileGrid" unique_id=53832653 instance=ExtResource("menutile")]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+title_text = "Shop"
+subtitle_text = "Packs and currency"
+accent_key = "credits"
 
-[node name="AccountMedalsChip" parent="MarginContainer/AccountPanel/Margin/VBox" unique_id=478969367 instance=ExtResource("5")]
+[node name="TeamTile" parent="MarginContainer/RootRow/MenuColumn/TileGrid" unique_id=1876668730 instance=ExtResource("menutile")]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+title_text = "Team"
+subtitle_text = "Squad, kit and inventory"
+accent_key = "heading"
 
-[node name="AccountEnergyBar" parent="MarginContainer/AccountPanel/Margin/VBox" unique_id=478969368 instance=ExtResource("energybar")]
+[node name="LeaderboardTile" parent="MarginContainer/RootRow/MenuColumn/TileGrid" unique_id=731302606 instance=ExtResource("menutile")]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
+title_text = "Leaderboard"
+subtitle_text = "See where you rank"
+accent_key = "medals"
+
+[node name="SettingsTile" parent="MarginContainer/RootRow/MenuColumn/TileGrid" unique_id=2136365341 instance=ExtResource("menutile")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+title_text = "Settings"
+subtitle_text = "Account and preferences"
+accent_key = "text_muted"

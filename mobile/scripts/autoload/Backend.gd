@@ -49,10 +49,15 @@ func call_endpoint(method: HTTPClient.Method, path: String, body: Dictionary = {
 	if err != OK:
 		http.queue_free()
 		push_warning("Backend call %s (error %s)" % [path, err])
-		return {"ok": false, "status": 0, "data": {}}
+		return {"ok": false, "status": 0, "data": {}, "error": NetError.GENERIC}
 
 	var result: Array = await http.request_completed
 	http.queue_free()
+	if NetError.is_transport_failure(result[0]):
+		# No status to report -- the request never got to a server.
+		var offline := NetError.message_for(result[0])
+		push_warning("Backend call %s: %s" % [path, offline])
+		return {"ok": false, "status": 0, "data": {}, "error": offline}
 	var status: int = result[1]
 	var body_bytes: PackedByteArray = result[3]
 	var text := body_bytes.get_string_from_utf8()

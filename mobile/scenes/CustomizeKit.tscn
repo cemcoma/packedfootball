@@ -37,6 +37,7 @@ layout_mode = 2
 theme_override_constants/separation = 10
 
 [node name="TitleLabel" type="Label" parent="Margin/RootVBox" unique_id=1940000005]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "Customize Kit"
@@ -46,58 +47,73 @@ layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 24
 
-[node name="PreviewColumn" type="VBoxContainer" parent="Margin/RootVBox/Body" unique_id=1940000007]
+[node name="PreviewPanel" type="PanelContainer" parent="Margin/RootVBox/Body" unique_id=1940000100]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PreviewColumn" type="VBoxContainer" parent="Margin/RootVBox/Body/PreviewPanel" unique_id=1940000007]
 layout_mode = 2
 theme_override_constants/separation = 8
+alignment = 1
 
-[node name="KitPreview" type="Control" parent="Margin/RootVBox/Body/PreviewColumn" unique_id=1940000008]
+[node name="KitPreview" type="Control" parent="Margin/RootVBox/Body/PreviewPanel/PreviewColumn" unique_id=1940000008]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(200, 220)
+custom_minimum_size = Vector2(156, 172)
 layout_mode = 2
 script = ExtResource("4")
 
-[node name="SummaryLabel" type="Label" parent="Margin/RootVBox/Body/PreviewColumn" unique_id=1940000009]
+[node name="SummaryLabel" type="Label" parent="Margin/RootVBox/Body/PreviewPanel/PreviewColumn" unique_id=1940000009]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(200, 0)
+custom_minimum_size = Vector2(156, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "Solid"
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="OptionsColumn" type="VBoxContainer" parent="Margin/RootVBox/Body" unique_id=1940000010]
+[node name="OptionsPanel" type="PanelContainer" parent="Margin/RootVBox/Body" unique_id=1940000101]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="OptionsColumn" type="VBoxContainer" parent="Margin/RootVBox/Body/OptionsPanel" unique_id=1940000010]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="PatternHeading" type="Label" parent="Margin/RootVBox/Body/OptionsColumn" unique_id=1940000011]
+[node name="PatternHeading" type="Label" parent="Margin/RootVBox/Body/OptionsPanel/OptionsColumn" unique_id=1940000011]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "Pattern"
 
-[node name="PatternRow" type="HBoxContainer" parent="Margin/RootVBox/Body/OptionsColumn" unique_id=1940000012]
+[node name="PatternRow" type="HBoxContainer" parent="Margin/RootVBox/Body/OptionsPanel/OptionsColumn" unique_id=1940000012]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="PrimaryHeading" type="Label" parent="Margin/RootVBox/Body/OptionsColumn" unique_id=1940000013]
+[node name="PrimaryHeading" type="Label" parent="Margin/RootVBox/Body/OptionsPanel/OptionsColumn" unique_id=1940000013]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "Primary colour"
 
-[node name="PrimaryGrid" type="GridContainer" parent="Margin/RootVBox/Body/OptionsColumn" unique_id=1940000014]
+[node name="PrimaryGrid" type="GridContainer" parent="Margin/RootVBox/Body/OptionsPanel/OptionsColumn" unique_id=1940000014]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 6
 theme_override_constants/v_separation = 6
 columns = 8
 
-[node name="SecondaryHeading" type="Label" parent="Margin/RootVBox/Body/OptionsColumn" unique_id=1940000015]
+[node name="SecondaryHeading" type="Label" parent="Margin/RootVBox/Body/OptionsPanel/OptionsColumn" unique_id=1940000015]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "Secondary colour"
 
-[node name="SecondaryGrid" type="GridContainer" parent="Margin/RootVBox/Body/OptionsColumn" unique_id=1940000016]
+[node name="SecondaryGrid" type="GridContainer" parent="Margin/RootVBox/Body/OptionsPanel/OptionsColumn" unique_id=1940000016]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 6

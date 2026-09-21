@@ -69,6 +69,14 @@ const SUPPORT_URL := "https://cemcoma.github.io/packedfootball/support/"
 @onready var _delete_field: LineEdit = %DeleteConfirmField
 @onready var _delete_cancel_button: Button = %DeleteCancelButton
 @onready var _delete_confirm_button: Button = %DeleteConfirmButton
+@onready var _settings_panel: PanelContainer = %SettingsPanel
+@onready var _delete_panel: PanelContainer = %Panel
+@onready var _section_headers: Array[Label] = [
+	%AccountHeader, %DisplayHeader, %LinksHeader, %SessionHeader,
+]
+
+## Deep enough to read as a danger against the light theme's white buttons.
+const DANGER_ON_LIGHT := Color(0.70, 0.13, 0.10)
 
 var _busy: bool = false
 
@@ -122,8 +130,29 @@ func _on_theme_selected(index: int) -> void:
 ## The delete button is the one thing on this screen that should NOT look
 ## like the others -- red, quiet, and clearly a different kind of action.
 func _apply_theme_colors() -> void:
-	_delete_account_button.add_theme_color_override("font_color", ThemeManager.color("warning"))
+	# The light theme's buttons are white, and "warning" is a pale amber picked
+	# for dark ones -- on white it stops reading as a danger at all.
+	var danger := (
+		DANGER_ON_LIGHT if ThemeManager.is_light() else ThemeManager.color("warning")
+	)
+	_delete_account_button.add_theme_color_override("font_color", danger)
 	_delete_footnote.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+
+	# The form sits on the tiles' frame instead of straight on the background
+	# photo, where every control had to fight the crowd behind it.
+	_settings_panel.add_theme_stylebox_override(
+		"panel",
+		MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("surface_border"), 3, true)
+	)
+	# Opaque, unlike the theme's default panel: the form was showing through
+	# the one dialog that must not be misread.
+	_delete_panel.add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("warning"), 3, true)
+	)
+	MenuTile.style_button(_back_button, ThemeManager.color("surface_border"))
+	var heading := ThemeManager.color("heading")
+	for header in _section_headers:
+		header.add_theme_color_override("font_color", heading)
 
 
 func _set_status(text: String, positive: bool = false) -> void:

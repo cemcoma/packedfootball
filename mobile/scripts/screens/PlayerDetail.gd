@@ -45,10 +45,15 @@ const KEEPER_STAT_ROWS := [
 
 @onready var _name_label: Label = %NameLabel
 @onready var _subtitle_label: Label = %SubtitleLabel
-@onready var _credits_chip: CurrencyChip = %CreditsChip
 
 @onready var _card_view: PlayerCardView = %CardView
 @onready var _origin_label: Label = %OriginLabel
+
+@onready var _card_panel: PanelContainer = %CardPanel
+@onready var _attributes_panel: PanelContainer = %AttributesPanel
+@onready var _tendencies_panel: PanelContainer = %TendenciesPanel
+@onready var _career_panel: PanelContainer = %CareerPanel
+@onready var _confirm_panel: PanelContainer = %Panel
 
 @onready var _attributes_heading: Label = %AttributesHeading
 @onready var _attributes_grid: GridContainer = %AttributesGrid
@@ -81,7 +86,6 @@ func _ready() -> void:
 	_confirm_button.pressed.connect(_on_confirm_release_pressed)
 	_cancel_button.pressed.connect(_on_cancel_release_pressed)
 
-	_credits_chip.set_currency("credits")
 	_confirm_overlay.visible = false
 
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
@@ -102,7 +106,6 @@ func _ready() -> void:
 
 
 func _refresh() -> void:
-	_credits_chip.set_amount(GameProfile.credits)
 	_name_label.text = _card.full_name()
 	_subtitle_label.text = tr("%s  ·  %s  ·  Overall %d") % [
 		_card.position, PlayerCard.tier_label(_card.tier), _card.overall()
@@ -222,12 +225,14 @@ func _refresh_buttons() -> void:
 ## inside a themed Panel, so the headings and status line need the palette --
 ## see ThemeManager's note on text_hint.
 func _apply_theme_colors() -> void:
+	_style_chrome()
 	var heading := ThemeManager.color("heading")
 	_subtitle_label.add_theme_color_override("font_color", heading)
 	_attributes_heading.add_theme_color_override("font_color", heading)
 	_tendencies_heading.add_theme_color_override("font_color", heading)
 	_career_heading.add_theme_color_override("font_color", heading)
-	_origin_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+	_origin_label.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+	_name_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
 	# The confirm text sits inside a themed PanelContainer -- which has its own
 	# background in both modes -- so it takes the Theme's Label colour and
 	# needs no override at all. It used to hardcode white, from back when
@@ -319,3 +324,23 @@ func _on_back_pressed() -> void:
 ## under it errors out (and leaves you on a screen with no card).
 func _go_back() -> void:
 	get_tree().change_scene_to_file.call_deferred(PlayerSession.return_scene)
+
+
+## The three data columns each get the tiles' frame. They used to be bare
+## grids of small text straight on the background photo, which is where this
+## screen was hardest to read.
+func _style_chrome() -> void:
+	var muted := ThemeManager.color("surface_border")
+	for panel in [_card_panel, _attributes_panel, _tendencies_panel, _career_panel]:
+		panel.add_theme_stylebox_override(
+			"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, muted, 3, true, Vector2(10, 8))
+		)
+	# Opaque and amber: releasing a card cannot be undone.
+	_confirm_panel.add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("warning"), 3, true)
+	)
+	MenuTile.style_button(_customize_button, ThemeManager.color("accent"))
+	MenuTile.style_button(_release_button, ThemeManager.color("warning"))
+	MenuTile.style_button(_confirm_button, ThemeManager.color("warning"))
+	MenuTile.style_button(_back_button, muted)
+	MenuTile.style_button(_cancel_button, muted)

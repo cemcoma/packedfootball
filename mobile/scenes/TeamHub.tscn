@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://kkf7l3g4vgmt" path="res://scripts/screens/TeamHub.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_u15wc"]
+[ext_resource type="PackedScene" path="res://scenes/components/MenuTile.tscn" id="menutile"]
 
 [node name="TeamHub" type="Control" unique_id=1950000001]
 layout_mode = 3
@@ -42,50 +43,33 @@ text = "TEAM"
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="SquadRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1950000007]
+[node name="TileRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1950000020]
 layout_mode = 2
+theme_override_constants/separation = 16
 
-[node name="SquadButton" type="Button" parent="Margin/RootVBox/SquadRow" unique_id=1950000008]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 50)
-layout_mode = 2
-size_flags_horizontal = 0
-theme_override_font_sizes/font_size = 18
-text = "Squad"
-
-[node name="SquadHint" type="Label" parent="Margin/RootVBox/SquadRow" unique_id=1950000009]
+[node name="SquadTile" parent="Margin/RootVBox/TileRow" unique_id=1950000008 instance=ExtResource("menutile")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 11
-text = "Pick your formation, choose who starts, and design your kit."
-autowrap_mode = 2
+title_text = "Squad"
+accent_key = "heading"
+hero = true
+min_height = 150
 
-[node name="InventoryRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1950000010]
-layout_mode = 2
-
-[node name="InventoryButton" type="Button" parent="Margin/RootVBox/InventoryRow" unique_id=1950000011]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 50)
-layout_mode = 2
-size_flags_horizontal = 0
-theme_override_font_sizes/font_size = 18
-text = "Inventory"
-
-[node name="InventoryHint" type="Label" parent="Margin/RootVBox/InventoryRow" unique_id=1950000012]
+[node name="InventoryTile" parent="Margin/RootVBox/TileRow" unique_id=1950000011 instance=ExtResource("menutile")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 11
-text = "Every player you own. Release or restyle any of them."
-autowrap_mode = 2
+title_text = "Inventory"
+hero = true
+min_height = 150
 
 [node name="Spacer2" type="Control" parent="Margin/RootVBox" unique_id=1950000013]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="BackButton" type="Button" parent="Margin/RootVBox" unique_id=1950000014]
+[node name="BackButton" type="Button" parent="Margin/RootVBox" unique_id=1592433410]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 0
-text = "Back to Menu"
+text = "Back"

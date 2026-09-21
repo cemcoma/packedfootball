@@ -1,6 +1,6 @@
 [gd_resource type="FontVariation" format=3 uid="uid://cappf0ntvar01"]
 
-[ext_resource type="FontFile" uid="uid://c5devhv8uhf53" path="res://theme/fonts/Arial Rounded Bold.ttf" id="1"]
+[ext_resource type="FontFile" uid="uid://bsf55571avq3d" path="res://theme/fonts/Monocraft.ttf" id="1"]
 [ext_resource type="FontFile" uid="uid://f5f53iypwf41" path="res://theme/fonts/Nunito-Bold.ttf" id="2"]
 
 [resource]

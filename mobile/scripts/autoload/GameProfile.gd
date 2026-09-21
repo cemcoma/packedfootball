@@ -23,6 +23,10 @@ extends Node
 
 ### SUPER IMPORTANT ###
 
+## Any balance or the energy bar moved. CurrencyHud's strip is on every
+## screen, so anything that changes a number has to say so here.
+signal currencies_changed
+
 const DEFAULT_FORMATION := "4-4-2"
 
 const DEFAULT_INVENTORY_CAP := 100
@@ -207,6 +211,7 @@ func _apply_profile_fields(doc: Dictionary) -> void:
 	kit = _str(doc, "kit", "")
 	var counters = doc.get("ad_counters")
 	ad_counters = counters if counters is Dictionary else {}
+	currencies_changed.emit()
 
 
 ## An empty lineup for the current formation, and no cards.
@@ -224,6 +229,7 @@ func refresh_currencies() -> bool:
 	credits = _int(doc, "credits", credits)
 	bucks = _int(doc, "bucks", bucks)
 	medals = _int(doc, "medals", medals)
+	currencies_changed.emit()
 	return true
 
 func load_inventory() -> Array:
@@ -302,6 +308,7 @@ func apply_inventory_cap(value) -> void:
 func apply_energy(block) -> void:
 	if block is Dictionary and block.has("energy"):
 		energy = block
+		currencies_changed.emit()
 
 func refresh_energy() -> bool:
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/energy")
@@ -462,6 +469,7 @@ func reset() -> void:
 	saved_formation = DEFAULT_FORMATION
 	saved_slot_assignment = []
 	ad_counters = {}
+	currencies_changed.emit()
 
 func add_purchased_cards(cards: Array) -> void:
 	for card in cards:
@@ -475,3 +483,4 @@ func apply_currency_balances(new_credits = null, new_bucks = null, new_medals = 
 		bucks = new_bucks
 	if typeof(new_medals) in [TYPE_INT, TYPE_FLOAT]:
 		medals = new_medals
+	currencies_changed.emit()

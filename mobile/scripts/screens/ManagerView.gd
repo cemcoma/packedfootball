@@ -65,9 +65,12 @@ var _kit: String = ""
 @onready var _overall_label: Label = %OverallLabel
 @onready var _back_button: Button = %BackButton
 
+@onready var _header_panel: PanelContainer = %HeaderPanel
+@onready var _squad_backdrop: PanelContainer = %SquadBackdrop
+@onready var _stats_backdrop: PanelContainer = %StatsBackdrop
+
 @onready var _pitch_view: PitchView = %Pitch
 @onready var _panel_header: Label = %PanelHeader
-@onready var _squad_scroll: ScrollContainer = %SquadScroll
 @onready var _squad_grid: GridContainer = %SquadGrid
 @onready var _stats_panel: VBoxContainer = %StatsPanel
 @onready var _out_of_position_label: Label = %OutOfPositionLabel
@@ -164,13 +167,28 @@ func _set_squad(formation: String, fields_list: Array) -> void:
 ## background, so the labels that carry their own colour override have to
 ## be recoloured by hand when the theme flips.
 func _apply_theme_colors() -> void:
-	_title_label.add_theme_color_override("font_color", ThemeManager.color("heading"))
-	_overall_label.add_theme_color_override("font_color", ThemeManager.color("heading"))
-	_formation_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
-	_league_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
-	_stats_page_label.add_theme_color_override("font_color", ThemeManager.color("heading"))
-	_stats_extra_country.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+	_style_panels()
+	var heading := ThemeManager.color("heading")
+	_title_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
+	_overall_label.add_theme_color_override("font_color", heading)
+	_stats_page_label.add_theme_color_override("font_color", heading)
 	_out_of_position_label.add_theme_color_override("font_color", ThemeManager.color("warning"))
+	# These sit on the frames now, not on the background photo, so they take
+	# the tiles' subtitle colour rather than the palette's hint.
+	for label in [_formation_label, _league_label, _record_label, _stats_extra_country]:
+		label.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+
+
+## The header, the squad list and the stats sheet all wear the tiles' frame,
+## matching Team.tscn -- this screen is the same layout for someone else's XI.
+func _style_panels() -> void:
+	var muted := ThemeManager.color("surface_border")
+	for panel in [_header_panel, _squad_backdrop, _stats_backdrop]:
+		panel.add_theme_stylebox_override(
+			"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, muted, 3, true, Vector2(10, 6))
+		)
+	MenuTile.style_button(_back_button, muted)
+	MenuTile.style_button(_close_button, muted)
 
 
 # -- state -> UI --------------------------------------------------------------
@@ -209,11 +227,12 @@ func _refresh_pitch() -> void:
 
 func _refresh_right_panel() -> void:
 	var showing_stats: bool = selected_slot != -1
-	_stats_panel.visible = showing_stats
-	_squad_scroll.visible = not showing_stats
+	_stats_backdrop.visible = showing_stats
+	# The whole squad frame goes, not just its grid: the header sits inside it
+	# now, and an empty frame above the stats sheet reads as a bug.
+	_squad_backdrop.visible = not showing_stats
 
 	if showing_stats:
-		_panel_header.text = tr("Player")
 		_populate_stats_panel()
 	else:
 		_panel_header.text = tr("Starting XI (tap a player for stats)")

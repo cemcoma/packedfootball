@@ -57,13 +57,25 @@ layout_mode = 2
 size_flags_horizontal = 4
 placeholder_text = "Email"
 
-[node name="PasswordField" type="LineEdit" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel" unique_id=1526269496]
-unique_name_in_owner = true
+[node name="PasswordRow" type="HBoxContainer" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel" unique_id=1526269500]
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 size_flags_horizontal = 4
+theme_override_constants/separation = 6
+
+[node name="PasswordField" type="LineEdit" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel/PasswordRow" unique_id=1526269496]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
 placeholder_text = "Password"
 secret = true
+
+[node name="ShowPasswordButton" type="Button" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel/PasswordRow" unique_id=1526269501]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 0)
+layout_mode = 2
+toggle_mode = true
+text = "Show"
 
 [node name="SpacerSign" type="Control" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel" unique_id=1942721573]
 custom_minimum_size = Vector2(0, 10)
@@ -130,13 +142,25 @@ layout_mode = 2
 size_flags_horizontal = 4
 placeholder_text = "Email"
 
-[node name="RegisterPasswordField" type="LineEdit" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel" unique_id=2050492644]
-unique_name_in_owner = true
+[node name="RegisterPasswordRow" type="HBoxContainer" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel" unique_id=2050492650]
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 size_flags_horizontal = 4
+theme_override_constants/separation = 6
+
+[node name="RegisterPasswordField" type="LineEdit" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel/RegisterPasswordRow" unique_id=2050492644]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
 placeholder_text = "Password"
 secret = true
+
+[node name="ShowRegisterPasswordButton" type="Button" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel/RegisterPasswordRow" unique_id=2050492651]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 0)
+layout_mode = 2
+toggle_mode = true
+text = "Show"
 
 [node name="RegisterConfirmPasswordField" type="LineEdit" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel" unique_id=2050492645]
 unique_name_in_owner = true

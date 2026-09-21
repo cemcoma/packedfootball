@@ -3,8 +3,8 @@
 [ext_resource type="Script" uid="uid://ce0gqgfdbq3ou" path="res://scripts/screens/Play.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/components/MenuTile.tscn" id="menutile"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_7a5gm"]
-[ext_resource type="PackedScene" uid="uid://d3yxqql70v6n8" path="res://scenes/components/EnergyBar.tscn" id="energybar"]
 
 [node name="Play" type="Control" unique_id=1553461410]
 layout_mode = 3
@@ -45,11 +45,6 @@ size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 24
 text = "PLAY"
 
-[node name="EnergyBar" parent="Margin/RootVBox/HeaderRow" unique_id=971980625 instance=ExtResource("energybar")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 4
-
 [node name="StatusLabel" type="Label" parent="Margin/RootVBox" unique_id=2039528902]
 unique_name_in_owner = true
 layout_mode = 2
@@ -59,43 +54,29 @@ autowrap_mode = 2
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="HBoxContainer" type="HBoxContainer" parent="Margin/RootVBox" unique_id=2011890571]
+[node name="TileRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=2011890600]
 layout_mode = 2
+theme_override_constants/separation = 16
 
-[node name="QuickMatchButton" type="Button" parent="Margin/RootVBox/HBoxContainer" unique_id=1406619786]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 50)
-layout_mode = 2
-size_flags_horizontal = 0
-theme_override_font_sizes/font_size = 18
-text = "Quick Match"
-
-[node name="QuickMatchHint" type="Label" parent="Margin/RootVBox/HBoxContainer" unique_id=377242336]
+[node name="QuickMatchTile" parent="Margin/RootVBox/TileRow" unique_id=1406619786 instance=ExtResource("menutile")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 11
-text = "One match against a random opponent -- a real player if one's around, otherwise a bot. Small credit reward, no ranking effect."
-autowrap_mode = 2
+title_text = "Quick Match"
+subtitle_text = "One match against a random opponent -- a real player if one's around, otherwise a bot. Small credit reward, no ranking effect."
+accent_key = "positive"
+hero = true
+min_height = 130
 
-[node name="HBoxContainer2" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1999781077]
-layout_mode = 2
-
-[node name="TournamentButton" type="Button" parent="Margin/RootVBox/HBoxContainer2" unique_id=928209185]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 50)
-layout_mode = 2
-size_flags_horizontal = 0
-theme_override_font_sizes/font_size = 18
-text = "Tournament"
-
-[node name="TournamentHint" type="Label" parent="Margin/RootVBox/HBoxContainer2" unique_id=1991090899]
+[node name="TournamentTile" parent="Margin/RootVBox/TileRow" unique_id=928209185 instance=ExtResource("menutile")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 11
-text = "Ten matches a day in a league of six, against players in your own tier. Finish top to go up. Medals and cash for the best finishes."
-autowrap_mode = 2
+title_text = "Tournament"
+subtitle_text = "Ten matches a day in a league of six, against players in your own tier. Finish top to go up. Medals and cash for the best finishes."
+accent_key = "medals"
+hero = true
+min_height = 130
 
 [node name="Spacer3" type="Control" parent="Margin/RootVBox" unique_id=1931392042]
 layout_mode = 2

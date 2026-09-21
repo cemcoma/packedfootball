@@ -23,7 +23,7 @@ extends VBoxContainer
 ## the manager name takes whatever is left.
 const COLUMNS := [
 	{"key": "position", "label": "#", "ratio": 0.7, "align": HORIZONTAL_ALIGNMENT_CENTER},
-	{"key": "display_name", "label": "Manager", "ratio": 4.0, "align": HORIZONTAL_ALIGNMENT_LEFT},
+	{"key": "display_name", "label": "Manager", "ratio": 3.2, "align": HORIZONTAL_ALIGNMENT_LEFT},
 	{"key": "played", "label": "P", "ratio": 0.8, "align": HORIZONTAL_ALIGNMENT_CENTER},
 	{"key": "_record", "label": "W-D-L", "ratio": 1.6, "align": HORIZONTAL_ALIGNMENT_CENTER},
 	{"key": "_goal_diff", "label": "GD", "ratio": 1.0, "align": HORIZONTAL_ALIGNMENT_CENTER},
@@ -32,8 +32,10 @@ const COLUMNS := [
 
 ## The outcome cell: the zone tint put into words, in the zone's colour. The
 ## words are the result banner's, so what the table says during the day is
-## what the banner says the morning after.
-const OUTCOME_COLUMN := {"label": "Outcome", "ratio": 1.9}
+## what the banner says the morning after. The ratio is sized for the longest
+## of them in the pixel font, which is wider per character than the old one --
+## at 1.9 "Kümede Kalır" lost a letter off each end.
+const OUTCOME_COLUMN := {"label": "Outcome", "ratio": 2.9}
 
 ## The reward cell: wide enough for the richest payout (medals, cash and
 ## credits side by side) at the row's own font size, logos a touch smaller

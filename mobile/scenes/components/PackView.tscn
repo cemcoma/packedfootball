@@ -16,21 +16,16 @@ corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
-[node name="PackView" type="Control" unique_id=1511904029]
-custom_minimum_size = Vector2(150, 270)
+[node name="PackView" type="PanelContainer" unique_id=1511904029]
+custom_minimum_size = Vector2(158, 280)
 layout_mode = 3
 anchors_preset = 0
-offset_right = 150.0
-offset_bottom = 270.0
+offset_right = 158.0
+offset_bottom = 280.0
 script = ExtResource("1")
 
 [node name="Layout" type="VBoxContainer" parent="." unique_id=141529489]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+layout_mode = 2
 theme_override_constants/separation = 8
 
 [node name="PackArtRatio" type="AspectRatioContainer" parent="Layout" unique_id=1030939728]
@@ -119,10 +114,9 @@ theme_override_constants/separation = 6
 layout_mode = 2
 
 [node name="PricePanel" type="PanelContainer" parent="Layout/Footer/HBoxContainer" unique_id=954498575]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme = SubResource("Theme_8aye7")
-theme_override_styles/panel = SubResource("StyleBoxFlat_84nhg")
 
 [node name="Margin" type="MarginContainer" parent="Layout/Footer/HBoxContainer/PricePanel" unique_id=571284187]
 layout_mode = 2

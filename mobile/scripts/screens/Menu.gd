@@ -5,7 +5,9 @@ extends Control
 ## a stub, but one level deeper, behind Play.
 ##
 ## AccountPanel (left side) shows the signed-in manager's own account
-## details at a glance -- display name, squad overall, wins/draws/losses --
+## record at a glance -- display name, squad overall, wins/draws/losses. The
+## balances that used to sit under it are CurrencyHud's strip now, top right
+## of this and every other screen --
 ## the same fields the old Profile screen used to show as its whole reason
 ## to exist. That screen is Settings now (rename, plus language/color-theme
 ## stubs), so this is the only place those squad stats are glanceable from
@@ -14,21 +16,18 @@ extends Control
 ## data is fetched once at sign-in), same as Settings.gd used to do for
 ## its own now-removed stats block.
 
-@onready var _play_button: Button = %PlayButton
-@onready var _shop_button: Button = %ShopButton
-@onready var _team_button: Button = %TeamButton
-@onready var _leaderboard_button: Button = %LeaderboardButton
-@onready var _settings_button: Button = %SettingsButton
+@onready var _play_button: MenuTile = %PlayTile
+@onready var _shop_button: MenuTile = %ShopTile
+@onready var _team_button: MenuTile = %TeamTile
+@onready var _leaderboard_button: MenuTile = %LeaderboardTile
+@onready var _settings_button: MenuTile = %SettingsTile
 
 @onready var _account_name_label: Label = %AccountNameLabel
 @onready var _account_overall_label: Label = %AccountOverallLabel
 @onready var _account_wins_label: Label = %AccountWinsLabel
 @onready var _account_draws_label: Label = %AccountDrawsLabel
 @onready var _account_losses_label: Label = %AccountLossesLabel
-@onready var _account_credits_chip: CurrencyChip = %AccountCreditsChip
-@onready var _account_bucks_chip: CurrencyChip = %AccountBucksChip
-@onready var _account_medals_chip: CurrencyChip = %AccountMedalsChip
-@onready var _account_energy_bar: EnergyBar = %AccountEnergyBar
+@onready var _account_panel: PanelContainer = %AccountPanel
 
 
 func _ready() -> void:
@@ -38,11 +37,18 @@ func _ready() -> void:
 	_leaderboard_button.pressed.connect(_on_leaderboard_pressed)
 	_settings_button.pressed.connect(_on_settings_pressed)
 
-	_account_credits_chip.set_currency("credits")
-	_account_bucks_chip.set_currency("bucks")
-	_account_medals_chip.set_currency("medals")
-
+	ThemeManager.theme_changed.connect(_restyle_account_panel)
+	_restyle_account_panel()
 	_refresh_account_panel()
+
+
+## The panel wears the tiles' frame, or it reads as a leftover from the old
+## rounded look sitting next to them.
+func _restyle_account_panel() -> void:
+	_account_panel.add_theme_stylebox_override(
+		"panel",
+		MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("surface_border"), 3, true)
+	)
 
 
 func _refresh_account_panel() -> void:
@@ -51,16 +57,6 @@ func _refresh_account_panel() -> void:
 	_account_wins_label.text = tr("Wins: %d") % GameProfile.wins
 	_account_draws_label.text = tr("Draws: %d") % GameProfile.draws
 	_account_losses_label.text = tr("Losses: %d") % GameProfile.losses
-	_account_credits_chip.set_amount(GameProfile.credits)
-	_account_bucks_chip.set_amount(GameProfile.bucks)
-	_account_medals_chip.set_amount(GameProfile.medals)
-	# Energy sits with the balances because that is what it is now: a thing
-	# you spend and run out of. load_all() already fetched it at sign-in, so
-	# this costs no request -- it is only re-read if that somehow missed.
-	_account_energy_bar.set_energy(GameProfile.energy)
-	if GameProfile.energy.is_empty():
-		await GameProfile.refresh_energy()
-		_account_energy_bar.set_energy(GameProfile.energy)
 
 
 func _on_play_pressed() -> void:

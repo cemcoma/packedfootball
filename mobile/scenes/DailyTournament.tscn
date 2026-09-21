@@ -2,9 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cor3d48luf4r1" path="res://scripts/screens/DailyTournament.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
-[ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="3"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_vojua"]
-[ext_resource type="PackedScene" uid="uid://d3yxqql70v6n8" path="res://scenes/components/EnergyBar.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="5"]
 [ext_resource type="Script" uid="uid://l3fnvnqxw6uh" path="res://scripts/components/StandingsTable.gd" id="6"]
 [ext_resource type="PackedScene" path="res://scenes/components/CurrencyAmount.tscn" id="7"]
@@ -55,16 +53,6 @@ size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 13
 text = "Ends in --"
 
-[node name="EnergyBar" parent="Margin/RootVBox/HeaderRow" unique_id=1999000008 instance=ExtResource("4")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 4
-
-[node name="CreditsChip" parent="Margin/RootVBox/HeaderRow" unique_id=1999000009 instance=ExtResource("3")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 4
-
 [node name="ProgressLabel" type="Label" parent="Margin/RootVBox" unique_id=1999000010]
 unique_name_in_owner = true
 layout_mode = 2
@@ -81,18 +69,34 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 6
 
-[node name="StandingsScroll" type="ScrollContainer" parent="Margin/RootVBox/Body/TableColumn" unique_id=1999000013]
+[node name="TablePanel" type="PanelContainer" parent="Margin/RootVBox/Body/TableColumn" unique_id=1999000060]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="TableMargin" type="MarginContainer" parent="Margin/RootVBox/Body/TableColumn/TablePanel" unique_id=1999000061]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="Inner" type="VBoxContainer" parent="Margin/RootVBox/Body/TableColumn/TablePanel/TableMargin" unique_id=1999000062]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="StandingsScroll" type="ScrollContainer" parent="Margin/RootVBox/Body/TableColumn/TablePanel/TableMargin/Inner" unique_id=1999000013]
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="Standings" type="VBoxContainer" parent="Margin/RootVBox/Body/TableColumn/StandingsScroll" unique_id=1999000014]
+[node name="Standings" type="VBoxContainer" parent="Margin/RootVBox/Body/TableColumn/TablePanel/TableMargin/Inner/StandingsScroll" unique_id=1999000014]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 script = ExtResource("6")
 
-[node name="RulesLabel" type="Label" parent="Margin/RootVBox/Body/TableColumn" unique_id=1999000015]
+[node name="RulesLabel" type="Label" parent="Margin/RootVBox/Body/TableColumn/TablePanel/TableMargin/Inner" unique_id=1999000015]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
@@ -104,6 +108,7 @@ layout_mode = 2
 theme_override_constants/separation = 6
 
 [node name="FullDayPanel" type="PanelContainer" parent="Margin/RootVBox/Body/FullDayColumn" unique_id=1999000041]
+unique_name_in_owner = true
 unique_name_in_owner = true
 layout_mode = 2
 

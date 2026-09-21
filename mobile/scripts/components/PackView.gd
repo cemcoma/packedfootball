@@ -1,5 +1,5 @@
 class_name PackView
-extends Control
+extends PanelContainer
 
 ## Reusable pack "box" visual -- the pack's art with name/type/price/
 ## cards-per-pack over it and, for a limited pack, how many are left. Same
@@ -28,6 +28,7 @@ const UNAVAILABLE_ALPHA := 0.55
 @onready var _cards_label: Label = %CardsLabel
 @onready var _limited_label: Label = %LimitedLabel
 @onready var _price_amount: CurrencyAmount = %PriceAmount
+@onready var _price_panel: PanelContainer = %PricePanel
 @onready var _tag_label: Label = %TagLabel
 @onready var _tap_button: Button = %TapButton
 @onready var _info_button: Button = %InfoButton
@@ -40,6 +41,8 @@ var _affordable: bool = true
 func _ready() -> void:
 	_tap_button.pressed.connect(_on_tap_button_pressed)
 	_info_button.pressed.connect(_on_info_button_pressed)
+	ThemeManager.theme_changed.connect(_restyle)
+	_restyle()
 
 
 func _on_tap_button_pressed() -> void:
@@ -59,7 +62,27 @@ func set_pack(pack: PackData) -> void:
 	_price_amount.set_amount(pack.price_currency, pack.price)
 	_price_amount.set_sizes(20, 18)
 	_pack_texture.texture = pack.get_texture()
+	_restyle()
 	_refresh_state()
+
+
+## The box and its price wear the menu's pixel frame, tinted with whatever
+## currency the pack costs -- so a Cash pack reads as a different kind of
+## purchase from a Credits one before you read the number.
+func _restyle() -> void:
+	if _price_panel == null:
+		return
+	var accent := (
+		CurrencyDisplay.color_for(_pack.price_currency) if _pack != null
+		else ThemeManager.color("surface_border")
+	)
+	add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, accent, 3, true, Vector2(6, 6))
+	)
+	_price_panel.add_theme_stylebox_override(
+		"panel",
+		MenuTile.pixel_frame(MenuTile.BASE_FILL.lightened(0.06), accent, 2, false, Vector2(4, 2))
+	)
 
 
 func set_affordable(can_afford: bool) -> void:

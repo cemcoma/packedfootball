@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://dwwt4ty1ir42y" path="res://scripts/components/PitchView.gd" id="1"]
 
 [node name="PitchView" type="Control" unique_id=1300278465]
-custom_minimum_size = Vector2(280, 400)
+custom_minimum_size = Vector2(260, 300)
 layout_mode = 3
 anchors_preset = 0
 offset_right = 280.0

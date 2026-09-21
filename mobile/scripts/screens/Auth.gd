@@ -41,6 +41,7 @@ extends Control
 @onready var _sign_in_button: Button = %SignInButton
 @onready var _show_register_button: Button = %ShowRegisterButton
 @onready var _forgot_password_button: Button = %ForgotPasswordButton
+@onready var _show_password_button: Button = %ShowPasswordButton
 
 @onready var _register_panel: VBoxContainer = %RegisterPanel
 @onready var _register_panel_actual: PanelContainer = %RegisterPanelActual
@@ -50,6 +51,7 @@ extends Control
 @onready var _register_confirm_password_field: LineEdit = %RegisterConfirmPasswordField
 @onready var _create_account_button: Button = %CreateAccountButton
 @onready var _back_to_sign_in_button: Button = %BackToSignInButton
+@onready var _show_register_password_button: Button = %ShowRegisterPasswordButton
 
 @onready var _reset_panel: VBoxContainer = %ResetPanel
 @onready var _reset_panel_actual: PanelContainer = %ResetPanelActual
@@ -89,6 +91,10 @@ func _ready() -> void:
 	_send_reset_button.pressed.connect(_on_send_reset_pressed)
 	_back_from_reset_button.pressed.connect(_on_back_to_sign_in_pressed)
 
+	_setup_fields()
+	ThemeManager.theme_changed.connect(_restyle_panels)
+	_restyle_panels()
+
 	# A saved session resumes silently: no form on screen while it's being
 	# checked, just the spinner -- testers kept typing their credentials
 	# into a form that was about to disappear on its own. The form only
@@ -109,6 +115,58 @@ func _ready() -> void:
 	if startup_notice != "":
 		_status_label.text = startup_notice
 		startup_notice = ""
+
+
+## The three forms wear the same frame as the rest of the app, rather than the
+## Theme's translucent rounded panel they were still using.
+func _restyle_panels() -> void:
+	var border := ThemeManager.color("surface_border")
+	for panel in [_sign_in_panel_actual, _register_panel_actual, _reset_panel_actual]:
+		panel.add_theme_stylebox_override(
+			"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, border, 3, true, Vector2(18, 16))
+		)
+
+
+## Everything the on-screen keyboard needs to behave like a normal app's
+## login: the right key layout per field, Enter moving down the form, and a
+## way to see what you typed.
+##
+## virtual_keyboard_type is what stops iOS auto-capitalising an address and
+## offering autocorrect over a password -- `secret` only hides the glyphs.
+func _setup_fields() -> void:
+	for field in [_email_field, _register_email_field, _reset_email_field]:
+		field.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_EMAIL_ADDRESS
+	for field in [_password_field, _register_password_field, _register_confirm_password_field]:
+		field.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_PASSWORD
+	_display_name_field.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_DEFAULT
+
+	# Enter walks the form and submits from the last field, so the keyboard's
+	# return key does something on every one of them.
+	_email_field.text_submitted.connect(func(_t): _password_field.grab_focus())
+	_password_field.text_submitted.connect(func(_t): _on_sign_in_pressed())
+	_display_name_field.text_submitted.connect(func(_t): _register_email_field.grab_focus())
+	_register_email_field.text_submitted.connect(func(_t): _register_password_field.grab_focus())
+	_register_password_field.text_submitted.connect(
+		func(_t): _register_confirm_password_field.grab_focus()
+	)
+	_register_confirm_password_field.text_submitted.connect(func(_t): _on_create_account_pressed())
+	_reset_email_field.text_submitted.connect(func(_t): _on_send_reset_pressed())
+
+	_show_password_button.toggled.connect(_on_show_password_toggled)
+	_show_register_password_button.toggled.connect(_on_show_register_password_toggled)
+
+
+func _on_show_password_toggled(shown: bool) -> void:
+	_password_field.secret = not shown
+	_show_password_button.text = tr("Hide") if shown else tr("Show")
+
+
+## One toggle for both register fields: they are the same secret typed twice,
+## and revealing only one of them is no help in finding a typo.
+func _on_show_register_password_toggled(shown: bool) -> void:
+	_register_password_field.secret = not shown
+	_register_confirm_password_field.secret = not shown
+	_show_register_password_button.text = tr("Hide") if shown else tr("Show")
 
 
 func _process(_delta: float) -> void:

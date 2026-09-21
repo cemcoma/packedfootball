@@ -8,8 +8,6 @@
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="4_0j84m"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="5"]
 
-[sub_resource type="ButtonGroup" id="ButtonGroup_formations"]
-
 [node name="Team" type="Control" unique_id=882744781]
 layout_mode = 3
 anchors_preset = 15
@@ -40,49 +38,31 @@ script = ExtResource("4_0j84m")
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="FormationRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=630417954]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="FormationButton442" type="Button" parent="Margin/RootVBox/FormationRow" unique_id=1949725644]
+[node name="HeaderPanel" type="PanelContainer" parent="Margin/RootVBox" unique_id=630417900]
 unique_name_in_owner = true
 layout_mode = 2
-toggle_mode = true
-button_group = SubResource("ButtonGroup_formations")
-text = "4-4-2"
 
-[node name="FormationButton433" type="Button" parent="Margin/RootVBox/FormationRow" unique_id=1560091446]
-unique_name_in_owner = true
+[node name="FormationRow" type="HBoxContainer" parent="Margin/RootVBox/HeaderPanel" unique_id=630417954]
 layout_mode = 2
-toggle_mode = true
-button_group = SubResource("ButtonGroup_formations")
-text = "4-3-3"
+theme_override_constants/separation = 12
 
-[node name="FormationButton352" type="Button" parent="Margin/RootVBox/FormationRow" unique_id=1344053873]
+[node name="FormationOption" type="OptionButton" parent="Margin/RootVBox/HeaderPanel/FormationRow" unique_id=630417901]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 0)
 layout_mode = 2
-toggle_mode = true
-button_group = SubResource("ButtonGroup_formations")
-text = "3-5-2"
+size_flags_vertical = 4
 
-[node name="FormationButton4231" type="Button" parent="Margin/RootVBox/FormationRow" unique_id=1836401694]
-unique_name_in_owner = true
-layout_mode = 2
-toggle_mode = true
-button_group = SubResource("ButtonGroup_formations")
-text = "4-2-3-1"
-
-[node name="FormationSpacer" type="Control" parent="Margin/RootVBox/FormationRow" unique_id=1011731955]
+[node name="FormationSpacer" type="Control" parent="Margin/RootVBox/HeaderPanel/FormationRow" unique_id=1011731955]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="OverallLabel" type="Label" parent="Margin/RootVBox/FormationRow" unique_id=1591920888]
+[node name="OverallLabel" type="Label" parent="Margin/RootVBox/HeaderPanel/FormationRow" unique_id=1591920888]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Overall --"
 
-[node name="AutoButton" type="Button" parent="Margin/RootVBox/FormationRow" unique_id=176537209]
+[node name="AutoButton" type="Button" parent="Margin/RootVBox/HeaderPanel/FormationRow" unique_id=176537209]
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Fill every slot with the strongest eligible player you own."
@@ -103,20 +83,29 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 8
 
-[node name="PanelHeader" type="Label" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=637674774]
+[node name="BenchBackdrop" type="PanelContainer" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=637674700]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="BenchBox" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/BenchBackdrop" unique_id=637674701]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PanelHeader" type="Label" parent="Margin/RootVBox/MainRow/RightPanel/BenchBackdrop/BenchBox" unique_id=637674774]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Bench"
 
-[node name="BenchScroll" type="ScrollContainer" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=478244495]
+[node name="BenchScroll" type="ScrollContainer" parent="Margin/RootVBox/MainRow/RightPanel/BenchBackdrop/BenchBox" unique_id=478244495]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 vertical_scroll_mode = 3
 
-[node name="BenchGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/BenchScroll" unique_id=921892683]
+[node name="BenchGrid" type="GridContainer" parent="Margin/RootVBox/MainRow/RightPanel/BenchBackdrop/BenchBox/BenchScroll" unique_id=921892683]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -125,7 +114,7 @@ theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 10
 columns = 4
 
-[node name="CancelButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel" unique_id=703277417]
+[node name="CancelButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/BenchBackdrop/BenchBox" unique_id=703277417]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Cancel"
@@ -193,28 +182,29 @@ theme_override_constants/h_separation = 20
 theme_override_constants/v_separation = 2
 columns = 2
 
-[node name="StatsButtonRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel" unique_id=999269672]
+[node name="StatsButtonRow" type="HBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop" unique_id=999269672]
 layout_mode = 2
+size_flags_vertical = 8
 theme_override_constants/separation = 8
 
-[node name="ReplaceButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsButtonRow" unique_id=642978750]
+[node name="ReplaceButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsButtonRow" unique_id=642978750]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Replace"
 
-[node name="ClearButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsButtonRow" unique_id=464571451]
+[node name="ClearButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsButtonRow" unique_id=464571451]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Clear Slot"
 
-[node name="StatsPageButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsButtonRow" unique_id=1920000003]
+[node name="StatsPageButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsButtonRow" unique_id=1920000003]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "Show Statistics"
 
-[node name="CloseButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsButtonRow" unique_id=2088812848]
+[node name="CloseButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsButtonRow" unique_id=2088812848]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Close"
@@ -271,6 +261,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Panel" type="PanelContainer" parent="DiscardConfirmOverlay/Center" unique_id=839000703]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(460, 0)
 layout_mode = 2
 
@@ -326,7 +317,6 @@ text = "Keep Editing"
 
 [node name="SavingPopup" parent="." unique_id=839000720 instance=ExtResource("5")]
 unique_name_in_owner = true
-visible = false
 layout_mode = 1
 grow_horizontal = 2
 grow_vertical = 2

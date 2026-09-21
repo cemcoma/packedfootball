@@ -27,14 +27,11 @@ extends Control
 ## is empty.
 
 @onready var _status_label: Label = %StatusLabel
-@onready var _quick_match_button: Button = %QuickMatchButton
-@onready var _tournament_button: Button = %TournamentButton
+@onready var _quick_match_button: MenuTile = %QuickMatchTile
+@onready var _tournament_button: MenuTile = %TournamentTile
 @onready var _back_button: Button = %BackButton
 
-@onready var _quick_match_hint: Label = %QuickMatchHint
-@onready var _tournament_hint: Label = %TournamentHint
 
-@onready var _energy_bar: EnergyBar = %EnergyBar
 @onready var _matchmaking_popup: Control = %MatchmakingPopup
 
 @onready var _testing_toggle_button: Button = %TestingToggleButton
@@ -101,27 +98,25 @@ func _ready() -> void:
 	_tournament_button.pressed.connect(_on_tournament_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 
-	ThemeManager.theme_changed.connect(_apply_theme_colors)
-	_apply_theme_colors()
-	_refresh_energy()
 	_setup_testing_panel()
 
-
-func _refresh_energy() -> void:
-	_energy_bar.set_energy(GameProfile.energy)
-	if GameProfile.energy.is_empty():
-		await GameProfile.refresh_energy()
-		_energy_bar.set_energy(GameProfile.energy)
+	ThemeManager.theme_changed.connect(_apply_theme_colors)
+	_apply_theme_colors()
 
 
-## The two hints sit straight on the screen background with no panel behind
-## them, so the Theme's Label color doesn't reach them (they carry their own
-## override) -- on light mode their pale grey was invisible. See
-## ThemeManager's note on text_hint.
+## The two tiles restyle themselves. Everything else here is a plain Button
+## sitting straight on the background, including the testing panel's controls
+## -- that panel is a bare VBox, not a frame.
 func _apply_theme_colors() -> void:
-	var hint := ThemeManager.color("text_hint")
-	_quick_match_hint.add_theme_color_override("font_color", hint)
-	_tournament_hint.add_theme_color_override("font_color", hint)
+	var accent := ThemeManager.color("accent")
+	var muted := ThemeManager.color("surface_border")
+	MenuTile.style_button(_back_button, muted)
+	MenuTile.style_button(_testing_toggle_button, muted)
+	for button in [_run_local_button, _check_load_button]:
+		MenuTile.style_button(button, muted)
+	for option in [_interval_option, _opponent_option]:
+		MenuTile.style_button(option, accent)
+		MenuTile.style_popup(option, accent)
 
 
 func _show_matchmaking_popup(status: String) -> void:
@@ -142,8 +137,8 @@ func _hide_matchmaking_popup() -> void:
 
 
 func _on_quick_match_pressed() -> void:
-	_quick_match_button.disabled = true
-	_tournament_button.disabled = true
+	_quick_match_button.set_tile_disabled(true)
+	_tournament_button.set_tile_disabled(true)
 	_status_label.text = ""
 	_show_matchmaking_popup(tr("Finding an opponent..."))
 
@@ -160,19 +155,18 @@ func _on_quick_match_pressed() -> void:
 			if res.status == 402
 			else tr("Could not start a match -- try again.")
 		)
-		_quick_match_button.disabled = false
-		_tournament_button.disabled = false
+		_quick_match_button.set_tile_disabled(false)
+		_tournament_button.set_tile_disabled(false)
 		return
 
 	GameProfile.apply_energy(res.data.get("energy"))
-	_energy_bar.set_energy(GameProfile.energy)
 
 	MatchSession.set_from_match_response(res.data)
 	if not MatchSession.has_pending():
 		_hide_matchmaking_popup()
 		_status_label.text = tr("Match finished, but the replay couldn't be loaded -- try again.")
-		_quick_match_button.disabled = false
-		_tournament_button.disabled = false
+		_quick_match_button.set_tile_disabled(false)
+		_tournament_button.set_tile_disabled(false)
 		return
 
 	# .get(key, default) only falls back to `default` when the key is
@@ -181,7 +175,9 @@ func _on_quick_match_pressed() -> void:
 	# concern PackData.gd's own _int() helper guards against). Updated here
 	# (rather than waiting for a future full GameProfile reload) so Profile
 	# screen reflects this match immediately.
-	GameProfile.credits = _int(res.data, "credits_remaining", GameProfile.credits)
+	# Through apply_currency_balances rather than assigned: that is what
+	# tells the HUD strip its number moved.
+	GameProfile.apply_currency_balances(res.data.get("credits_remaining"))
 	GameProfile.wins = _int(res.data, "wins", GameProfile.wins)
 	GameProfile.losses = _int(res.data, "losses", GameProfile.losses)
 	GameProfile.draws = _int(res.data, "draws", GameProfile.draws)

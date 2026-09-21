@@ -46,17 +46,25 @@ theme_override_font_sizes/font_size = 24
 text = "LEADERBOARD"
 
 [node name="HeaderSpacer" type="Control" parent="Margin/RootVBox/HeaderRow" unique_id=582632051]
-custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PositionOption" type="OptionButton" parent="Margin/RootVBox/HeaderRow" unique_id=1395513173]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="TabPanel" type="PanelContainer" parent="Margin/RootVBox" unique_id=293315300]
+unique_name_in_owner = true
 layout_mode = 2
 
-[node name="VBoxContainer" type="VBoxContainer" parent="Margin/RootVBox/HeaderRow" unique_id=224035501]
-layout_mode = 2
-
-[node name="TabRow" type="HBoxContainer" parent="Margin/RootVBox/HeaderRow/VBoxContainer" unique_id=293315331]
+[node name="TabRow" type="HBoxContainer" parent="Margin/RootVBox/TabPanel" unique_id=293315331]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="UsersTabButton" type="Button" parent="Margin/RootVBox/HeaderRow/VBoxContainer/TabRow" unique_id=1794285886]
+[node name="UsersTabButton" type="Button" parent="Margin/RootVBox/TabPanel/TabRow" unique_id=1794285886]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(100, 36)
 layout_mode = 2
@@ -65,7 +73,7 @@ button_pressed = true
 button_group = SubResource("ButtonGroup_leaderboard_tabs")
 text = "Managers"
 
-[node name="GoalsTabButton" type="Button" parent="Margin/RootVBox/HeaderRow/VBoxContainer/TabRow" unique_id=1395513169]
+[node name="GoalsTabButton" type="Button" parent="Margin/RootVBox/TabPanel/TabRow" unique_id=1395513169]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 36)
 layout_mode = 2
@@ -73,7 +81,7 @@ toggle_mode = true
 button_group = SubResource("ButtonGroup_leaderboard_tabs")
 text = "Goals"
 
-[node name="AssistsTabButton" type="Button" parent="Margin/RootVBox/HeaderRow/VBoxContainer/TabRow" unique_id=1395513170]
+[node name="AssistsTabButton" type="Button" parent="Margin/RootVBox/TabPanel/TabRow" unique_id=1395513170]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 36)
 layout_mode = 2
@@ -81,7 +89,7 @@ toggle_mode = true
 button_group = SubResource("ButtonGroup_leaderboard_tabs")
 text = "Assists"
 
-[node name="RatingTabButton" type="Button" parent="Margin/RootVBox/HeaderRow/VBoxContainer/TabRow" unique_id=1395513171]
+[node name="RatingTabButton" type="Button" parent="Margin/RootVBox/TabPanel/TabRow" unique_id=1395513171]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 36)
 layout_mode = 2
@@ -89,7 +97,7 @@ toggle_mode = true
 button_group = SubResource("ButtonGroup_leaderboard_tabs")
 text = "Rating"
 
-[node name="CleanSheetsTabButton" type="Button" parent="Margin/RootVBox/HeaderRow/VBoxContainer/TabRow" unique_id=1395513172]
+[node name="CleanSheetsTabButton" type="Button" parent="Margin/RootVBox/TabPanel/TabRow" unique_id=1395513172]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(110, 36)
 layout_mode = 2
@@ -97,39 +105,30 @@ toggle_mode = true
 button_group = SubResource("ButtonGroup_leaderboard_tabs")
 text = "Clean sheets"
 
-[node name="HBoxContainer" type="HBoxContainer" parent="Margin/RootVBox/HeaderRow/VBoxContainer" unique_id=1475117971]
-layout_mode = 2
-
-[node name="Control" type="Control" parent="Margin/RootVBox/HeaderRow/VBoxContainer/HBoxContainer" unique_id=1931913748]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="PositionOption" type="OptionButton" parent="Margin/RootVBox/HeaderRow/VBoxContainer/HBoxContainer" unique_id=1395513173]
+[node name="ListBackdrop" type="PanelContainer" parent="Margin/RootVBox" unique_id=1140258800]
 unique_name_in_owner = true
-visible = false
-custom_minimum_size = Vector2(130, 36)
 layout_mode = 2
+size_flags_vertical = 3
 
-[node name="StatusLabel" type="Label" parent="Margin/RootVBox" unique_id=1140258818]
+[node name="ListBox" type="VBoxContainer" parent="Margin/RootVBox/ListBackdrop" unique_id=1140258801]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="StatusLabel" type="Label" parent="Margin/RootVBox/ListBackdrop/ListBox" unique_id=1140258818]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 horizontal_alignment = 1
 
-[node name="ListScroll" type="ScrollContainer" parent="Margin/RootVBox" unique_id=1671539840]
+[node name="ListScroll" type="ScrollContainer" parent="Margin/RootVBox/ListBackdrop/ListBox" unique_id=1671539840]
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="ListCenter" type="CenterContainer" parent="Margin/RootVBox/ListScroll" unique_id=1671539841]
+[node name="RowsList" type="VBoxContainer" parent="Margin/RootVBox/ListBackdrop/ListBox/ListScroll" unique_id=1274833684]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 3
-
-[node name="RowsList" type="VBoxContainer" parent="Margin/RootVBox/ListScroll/ListCenter" unique_id=1274833684]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(520, 0)
-layout_mode = 2
 theme_override_constants/separation = 4
 
 [node name="PagerRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1274833700]

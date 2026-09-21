@@ -27,11 +27,7 @@ extends Control
 
 const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
 
-@onready var _credits_chip: CurrencyChip = %CreditsChip
-@onready var _bucks_chip: CurrencyChip = %BucksChip
-@onready var _medals_chip: CurrencyChip = %MedalsChip
 @onready var _inventory_label: Label = %InventoryLabel
-@onready var _energy_bar: EnergyBar = %EnergyBar
 @onready var _currency_tabs: CurrencyPanel = %CurrencyTabs
 @onready var _packs_tab_button: Button = %PacksTabButton
 @onready var _currency_tab_button: Button = %CurrencyTabButton
@@ -52,6 +48,7 @@ const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
 @onready var _buy_confirm_footnote: Label = %BuyConfirmFootnote
 @onready var _buy_cancel_button: Button = %BuyCancelButton
 @onready var _buy_confirm_button: Button = %BuyConfirmButton
+@onready var _buy_panel: PanelContainer = %Panel
 
 ## The pack the confirmation popup is currently asking about.
 var _confirming_pack: PackData = null
@@ -87,30 +84,23 @@ func _ready() -> void:
 	_currency_tab_button.pressed.connect(_on_currency_tab_pressed)
 	_pack_type_dropdown.item_selected.connect(_on_pack_type_selected)
 	_back_button.pressed.connect(_on_back_pressed)
-	_currency_tabs.currency_changed.connect(_refresh_currency_labels)
+	_currency_tabs.currency_changed.connect(_refresh_inventory_label)
 	_buy_cancel_button.pressed.connect(_close_buy_confirm)
 	_buy_confirm_button.pressed.connect(_on_buy_confirmed)
 	_buy_confirm_overlay.visible = false
 
-	_credits_chip.set_currency("credits")
-	_bucks_chip.set_currency("bucks")
-	_medals_chip.set_currency("medals")
 
 	# Entering the Shop refreshes the balances before showing anything
 	# priced: bucks bought through RevenueCat are granted by a webhook
 	# rather than by this client (see CurrencyPanel), so the cached numbers
 	# can be behind by a whole purchase, and this is the one screen where
 	# being wrong about them actually costs the player something.
-	_refresh_currency_labels()
+	ThemeManager.theme_changed.connect(_restyle_chrome)
+	_restyle_chrome()
+
+	_refresh_inventory_label()
 	await _refresh_and_load()
 
-
-func _refresh_currency_labels() -> void:
-	_credits_chip.set_amount(GameProfile.credits)
-	_bucks_chip.set_amount(GameProfile.bucks)
-	_medals_chip.set_amount(GameProfile.medals)
-	_energy_bar.set_energy(GameProfile.energy)
-	_refresh_inventory_label()
 
 func _refresh_inventory_label() -> void:
 	var count := GameProfile.inventory_count()
@@ -125,12 +115,37 @@ func _refresh_inventory_label() -> void:
 func _on_packs_tab_pressed() -> void:
 	_packs_panel.visible = true
 	_currency_panel.visible = false
+	_restyle_chrome()
 
 
 func _on_currency_tab_pressed() -> void:
 	_packs_panel.visible = false
 	_currency_panel.visible = true
+	_restyle_chrome()
 	await _refresh_currencies(tr("Updating your balance..."))
+
+
+## The tabs and the buy dialog, in the same pixel frame the packs wear. The
+## active tab is the lit one; the inactive tab drops to the border colour so
+## which panel you are looking at is readable without reading the labels.
+func _restyle_chrome() -> void:
+	_style_tab(_packs_tab_button, _packs_panel.visible)
+	_style_tab(_currency_tab_button, _currency_panel.visible)
+	var accent := ThemeManager.color("accent")
+	MenuTile.style_button(_back_button, ThemeManager.color("surface_border"))
+	MenuTile.style_button(_pack_type_dropdown, accent)
+	MenuTile.style_popup(_pack_type_dropdown, accent)
+	# Opaque, so the packs behind it can't be mistaken for part of the dialog.
+	_buy_panel.add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("accent"), 3, true)
+	)
+
+
+func _style_tab(button: Button, active: bool) -> void:
+	var accent := (
+		ThemeManager.color("accent") if active else ThemeManager.color("surface_border")
+	)
+	MenuTile.style_button(button, accent, active)
 
 
 # -- fetching ------------------------------------------------------------------
@@ -152,7 +167,7 @@ func _refresh_currencies(status: String) -> bool:
 	_busy_popup.visible = true
 
 	var ok: bool = await GameProfile.refresh_currencies()
-	_refresh_currency_labels()
+	_refresh_inventory_label()
 
 	_busy_popup.visible = false
 	_busy = false
@@ -171,7 +186,7 @@ func _refresh_and_load() -> void:
 
 	var ok: bool = await GameProfile.refresh_currencies()
 	await GameProfile.refresh_energy()
-	_refresh_currency_labels()
+	_refresh_inventory_label()
 
 	_busy_popup.set_status(tr("Loading packs..."))
 	await _load_packs()

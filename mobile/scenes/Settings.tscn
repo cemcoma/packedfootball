@@ -35,104 +35,143 @@ script = ExtResource("4_1dggd")
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="CenterContainer" type="CenterContainer" parent="Margin/OuterVBox" unique_id=651017994]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="RootVBox" type="VBoxContainer" parent="Margin/OuterVBox/CenterContainer" unique_id=771828380]
-custom_minimum_size = Vector2(380, 0)
-layout_mode = 2
-theme_override_constants/separation = 16
-
-[node name="TitleLabel" type="Label" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=1725613320]
+[node name="TitleLabel" type="Label" parent="Margin/OuterVBox" unique_id=1725613320]
 layout_mode = 2
 theme_override_font_sizes/font_size = 28
 text = "SETTINGS"
 horizontal_alignment = 1
 
-[node name="NameRow" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=1018989684]
+[node name="CenterContainer" type="CenterContainer" parent="Margin/OuterVBox" unique_id=651017994]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SettingsPanel" type="PanelContainer" parent="Margin/OuterVBox/CenterContainer" unique_id=651017995]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="PanelMargin" type="MarginContainer" parent="Margin/OuterVBox/CenterContainer/SettingsPanel" unique_id=651017996]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 14
+
+[node name="Columns" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin" unique_id=651017997]
+layout_mode = 2
+theme_override_constants/separation = 28
+
+[node name="LeftCol" type="VBoxContainer" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns" unique_id=651017998]
+custom_minimum_size = Vector2(340, 0)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AccountHeader" type="Label" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol" unique_id=651018000]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Account"
+
+[node name="NameRow" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol" unique_id=1018989684]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="NameField" type="LineEdit" parent="Margin/OuterVBox/CenterContainer/RootVBox/NameRow" unique_id=772939797]
+[node name="NameField" type="LineEdit" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol/NameRow" unique_id=772939797]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(260, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "Manager name"
 
-[node name="SaveNameButton" type="Button" parent="Margin/OuterVBox/CenterContainer/RootVBox/NameRow" unique_id=1876657335]
+[node name="SaveNameButton" type="Button" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol/NameRow" unique_id=1876657335]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Save Name"
 
-[node name="StatusLabel" type="Label" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=1876657400]
+[node name="StatusLabel" type="Label" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol" unique_id=1876657400]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 13
-horizontal_alignment = 1
+theme_override_font_sizes/font_size = 11
 autowrap_mode = 2
 
-[node name="OptionsRow" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=396134971]
+[node name="DisplayHeader" type="Label" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol" unique_id=651018001]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Display"
+
+[node name="LanguageRow" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol" unique_id=651018002]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="LanguageOption" type="OptionButton" parent="Margin/OuterVBox/CenterContainer/RootVBox/OptionsRow" unique_id=565509366]
+[node name="LanguageLabel" type="Label" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol/LanguageRow" unique_id=651018003]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 13
+text = "Language"
+
+[node name="LanguageOption" type="OptionButton" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol/LanguageRow" unique_id=565509366]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="ThemeOption" type="OptionButton" parent="Margin/OuterVBox/CenterContainer/RootVBox/OptionsRow" unique_id=2039548150]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="LinksRow" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=689277720]
+[node name="ThemeRow" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol" unique_id=651018004]
 layout_mode = 2
 theme_override_constants/separation = 10
-alignment = 1
 
-[node name="PrivacyButton" type="Button" parent="Margin/OuterVBox/CenterContainer/RootVBox/LinksRow" unique_id=689277721]
+[node name="ThemeLabel" type="Label" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol/ThemeRow" unique_id=651018005]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 13
+text = "Theme"
+
+[node name="ThemeOption" type="OptionButton" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol/ThemeRow" unique_id=2039548150]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+
+[node name="RightCol" type="VBoxContainer" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns" unique_id=651018006]
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="LinksHeader" type="Label" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/RightCol" unique_id=651018007]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Links"
+
+[node name="PrivacyButton" type="Button" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/RightCol" unique_id=689277721]
+unique_name_in_owner = true
+layout_mode = 2
 text = "Privacy Policy"
-flat = true
 
-[node name="SupportButton" type="Button" parent="Margin/OuterVBox/CenterContainer/RootVBox/LinksRow" unique_id=689277722]
+[node name="SupportButton" type="Button" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/RightCol" unique_id=689277722]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 3
 text = "Support"
-flat = true
 
-[node name="AdPrivacyButton" type="Button" parent="Margin/OuterVBox/CenterContainer/RootVBox/LinksRow" unique_id=689277723]
+[node name="AdPrivacyButton" type="Button" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/RightCol" unique_id=689277723]
 unique_name_in_owner = true
-visible = false
 layout_mode = 2
-size_flags_horizontal = 3
 text = "Ad Choices"
-flat = true
 
-[node name="Spacer" type="Control" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=689277706]
-custom_minimum_size = Vector2(0, 12)
+[node name="Spacer" type="Control" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/RightCol" unique_id=689277706]
 layout_mode = 2
+size_flags_vertical = 3
 
-[node name="ButtonRow" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=1940000200]
-layout_mode = 2
-theme_override_constants/separation = 10
-
-[node name="LogoutButton" type="Button" parent="Margin/OuterVBox/CenterContainer/RootVBox/ButtonRow" unique_id=1658000256]
+[node name="SessionHeader" type="Label" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/RightCol" unique_id=651018010]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 12
+text = "Session"
+
+[node name="LogoutButton" type="Button" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/RightCol" unique_id=1658000256]
+unique_name_in_owner = true
+layout_mode = 2
 text = "Log Out / Switch Account"
 
-[node name="DeleteSpacer" type="Control" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=1658000300]
-custom_minimum_size = Vector2(0, 20)
-layout_mode = 2
-
-[node name="DeleteAccountButton" type="Button" parent="Margin/OuterVBox/CenterContainer/RootVBox" unique_id=1658000301]
+[node name="DeleteAccountButton" type="Button" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/RightCol" unique_id=1658000301]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Delete Account"
@@ -171,6 +210,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Panel" type="PanelContainer" parent="DeleteConfirmOverlay/Center" unique_id=1658000313]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(420, 0)
 layout_mode = 2
 

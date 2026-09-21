@@ -9,6 +9,13 @@ extends PanelContainer
 
 const LOW_FRACTION := 0.25  # at or below this, the bar warns
 
+## The bar's own frame. Its fill is the same colour as the chip's border, so
+## without a dark edge between them the two read as one block.
+const BAR_OUTLINE := Color(0.04, 0.04, 0.05)
+
+@onready var _row: HBoxContainer = %Row
+@onready var _icon: TextureRect = %Icon
+@onready var _bar_frame: PanelContainer = %BarFrame
 @onready var _bar: ProgressBar = %Bar
 @onready var _amount_label: Label = %AmountLabel
 @onready var _timer_label: Label = %TimerLabel
@@ -17,6 +24,7 @@ var _energy: int = 0
 var _energy_max: int = 1
 var _seconds_to_next: float = 0.0
 var _regen_seconds: float = 2700.0
+var _compact: bool = false
 
 
 func _ready() -> void:
@@ -34,6 +42,25 @@ func set_energy(block: Dictionary) -> void:
 	_seconds_to_next = float(_int(block, "seconds_to_next", int(_seconds_to_next)))
 	_regen_seconds = float(maxi(1, _int(block, "regen_seconds", int(_regen_seconds))))
 	_refresh()
+
+
+## Shrinks the bar for the HUD strip, where it sits beside three chips
+## rather than alone in a header.
+func set_compact(value: bool) -> void:
+	_compact = value
+	_apply_sizes()
+	_restyle()
+
+
+func _apply_sizes() -> void:
+	if _bar == null:
+		return
+	var icon_px := 16 if _compact else 30
+	_icon.custom_minimum_size = Vector2(icon_px, icon_px)
+	_bar.custom_minimum_size = Vector2(48 if _compact else 96, 5 if _compact else 8)
+	_amount_label.add_theme_font_size_override("font_size", 13 if _compact else 15)
+	_timer_label.add_theme_font_size_override("font_size", 9 if _compact else 10)
+	_row.add_theme_constant_override("separation", 5 if _compact else 8)
 
 
 static func _int(data: Dictionary, key: String, default: int) -> int:
@@ -74,51 +101,66 @@ func _refresh() -> void:
 	_restyle()
 
 
+## "+1 in 14m 04s" in a header; just "14m 04s" in the HUD strip, where the
+## bar beside it already says what is counting up and the sentence was wider
+## than the rest of the strip put together.
 func _refresh_timer() -> void:
 	if _timer_label == null:
 		return
-	_timer_label.text = TimeFormat.next_energy_in(int(ceil(_seconds_to_next)), is_full())
+	var seconds := int(ceil(_seconds_to_next))
+	if not _compact:
+		_timer_label.text = TimeFormat.next_energy_in(seconds, is_full())
+	elif is_full():
+		_timer_label.text = TranslationServer.translate("Full")
+	else:
+		_timer_label.text = TimeFormat.duration(seconds)
 
 
 ## Amber when the bar is nearly out, because that is the state that stops you
 ## playing -- the same "warn on the thing that blocks you" rule the Shop's
 ## bench counter and the Squad screen's unsaved marker use.
 func _restyle() -> void:
-	if _bar == null:
+	if _bar_frame == null:
 		return
 	var low: bool = float(_energy) / float(_energy_max) <= LOW_FRACTION
-	var accent := ThemeManager.color("warning") if low else ThemeManager.color("positive")
+	var accent := ThemeManager.color("warning") if low else ThemeManager.color("energy")
 
-	var panel := StyleBoxFlat.new()
-	panel.bg_color = Color(accent.r, accent.g, accent.b, 0.14)
-	panel.border_color = Color(accent.r, accent.g, accent.b, 0.55)
-	panel.set_border_width_all(1)
-	panel.set_corner_radius_all(10)
-	panel.content_margin_left = 10.0
-	panel.content_margin_right = 10.0
-	panel.content_margin_top = 4.0
-	panel.content_margin_bottom = 4.0
-	add_theme_stylebox_override("panel", panel)
+	add_theme_stylebox_override("panel", MenuTile.pixel_frame(
+		MenuTile.BASE_FILL.lerp(accent, CurrencyChip.FILL_MIX),
+		accent,
+		CurrencyChip.BORDER_WIDTH,
+		true,
+		Vector2(6, 2) if _compact else Vector2(10, 4)
+	))
 
+	# The bar sits in its own black frame rather than carrying a border on the
+	# fill: ProgressBar draws the fill OVER the background style, so a border
+	# there is covered wherever the bar is full.
+	var frame := StyleBoxFlat.new()
+	frame.anti_aliasing = false
+	frame.set_corner_radius_all(0)
+	frame.bg_color = BAR_OUTLINE
+	frame.border_color = BAR_OUTLINE
+	frame.set_border_width_all(1)
+	frame.content_margin_left = 1.0
+	frame.content_margin_right = 1.0
+	frame.content_margin_top = 1.0
+	frame.content_margin_bottom = 1.0
+	_bar_frame.add_theme_stylebox_override("panel", frame)
+
+	# Hard-edged like every other panel: a rounded, smoothed fill is the one
+	# thing that reads as "not pixel art".
 	var fill := StyleBoxFlat.new()
+	fill.anti_aliasing = false
+	fill.set_corner_radius_all(0)
 	fill.bg_color = accent
-	fill.set_corner_radius_all(3)
 	_bar.add_theme_stylebox_override("fill", fill)
 
 	var track := StyleBoxFlat.new()
+	track.anti_aliasing = false
+	track.set_corner_radius_all(0)
 	track.bg_color = Color(accent.r, accent.g, accent.b, 0.18)
-	track.set_corner_radius_all(3)
 	_bar.add_theme_stylebox_override("background", track)
 
-	# The labels are deliberately left alone, so they take the Theme's ordinary
-	# Label colour like text anywhere else.
-	#
-	# They used to carry font_color overrides -- and a per-node override beats
-	# every theme in the lookup, so nothing downstream could change them back.
-	# It was also wrong twice over now that panels are the green card: the
-	# timer's "text_hint" is near-black in light mode, and the accent washed
-	# out against the panel tint.
-	#
-	# The low-energy signal lives in the BAR and the panel border instead,
-	# which is where colour belongs -- a number that changes colour reads as a
-	# different number, a bar that changes colour reads as a warning.
+	# The labels take the Theme's ordinary Label colour on purpose; the
+	# low-energy signal lives in the bar and the border, where colour belongs.

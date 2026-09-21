@@ -64,11 +64,14 @@ const PLAIN_BACKDROP := Color(0.0, 0.0, 0.0, 0.62)
 ## Podium text is dark on the bright backdrops, light on the plain one.
 const PODIUM_TEXT := Color(0.08, 0.07, 0.05)
 const PLAIN_TEXT := Color(0.96, 0.96, 0.98)
-const ROW_CORNER := 6
 const ROW_HEIGHT := 44
 ## The signed-in manager's own row gets the accent ring so they can find
 ## themselves on a page without reading every name.
 const ME_RING_WIDTH := 2
+
+@onready var _title_label: Label = %TitleLabel
+@onready var _tab_panel: PanelContainer = %TabPanel
+@onready var _list_backdrop: PanelContainer = %ListBackdrop
 
 @onready var _users_tab_button: Button = %UsersTabButton
 @onready var _goals_tab_button: Button = %GoalsTabButton
@@ -83,9 +86,12 @@ const ME_RING_WIDTH := 2
 @onready var _next_button: Button = %NextButton
 @onready var _back_button: Button = %BackButton
 
-var _tab: String = "users"  # a TAB_STATS key
-var _position: String = ""  # a POSITION_FILTERS key; player boards only
-var _page: Dictionary = {}  # board key -> current page
+## Static, so opening a manager and coming back lands on the board you were
+## reading rather than the first tab -- the scene is rebuilt from scratch on
+## that trip, and per-instance state would not survive it.
+static var _tab: String = "users"  # a TAB_STATS key
+static var _position: String = ""  # a POSITION_FILTERS key; player boards only
+static var _page: Dictionary = {}  # board key -> current page
 ## board key -> page -> the response body (entries, has_more). A board is
 ## a tab plus, for players, the position filter, so each filter pages on
 ## its own.
@@ -106,8 +112,35 @@ func _ready() -> void:
 	_next_button.pressed.connect(_on_page_step.bind(1))
 	_back_button.pressed.connect(_on_back_pressed)
 	ThemeManager.theme_changed.connect(_render)
+	ThemeManager.theme_changed.connect(_style_chrome)
 
+	_restore_view()
+	_style_chrome()
 	await _show_page()
+
+
+## Put the controls back where the static state says they were. Neither
+## `button_pressed` nor `select()` emits the signals the user's own taps do,
+## so this can't loop back into _on_tab_pressed/_on_position_selected.
+##
+## The row cache is deliberately NOT kept: a leaderboard that came back
+## instantly would be showing ranks from before the trip.
+func _restore_view() -> void:
+	var tab_buttons := {
+		"users": _users_tab_button,
+		"goals": _goals_tab_button,
+		"assists": _assists_tab_button,
+		"avg_rating": _rating_tab_button,
+		"clean_sheets": _clean_sheets_tab_button,
+	}
+	if tab_buttons.has(_tab):
+		tab_buttons[_tab].button_pressed = true
+
+	for i in POSITION_FILTERS.size():
+		if POSITION_FILTERS[i][0] == _position:
+			_position_option.select(i)
+			break
+	_position_option.visible = _is_player_board()
 
 
 func _is_player_board() -> bool:
@@ -124,6 +157,7 @@ func _on_tab_pressed(tab: String) -> void:
 		return
 	_tab = tab
 	_position_option.visible = _is_player_board()
+	_style_chrome()  # the lit tab is ours to paint, not the Theme's
 	await _show_page()
 
 
@@ -233,14 +267,20 @@ func _build_row(entry: Dictionary) -> Control:
 
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(0, ROW_HEIGHT)
+	# Hard-edged like every other panel; the podium colours still carry the
+	# rank, and the border is what separates a row from its neighbour.
 	var style := StyleBoxFlat.new()
+	style.anti_aliasing = false
+	style.set_corner_radius_all(0)
 	style.bg_color = PODIUM_BACKDROPS.get(rank, PLAIN_BACKDROP)
-	style.set_corner_radius_all(ROW_CORNER)
 	style.content_margin_left = 12
 	style.content_margin_right = 12
-	if is_me:
-		style.set_border_width_all(ME_RING_WIDTH)
-		style.border_color = ThemeManager.color("accent")
+	style.set_border_width_all(ME_RING_WIDTH)
+	style.border_color = (
+		ThemeManager.color("accent") if is_me
+		else Color(0.0, 0.0, 0.0, 0.55) if on_podium
+		else ThemeManager.color("surface_border")
+	)
 	panel.add_theme_stylebox_override("panel", style)
 
 	var row := HBoxContainer.new()
@@ -330,3 +370,28 @@ func _on_row_pressed(entry: Dictionary) -> void:
 static func _int(data: Dictionary, key: String, default: int) -> int:
 	var value = data.get(key)
 	return int(value) if typeof(value) in [TYPE_INT, TYPE_FLOAT] else default
+
+
+## The tabs, the list frame and the pager, in the same pixel frame the rest of
+## the app wears. Called again on every tab change so the lit tab follows.
+func _style_chrome() -> void:
+	var accent := ThemeManager.color("accent")
+	var muted := ThemeManager.color("surface_border")
+	_title_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
+	for panel in [_tab_panel, _list_backdrop]:
+		panel.add_theme_stylebox_override(
+			"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, muted, 3, true, Vector2(8, 6))
+		)
+	var tabs := {
+		"users": _users_tab_button,
+		"goals": _goals_tab_button,
+		"assists": _assists_tab_button,
+		"avg_rating": _rating_tab_button,
+		"clean_sheets": _clean_sheets_tab_button,
+	}
+	for key in tabs:
+		MenuTile.style_button(tabs[key], accent if key == _tab else muted, key == _tab)
+	MenuTile.style_popup(_position_option, accent)
+	MenuTile.style_button(_position_option, accent)
+	for button in [_back_button, _prev_button, _next_button]:
+		MenuTile.style_button(button, muted)

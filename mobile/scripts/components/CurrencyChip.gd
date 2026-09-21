@@ -1,16 +1,18 @@
 class_name CurrencyChip
 extends PanelContainer
 
-## One currency's balance as a tinted pill -- a colored dot, the amount, and
-## the currency's name -- replacing the bare "0 credits" Labels the Shop
-## header used to show. Everything about how a currency reads (its name, its
-## accent color, thousand separators) comes from CurrencyDisplay, so all
-## three chips stay consistent with each other and with every other place a
-## currency appears.
+## One currency's balance as a chip -- icon (or a tinted dot until the art
+## lands) and the amount, in the tiles' pixel frame tinted by the currency's
+## own colour. CurrencyDisplay decides the name, colour and separators, so
+## every chip agrees with every other place a currency appears.
 ##
-## The panel StyleBox is built in code rather than baked into the .tscn,
-## because its tint depends on which currency the chip is showing -- one
-## scene, three different looks, no per-currency scene duplication.
+## The StyleBox is built in code, not baked into the .tscn: its tint depends
+## on which currency the chip is showing, so one scene covers all of them.
+
+## Border tint strength. The fill stays near-black like every other panel --
+## a tinted fill swallows the number.
+const FILL_MIX := 0.14
+const BORDER_WIDTH := 2
 
 @onready var _icon: TextureRect = %Icon
 @onready var _dot: ColorRect = %Dot
@@ -18,12 +20,12 @@ extends PanelContainer
 @onready var _name_label: Label = %NameLabel
 
 var _currency_key: String = ""
+var _compact: bool = false
 
 
 func _ready() -> void:
-	# Palette colors are baked into a StyleBoxFlat here, so a dark/light
-	# swap has to rebuild it -- widgets that only use themed Button/Panel
-	# styles get restyled for free, but this one doesn't.
+	# Palette colours are baked into a StyleBoxFlat here, so a dark/light
+	# swap has to rebuild it.
 	ThemeManager.theme_changed.connect(func() -> void:
 		if _currency_key != "":
 			set_currency(_currency_key)
@@ -46,17 +48,36 @@ func set_currency(currency_key: String) -> void:
 	_dot.color = color
 	_name_label.text = CurrencyDisplay.label_for(currency_key)
 	_name_label.add_theme_color_override("font_color", color)
+	_apply_sizes()
 
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(color.r, color.g, color.b, 0.14)
-	style.border_color = Color(color.r, color.g, color.b, 0.55)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(10)
-	style.content_margin_left = 10.0
-	style.content_margin_right = 10.0
-	style.content_margin_top = 4.0
-	style.content_margin_bottom = 4.0
-	add_theme_stylebox_override("panel", style)
+	add_theme_stylebox_override("panel", MenuTile.pixel_frame(
+		MenuTile.BASE_FILL.lerp(color, FILL_MIX),
+		color,
+		BORDER_WIDTH,
+		true,
+		Vector2(6, 2) if _compact else Vector2(10, 4)
+	))
+
+
+## The HUD strip runs four of these across the top of the screen, so they
+## shrink there; a chip sitting alone in a header keeps the full size.
+func set_compact(value: bool) -> void:
+	_compact = value
+	if _currency_key != "":
+		set_currency(_currency_key)
+	else:
+		_apply_sizes()
+
+
+func _apply_sizes() -> void:
+	if _icon == null:
+		return
+	var icon_px := 16 if _compact else 30
+	_icon.custom_minimum_size = Vector2(icon_px, icon_px)
+	_dot.custom_minimum_size = Vector2(8, 8)
+	var row: HBoxContainer = _amount_label.get_parent()
+	row.add_theme_constant_override("separation", 5 if _compact else 6)
+	_amount_label.add_theme_font_size_override("font_size", 13 if _compact else 15)
 
 
 func set_amount(value: int) -> void:

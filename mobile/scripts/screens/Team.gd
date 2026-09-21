@@ -23,9 +23,6 @@ extends Control
 
 const PLAYER_CARD_SCENE := preload("res://scenes/components/PlayerCardView.tscn")
 
-## Dark in both modes -- see _apply_theme_colors.
-const STATS_BACKDROP_COLOR := Color(0.05, 0.06, 0.08, 0.78)
-
 ## How many name/value pairs sit side by side in the stats grid. The list is
 ## long enough to run out of vertical room well before horizontal.
 const STAT_GRID_COLUMNS := 2
@@ -69,18 +66,15 @@ var selected_slot: int = -1  # -1 = nothing focused
 var picker_mode: bool = false  # only meaningful when selected_slot != -1
 var status_text: String = ""
 
-var _formation_buttons: Dictionary = {}  # name -> Button
-
-@onready var _formation_button_442: Button = %FormationButton442
-@onready var _formation_button_433: Button = %FormationButton433
-@onready var _formation_button_352: Button = %FormationButton352
-@onready var _formation_button_4231: Button = %FormationButton4231
+@onready var _formation_option: OptionButton = %FormationOption
+@onready var _header_panel: PanelContainer = %HeaderPanel
+@onready var _bench_backdrop: PanelContainer = %BenchBackdrop
+@onready var _discard_panel: PanelContainer = %Panel
 @onready var _overall_label: Label = %OverallLabel
 @onready var _auto_button: Button = %AutoButton
 
 @onready var _pitch_view: PitchView = %Pitch
 @onready var _panel_header: Label = %PanelHeader
-@onready var _bench_scroll: ScrollContainer = %BenchScroll
 @onready var _bench_grid: GridContainer = %BenchGrid
 @onready var _cancel_button: Button = %CancelButton
 @onready var _stats_panel: VBoxContainer = %StatsPanel
@@ -107,15 +101,11 @@ var _formation_buttons: Dictionary = {}  # name -> Button
 
 
 func _ready() -> void:
-	_formation_buttons = {
-		"4-4-2": _formation_button_442,
-		"4-3-3": _formation_button_433,
-		"3-5-2": _formation_button_352,
-		"4-2-3-1": _formation_button_4231,
-	}
-	for formation_name in _formation_buttons.keys():
-		var button: Button = _formation_buttons[formation_name]
-		button.pressed.connect(_on_formation_button_pressed.bind(formation_name))
+	# Built from FORMATION_NAMES rather than four buttons in the scene, so a
+	# new shape is a one-line change there and never runs out of width here.
+	for formation_name in Formations.FORMATION_NAMES:
+		_formation_option.add_item(formation_name)
+	_formation_option.item_selected.connect(_on_formation_selected)
 
 	_auto_button.pressed.connect(_on_auto_pressed)
 	_pitch_view.slot_pressed.connect(_on_slot_tapped)
@@ -145,33 +135,55 @@ func _ready() -> void:
 ## against the light background. _refresh_bottom() recolors the status label
 ## on the same palette (it flips between positive and warning).
 func _apply_theme_colors() -> void:
-	_style_stats_backdrop()
+	_style_panels()
+	_style_controls()
 	_stats_page_label.add_theme_color_override("font_color", ThemeManager.color("heading"))
 	_stats_extra_country.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 	_out_of_position_label.add_theme_color_override("font_color", ThemeManager.color("warning"))
+	# The attribute rows bake the accent in, so they have to be rebuilt when
+	# the palette moves under them -- same as PlayerDetail._refresh_skills.
+	if selected_slot != -1 and not picker_mode:
+		_populate_stats_panel()
 	_refresh_overall()
 	_refresh_bottom()
 
 
-func _style_stats_backdrop() -> void:
+## Every panel on this screen wears the tiles' frame. The bench and the stats
+## used to sit straight on the background photo, which is the worst case for
+## a grid of small cards.
+func _style_panels() -> void:
 	var border := ThemeManager.color("surface_border")
-	var style := StyleBoxFlat.new()
-	style.bg_color = STATS_BACKDROP_COLOR
-	style.border_color = Color(border.r, border.g, border.b, 0.45)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(12)
-	style.content_margin_left = 10.0
-	style.content_margin_right = 10.0
-	style.content_margin_top = 8.0
-	style.content_margin_bottom = 8.0
-	_stats_backdrop.add_theme_stylebox_override("panel", style)
+	for panel in [_header_panel, _bench_backdrop, _stats_backdrop]:
+		panel.add_theme_stylebox_override(
+			"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, border, 3, true, Vector2(10, 6))
+		)
+	# Opaque and amber: the one dialog that must not be misread as the squad.
+	_discard_panel.add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("warning"), 3, true)
+	)
+
+
+func _style_controls() -> void:
+	var accent := ThemeManager.color("accent")
+	var muted := ThemeManager.color("surface_border")
+	MenuTile.style_button(_formation_option, accent)
+	MenuTile.style_popup(_formation_option, accent)
+	for button in [_auto_button, _replace_button, _save_button]:
+		MenuTile.style_button(button, accent)
+	for button in [
+		_cancel_button, _clear_button, _stats_page_button, _close_button,
+		_back_button, _kit_button, _discard_cancel_button,
+	]:
+		MenuTile.style_button(button, muted)
+	MenuTile.style_button(_discard_save_button, ThemeManager.color("positive"))
+	MenuTile.style_button(_discard_confirm_button, ThemeManager.color("warning"))
 
 
 # -- state -> UI --------------------------------------------------------------
 
 
 func _refresh_all() -> void:
-	_refresh_formation_buttons()
+	_refresh_formation_option()
 	_refresh_overall()
 	_refresh_pitch()
 	_refresh_right_panel()
@@ -208,10 +220,10 @@ func _refresh_overall() -> void:
 	)
 
 
-func _refresh_formation_buttons() -> void:
-	for formation_name in _formation_buttons.keys():
-		var button: Button = _formation_buttons[formation_name]
-		button.button_pressed = (formation_name == GameProfile.formation)
+func _refresh_formation_option() -> void:
+	var index := Formations.FORMATION_NAMES.find(GameProfile.formation)
+	if index >= 0:
+		_formation_option.select(index)
 
 
 func _refresh_pitch() -> void:
@@ -224,11 +236,12 @@ func _refresh_right_panel() -> void:
 	var showing_picker: bool = selected_slot != -1 and picker_mode
 
 	_stats_backdrop.visible = showing_stats
-	_bench_scroll.visible = not showing_stats
+	# The whole bench frame goes, not just its grid: the header sits inside it
+	# now, and an empty frame above the stats panel reads as a bug.
+	_bench_backdrop.visible = not showing_stats
 	_cancel_button.visible = showing_picker
 
 	if showing_stats:
-		_panel_header.text = tr("Player")
 		_populate_stats_panel()
 	elif showing_picker:
 		var slots := Formations.get_formation(GameProfile.formation)
@@ -324,12 +337,20 @@ func _populate_stats_panel() -> void:
 func _populate_attributes_page(card: PlayerCard) -> void:
 	_stats_page_label.text = tr("Attributes")
 	var entries: Array = []
+	# The stats this position's overall is actually judged on, accented the
+	# same way Player Details accents them -- one card read two ways should
+	# not highlight two different things.
+	var primary := card.primary_stats()
 	for row in ATTR_ROWS:
 		var key: String = row[1]
 		var value: int = card.attributes.get(key, 0)
 		# Height is centimetres, not a 0-100 skill (see player.py's
 		# PHYSICAL_FIELDS -- it's excluded from the overall for that reason).
-		entries.append([tr(row[0]), "%d cm" % value if key == "height" else str(value)])
+		entries.append([
+			tr(row[0]),
+			"%d cm" % value if key == "height" else str(value),
+			key in primary,
+		])
 	_fill_stat_grid(entries)
 
 	var goals: int = card.statistics.get("goals", 0)
@@ -378,23 +399,33 @@ func _fill_stat_grid(entries: Array) -> void:
 		for c in STAT_GRID_COLUMNS:
 			var i := c * rows + r
 			if i < entries.size():
-				_add_stat_row(entries[i][0], entries[i][1])
+				var entry: Array = entries[i]
+				_add_stat_row(entry[0], entry[1], entry.size() > 2 and bool(entry[2]))
 			else:
 				# Keeps the grid rectangular so the filled columns stay aligned.
 				_stats_attr_grid.add_child(Control.new())
 				_stats_attr_grid.add_child(Control.new())
 
 
-func _add_stat_row(label_text: String, value_text: String) -> void:
+## `highlight` marks a primary stat, in the accent -- same rule and same
+## colour as PlayerDetail._add_row.
+func _add_stat_row(label_text: String, value_text: String, highlight: bool = false) -> void:
+	var accent := ThemeManager.color("accent")
+
 	var name_label := Label.new()
 	name_label.text = label_text
+	if highlight:
+		name_label.add_theme_color_override("font_color", accent)
 	_stats_attr_grid.add_child(name_label)
+
 	var value_label := Label.new()
 	value_label.text = value_text
 	# Right-aligned and expanding, so the numbers line up and the gap between
 	# the two column pairs reads as a gap.
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if highlight:
+		value_label.add_theme_color_override("font_color", accent)
 	_stats_attr_grid.add_child(value_label)
 
 
@@ -426,9 +457,11 @@ func _refresh_bottom() -> void:
 # -- input handlers -----------------------------------------------------------
 
 
-func _on_formation_button_pressed(formation_name: String) -> void:
+func _on_formation_selected(index: int) -> void:
+	if index < 0 or index >= Formations.FORMATION_NAMES.size():
+		return
+	var formation_name: String = Formations.FORMATION_NAMES[index]
 	if formation_name == GameProfile.formation:
-		_refresh_formation_buttons()  # keep the active one looking pressed
 		return
 	GameProfile.switch_formation(formation_name)
 	selected_slot = -1

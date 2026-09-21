@@ -20,7 +20,11 @@ const SWATCH_CORNER := 6
 const SELECTED_BORDER := 3
 const UNSELECTED_BORDER := 1
 
+@onready var _title_label: Label = %TitleLabel
+@onready var _headings: Array[Label] = [%PatternHeading, %PrimaryHeading, %SecondaryHeading]
 @onready var _preview: KitPreview = %KitPreview
+@onready var _preview_panel: PanelContainer = %PreviewPanel
+@onready var _options_panel: PanelContainer = %OptionsPanel
 @onready var _pattern_row: HBoxContainer = %PatternRow
 @onready var _primary_grid: GridContainer = %PrimaryGrid
 @onready var _secondary_grid: GridContainer = %SecondaryGrid
@@ -78,8 +82,9 @@ func _build_color_grid(grid: GridContainer, is_primary: bool) -> void:
 
 func _style_swatch(button: Button, hex: String, selected: bool) -> void:
 	var style := StyleBoxFlat.new()
+	style.anti_aliasing = false
+	style.set_corner_radius_all(0)
 	style.bg_color = KitDesign.color_from_hex(hex)
-	style.set_corner_radius_all(SWATCH_CORNER)
 	style.set_border_width_all(SELECTED_BORDER if selected else UNSELECTED_BORDER)
 	# The selected swatch is marked with the theme's accent, which is legible
 	# against every color in the palette in both themes -- a plain white ring
@@ -110,7 +115,16 @@ func _refresh_pattern_buttons() -> void:
 	var children := _pattern_row.get_children()
 	for i in range(mini(children.size(), patterns.size())):
 		var button: Button = children[i]
-		button.button_pressed = patterns[i] == _design.pattern
+		var chosen: bool = patterns[i] == _design.pattern
+		button.button_pressed = chosen
+		# toggle_mode alone can't show the choice any more: the frame is ours,
+		# so the lit state has to be painted here.
+		MenuTile.style_button(
+			button,
+			ThemeManager.color("accent") if chosen else ThemeManager.color("surface_border"),
+			chosen,
+			Vector2(10, 4)
+		)
 
 
 func _refresh_color_grid(grid: GridContainer, chosen_hex: String) -> void:
@@ -124,8 +138,24 @@ func _refresh_color_grid(grid: GridContainer, chosen_hex: String) -> void:
 ## panel behind them, so they need the palette rather than the Theme's Label
 ## color -- see ThemeManager's note on text_hint.
 func _apply_theme_colors() -> void:
-	_summary_label.add_theme_color_override("font_color", ThemeManager.color("heading"))
+	_style_chrome()
+	_title_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
+	_summary_label.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
 	_status_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+	for heading in _headings:
+		(heading as Label).add_theme_color_override("font_color", ThemeManager.color("heading"))
+
+
+## Both columns get the tiles' frame -- the swatch grids used to float on the
+## background photo with nothing behind them.
+func _style_chrome() -> void:
+	var muted := ThemeManager.color("surface_border")
+	for panel in [_preview_panel, _options_panel]:
+		panel.add_theme_stylebox_override(
+			"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, muted, 3, true, Vector2(10, 8))
+		)
+	MenuTile.style_button(_save_button, ThemeManager.color("accent"))
+	MenuTile.style_button(_back_button, muted)
 
 
 # -- input handlers -----------------------------------------------------------

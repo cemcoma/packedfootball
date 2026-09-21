@@ -33,13 +33,13 @@ const MATCH_SCENE := "res://scenes/Match.tscn"
 
 @onready var _tier_label: Label = %TierLabel
 @onready var _countdown_label: Label = %CountdownLabel
-@onready var _energy_bar: EnergyBar = %EnergyBar
-@onready var _credits_chip: CurrencyChip = %CreditsChip
 
 @onready var _status_label: Label = %StatusLabel
 @onready var _progress_label: Label = %ProgressLabel
 @onready var _standings: StandingsTable = %Standings
 @onready var _rules_label: Label = %RulesLabel
+@onready var _table_panel: PanelContainer = %TablePanel
+@onready var _full_day_panel_frame: PanelContainer = %FullDayPanel
 @onready var _full_day_panel: PanelContainer = %FullDayPanel
 @onready var _full_day_heading: Label = %FullDayHeading
 @onready var _full_day_bar: ProgressBar = %FullDayBar
@@ -74,7 +74,6 @@ func _ready() -> void:
 	_full_day_claim_button.pressed.connect(_on_claim_full_day_pressed.bind({}))
 	_banner_claim_button.pressed.connect(_on_banner_claim_pressed)
 
-	_credits_chip.set_currency("credits")
 	_banner.visible = false
 	_busy_popup.visible = false
 
@@ -118,11 +117,8 @@ func _apply_state(data: Dictionary) -> void:
 	_tier_label.text = tier_name if tier_name is String else tr("Tournament")
 	_countdown_label.text = TimeFormat.ends_in(int(_seconds_remaining))
 
-	# Into the shared cache too, not just this bar -- Menu, Play and Shop all
-	# show the same number and should not be stale after a tournament match.
+	# Into the shared cache, which is what the HUD strip reads.
 	GameProfile.apply_energy(data.get("energy"))
-	_energy_bar.set_energy(GameProfile.energy)
-	_credits_chip.set_amount(GameProfile.credits)
 
 	# The reward table rides along on the standings -- each row shows what
 	# its position pays, so there is no separate rewards list to keep in step.
@@ -236,7 +232,9 @@ func _refresh_buttons() -> void:
 	var played := _int(_state, "matches_played", 0)
 	var total := _int(_state, "matches_max", 10)
 	var out_of_matches: bool = played >= total
-	var out_of_energy: bool = _energy_bar.energy() <= 0
+	# The HUD's bar, not GameProfile's block: it ticks the next point down
+	# locally, so it is the only live reading of the bar.
+	var out_of_energy: bool = CurrencyHud.energy() <= 0
 
 	_join_button.visible = not joined
 	_play_button.visible = joined
@@ -331,7 +329,22 @@ func _set_status(text: String, warn: bool) -> void:
 ## Labels here sit on the plain screen background rather than inside a themed
 ## Panel -- see ThemeManager's note on text_hint.
 func _apply_theme_colors() -> void:
+	MenuTile.style_button(_join_button, ThemeManager.color("accent"))
+	MenuTile.style_button(_play_button, ThemeManager.color("accent"))
+	MenuTile.style_button(_back_button, ThemeManager.color("surface_border"))
 	var heading := ThemeManager.color("heading")
+
+	# The table used to sit straight on the background photo, where its header
+	# row and the quieter "stay" rows were competing with the crowd behind them.
+	_table_panel.add_theme_stylebox_override(
+		"panel",
+		MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("surface_border"), 3, true)
+	)
+	_full_day_panel_frame.add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, heading, 3, true)
+	)
+	_style_full_day_bar(heading)
+
 	_tier_label.add_theme_color_override("font_color", heading)
 	_countdown_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 	_progress_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
@@ -342,6 +355,24 @@ func _apply_theme_colors() -> void:
 	# The banner text is inside a themed PanelContainer, which carries its own
 	# background in both modes -- so it takes the Theme's Label colour. Forcing
 	# white here would vanish against the light theme's near-white panel.
+
+
+## Hard-edged like everything else: a rounded, anti-aliased bar is the one
+## thing that gives away that a pixel-art screen is using stock widgets.
+func _style_full_day_bar(accent: Color) -> void:
+	var fill := StyleBoxFlat.new()
+	fill.anti_aliasing = false
+	fill.set_corner_radius_all(0)
+	fill.bg_color = accent
+	_full_day_bar.add_theme_stylebox_override("fill", fill)
+
+	var track := StyleBoxFlat.new()
+	track.anti_aliasing = false
+	track.set_corner_radius_all(0)
+	track.bg_color = Color(accent.r, accent.g, accent.b, 0.18)
+	track.border_color = Color(accent.r, accent.g, accent.b, 0.45)
+	track.set_border_width_all(1)
+	_full_day_bar.add_theme_stylebox_override("background", track)
 
 
 # -- actions -------------------------------------------------------------------
@@ -455,7 +486,6 @@ func _on_claim_full_day_pressed(target: Dictionary) -> void:
 		res.data.get("bucks_remaining"),
 		res.data.get("medals_remaining"),
 	)
-	_credits_chip.set_amount(GameProfile.credits)
 
 	var rewards = res.data.get("rewards")
 	var parts: Array = []

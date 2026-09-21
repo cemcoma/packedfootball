@@ -18,8 +18,8 @@ config/name="Packed Football Mobile"
 run/main_scene="res://scenes/Splash.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 boot_splash/bg_color=Color(0.050980393, 0.08235294, 0.14901961, 1)
-boot_splash/image="res://sprites/splash/boot/boot_splash.png"
 boot_splash/stretch_mode=4
+boot_splash/image="res://sprites/splash/boot/boot_splash.png"
 
 [autoload]
 
@@ -35,6 +35,7 @@ PlayerSession="*res://scripts/autoload/PlayerSession.gd"
 ManagerSession="*res://scripts/autoload/ManagerSession.gd"
 AdManager="*uid://d1x5ac4vymns1"
 LocaleManager="*res://scripts/autoload/LocaleManager.gd"
+CurrencyHud="*res://scripts/autoload/CurrencyHud.gd"
 
 [display]
 

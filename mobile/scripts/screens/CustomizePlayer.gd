@@ -37,7 +37,8 @@ const SELECTED_BORDER := 3
 const UNSELECTED_BORDER := 1
 
 @onready var _title_label: Label = %TitleLabel
-@onready var _credits_chip: CurrencyChip = %CreditsChip
+@onready var _preview_panel: PanelContainer = %PreviewPanel
+@onready var _options_panel: PanelContainer = %OptionsPanel
 @onready var _preview: PlayerModelView = %Preview
 @onready var _preview_caption: Label = %PreviewCaption
 @onready var _options_box: VBoxContainer = %OptionsBox
@@ -62,7 +63,6 @@ var _headings: Array = []  # Label, recoloured on a theme swap
 func _ready() -> void:
 	_save_button.pressed.connect(_on_save_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
-	_credits_chip.set_currency("credits")
 	# Sourced from CurrencyDisplay rather than left to the .tscn, so the one
 	# ICONS table stays the only place a logo path lives.
 	_credits_texture.texture = CurrencyDisplay.icon_for("credits")
@@ -126,8 +126,9 @@ func _build_options() -> void:
 ## out on hover -- lifted wholesale from CustomizeKit's colour grid.
 func _style_swatch(button: Button, color: Color, selected: bool) -> void:
 	var style := StyleBoxFlat.new()
+	style.anti_aliasing = false
+	style.set_corner_radius_all(0)
 	style.bg_color = color
-	style.set_corner_radius_all(SWATCH_CORNER)
 	style.set_border_width_all(SELECTED_BORDER if selected else UNSELECTED_BORDER)
 	style.border_color = (
 		ThemeManager.color("accent") if selected else ThemeManager.color("surface_border")
@@ -149,7 +150,6 @@ func _changed_slots() -> Array:
 
 func _refresh() -> void:
 	_preview.set_appearance(_edited_appearance)
-	_credits_chip.set_amount(GameProfile.credits)
 	_refresh_option_buttons()
 	_refresh_cost()
 	_apply_theme_colors()
@@ -164,6 +164,15 @@ func _refresh_option_buttons() -> void:
 			var button: Button = buttons[index]
 			if colors.is_empty():
 				button.button_pressed = index == chosen
+				# toggle_mode alone can't show the choice any more: the frame
+				# is ours, so the lit state has to be painted here.
+				MenuTile.style_button(
+					button,
+					ThemeManager.color("accent") if index == chosen
+					else ThemeManager.color("surface_border"),
+					index == chosen,
+					Vector2(10, 4)
+				)
 			else:
 				_style_swatch(button, colors[index], index == chosen)
 
@@ -201,11 +210,13 @@ func _refresh_cost() -> void:
 ## Panel -- see ThemeManager's note on text_hint. The cost line goes amber
 ## when the changes cost more than the balance can cover.
 func _apply_theme_colors() -> void:
+	_style_chrome()
 	var heading := ThemeManager.color("heading")
-	_title_label.add_theme_color_override("font_color", heading)
+	_title_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
 	for label in _headings:
 		(label as Label).add_theme_color_override("font_color", heading)
-	_preview_caption.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+	# On a frame now, not on the background photo.
+	_preview_caption.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
 
 	var cost: int = _changed_slots().size() * CREDITS_PER_CHANGE
 	_cost_label.add_theme_color_override(
@@ -294,3 +305,15 @@ func _on_back_pressed() -> void:
 ## that point, so the swap has to be deferred.
 func _go_back() -> void:
 	get_tree().change_scene_to_file.call_deferred(PlayerSession.return_scene)
+
+
+## The preview and the picker each get the tiles' frame; they used to sit
+## straight on the background photo with the swatches floating on it.
+func _style_chrome() -> void:
+	var muted := ThemeManager.color("surface_border")
+	for panel in [_preview_panel, _options_panel]:
+		panel.add_theme_stylebox_override(
+			"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, muted, 3, true, Vector2(10, 8))
+		)
+	MenuTile.style_button(_save_button, ThemeManager.color("accent"))
+	MenuTile.style_button(_back_button, muted)

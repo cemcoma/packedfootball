@@ -5,10 +5,8 @@
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="3"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_ht580"]
 [ext_resource type="PackedScene" uid="uid://4v5328a5h2ap" path="res://scenes/components/CurrencyPanel.tscn" id="4"]
-[ext_resource type="PackedScene" uid="uid://y83i6vgck6iw" path="res://scenes/components/CurrencyChip.tscn" id="5"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="6"]
 [ext_resource type="PackedScene" path="res://scenes/components/CurrencyAmount.tscn" id="7_buyconfirm"]
-[ext_resource type="PackedScene" uid="uid://d3yxqql70v6n8" path="res://scenes/components/EnergyBar.tscn" id="energybar"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_shop_tabs"]
 
@@ -59,26 +57,6 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "Bench 0 / 50"
-
-[node name="EnergyBar" parent="Margin/RootVBox/HeaderRow" unique_id=1227408415 instance=ExtResource("energybar")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 4
-
-[node name="CreditsChip" parent="Margin/RootVBox/HeaderRow" unique_id=2054769787 instance=ExtResource("5")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 4
-
-[node name="BucksChip" parent="Margin/RootVBox/HeaderRow" unique_id=1492740953 instance=ExtResource("5")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 4
-
-[node name="MedalsChip" parent="Margin/RootVBox/HeaderRow" unique_id=553478192 instance=ExtResource("5")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 4
 
 [node name="TabRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=2141861707]
 layout_mode = 2
@@ -183,6 +161,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Panel" type="PanelContainer" parent="BuyConfirmOverlay/Center" unique_id=2119326703]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(420, 0)
 layout_mode = 2
 
