@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://wdo1vcjayvhe" path="res://scripts/screens/PackReveal.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
-[ext_resource type="PackedScene" uid="uid://ulrndvhqpktd" path="res://scenes/components/PlayerCardView.tscn" id="3"]
+[ext_resource type="Script" uid="uid://cqrv7m2xk1wbe" path="res://scripts/components/CardCarousel.gd" id="3"]
 [ext_resource type="PackedScene" uid="uid://b8wq3k1pnv2xa" path="res://scenes/components/PackWalkoutStage.tscn" id="4"]
 
 [node name="PackReveal" type="Control" unique_id=1255259700]
@@ -91,18 +91,56 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "PACK OPENED"
 
-[node name="CardsScroll" type="ScrollContainer" parent="BrowseLayer/Margin/RootVBox" unique_id=1181711653]
+[node name="DetailPanel" type="PanelContainer" parent="BrowseLayer/Margin/RootVBox" unique_id=1700100001]
+unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 3
-horizontal_scroll_mode = 0
 
-[node name="CardsGrid" type="GridContainer" parent="BrowseLayer/Margin/RootVBox/CardsScroll" unique_id=97098289]
+[node name="Margin" type="MarginContainer" parent="BrowseLayer/Margin/RootVBox/DetailPanel" unique_id=1700100002]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 10
+
+[node name="DetailRow" type="HBoxContainer" parent="BrowseLayer/Margin/RootVBox/DetailPanel/Margin" unique_id=1700100003]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="InfoCol" type="VBoxContainer" parent="BrowseLayer/Margin/RootVBox/DetailPanel/Margin/DetailRow" unique_id=1700100004]
+custom_minimum_size = Vector2(230, 0)
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="DetailNameLabel" type="Label" parent="BrowseLayer/Margin/RootVBox/DetailPanel/Margin/DetailRow/InfoCol" unique_id=1700100005]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Player"
+
+[node name="DetailMetaLabel" type="Label" parent="BrowseLayer/Margin/RootVBox/DetailPanel/Margin/DetailRow/InfoCol" unique_id=1700100006]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+
+[node name="DetailOriginLabel" type="Label" parent="BrowseLayer/Margin/RootVBox/DetailPanel/Margin/DetailRow/InfoCol" unique_id=1700100007]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+
+[node name="DetailAttrGrid" type="GridContainer" parent="BrowseLayer/Margin/RootVBox/DetailPanel/Margin/DetailRow" unique_id=1700100009]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/h_separation = 12
-theme_override_constants/v_separation = 12
-columns = 4
+theme_override_constants/h_separation = 18
+theme_override_constants/v_separation = 2
+columns = 6
+
+[node name="Carousel" type="Control" parent="BrowseLayer/Margin/RootVBox" unique_id=1700100010]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+size_flags_vertical = 3
+script = ExtResource("3")
 
 [node name="FooterRow" type="HBoxContainer" parent="BrowseLayer/Margin/RootVBox" unique_id=1085272900]
 layout_mode = 2
@@ -136,82 +174,8 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Cancel"
 
-[node name="HeroSound" type="AudioStreamPlayer" parent="." unique_id=3480197255]
+[node name="HeroSound" type="AudioStreamPlayer" parent="." unique_id=-814770041]
 unique_name_in_owner = true
-
-[node name="StatsPopup" type="Control" parent="." unique_id=1876874277]
-unique_name_in_owner = true
-visible = false
-layout_mode = 1
-anchors_preset = 5
-anchor_left = 0.5
-anchor_right = 0.5
-offset_right = 480.0
-offset_bottom = 540.0
-grow_horizontal = 2
-
-[node name="Scrim" type="ColorRect" parent="StatsPopup" unique_id=1962301924]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_right = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0, 0, 0, 0.6)
-
-[node name="Center" type="CenterContainer" parent="StatsPopup" unique_id=236097141]
-layout_mode = 1
-
-[node name="Panel" type="Panel" parent="StatsPopup/Center" unique_id=79146303]
-layout_mode = 2
-
-[node name="Margin" type="MarginContainer" parent="StatsPopup/Center/Panel" unique_id=1029826704]
-layout_mode = 0
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 16
-
-[node name="VBox" type="VBoxContainer" parent="StatsPopup/Center/Panel/Margin" unique_id=898476303]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="HeroRow" type="HBoxContainer" parent="StatsPopup/Center/Panel/Margin/VBox" unique_id=784720609]
-layout_mode = 2
-theme_override_constants/separation = 16
-
-[node name="LeftCol" type="VBoxContainer" parent="StatsPopup/Center/Panel/Margin/VBox/HeroRow" unique_id=2124412618]
-layout_mode = 2
-theme_override_constants/separation = 4
-
-[node name="StatsCardView" parent="StatsPopup/Center/Panel/Margin/VBox/HeroRow/LeftCol" unique_id=781753064 instance=ExtResource("3")]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="StatsExtraCountry" type="Label" parent="StatsPopup/Center/Panel/Margin/VBox/HeroRow/LeftCol" unique_id=764466026]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 11
-horizontal_alignment = 1
-
-[node name="StatsExtraGam" type="Label" parent="StatsPopup/Center/Panel/Margin/VBox/HeroRow/LeftCol" unique_id=1943278115]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 11
-horizontal_alignment = 1
-
-[node name="StatsAttrGrid" type="GridContainer" parent="StatsPopup/Center/Panel/Margin/VBox/HeroRow" unique_id=1651759316]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_constants/h_separation = 16
-columns = 2
-
-[node name="CloseStatsButton" type="Button" parent="StatsPopup/Center/Panel/Margin/VBox" unique_id=408287038]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 4
-text = "Close"
 
 [node name="SellConfirmOverlay" type="Control" parent="." unique_id=1085272910]
 unique_name_in_owner = true
@@ -258,8 +222,8 @@ theme_override_constants/separation = 12
 unique_name_in_owner = true
 custom_minimum_size = Vector2(340, 0)
 layout_mode = 2
-autowrap_mode = 2
 horizontal_alignment = 1
+autowrap_mode = 2
 
 [node name="ButtonRow" type="HBoxContainer" parent="SellConfirmOverlay/Center/Panel/Margin/VBox" unique_id=1085272917]
 layout_mode = 2

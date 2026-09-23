@@ -13,17 +13,19 @@ extends Control
 ## tier. The rare ones get the real WALKOUT -- the player himself comes
 ## out of the light and celebrates before his card forms (see
 ## PackWalkoutStage.player_walkout()); a best card below that bar just has
-## its card rise out of the beam, no player, no celebration. The rest are never animated at all -- they are already waiting in
-## the browse grid underneath (the same disposable-child population
-## pattern Shop.gd's pack grid and Team.gd's bench grid use), where
-## tapping one reuses PlayerCardView's own existing `pressed` signal to
-## show a stats popup mirroring Team.gd's own stats panel content -- same
-## attribute list, deliberately duplicated rather than shared until a
-## third call site wants it.
+## its card rise out of the beam, no player, no celebration. The rest are
+## never animated at all -- they are already waiting in the strip
+## underneath.
+##
+## Once the opening is over every card sits in that strip (see
+## CardCarousel): the best pull centred, the rest queued to its right, and
+## whichever one is centred described in full by the panel above it -- the
+## same attribute list Team.gd's stats panel shows, deliberately duplicated
+## rather than shared until a third call site wants it.
 ##
 ## Taps drive the sequence: one during the buildup or a walkout
 ## fast-forwards it, one on a card that has landed brings out the next
-## (or the grid). Fast-forwarding steps the running Tween to completion
+## (or the strip). Fast-forwarding steps the running Tween to completion
 ## rather than killing it -- a killed Tween never fires `finished`, so
 ## anything awaiting it would hang forever.
 
@@ -44,7 +46,7 @@ const WALKOUT_MIN_TIER := "special"
 ## How big a card stands once it has walked out -- the rarer it is, the
 ## more of the screen it takes.
 const WALKOUT_SCALE_BY_TIER := {
-	"bronze": 0.7, "silver": 0.8, "gold": 1.00, "platinum": 1.10,
+	"bronze": 1.0, "silver": 1.0, "gold": 1.00, "platinum": 1.10,
 	"diamond": 1.2, "special": 1.3, "icon": 1.5,
 }
 const DEFAULT_WALKOUT_SCALE := 1.25
@@ -55,7 +57,7 @@ const DEFAULT_WALKOUT_SCALE := 1.25
 @onready var _skip_hint_label: Label = %SkipHintLabel
 
 @onready var _browse_layer: Control = %BrowseLayer
-@onready var _cards_grid: GridContainer = %CardsGrid
+@onready var _carousel: CardCarousel = %Carousel
 @onready var _back_button: Button = %BackButton
 
 ## No stream assigned yet -- a ready-but-silent hook for whatever hero-moment
@@ -63,12 +65,11 @@ const DEFAULT_WALKOUT_SCALE := 1.25
 ## played so an unset stream is a quiet no-op instead of a console warning.
 @onready var _hero_sound: AudioStreamPlayer = %HeroSound
 
-@onready var _stats_popup: Control = %StatsPopup
-@onready var _stats_card_view: PlayerCardView = %StatsCardView
-@onready var _stats_extra_country: Label = %StatsExtraCountry
-@onready var _stats_extra_gam: Label = %StatsExtraGam
-@onready var _stats_attr_grid: GridContainer = %StatsAttrGrid
-@onready var _close_stats_button: Button = %CloseStatsButton
+@onready var _detail_panel: PanelContainer = %DetailPanel
+@onready var _detail_name_label: Label = %DetailNameLabel
+@onready var _detail_meta_label: Label = %DetailMetaLabel
+@onready var _detail_origin_label: Label = %DetailOriginLabel
+@onready var _detail_attr_grid: GridContainer = %DetailAttrGrid
 
 @onready var _quick_sell_button: Button = %QuickSellButton
 @onready var _sell_action_row: HBoxContainer = %SellActionRow
@@ -84,9 +85,13 @@ var _sell_mode: bool = false
 var _selected_ids: Array = []
 var _selling: bool = false
 ## player_id -> its PlayerCardView. Built by the walkout for the cards that
-## get one and by the grid for the rest, then kept so selecting a card
-## restyles just that one instead of rebuilding the grid mid-selection.
+## get one and by the strip for the rest, then kept so selecting a card
+## restyles just that one instead of rebuilding the strip mid-selection.
 var _browse_views: Dictionary = {}
+
+## The cards in the order the strip holds them, best first -- a carousel
+## index is a position in here.
+var _browse_order: Array = []
 
 var _cards: Array = []  # PlayerCard, sorted worst -> best
 
@@ -94,7 +99,8 @@ var _cards: Array = []  # PlayerCard, sorted worst -> best
 func _ready() -> void:
 	_skip_catcher.pressed.connect(_on_skip_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
-	_close_stats_button.pressed.connect(_on_close_stats_pressed)
+	_carousel.focus_changed.connect(_on_focus_changed)
+	_carousel.card_tapped.connect(_on_card_tapped)
 	_quick_sell_button.pressed.connect(_on_quick_sell_pressed)
 	_cancel_sell_button.pressed.connect(_exit_sell_mode)
 	_sell_selected_button.pressed.connect(_on_sell_selected_pressed)
@@ -104,7 +110,8 @@ func _ready() -> void:
 
 	# The tap hint is drawn straight over the screen background with no
 	# panel behind it -- its own pale grey override made it invisible in
-	# light mode. See ThemeManager's note on text_hint.
+	# light mode. See ThemeManager's note on text_hint. The detail panel
+	# below carries palette colours of its own, so it goes the same way.
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
 	_apply_theme_colors()
 
@@ -123,6 +130,22 @@ func _ready() -> void:
 
 func _apply_theme_colors() -> void:
 	_skip_hint_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+
+	# The same pixel frame PlayerDetail puts its own panels in -- a dark tile
+	# in both themes, so the text on it takes MenuTile's colours.
+	_detail_panel.add_theme_stylebox_override("panel", MenuTile.pixel_frame(
+		MenuTile.BASE_FILL, ThemeManager.color("surface_border"), 3, true, Vector2(10, 8)
+	))
+	_detail_name_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
+	_detail_meta_label.add_theme_color_override("font_color", ThemeManager.color("heading"))
+	_detail_origin_label.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+
+	# The attribute rows accent the centred card's primary stats, so they
+	# carry a colour override and have to be rebuilt when the palette moves
+	# under them -- same reason PlayerDetail rebuilds its own.
+	var index: int = _carousel.focus_index()
+	if index >= 0 and index < _browse_order.size():
+		_show_card_detail(_browse_order[index])
 
 
 ## Ascending sort predicate ("does a belong before b") -- worst tier first,
@@ -208,7 +231,11 @@ func _show_browse_state() -> void:
 	_skip_catcher.visible = false
 	_skip_hint_label.visible = false
 
-	for card in _cards:
+	# Best first, so the pull worth seeing is the one already centred and
+	# the rest queue up to its right.
+	_browse_order = _cards.duplicate()
+	_browse_order.reverse()
+	for card in _browse_order:
 		var view: PlayerCardView = _browse_views.get(card.player_id)
 		var walked_out: bool = view != null
 		if walked_out:
@@ -216,67 +243,100 @@ func _show_browse_state() -> void:
 		else:
 			view = PLAYER_CARD_SCENE.instantiate()
 
-		view.scale = Vector2.ONE
-		view.modulate = Color.WHITE
-		view.pivot_offset = Vector2.ZERO
-		view.position = Vector2.ZERO
 		view.set_celebrating(false)
-		_cards_grid.add_child(view)
+		_carousel.add_view(view)  
 		if not walked_out:
-			view.set_card(card)  # in the tree first -- see _play_reveal_sequence
-		view.pressed.connect(_on_card_pressed.bind(card.player_id))
+			view.set_card(card) 
 		_browse_views[card.player_id] = view
 
 	_browse_layer.visible = true
 	_exit_sell_mode()
+	_carousel.snap_to(0, false)
+	_on_focus_changed(_carousel.focus_index())
 
 
-## Bound by player_id rather than by the tapped PlayerCardView itself --
-## same lookup Team.gd's own _on_card_view_pressed() already does
-## (GameProfile.all_cards[player_id]), since every card opened this pack
-## is already merged into that same dictionary (Shop.gd's
-## GameProfile.add_purchased_cards(), before this screen ever loads).
-func _on_card_pressed(player_id: String) -> void:
-	var card: PlayerCard = GameProfile.all_cards.get(player_id)
-	if card == null:
+## The centred card is the one the panel describes, and the only one still
+## wearing the celebration glow.
+func _on_focus_changed(index: int) -> void:
+	for i in _browse_order.size():
+		var card: PlayerCard = _browse_order[i]
+		var view: PlayerCardView = _browse_views.get(card.player_id)
+		if view != null:
+			view.set_celebrating(i == index, PlayerCard.tier_color(card.tier))
+
+	if index < 0 or index >= _browse_order.size():
+		_clear_card_detail()
+		return
+	_show_card_detail(_browse_order[index])
+
+
+## A tap on a card off to the side brings it in; on the centred one it only
+## means anything while selling.
+func _on_card_tapped(index: int) -> void:
+	if index != _carousel.focus_index():
+		_carousel.snap_to(index)
+		return
+	if not _sell_mode or index < 0 or index >= _browse_order.size():
 		return
 
-	if _sell_mode:
-		if _selected_ids.has(player_id):
-			_selected_ids.erase(player_id)
-		else:
-			_selected_ids.append(player_id)
-		_restyle_card(player_id)
-		_update_sell_ui()
-		return
+	var player_id: String = _browse_order[index].player_id
+	if _selected_ids.has(player_id):
+		_selected_ids.erase(player_id)
+	else:
+		_selected_ids.append(player_id)
+	_restyle_card(player_id)
+	_update_sell_ui()
 
-	_stats_card_view.set_card(card)
-	_stats_extra_country.text = "%s\n%s" % [card.hometown, card.country]
 
-	for child in _stats_attr_grid.get_children():
-		_stats_attr_grid.remove_child(child)
+func _show_card_detail(card: PlayerCard) -> void:
+	_detail_name_label.text = card.full_name()
+	_detail_meta_label.text = tr("%s  ·  %s  ·  Overall %d") % [
+		card.position, PlayerCard.tier_label(card.tier), card.overall()
+	]
+	_detail_origin_label.text = "%s, %s" % [card.hometown, card.country]
+
+	for child in _detail_attr_grid.get_children():
+		_detail_attr_grid.remove_child(child)
 		child.queue_free()
+	# The stats this card's position is judged on are accented, the same way
+	# PlayerDetail marks them -- the lookup goes through the position, so a
+	# row pair is never one of PRIMARY_STATS_BY_POSITION's keys.
+	var primary: Array = card.primary_stats()
 	for row in ATTR_ROWS:
-		var label_name: String = tr(row[0])
-		var key: String = row[1]
-		var value: int = card.attributes.get(key, 0)
-		var name_label := Label.new()
-		name_label.text = label_name
-		_stats_attr_grid.add_child(name_label)
-		var value_label := Label.new()
-		value_label.text = str(value)
-		_stats_attr_grid.add_child(value_label)
-
-	var goals: int = card.statistics.get("goals", 0)
-	var assists: int = card.statistics.get("assists", 0)
-	var matches: int = card.statistics.get("matches_played", 0)
-	_stats_extra_gam.text = tr("\nGoals: %d\nAssists: %d\nMatches: %d") % [goals, assists, matches]
-
-	_stats_popup.visible = true
+		_add_attr_cells(tr(row[0]), int(card.attributes.get(row[1], 0)), row[1] in primary)
 
 
-func _on_close_stats_pressed() -> void:
-	_stats_popup.visible = false
+## Reached when the last card is sold out from under the panel.
+func _clear_card_detail() -> void:
+	_detail_name_label.text = ""
+	_detail_meta_label.text = ""
+	_detail_origin_label.text = ""
+	for child in _detail_attr_grid.get_children():
+		_detail_attr_grid.remove_child(child)
+		child.queue_free()
+
+
+## Name left, value right -- the same pair of cells PlayerDetail's own
+## attribute grid is built from. `highlight` marks a primary stat; every
+## other row takes the Theme's own Label colour.
+func _add_attr_cells(label_text: String, value: int, highlight: bool) -> void:
+	var accent := ThemeManager.color("accent")
+
+	var name_label := Label.new()
+	name_label.text = label_text
+	name_label.add_theme_font_size_override("font_size", 12)
+	if highlight:
+		name_label.add_theme_color_override("font_color", accent)
+	_detail_attr_grid.add_child(name_label)
+
+	var value_label := Label.new()
+	value_label.text = str(value)
+	value_label.add_theme_font_size_override("font_size", 12)
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if highlight:
+		value_label.add_theme_color_override("font_color", accent)
+	_detail_attr_grid.add_child(value_label)
 
 
 func _on_back_pressed() -> void:
@@ -371,20 +431,24 @@ func _on_sell_confirm_pressed() -> void:
 		_update_sell_ui()
 		return
 
-	for pid in sold:
-		GameProfile.release_card(pid)
-		var view: PlayerCardView = _browse_views.get(pid)
-		if view != null:
-			_cards_grid.remove_child(view)
-			view.queue_free()
-		_browse_views.erase(pid)
-	GameProfile.apply_inventory_cap(res.data.get("inventory_cap"))
-	GameProfile.apply_currency_balances(res.data.get("credits_remaining"))
-
+	# The strip reports its new centre as each card leaves it, so what the
+	# panel reads has to be right before the first one goes.
 	var kept: Array = []
 	for card in _cards:
 		if not sold.has(card.player_id):
 			kept.append(card)
 	_cards = kept
+	_browse_order = _cards.duplicate()
+	_browse_order.reverse()
+
+	for pid in sold:
+		GameProfile.release_card(pid)
+		var view: PlayerCardView = _browse_views.get(pid)
+		if view != null:
+			_carousel.remove_view(view)
+			view.queue_free()
+		_browse_views.erase(pid)
+	GameProfile.apply_inventory_cap(res.data.get("inventory_cap"))
+	GameProfile.apply_currency_balances(res.data.get("credits_remaining"))
 
 	_exit_sell_mode()
