@@ -172,39 +172,17 @@ THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
 
 FRAMES_PER_CLOCK_SECOND: Final = 2 # match_clock_frames / 2 = seconds, so 90:00 == 10800
 
-# --- adaptive decision intervals (game(adaptive_decisions=...), default on) --
-#
-# step() runs a decision round every decision_interval frames; with this on,
-# each player only actually re-decides every Nth round, where N depends on
-# how close the ball is to them -- decisions are where the CPU goes (22
-# Python-side step() calls), and a keeper watching from the far half has
-# nothing to re-decide 30 times a second. Between decisions a player keeps
-# running their last "move" (re-resolved each round, so heading/fatigue
-# still apply); one-shot actions (pass/shoot/tackle...) are never repeated.
-#
-# In rounds, not frames, so the cooldowns step() decrements keep meaning
-# what they meant. 1 == every round == today's behaviour for that player.
 ADAPTIVE_NEAR_ROUNDS: Final[int] = 1
 ADAPTIVE_MID_ROUNDS: Final[int] = 3
 ADAPTIVE_FAR_ROUNDS: Final[int] = 6
 ADAPTIVE_NEAR_RADIUS: Final[float] = 15.0   # units from the ball -> NEAR
 ADAPTIVE_MID_RADIUS: Final[float] = 35.0    # -> MID; beyond -> FAR
-
-# The ball's PATH counts too, not just where it is: anyone within this of
-# where a moving ball will pass in the next ADAPTIVE_PATH_LOOKAHEAD seconds
-# is NEAR -- the receiver of a pass, the defender it's going past, the
-# keeper it's flying at. This is what keeps passes catchable at all.
 ADAPTIVE_PATH_RADIUS: Final[float] = 6.0
 ADAPTIVE_PATH_LOOKAHEAD: Final[float] = 1.0
-
-# The keeper is one player and the stakes are high: NEAR whenever the ball
-# is in their own half, FAR otherwise (unless the path rule says NEAR).
 ADAPTIVE_KEEPER_OWN_HALF_ROUNDS: Final[int] = ADAPTIVE_NEAR_ROUNDS
+
 REGULATION_FRAMES: Final = 10800   # 90:00, before any added time
 
-# Stoppage time, in frames. Weighted heavy per event on purpose: this engine
-# keeps the ball in play far more than real football (~5 restarts a match,
-# not ~60), so light weights would give every match a 0:10 of added time.
 ADDED_TIME_BASE_FRAMES: Final = 60   # 30s
 ADDED_TIME_PER_GOAL: Final = 60      # 30s, celebration + restart
 ADDED_TIME_PER_RESTART: Final = 20   # 10s per throw-in/corner/goal kick

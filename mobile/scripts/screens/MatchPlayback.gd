@@ -107,6 +107,11 @@ const ACTION_COLOR_GOAL := Color(1.0, 0.85, 0.15)          # gold
 const ACTION_COLOR_SHOOT := Color(1.0, 0.45, 0.1)          # orange
 const ACTION_COLOR_SAVE := Color(0.25, 0.85, 1.0)          # cyan
 const ACTION_COLOR_BEATEN := Color(0.9, 0.15, 0.15, 0.55)  # beaten keeper's shadow
+# A beaten keeper stays down this long (gameEngine.KEEPER_BEATEN_FRAMES), and
+# is drawn at this point of the dive -- inside its hold, so he is flat out
+# rather than half way back up.
+const BEATEN_DOWN_SECONDS := 1.5
+const BEATEN_DOWN_PHASE := 0.30
 
 # Only the moments that decide something shout. A throw-in does not.
 const BANNER_SCALE_BIG := 1.6
@@ -787,7 +792,10 @@ func _process(delta: float) -> void:
 		if action.is_empty():
 			continue
 		action["elapsed"] += effective_delta
-		if action["elapsed"] >= PlayerFigure.action_duration(action["action"]):
+		var life: float = PlayerFigure.action_duration(action["action"])
+		if action.get("beaten", false):
+			life = maxf(life, BEATEN_DOWN_SECONDS)
+		if action["elapsed"] >= life:
 			player_actions[i] = {}
 	ball_flash_timer = maxf(0.0, ball_flash_timer - effective_delta)
 	banner_timer = maxf(0.0, banner_timer - effective_delta)
@@ -1634,7 +1642,14 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 		var phase: float = playback_tick * RUN_CYCLE_SPEED + float(i)
 		if pose != "":
 			phase = float(action["elapsed"])
-		if celebrating:
+		if celebrating and action.get("beaten", false):
+			# He dived and was beaten. Leave him on the floor for the
+			# celebration instead of standing him up to watch politely --
+			# the pose override below puts everyone who did not score on
+			# their feet, keeper included.
+			pose = "dive"
+			phase = BEATEN_DOWN_PHASE
+		elif celebrating:
 			pose = PlayerFigure.POSE_CELEBRATE if team == _celebration_team else PlayerFigure.POSE_IDLE
 			if i == _celebration_scorer:
 				phase = _celebration_phase
