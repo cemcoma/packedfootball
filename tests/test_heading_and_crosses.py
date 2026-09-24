@@ -291,12 +291,21 @@ def test_header_goal_is_credited_to_the_header(rosters):
     """Header at goal -> goal: the scorer is the player who headed it."""
     home, away = rosters
     found = False
-    for seed in range(1, 40):
+    # A header that actually goes in is roughly a 1-in-60 seed here, so a
+    # 39-seed window passed on luck: any engine change that shifts
+    # trajectories moved the hit out of range while the rate was unchanged.
+    for seed in range(1, 140):
         g = game(Team("H", copy.deepcopy(home)), Team("A", copy.deepcopy(away)), seed=seed, record_replay=True)
         g.run_match(max_steps=4000, render=False)
         events = g.replay._events
         for k, e in enumerate(events):
             if e[1] != ActionType.GOAL:
+                continue
+            # An own goal credits the player who put it in, on the far side
+            # from the team that scored (see ENGINE_VERSION 2.2.1) -- a header
+            # that missed and went in off a defender is one, so it is not the
+            # attribution this test is about.
+            if (e[2] < 11) != (e[3] == 0):
                 continue
             prior = [x for x in events[:k] if x[1] in (ActionType.HEADER, ActionType.SHOOT)]
             if prior and prior[-1][1] == ActionType.HEADER and (prior[-1][2] < 11) == (e[3] == 0):
@@ -304,7 +313,7 @@ def test_header_goal_is_credited_to_the_header(rosters):
                 found = True
         if found:
             break
-    assert found, "no header goal in 39 short matches -- corners aren't producing headers at goal"
+    assert found, "no header goal in 139 short matches -- corners aren't producing headers at goal"
 
 
 # --------------------------------------------------------------- wingplay
@@ -466,8 +475,12 @@ def test_wingplay_produces_open_play_crosses():
 
     home = generate_starter_roster("4-4-2", tier="gold", seed=11)
     away = generate_starter_roster("4-4-2", tier="gold", seed=12)
+    # Six seeds, because open-play crosses run about 1.9 a match and swing 0-4
+    # match to match: three seeds could total 2 on a bad draw while the rate
+    # itself was fine. Crossing got stricter once a cross had to have someone
+    # in (or arriving into) the box to aim at, which is what exposed this.
     open_play = 0
-    for seed in (1, 3, 4):
+    for seed in (1, 3, 4, 5, 6, 7):
         g = game(Team("H", copy.deepcopy(home)), Team("A", copy.deepcopy(away)), seed=seed, record_replay=True)
         g.run_match(render=False)
         events = g.replay._events
@@ -476,7 +489,7 @@ def test_wingplay_produces_open_play_crosses():
             1 for e in events
             if e[1] == ActionType.CROSS and not any(0 <= e[0] - t <= 40 for t in corner_ticks)
         )
-    assert open_play >= 3, f"only {open_play} open-play crosses in three matches"
+    assert open_play >= 5, f"only {open_play} open-play crosses in six matches"
 
 
 # --------------------------------------------------------- attacking shape

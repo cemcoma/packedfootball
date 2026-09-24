@@ -61,6 +61,12 @@ class ActionType(IntEnum):
     FULLTIME = 14
     HEADER = 15
     SHOT_OFF_TARGET = 16
+    FOUL = 17
+    FREE_KICK = 18
+    PENALTY = 19
+    SAVE_FAILED = 20
+    FREE_KICK_SHOT = 21
+    THROW_TAKEN = 22
 
 
 def _q(value: float) -> int:

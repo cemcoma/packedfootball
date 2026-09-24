@@ -37,7 +37,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
 
-from player.player import Attributes
+from player.player import Attributes, DEFAULT_STATISTICS
 
 # What a brand-new profile starts with -- game_config.py's, re-exported.
 from game_config import (  # noqa: F401
@@ -78,7 +78,10 @@ def fields_to_player(fields: dict, player_class_map: dict, default_class):
         hometown=fields.get("hometown"),
         appearance=fields.get("appearance"),
     )
-    p.statistics = dict(fields["statistics"])
+    # Merged onto the defaults, not a raw replace: a doc written before a stat
+    # field existed would otherwise load without the key and KeyError the first
+    # time record_match touched it.
+    p.statistics = {**DEFAULT_STATISTICS, **fields["statistics"]}
     return p
 
 

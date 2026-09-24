@@ -38,7 +38,7 @@ const ROSTER_PATH := "res://test_data/sample_match.json"
 
 
 const FULL_MODE_BOX_SIZE := Vector2(378.0, 540.0)
-const BALL_RADIUS_UNITS := 0.55
+const BALL_RADIUS_UNITS := 0.3
 
 
 const BALL_HEIGHT_LIFT := 0.55
@@ -48,12 +48,8 @@ const BALL_SHADOW_ALPHA := 0.35
 const BALL_SHADOW_MIN_SCALE := 0.45 # how far the shadow tightens when high
 const BALL_SHADOW_FADE_UNITS := 6.0 # height at which it's fully faded/tight
 
-# How tall a drawn player is, in pitch units. NOT the simulation's physical
-# radius (gameEngine's possession_radius works against 1.3) -- a figure
-# stands on its position instead of being centred on it, so it can be this
-# much taller than its footprint without the sim changing. ~48px at the
-# zoom camera below.
-const FIGURE_HEIGHT_UNITS := 3.2
+# How tall a drawn player is, in pitch units. NOT the simulation's physical radius
+const FIGURE_HEIGHT_UNITS := 1.9
 const DIVE_STRAIGHT_UNITS := 1.0
 const FIGURE_FULL_DETAIL_PX := 26.0
 const FACING_MIN_SPEED := 0.6
@@ -110,6 +106,11 @@ const CHANGE_KIT_FALLBACKS := [Color(0.95, 0.95, 0.96), Color(0.12, 0.12, 0.14)]
 const ACTION_COLOR_GOAL := Color(1.0, 0.85, 0.15)          # gold
 const ACTION_COLOR_SHOOT := Color(1.0, 0.45, 0.1)          # orange
 const ACTION_COLOR_SAVE := Color(0.25, 0.85, 1.0)          # cyan
+const ACTION_COLOR_BEATEN := Color(0.9, 0.15, 0.15, 0.55)  # beaten keeper's shadow
+
+# Only the moments that decide something shout. A throw-in does not.
+const BANNER_SCALE_BIG := 1.6
+const BANNER_SCALE_SMALL := 0.95
 
 # Size of one color chip in the pause screen's key (see _build_legend).
 const LEGEND_SWATCH_SIZE := Vector2(14.0, 14.0)
@@ -126,10 +127,16 @@ const EVENT_ACTIONS := {
 	ReplayReader.ActionType.KICKOFF: "pass",
 	ReplayReader.ActionType.CLEARANCE: "clear",
 	ReplayReader.ActionType.GOAL_KICK: "clear",
-	ReplayReader.ActionType.THROW_IN: "throw",
+	ReplayReader.ActionType.THROW_TAKEN: "throw",
 	ReplayReader.ActionType.RECEIVED_PASS: "trap",
 	ReplayReader.ActionType.TACKLE: "tackle",
 	ReplayReader.ActionType.ANKLEBREAKER: "tackle",
+	ReplayReader.ActionType.FOUL: "tackle",
+	ReplayReader.ActionType.FREE_KICK: "pass",
+	ReplayReader.ActionType.FREE_KICK_SHOT: "shoot",
+	ReplayReader.ActionType.PENALTY: "shoot",
+	# Beaten: he goes down and stays down, with a red shadow under him.
+	ReplayReader.ActionType.SAVE_FAILED: "dive",
 	ReplayReader.ActionType.SAVE: "dive",
 	ReplayReader.ActionType.HEADER: "header",
 }
@@ -186,13 +193,24 @@ const RING_SEGMENTS := 28
 # isn't ended by "someone has it" until this many ticks in.
 const TRAIL_GRACE_TICKS := 6.0
 
-# Dead-ball stoppages. The engine records no samples during its restart
-# hold, so the recording slides straight from the last in-play frame into
-# the restart shape and you never see where the ball went out. These hold
-# that last frame for STOPPAGE_HOLD_SECONDS of REAL time first, with the
-# restart named in the banner. Goals have the celebration, half time its
+# Dead-ball stoppages. The engine samples through its restart hold now, so
+# the set piece arranging itself is in the recording -- this holds the last
+# in-play frame for STOPPAGE_HOLD_SECONDS of REAL time first, with the
+# restart named in the banner, so you see where the ball went out before the
+# scene resets. Goals have the celebration, half time its
 # own pause; kickoffs follow one or the other.
 const STOPPAGE_HOLD_SECONDS := 1.0
+# A free kick or penalty gets longer, and a run-up. The ENGINE no longer waits
+# for a set piece -- holding the sim still just made players twitch -- so the
+# buildup lives here: the taker backs off the ball, then runs in, and the kick
+# the engine recorded plays out as he arrives. Same idea as the celebration
+# latch below.
+# How long each restart holds. A direct free kick and a penalty get a beat to
+# build; a routine restart just needs naming and getting on with.
+const SET_PIECE_HOLD_SECONDS := 1.0
+const SET_PIECE_HOLD_SHOT := 1.5
+const SET_PIECE_BACKOFF_UNITS := 0.1
+const SET_PIECE_BACKOFF_FRACTION := 0.55   # of the hold spent walking back
 # The ball is carried on from that frame -- out over the line, as it really
 # went -- and keeps rolling until it is this far off the pitch.
 const STOPPAGE_BALL_RUNOUT_UNITS := 1.5
@@ -201,6 +219,9 @@ const STOPPAGE_EVENTS := {
 	ReplayReader.ActionType.THROW_IN: "THROW-IN",
 	ReplayReader.ActionType.CORNER: "CORNER",
 	ReplayReader.ActionType.GOAL_KICK: "GOAL KICK",
+	ReplayReader.ActionType.FREE_KICK: "FREE KICK",
+	ReplayReader.ActionType.FREE_KICK_SHOT: "FREE KICK",
+	ReplayReader.ActionType.PENALTY: "PENALTY",
 }
 
 # The scorer's card in the lower-third panel: the shared card template,
@@ -243,11 +264,13 @@ var away_score: int = 0
 var banner_text: String = ""
 var banner_timer: float = 0.0
 var banner_color: Color = Color.WHITE
+var banner_scale: float = BANNER_SCALE_SMALL
 var halftime_pause_remaining: float = 0.0
 # Real seconds left on a dead-ball hold, and the hold _process_events has
 # asked for but the live path hasn't started yet ({} when none) -- kept
 # apart so a skip's event catch-up can't rewind the playback tick.
 var stoppage_remaining: float = 0.0
+var _set_piece := {}   # {taker, hold, left} while a set-piece run-up plays
 var _pending_stoppage: Dictionary = {}
 # The ball of a stoppage: latched from the held frame and flown on out of
 # play (the engine froze it at the line), shown in place of the recorded
@@ -538,8 +561,10 @@ func _reset_state() -> void:
 	banner_text = ""
 	banner_timer = 0.0
 	banner_color = Color.WHITE
+	banner_scale = BANNER_SCALE_SMALL
 	halftime_pause_remaining = 0.0
 	stoppage_remaining = 0.0
+	_set_piece = {}
 	_pending_stoppage = {}
 	_out_ball_latched = false
 	_out_ball_until_tick = -1.0
@@ -705,10 +730,18 @@ func _process(delta: float) -> void:
 	# it went out before everyone slides into the restart shape.
 	if stoppage_remaining > 0.0:
 		stoppage_remaining = maxf(0.0, stoppage_remaining - delta)
-		_advance_out_ball(delta)
+		if not _set_piece.is_empty():
+			_set_piece["left"] = maxf(0.0, float(_set_piece["left"]) - delta)
+		else:
+			# Only a ball that actually ran out keeps rolling. A free kick's
+			# ball is sat on the spot; latching it as an "out ball" would just
+			# freeze a stale copy over the real one.
+			_advance_out_ball(delta)
 		banner_timer = maxf(0.0, banner_timer - delta)
 		queue_redraw()
 		return
+	elif not _set_piece.is_empty():
+		_set_piece = {}
 	# Once play resumes the out ball keeps rolling to a stop while everyone
 	# slides into the restart shape, until the recording hands the ball to
 	# the taker.
@@ -733,13 +766,20 @@ func _process(delta: float) -> void:
 	if not _pending_stoppage.is_empty():
 		# Back to the last recorded in-play frame -- at most a sample
 		# interval, and events already passed can't fire twice.
-		playback_tick = minf(playback_tick, float(_pending_stoppage["tick"]))
-		stoppage_remaining = STOPPAGE_HOLD_SECONDS
+		var taker: int = int(_pending_stoppage.get("taker", -1))
+		if taker >= 0:
+			playback_tick = maxf(playback_tick, float(_pending_stoppage["until"]))
+		else:
+			playback_tick = minf(playback_tick, float(_pending_stoppage["tick"]))
+		var hold: float = float(_pending_stoppage.get("hold", STOPPAGE_HOLD_SECONDS))
+		stoppage_remaining = hold
+		_set_piece = {"taker": taker, "hold": hold, "left": hold} if taker >= 0 else {}
 		_out_ball_latched = false
 		_out_ball_until_tick = float(_pending_stoppage["until"])
 		banner_text = tr(_pending_stoppage["label"])
-		banner_timer = STOPPAGE_HOLD_SECONDS + 0.8  # solid through the hold, fading after
+		banner_timer = hold  # gone when play resumes, not hanging over the next move
 		banner_color = Color.WHITE
+		banner_scale = BANNER_SCALE_BIG if banner_text == tr("PENALTY") else BANNER_SCALE_SMALL
 		_pending_stoppage = {}
 
 	for i in range(player_actions.size()):
@@ -893,6 +933,7 @@ func _arm_actions(current_tick: float) -> void:
 				"action": name,
 				"elapsed": (current_tick - start_tick) / TICKS_PER_SECOND,
 				"aim": _dive_aim(idx) if name == "dive" else 0.0,
+				"beaten": int(event["type"]) == ReplayReader.ActionType.SAVE_FAILED,
 			}
 		next_action_index += 1
 
@@ -972,24 +1013,37 @@ func _process_events(current_tick: float) -> void:
 			# whole celebration instead of fading two seconds before it ends.
 			banner_timer = GOAL_CELEBRATION_SECONDS
 			banner_color = ACTION_COLOR_GOAL
+			banner_scale = BANNER_SCALE_BIG
 			if known:
 				_show_goal_scorer(idx, own_goal)
 		elif STOPPAGE_EVENTS.has(event_type) and current_tick - float(event["tick"]) < TICKS_PER_SECOND:
 			# Only for an event playback has just reached -- a catch-up after
 			# a skip walks through hours of old ones, none of which is a hold.
 			var bracket := _find_bracket(replay["samples"], float(event["tick"]))
+			var is_set_piece: bool = event_type in [
+				ReplayReader.ActionType.FREE_KICK,
+				ReplayReader.ActionType.FREE_KICK_SHOT,
+				ReplayReader.ActionType.PENALTY,
+			]
+			var big_moment: bool = event_type in [
+				ReplayReader.ActionType.FREE_KICK_SHOT, ReplayReader.ActionType.PENALTY
+			]
 			_pending_stoppage = {
 				"tick": float(bracket[0]["tick"]),
 				"until": float(bracket[1]["tick"]),
 				"label": STOPPAGE_EVENTS[event_type],
+				"hold": (SET_PIECE_HOLD_SHOT if big_moment else SET_PIECE_HOLD_SECONDS) if is_set_piece else STOPPAGE_HOLD_SECONDS,
+				"taker": int(event.get("player_idx", -1)) if is_set_piece else -1,
 			}
 		elif event_type == ReplayReader.ActionType.HALFTIME:
 			banner_text = tr("HALF TIME")
+			banner_scale = BANNER_SCALE_BIG
 			banner_timer = HALFTIME_PAUSE_SECONDS
 			banner_color = Color.WHITE
 			halftime_pause_remaining = HALFTIME_PAUSE_SECONDS
 		elif event_type == ReplayReader.ActionType.FULLTIME:
 			banner_text = tr("FULL TIME")
+			banner_scale = BANNER_SCALE_BIG
 			banner_timer = 4.0
 			banner_color = Color.WHITE
 			if _is_real_match:
@@ -1504,6 +1558,27 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 	var controller: int = state["ball_controller"]
 	var scale: float = cam.scale
 
+	# Set-piece run-up: the taker steps away from the ball, then drives back on
+	# to it as the hold runs out, so the kick lands as he arrives. Purely drawn
+	# -- the engine already took the kick and never moved him like this.
+	if not _set_piece.is_empty():
+		var sp_taker: int = int(_set_piece["taker"])
+		if sp_taker >= 0 and sp_taker < players.size():
+			var sp_hold: float = maxf(0.001, float(_set_piece["hold"]))
+			var done: float = clampf(1.0 - float(_set_piece["left"]) / sp_hold, 0.0, 1.0)
+			# Back off over the first stretch, run in over the rest.
+			var away: float
+			if done < SET_PIECE_BACKOFF_FRACTION:
+				away = done / SET_PIECE_BACKOFF_FRACTION
+			else:
+				away = 1.0 - (done - SET_PIECE_BACKOFF_FRACTION) / maxf(0.001, 1.0 - SET_PIECE_BACKOFF_FRACTION)
+			var ball_xy: Vector2 = state["ball"]
+			var stand: Vector2 = players[sp_taker]
+			var back := stand - ball_xy
+			if back.length() > 0.01:
+				players = players.duplicate()
+				players[sp_taker] = stand + back.normalized() * (SET_PIECE_BACKOFF_UNITS * away)
+
 	var celebrating := _celebrating()
 	if celebrating:
 		# Latch where the scoring side stood when the ball went in, on the
@@ -1576,6 +1651,11 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 		# The carrier gets a ring on the ground, so you can always see who
 		# has the ball.
 		var flash := Color(0.718, 1.0, 1.0, 0.851) if i == controller else Color(0, 0, 0, 0)
+		# A beaten keeper lies there under a red shadow until he is back up, so
+		# you can see the save was attempted and missed rather than never made.
+		var act_i: Dictionary = player_actions[i] if i < player_actions.size() else {}
+		if act_i.get("action", "") == "dive" and act_i.get("beaten", false):
+			flash = ACTION_COLOR_BEATEN
 
 		PlayerFigure.draw_into(
 			self,
@@ -1685,6 +1765,6 @@ func _draw_banner(font: Font, font_size: int) -> void:
 		banner_text,
 		HORIZONTAL_ALIGNMENT_CENTER,
 		300,
-		int(font_size * 1.6),
+		int(font_size * banner_scale),
 		color
 	)

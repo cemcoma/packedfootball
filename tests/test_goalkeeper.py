@@ -192,10 +192,12 @@ def test_sweep_actually_fires_in_a_real_match(make_match):
 
     gk_mod.Goalkeeper._decide_off_ball_defense = spy
     try:
-        # Two seeds, because how often a keeper gets a claimable loose ball
-        # varies a lot match to match -- a single seed makes this flaky
-        # without making it any stricter.
-        for seed in (7, 2024):
+        # Several seeds, because how often a keeper gets a claimable loose ball
+        # varies a lot match to match. "save" in particular is an order of
+        # magnitude rarer than "dive" (~40 vs ~350 over eight matches), so two
+        # seeds missed it entirely whenever an engine change shifted
+        # trajectories, without the rate itself having moved.
+        for seed in (7, 2024, 1, 2, 3):
             make_match(seed=seed).run_match(max_steps=10800, render=False)
     finally:
         gk_mod.Goalkeeper._decide_off_ball_defense = real

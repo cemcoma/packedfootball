@@ -1,5 +1,5 @@
 from player.player import _norm2, player, ActionProfile
-from game_config import PITCH_HEIGHT, PITCH_WIDTH
+from game_config import pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
 class MidfielderActionProfile(ActionProfile):
@@ -91,7 +91,7 @@ class Midfielder(player):
         if best_runner is None:
             return None
 
-        lead_distance = 4.0 + (self.attributes.vision / 100.0) * 8.0
+        lead_distance = 4.0 + stat_ability(self.attributes.vision) * 8.0
         led_target = best_runner.copy()
         led_target[1] += lead_distance * goal_dir
         led_target = np.clip(led_target, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])
@@ -111,8 +111,8 @@ class Midfielder(player):
         elif decision == "pass":
             best_target = self._choose_pass_target(state)
             dist = _norm2(best_target - state["my_pos"])
-            required_power = min(1.0, dist / 10.0)
-            actual_power = required_power * (self.attributes.power / 60.0)
+            required_power = pass_power(dist, self.attributes.power, 1.0, 60.0)
+            actual_power = required_power
             return {"type": "pass", "target": best_target, "power": actual_power}
 
         elif decision == "through_ball":
@@ -120,51 +120,49 @@ class Midfielder(player):
             if through_target is None:
                 through_target = self._choose_pass_target(state)
             dist = _norm2(through_target - state["my_pos"])
-            required_power = min(1.0, dist / 9.0)
-            actual_power = required_power * (self.attributes.power / 55.0)
+            required_power = pass_power(dist, self.attributes.power, 1.111, 55.0)
+            actual_power = required_power
             return {"type": "pass", "target": through_target, "power": actual_power, "pass_type": "through_ball"}
 
         elif decision == "clear":
-            forward_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-            wide_x = state["rng"].choice([0.0, 70.0])
-            target = np.array([wide_x + state["rng"].uniform(-15, 15), forward_y])
+            target = self._clearance_target(state)
             return {"type": "pass", "target": target, "power": min(1.0, self.attributes.power / 50.0), "pass_type": "clearance"}
 
         elif decision == "cross":
             cross_target = self._choose_cross_target(state)
             dist = _norm2(cross_target - state["my_pos"])
-            required_power = min(1.0, dist / 12.0) 
-            actual_power = required_power * (self.attributes.power / 60.0)
+            required_power = pass_power(dist, self.attributes.power, 0.833, 60.0)
+            actual_power = required_power
             return {"type": "pass", "target": cross_target, "power": actual_power, "pass_type": "cross"}
             
         elif decision == "dribble":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-            dribble_speed = max(1.0, (self.attributes.dribbling / 100.0) * 1.25)
+            dribble_speed = max(1.0, stat_ability(self.attributes.dribbling) * 1.25)
             return {"type": "move", "target": np.array([35.0, enemy_goal_y]), "speed_mod": dribble_speed}
             
         # --- Off-Ball Attacking Movement ---
         elif decision == "forward_run":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
             run_target = np.array([state["my_pos"][0], enemy_goal_y])
-            return {"type": "move", "target": run_target, "speed_mod": (self.attributes.speed * 0.9) / 100.0}
+            return {"type": "move", "target": run_target, "speed_mod": pace_ability(self.attributes.speed) * 0.9}
             
         elif decision == "support":
             target = self._predict_ball_landing_target(state)
             vec_to_target = target - state["my_pos"]
-            intercept_weight = 0.55 + (self.attributes.speed / 100.0) * 0.35
+            intercept_weight = 0.55 + pace_ability(self.attributes.speed) * 0.35
             support_target = state["my_pos"] + (vec_to_target * intercept_weight)
-            return {"type": "move", "target": support_target, "speed_mod": (self.attributes.speed * 0.7) / 100.0}
+            return {"type": "move", "target": support_target, "speed_mod": pace_ability(self.attributes.speed) * 0.7}
             
         elif decision == "hold_attack":
             # Follow the ball up the pitch so the attack has support.
             target = self._attack_shape_target(state)
-            return {"type": "move", "target": target, "speed_mod": (self.attributes.speed * 0.75) / 100.0}
+            return {"type": "move", "target": target, "speed_mod": pace_ability(self.attributes.speed) * 0.75}
             
         # --- Defensive & Loose Ball Movement ---
         elif decision == "hold_defense":
             backward_shift = -10.0 if state.get("a_direction", 1) == 1 else 10.0
             defensive_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + backward_shift])
-            return {"type": "move", "target": defensive_pos, "speed_mod": (self.attributes.speed * 0.6) / 100.0}
+            return {"type": "move", "target": defensive_pos, "speed_mod": pace_ability(self.attributes.speed) * 0.6}
 
         elif decision == "screen":
             # CDM signature move: sits on the line between the ball and its
@@ -177,21 +175,21 @@ class Midfielder(player):
             dist = _norm2(vec_to_goal)
             shield_distance = min(14.0, dist * 0.4)
             screen_target = ball_pos + (vec_to_goal / (dist + 1e-5)) * shield_distance
-            return {"type": "move", "target": screen_target, "speed_mod": (self.attributes.speed * 0.7) / 100.0}
+            return {"type": "move", "target": screen_target, "speed_mod": pace_ability(self.attributes.speed) * 0.7}
 
         elif decision == "press":
             target = self._predict_ball_landing_target(state)
             vec_to_target = target - state["my_pos"]
-            press_weight = 0.7 + (self.attributes.speed / 100.0) * 0.25
+            press_weight = 0.7 + pace_ability(self.attributes.speed) * 0.25
             press_target = state["my_pos"] + (vec_to_target * press_weight)
-            return {"type": "move", "target": press_target, "speed_mod": (self.attributes.speed * 0.9) / 100.0}
+            return {"type": "move", "target": press_target, "speed_mod": pace_ability(self.attributes.speed) * 0.9}
 
         elif decision == "contain":
             target = self._predict_ball_landing_target(state)
             vec_to_target = target - state["my_pos"]
-            contain_weight = 0.5 + (self.attributes.speed / 100.0) * 0.2
+            contain_weight = 0.5 + pace_ability(self.attributes.speed) * 0.2
             contain_target = state["my_pos"] + (vec_to_target * contain_weight)
-            return {"type": "move", "target": contain_target, "speed_mod": (self.attributes.speed) / 100.0}
+            return {"type": "move", "target": contain_target, "speed_mod": pace_ability(self.attributes.speed)}
             
         elif decision in {"recover", "recover_slow"}:
             ball_pos = state["ball_pos"]
@@ -205,7 +203,7 @@ class Midfielder(player):
             shifted_target[1] = np.clip(shifted_target[1], 0.0, 100.0)
             
             speed_mult = 0.7 if decision == "recover" else 0.4
-            return {"type": "move", "target": shifted_target, "speed_mod": (self.attributes.speed * speed_mult) / 100.0}
+            return {"type": "move", "target": shifted_target, "speed_mod": pace_ability(self.attributes.speed) * speed_mult}
             
         # --- Dispossession ---
         elif decision == "tackle":
@@ -215,7 +213,7 @@ class Midfielder(player):
             return {"type": "capture", "stat": self.attributes.ballcontrol}
 
         elif decision == "chase":
-            return {"type": "move", "target": self._chase_target(state), "speed_mod": (self.attributes.speed * 1.0) / 100.0}
+            return {"type": "move", "target": self._chase_target(state), "speed_mod": pace_ability(self.attributes.speed) * 1.0}
 
         return self._build_wing_action(decision, state)
 
@@ -443,14 +441,14 @@ class Midfielder(player):
         if dist_to_ball < 2.0:
             actions = ["tackle", "contain"]
             t_tackle = max(1.0, self.attributes.aggression * 1.5)
-            t_contain = max(1.0, getattr(self.attributes, "defending", 50) + (100 - self.attributes.aggression))
+            t_contain = max(1.0, getattr(self.attributes, "defending", 50) + max(0, 100 - self.attributes.aggression))
             probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
             return state["rng"].choice(actions, p=probs)
 
         if dist_to_ball < 15.0:
             if ball_pressure_count >= 2:
                 return "contain"
-            if state["rng"].integers(0, 100) < getattr(self.attributes, "aggression", 40):
+            if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "aggression", 40)):
                 return "press"
             else:
                 return "contain"

@@ -49,6 +49,27 @@ BALL_AIR_FRICTION: Final = 0.85
 
 
 # =============================================================================
+# Match feel
+# =============================================================================
+#
+# The dials that decide how the game moves. Here rather than in gameEngine.py
+# because base speed is read by BOTH the engine and the decision layer (it was
+# duplicated in the two, which is how the values drift apart), and because
+# these are the first things anyone tunes.
+
+# Units per second at speed_mod 1.0, before the speed stat and fatigue scale it.
+PLAYER_BASE_SPEED: Final = 10.0
+
+# How near the ball a player must be to take it. The ball snaps to whoever wins
+# it, so this is also how far it visibly jumps on a capture -- keep it tight.
+POSSESSION_RADIUS: Final = 1.0
+
+# Minimum distance between two players' centres. Wide bodies jam the middle and
+# passes hit legs.
+PLAYER_RADIUS: Final = 0.6
+
+
+# =============================================================================
 # Positions
 # =============================================================================
 
@@ -182,6 +203,84 @@ FORMATIONS = {
 # =============================================================================
 # Card tiers
 # =============================================================================
+
+# =============================================================================
+# Stat scale
+# =============================================================================
+#
+# The top of the attribute axis. Cards roll to 96 (TIER_RANGES); the space
+# above is what items and boosters buy. The client needs this too once
+# items land -- it has no copy yet.
+STAT_CEILING: Final = 130
+
+# Every stat-derived formula divides by STAT_CEILING instead of 100, and any
+# further divisor is scaled by this, so a stat at the same FRACTION of the
+# axis produces the same value it did on the old 0-100 axis.
+STAT_SCALE: Final = STAT_CEILING / 100.0
+
+
+# Raw stat -> 0..1 ability. Linear made a 50 exactly half a 100, and those
+# deficits compound until a bronze card cannot function as a footballer.
+# A gamma below 1 lifts the weak end without touching the strong end.
+# 1.0 reproduces the old straight line exactly.
+STAT_CURVE_GAMMA: Final = 1.0
+
+# Slope. Below 1 it squeezes the spread toward STAT_CURVE_PIVOT, so a weak card
+# closes on a strong one WITHOUT the whole game speeding up (which is what
+# gamma alone does). The pivot sits near a gold card, so gold is the fixed point.
+STAT_CURVE_COMPRESS: Final = 1.0
+STAT_CURVE_PIVOT: Final = 0.72
+
+
+# Ball speed one kick-power unit buys (gameEngine.base_kick_pow).
+BASE_KICK_POW: Final = 20.0
+
+# A rolling ball covers speed / -ln(BALL_GROUND_FRICTION) units before it stops.
+# Passes used to saturate at 10 units of distance and then get MULTIPLIED by the
+# power stat, so anything past 10 units flew ~3x too far: sideways balls ran out
+# of play and arrived far too fast to be controlled. Size the kick from the
+# distance instead and let power CAP it, the way crosses already work.
+# How fast the ball should still be going when it reaches the target. This is
+# the whole trade-off: it sets how much pace a pass carries (beating a
+# pressing defender) AND how far past the receiver it runs if nobody collects
+# it -- overshoot is arrive * 1.44 units, whatever the distance.
+PASS_ARRIVE_SPEED: Final = 22.0
+
+
+def pass_power(dist: float, power_stat: float, urgency: float = 1.0,
+               max_div: float = 60.0, arrive: float | None = None) -> float:
+    import math
+    per_unit = -math.log(BALL_GROUND_FRICTION)
+    av = PASS_ARRIVE_SPEED if arrive is None else arrive
+    needed = (av + dist * per_unit * urgency) / BASE_KICK_POW
+    return max(0.05, min(needed, power_stat / max_div))
+
+
+# Pace only. Even a poor footballer is quick -- what they lack is technique --
+# so the speed spread is narrowed while shooting/passing/control keep theirs.
+# This is what stops a better card simply outrunning you to every ball.
+SPEED_COMPRESS: Final = 1.0
+SPEED_PIVOT: Final = 0.72
+
+
+def pace_ability(stat: float, compress: float | None = None) -> float:
+    a = stat_ability(stat)
+    c = SPEED_COMPRESS if compress is None else compress
+    if c != 1.0:
+        a = SPEED_PIVOT + (a - SPEED_PIVOT) * c
+    return min(1.0, max(0.0, a))
+
+
+def stat_ability(stat: float, gamma: float | None = None, compress: float | None = None) -> float:
+    a = min(1.0, max(0.0, float(stat)) / 100.0)
+    g = STAT_CURVE_GAMMA if gamma is None else gamma
+    if g != 1.0:
+        a = a ** g
+    c = STAT_CURVE_COMPRESS if compress is None else compress
+    if c != 1.0:
+        a = STAT_CURVE_PIVOT + (a - STAT_CURVE_PIVOT) * c
+    return min(1.0, max(0.0, a))
+
 
 ### SUPER IMPORTANT ###
 # Every tier a card can be rolled at, with its overall range.

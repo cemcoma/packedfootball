@@ -1,5 +1,5 @@
 from player.player import _norm2, player, ActionProfile
-from game_config import PITCH_HEIGHT, PITCH_WIDTH
+from game_config import pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
 # Where a full-back stands in to cover the middle when no centre-back is
@@ -7,6 +7,9 @@ import numpy as np
 # far either side of the centre, on the side their flank is. Deep enough
 # to be between a lone striker and the goal, not so deep the whole side
 # collapses onto the six-yard box.
+# How far ahead of his man a marker positions himself.
+MARK_LEAD_SECONDS = 0.35
+
 COVER_DEPTH = 22.0
 COVER_HALF_GAP = 7.0
 COVER_ROLES = ("LB", "RB", "LWB", "RWB")
@@ -71,32 +74,30 @@ class Defender(player):
         elif decision == "pass":
             best_target = self._choose_pass_target(state)
             dist = _norm2(best_target - state["my_pos"])
-            required_power = min(1.0, dist / 10.0) 
-            actual_power = required_power * (self.attributes.power / 60.0)
+            required_power = pass_power(dist, self.attributes.power, 1.0, 60.0)
+            actual_power = required_power
             return {"type": "pass", "target": best_target, "power": actual_power}
             
         elif decision == "clear":
-            forward_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-            wide_x = state["rng"].choice([0.0, 70.0])
-            target = np.array([wide_x + state["rng"].uniform(-15, 15), forward_y])
+            target = self._clearance_target(state)
             return {"type": "pass", "target": target, "power": min(1.0, self.attributes.power / 50.0), "pass_type": "clearance"}
 
         elif decision == "cross":
             cross_target = self._choose_cross_target(state)
             dist = _norm2(cross_target - state["my_pos"])
-            required_power = min(1.0, dist / 12.0) 
-            actual_power = required_power * (self.attributes.power / 60.0)
+            required_power = pass_power(dist, self.attributes.power, 0.833, 60.0)
+            actual_power = required_power
             return {"type": "pass", "target": cross_target, "power": actual_power, "pass_type": "cross"}
             
         elif decision == "dribble":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-            dribble_speed = max(1.0, (self.attributes.dribbling / 100.0) * 1.25)
+            dribble_speed = max(1.0, stat_ability(self.attributes.dribbling) * 1.25)
             return {"type": "move", "target": np.array([35.0, enemy_goal_y]), "speed_mod": dribble_speed}
             
         elif decision == "forward_run":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
             run_target = np.array([state["my_pos"][0], enemy_goal_y])
-            return {"type": "move", "target": run_target, "speed_mod": (self.attributes.speed * 0.9) / 100.0}
+            return {"type": "move", "target": run_target, "speed_mod": pace_ability(self.attributes.speed) * 0.9}
 
         elif decision == "overlap":
             # Hugs whichever touchline this wingback's own formation slot sits
@@ -107,54 +108,69 @@ class Defender(player):
             lead = 10.0 if state.get("a_direction", 1) == 1 else -10.0
             ahead_y = np.clip(state["ball_pos"][1] + lead, 0.0, PITCH_HEIGHT)
             overlap_target = np.array([touchline_x, ahead_y])
-            return {"type": "move", "target": overlap_target, "speed_mod": (self.attributes.speed * 1.0) / 100.0}
+            return {"type": "move", "target": overlap_target, "speed_mod": pace_ability(self.attributes.speed) * 1.0}
 
         elif decision == "support":
             target = self._predict_ball_landing_target(state)
             vec_to_target = target - state["my_pos"]
-            intercept_weight = 0.55 + (self.attributes.speed / 100.0) * 0.35
+            intercept_weight = 0.55 + pace_ability(self.attributes.speed) * 0.35
             support_target = state["my_pos"] + (vec_to_target * intercept_weight)
-            return {"type": "move", "target": support_target, "speed_mod": (self.attributes.speed * 0.7) / 100.0}
+            return {"type": "move", "target": support_target, "speed_mod": pace_ability(self.attributes.speed) * 0.7}
             
         elif decision == "hold_attack":
             forward_shift = 15.0 if state.get("a_direction", 1) == 1 else -15.0
             tactical_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + forward_shift])
-            return {"type": "move", "target": tactical_pos, "speed_mod": (self.attributes.speed * 0.5) / 100.0}
+            return {"type": "move", "target": tactical_pos, "speed_mod": pace_ability(self.attributes.speed) * 0.5}
             
         elif decision == "cover" or (decision in {"hold_defense", "hold_attack", "recover", "recover_slow"} and self._should_cover(state)):
-            return {"type": "move", "target": self._cover_target(state), "speed_mod": (self.attributes.speed * 0.8) / 100.0}
+            return {"type": "move", "target": self._cover_target(state), "speed_mod": pace_ability(self.attributes.speed) * 0.8}
 
         elif decision == "hold_defense":
             backward_shift = -10.0 if state.get("a_direction", 1) == 1 else 10.0
             defensive_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + backward_shift])
-            return {"type": "move", "target": defensive_pos, "speed_mod": (self.attributes.speed * 0.6) / 100.0}
+            return {"type": "move", "target": defensive_pos, "speed_mod": pace_ability(self.attributes.speed) * 0.6}
             
         elif decision == "man_mark":
             opponents = np.asarray(state.get("opponents", []))
             if opponents.size == 0:
-                return {"type": "move", "target": state["formation_pos"], "speed_mod": (self.attributes.speed * 0.6) / 100.0}
+                return {"type": "move", "target": state["formation_pos"], "speed_mod": pace_ability(self.attributes.speed) * 0.6}
             
-            dists = np.linalg.norm(opponents - state["my_pos"], axis=1)
-            target_opp = opponents[np.argmin(dists)]
             own_goal = np.array([35.0, 0.0 if state.get("a_direction", 1) == 1 else 100.0])
-            
+            dists = np.linalg.norm(opponents - state["my_pos"], axis=1)
+
+            # Pick the man who is actually dangerous, not merely the closest:
+            # the one with the ball in my area outranks a spare body stood
+            # nearer me, which is how a winger used to run off unattended.
+            ball_pos = np.asarray(state["ball_pos"], dtype=float)
+            threat = np.linalg.norm(opponents - ball_pos, axis=1)
+            pick = int(np.argmin(dists + np.clip(threat - 4.0, 0.0, None) * 0.6))
+            target_opp = opponents[pick]
+
+            # Mark where he is GOING. Sitting on where he stands means always
+            # arriving a step late.
+            opp_vels = state.get("opponent_vel")
+            if opp_vels is not None:
+                target_opp = target_opp + np.asarray(opp_vels[pick], dtype=float) * MARK_LEAD_SECONDS
+
             vec_to_goal = own_goal - target_opp
             mark_pos = target_opp + (vec_to_goal / (_norm2(vec_to_goal) + 1e-5)) * 1.5
-            return {"type": "move", "target": mark_pos, "speed_mod": (self.attributes.speed * 0.8) / 100.0}
+            # Full pace: marking at 0.8 meant the marker was slower than his man
+            # by construction and simply got left behind.
+            return {"type": "move", "target": mark_pos, "speed_mod": pace_ability(self.attributes.speed) * 1.0}
 
         elif decision == "press":
             target = self._predict_ball_landing_target(state)
             vec_to_target = target - state["my_pos"]
-            press_weight = 0.7 + (self.attributes.speed / 100.0) * 0.25
+            press_weight = 0.7 + pace_ability(self.attributes.speed) * 0.25
             press_target = state["my_pos"] + (vec_to_target * press_weight)
-            return {"type": "move", "target": press_target, "speed_mod": (self.attributes.speed * 0.9) / 100.0}
+            return {"type": "move", "target": press_target, "speed_mod": pace_ability(self.attributes.speed) * 0.9}
 
         elif decision == "contain":
             target = self._predict_ball_landing_target(state)
             vec_to_target = target - state["my_pos"]
-            contain_weight = 0.5 + (self.attributes.speed / 100.0) * 0.2
+            contain_weight = 0.5 + pace_ability(self.attributes.speed) * 0.2
             contain_target = state["my_pos"] + (vec_to_target * contain_weight)
-            return {"type": "move", "target": contain_target, "speed_mod": (self.attributes.speed * 0.5) / 100.0}
+            return {"type": "move", "target": contain_target, "speed_mod": pace_ability(self.attributes.speed) * 0.5}
             
         elif decision in {"recover", "recover_slow"}:
             ball_pos = state["ball_pos"]
@@ -168,7 +184,7 @@ class Defender(player):
             shifted_target[1] = np.clip(shifted_target[1], 0.0, 100.0)
             
             speed_mult = 0.7 if decision == "recover" else 0.4
-            return {"type": "move", "target": shifted_target, "speed_mod": (self.attributes.speed * speed_mult) / 100.0}
+            return {"type": "move", "target": shifted_target, "speed_mod": pace_ability(self.attributes.speed) * speed_mult}
             
         elif decision == "tackle":
             return {"type": "tackle", "stat": self.attributes.defending}
@@ -177,7 +193,7 @@ class Defender(player):
             return {"type": "capture", "stat": self.attributes.ballcontrol}
         
         elif decision == "chase":
-            return {"type": "move", "target": self._chase_target(state), "speed_mod": (self.attributes.speed * 1.0) / 100.0}
+            return {"type": "move", "target": self._chase_target(state), "speed_mod": pace_ability(self.attributes.speed) * 1.0}
 
         return None
 
@@ -327,13 +343,13 @@ class Defender(player):
         if dist_to_ball < 2.0:
             actions = ["tackle", "contain"]
             t_tackle = max(1.0, self.attributes.aggression * 1.5)
-            t_contain = max(1.0, getattr(self.attributes, "defending", 50) + (100 - self.attributes.aggression))
+            t_contain = max(1.0, getattr(self.attributes, "defending", 50) + max(0, 100 - self.attributes.aggression))
             probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
             return state["rng"].choice(actions, p=probs)
 
         if dist_to_ball < 15.0:
             if ball_pressure_count >= 2: return "contain"
-            return "press" if state["rng"].integers(0, 100) < getattr(self.attributes, "aggression", 40) else "contain"
+            return "press" if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "aggression", 40)) else "contain"
 
         actions = ["hold_defense", "man_mark"]
         t_hold = 50.0 * self.get_action_bias("hold_defense")

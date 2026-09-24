@@ -7,6 +7,10 @@ from typing import Final
 
 from replay import ActionType, ReplayRecorder
 from game_config import (  # noqa: F401
+    STAT_CEILING,
+    pace_ability,
+    stat_ability,
+    STAT_SCALE,
     BALL_AIR_FRICTION,
     BALL_GRAVITY,
     BALL_GROUND_FRICTION,
@@ -16,6 +20,9 @@ from game_config import (  # noqa: F401
     HEAD_CONTACT_HEIGHT,
     PITCH_HEIGHT,
     PITCH_WIDTH,
+    PLAYER_BASE_SPEED,
+    PLAYER_RADIUS,
+    POSSESSION_RADIUS,
 )
 from formations import get_formation, is_similar_position
 
@@ -96,7 +103,69 @@ from formations import get_formation, is_similar_position
 #         has a real y component and the ball leaves the woodwork once. A
 #         glancing hit that used to die on the line now goes back into play,
 #         in off the post, or wide for a goal kick.
-ENGINE_VERSION: Final[str] = "2.4.0"
+#   3.0.0 the attribute axis runs to STAT_CEILING (130), not 100, so items and
+#         boosters have somewhere to go. Every stat-derived formula divides by
+#         the ceiling and its other divisors scale with it, so a stat at the
+#         same fraction of the axis behaves as it did -- but a rolled card
+#         (45-96) now sits lower on it. Keeper save weights summed to 1.3, so
+#         min(1.0, save_stat/100) capped every keeper from ~77 up: fixed, which
+#         is what flattened platinum/diamond/icon keepers into one. Attributes
+#         clamps to [0, STAT_CEILING] on construction. Height no longer takes
+#         the out-of-position 0.9 (it is centimetres, not a skill).
+#         Passing: kick power is sized from the distance and CAPPED by the power
+#         stat instead of multiplied by it (every pass past 10 units used to fly
+#         ~3x too far), a pass records its intended receiver and he goes to meet
+#         it, chase targets are cut off at the touchline, and reception scores on
+#         the ball's speed RELATIVE to the receiver plus whether it is running
+#         with him -- a hard ball taken facing the wrong way comes off him.
+#         Pass choice scores lane openness (can a defender reach the line before
+#         the ball?) rather than vetoing on distance alone.
+#         Fouls, free kicks and penalties: a failed tackle can take the man, and
+#         a foul in the box is a penalty. A penalty is a guessing game of its
+#         own (see _resolve_penalty), not a shot through _save_chance, which
+#         rates a slow central ball as the easiest save there is. Defenders
+#         Free kicks come in three shapes, each with its own setup: a deep one
+#         restarts play (the side in front pushes up, the defence drops into
+#         shape), a wide or distant one is a delivery into the box set up like a
+#         corner, and a close central one is struck over a wall through its own
+#         check (_resolve_free_kick), since the open-play save curve knows about
+#         neither a set keeper nor a wall. How many bodies go forward scales
+#         with how far behind the side is. The taker must PLAY it (must_pass)
+#         and the defending side clears ten yards, so a free kick can no longer
+#         be dribbled out of or taken by the side that conceded it.
+#         A restart's first touch keeps its own player reference: restart_player
+#         is wiped at the whistle, so the old guard could never match and every
+#         throw-in had been going out as an ordinary pass.
+#         The engine no longer holds still for a set piece (10 frames, not 150):
+#         freezing the sim only made players twitch on screen, so the buildup --
+#         backing off the ball and the run-up -- is drawn by the replay instead.
+#         Keepers distribute 50/50: hoof it, or roll it to the nearest defender
+#         behind them. They no longer hunt for a progressive pass from the
+#         six-yard box, and a goal kick takes the same 50/50 rather than always
+#         going short.
+#         Wingers cutting inside latch the intent, so the move runs its ~2s
+#         course instead of reverting to the touchline on the next decision.
+#         A direct free kick is struck flat, not lobbed: _flight_time was asked
+#         for a GROUND-friction estimate for a ball flying under air friction,
+#         so _launch_vz answered with an arc that peaked at 5m from 25 units
+#         against a 2.5m bar -- every one outside ~18 units went over.
+#         must_pass survives a loose ball, so a set-piece taker plays it instead
+#         of being freed to shoot the moment the whistle went.
+#         A ball can no longer travel THROUGH a player (_body_check): step()
+#         only resolves a loose ball every few frames and a capture can be
+#         declined, so one could cross a man clean and carry on. It is taken,
+#         or it dies at his feet. A loose ball is also offered down the queue
+#         rather than to the nearest man alone -- he may be inside his own
+#         capture lockout, and asking only him meant a third of offers were
+#         refused with somebody else stood in range.
+#         Fouls roughly sixth-ed: being skinned is the more interesting outcome
+#         and the game was stopping too often. An outfield clearance goes where
+#         the man is FACING (within 90 degrees) instead of at a random far
+#         corner that was often behind him. Restarts are sampled
+#         through the stoppage: tick() returns before the snapshot, so a replay
+#         used to have a hole where every stoppage was and the client could only
+#         jump-cut.
+ENGINE_VERSION: Final[str] = "3.0.0"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -168,6 +237,55 @@ STAMINA_MIN_SPEED_FACTOR: Final = 0.65   # pace kept when completely empty
 # A save is one roll per shot, and how likely it is depends on the SHOT, not
 # just the keeper. Anchors: a 100-rated keeper saves ~100% of an easy shot
 # (slow, straight at them) and ~50% of a hard one (fast, full stretch).
+# Fouls. Rolled only on a failed tackle, so a clean challenge never gives one.
+# Tuned for roughly six anklebreakers per foul: the game stops too much
+# otherwise, and being skinned is the more interesting outcome anyway.
+FOUL_BASE: Final = 0.065
+FOUL_AGGRESSION_WEIGHT: Final = 0.12
+FOUL_OUTPACED_WEIGHT: Final = 0.165
+FOUL_FROM_BEHIND_WEIGHT: Final = 0.08
+FOUL_MAX: Final = 0.36
+
+# Free kicks: how far off the ball the wall stands, and how many are in it.
+# The ENGINE barely pauses for a set piece -- just long enough to register the
+# restart. The buildup (backing off the ball, the run-up) is the replay's job:
+# holding the sim still for two seconds only made players twitch on screen.
+FREE_KICK_SETUP_FRAMES: Final = 10
+PENALTY_SETUP_FRAMES: Final = 10
+
+# Free kicks come in three shapes, measured from the goal being attacked.
+# Close and central is a shot; anywhere else in the final third is a cross;
+# everything deeper is a restart of play. Each is set up by its own method.
+FK_SHOOTING_RANGE: Final = 30.0
+FK_SHOOTING_HALF_WIDTH: Final = 15.0
+FK_CROSS_RANGE: Final = 48.0
+
+# Bodies a chasing side commits on top of the usual number, per goal behind.
+FK_CHASE_BONUS_MAX: Final = 3
+
+# A direct free kick: harder than a penalty by a long way. Placement is whether
+# he beats the wall AND hits the frame; then the keeper, who is set and
+# expecting it. Real conversion is well under one in ten.
+FK_PLACEMENT_MIN: Final = 0.25
+FK_PLACEMENT_SPAN: Final = 0.35
+FK_WALL_BLOCK: Final = 0.25
+FK_SAVE_MIN: Final = 0.62
+FK_SAVE_SPAN: Final = 0.25
+FREE_KICK_SHOT_SPEED: Final = 30.0
+FREE_KICK_TARGET_HEIGHT: Final = 1.2
+# Never peak above the bar, whatever the distance solves to.
+FREE_KICK_MAX_VZ: Final = 6.5
+WALL_DISTANCE: Final = 9.15
+WALL_PLAYERS: Final = 3
+PENALTY_SHOT_SPEED: Final = 26.0
+
+# Penalties. Both scales floor at 0.80 -- see _resolve_penalty for why.
+PENALTY_PLACEMENT_MIN: Final = 0.80
+PENALTY_PLACEMENT_SPAN: Final = 0.19
+PENALTY_SAVE_MIN: Final = 0.80
+PENALTY_SAVE_SPAN: Final = 0.19
+PENALTY_SIDES: Final = (-1, 0, 1)    # left / middle / right, from the taker
+
 KEEPER_QUALITY_BASE: Final = 0.55        # save odds floor before attributes
 HARD_SHOT_SPEED: Final = 37.0            # ball speed counting as "hard" (observed max)
 KEEPER_REACH: Final = 6.2                # lateral units = a full-stretch dive
@@ -186,13 +304,49 @@ SAVE_ENGAGE_TIME: Final = 0.45
 
 # A ball this fast can only be blocked from within this distance of it.
 BLOCK_FAST_SPEED: Final = 12.0
+# How long the passer's TEAMMATES are frozen out of a new pass; the passer
+# themselves is out for the full ball_release_cooldown. 99 = the old whole-side
+# freeze (longer than any cooldown).
+TEAMMATE_RELEASE_BLOCK_FRAMES = 4
+
+# Receiving. Comfort is the RELATIVE speed a clean first touch handles; running
+# with the ball widens it. Above the stun speed, facing the wrong way, the ball
+# bounces off them instead of through them.
+# The base was 0.8, which with the stat bonuses put every raw control chance at
+# 1.08-1.22 -- clipped to 0.99, so nobody ever miscontrolled and the stride/stun
+# terms below were dead. Low enough now that a hard ball taken badly can be lost.
+# Give and go: how long the passer keeps running, and how far ahead he aims.
+PASS_AND_MOVE_FRAMES: Final = 45
+PASS_AND_MOVE_PUSH: Final = 12.0
+
+RECEIVE_BASE: Final = 0.55
+RECEIVE_STRIDE_WEIGHT: Final = 0.30
+RECEIVE_COMFORT_SPEED: Final = 18.0
+RECEIVE_ALIGN_BONUS: Final = 0.8
+RECEIVE_STUN_SPEED: Final = 22.0
+RECEIVE_STUN_FRAMES: Final = 12
+RECEIVE_DEFLECT_KEEP: Final = 0.25   # pace kept by a ball that comes off a bad touch
+
+# How long a player who muffed his touch waits before he may try again. Short,
+# because the ball is usually still at his feet: a long one meant an opponent
+# collected his own miscontrol for him.
+CAPTURE_RETRY_FRAMES: Final = 3
+
+# Close enough that the ball has gone THROUGH him, not merely past him.
+BALL_TOUCH_RADIUS: Final = 0.45
+BODY_TOUCH_KEEP: Final = 0.22   # pace left on a ball that hits a man who cannot control it
+CAPTURE_RETRY_FRAMES: Final = 4  # ...and how soon he may try again
+
+# How far down the queue a loose ball is offered before it is left to run.
+LOOSE_BALL_OFFERS: Final = 3
+
 BLOCK_FAST_RADIUS: Final = 1.5
 
 # --- Heading ---------------------------------------------------------------
 # A ball at or above HEAD_MIN_HEIGHT is an aerial ball: it flies over anyone
 # whose reach (_head_reach) is below it, and is headed by anyone it isn't.
 HEAD_MIN_HEIGHT: Final = 1.2
-HEAD_RADIUS: Final = 2.5             # lateral distance to be in a header contest
+HEAD_RADIUS: Final = 1.25             # lateral distance to be in a header contest
 HEAD_STANDING_BONUS: Final = 0.25    # standing reach above body height
 HEAD_JUMP_MAX: Final = 0.6           # extra reach at 100 heading/agility
 KEEPER_HAND_REACH: Final = 0.9       # arms up, on top of body height
@@ -245,8 +399,8 @@ PASS_AIM_ERROR_DEGREES: Final[float] = 8.0
 PASS_AIM_ERROR_BY_TYPE: Final[dict] = {
     "normal": 1.0, "through_ball": 1.0, "cross": 0.5, "clearance": 0.5, "throw_in": 0.25,
 }
-base_speed:Final = 10.0
-possession_radius: Final = 2.0
+base_speed: Final = PLAYER_BASE_SPEED     # see game_config: shared with player.py
+possession_radius: Final = POSSESSION_RADIUS
 final_whistle_delay: Final = 600
 OUT_OF_POSITION_PENALTY: Final = 0.9
 
@@ -265,11 +419,13 @@ def _apply_out_of_position_penalty(p):
     which only ever needs 2 constants already defined before it's reached).
     Deferred to call time, well after both modules have fully loaded.
     """
-    from player.player import Attributes, TENDENCY_FIELDS
+    from player.player import Attributes, TENDENCY_FIELDS, PHYSICAL_FIELDS
 
     original_fields = asdict(p.attributes)
     scaled_fields = {
-        field: (value if field in TENDENCY_FIELDS else round(value * OUT_OF_POSITION_PENALTY))
+        # height is centimetres, not a skill -- scaling it shrank the player.
+        field: (value if field in TENDENCY_FIELDS or field in PHYSICAL_FIELDS
+                else round(value * OUT_OF_POSITION_PENALTY))
         for field, value in original_fields.items()
     }
     penalized = copy.copy(p)
@@ -331,6 +487,9 @@ class game:
             for i, p in enumerate(raw_players)
         ]
         # How high each player can get to a ball, fixed for the match.
+        # Pace per player, cached like _reach: the decision layer needs a
+        # teammate's and an opponent's top speed, not just their velocity.
+        self._pace = np.array([pace_ability(p.attributes.speed) * base_speed for p in self.all_players], dtype=float)
         self._reach = np.array([self._head_reach(i) for i in range(22)], dtype=float)
         # A plan a player is latched onto across decision rounds ("wingplay"),
         # carried on the action dict's "intent" key; cleared on ball release.
@@ -369,6 +528,9 @@ class game:
         self.last_shot_player = -1
         self.last_shot_on_target = False
         self.last_pass_player = -1
+        self.pass_receiver = -1
+        self.pass_and_move = -1
+        self.pass_and_move_timer = 0
         # Identifies the shot currently in flight so each keeper gets exactly
         # one save attempt at it. -1 means no live shot.
         self.active_shot_id = -1
@@ -382,7 +544,7 @@ class game:
         self.ball_event = "neutral"
         
         self.possession_radius = possession_radius
-        self.player_radius = 1
+        self.player_radius = PLAYER_RADIUS
         self.step_count = 0
         self.match_clock_frames = 0
 
@@ -394,6 +556,7 @@ class game:
         self.halftime_clock_frames = -1
 
         self.ball_release_cooldown = 0
+        self.ball_release_team_cooldown = 0
         self.ball_release_player = -1
         self.ball_capture_cooldown = 0
         self.ball_capture_player = -1
@@ -413,8 +576,12 @@ class game:
         self.restart_type = None
         self.restart_team = None
         self.restart_player = None
+        self.free_kick_kind = None
+        self.pending_restart_pass_player = -1
         self.restart_timer = 0  
-        self.pending_restart_pass_type = None # Outlives restart_type (which is cleared the moment restart_timer runs out) so the restart's first pass still knows it's a throw-in.
+        # Outlives restart_type AND restart_player, both cleared the moment the
+        # whistle goes, so the restart's first touch still knows what it is.
+        self.pending_restart_pass_type = None
         self.camera_mode = "zoom" 
         self.visual_action = [""] * 22
         self.visual_action_timer = np.zeros(22, dtype=int)
@@ -558,6 +725,7 @@ class game:
                 self.out_of_play = False
                 self.ball_release_player = -1
                 self.ball_release_cooldown = 0
+                self.ball_release_team_cooldown = 0
 
     def _register_touch(self, player_index: int):
         if self.last_touch_player == player_index:
@@ -579,6 +747,13 @@ class game:
         self.goal_popup = {"text": f"GOAL {team_label}", "timer": 90, "team": team_label}
 
     def reset_positions(self, restart_type: str | None = None, team: int | None = None):
+        if restart_type == "free_kick":
+            # Deliberately NO formation reset. Snapping all 22 back on every
+            # foul would wipe the attacking shape that won the free kick --
+            # _begin_restart places only the ball, the taker and the wall.
+            self.velocity[:] = 0.0
+            return
+
         for i in range(22):
             self.positions[i] = np.array(self.formation[i]["pos"], dtype=float)
         self.velocity[:] = 0.0
@@ -597,6 +772,27 @@ class game:
         if restart_type == "throw_in":
             self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
             self.ball_vz = 0.0
+            self.ball_controller = -1
+            return
+
+        if restart_type == "penalty":
+            # Everyone crowds the edge of the area waiting for the rebound --
+            # only the keeper is inside it, and the taker is placed on the spot
+            # by _begin_restart. They used to be left in their own defensive
+            # third, which is not what a penalty looks like.
+            attacking = team if team is not None else 0
+            box_is_high = (1 - attacking) == 1
+            edge = 79.0 if box_is_high else 21.0
+            depth = -1.0 if box_is_high else 1.0
+            crowd = [i for i in range(22) if i not in self._keeper_indices]
+            # Alternate the sides around the D so it is not one team in a line.
+            crowd.sort(key=lambda i: (i % 2, i))
+            span = np.linspace(17.0, 53.0, num=len(crowd))
+            for n, i in enumerate(crowd):
+                self.positions[i] = np.array([
+                    float(span[n]) + self.rng.uniform(-1.5, 1.5),
+                    edge + depth * self.rng.uniform(0.0, 6.0),
+                ])
             self.ball_controller = -1
             return
 
@@ -656,8 +852,10 @@ class game:
         self.ball_controller = -1
         self.ball_release_player = -1
         self.ball_release_cooldown = 0
+        self.ball_release_team_cooldown = 0
         self.pending_restart_pass_type = None
-        if restart_type in ("throw_in", "corner", "goal_kick"):
+        self.pending_restart_pass_player = -1
+        if restart_type in ("throw_in", "corner", "goal_kick", "free_kick", "penalty"):
             self.restart_count += 1
         self.reset_positions(restart_type=restart_type, team=self.restart_team)
 
@@ -670,6 +868,59 @@ class game:
             self.ball_controller = kickoff_player
             self._set_must_pass_for_player(kickoff_player)
             self.kickoff_timer = 30
+        elif restart_type == "free_kick":
+            spot = np.array([out_x, out_y if out_y is not None else 50.0], dtype=float)
+            self.ball[:] = [spot[0], spot[1], 0.0, 0.0, 0.0]
+            self.ball_vz = 0.0
+            # Three different set pieces wearing one name -- see each setup.
+            self.free_kick_kind = self._free_kick_kind(spot, self.restart_team)
+            if self.free_kick_kind == "shooting":
+                taker = self._setup_shooting_free_kick(spot, self.restart_team)
+            elif self.free_kick_kind == "crossable":
+                taker = self._setup_crossable_free_kick(spot, self.restart_team)
+            else:
+                taker = self._setup_defensive_free_kick(spot, self.restart_team)
+            self.restart_player = taker
+            if self.free_kick_kind != "shooting":
+                # Ten yards, for every kind. Without it an opponent can stand on
+                # the ball and simply take the free kick off the side that won
+                # it -- and the man who fouled is back within tackling range.
+                self._clear_free_kick_ring(spot, self.restart_team, {taker})
+                # And he must PLAY it, not dribble away from the spot. Set
+                # directly rather than via _set_must_pass_for_player, which also
+                # arms the kickoff fields and those belong to a kickoff.
+                self.must_pass_next = True
+                self.must_pass_player = taker
+            self.restart_timer = FREE_KICK_SETUP_FRAMES
+            if self.replay:
+                self.replay.event(
+                    self.match_clock_frames,
+                    ActionType.FREE_KICK_SHOT if self.free_kick_kind == "shooting"
+                    else ActionType.FREE_KICK,
+                    player_idx=taker, team=self.restart_team,
+                )
+
+        elif restart_type == "penalty":
+            goal_y = PITCH_HEIGHT if self.restart_team == 0 else 0.0
+            spot_y = goal_y - 11.0 if self.restart_team == 0 else 11.0
+            self.ball[:] = [PITCH_WIDTH / 2.0, spot_y, 0.0, 0.0, 0.0]
+            self.ball_vz = 0.0
+            taker = self._pick_role_slot(self.restart_team, ("ST", "CF", "CAM", "LW", "RW"), 9)
+            self.restart_player = taker
+            back = -1.5 if self.restart_team == 0 else 1.5
+            keeper = self._keeper_indices[1] if self.restart_team == 0 else self._keeper_indices[0]
+            # Placed, not walked: the taker starts at his formation slot ~42
+            # units away, and no plausible setup time covers that. A penalty is
+            # a staged scene -- he is already stood over the ball.
+            self.positions[taker] = np.array([PITCH_WIDTH / 2.0, spot_y + back])
+            self.positions[keeper] = np.array([PITCH_WIDTH / 2.0, goal_y])
+            self.restart_timer = PENALTY_SETUP_FRAMES
+            if self.replay:
+                self.replay.event(
+                    self.match_clock_frames, ActionType.PENALTY,
+                    player_idx=taker, team=self.restart_team,
+                )
+
         elif restart_type == "corner":
             corner_player = self._pick_role_slot(self.restart_team, ("RW", "LW", "RM", "LM", "LWB", "RWB"), 8)
             self.restart_player = corner_player
@@ -712,7 +963,7 @@ class game:
             # Survives restart_timer expiring (which clears restart_type), so
             # the throw itself is still thrown rather than kicked -- see
             # _resolve_action's pass branch.
-            self.pending_restart_pass_type = "throw_in"
+            self._arm_restart_pass("throw_in", throw_player)
 
         if self.replay:
             restart_event = {
@@ -1068,16 +1319,11 @@ class game:
             running = True
 
         regulation_half = max_steps // 2
-        # display_clock_frames measures the second half from here, and
-        # max_steps is a parameter -- a test playing a short match still has
-        # its halves start where they should.
         self.regulation_half_frames = regulation_half
         first_half_end = None   # regulation + added time for the 1st half
         second_half_end = None  # ditto for the 2nd
         halftime_done = False
 
-        # Who was attacking when each whistle came due, latched once (None is
-        # a real value here -- "ball was dead" -- hence the sentinel).
         halftime_attacker = _UNSET
         fulltime_attacker = _UNSET
 
@@ -1221,7 +1467,20 @@ class game:
 
         if self.restart_type is not None:
             self.restart_timer = max(0, self.restart_timer - 1)
+            # Sampled THROUGH the stoppage. tick() returns early here, before
+            # the snapshot below ever ran, so the replay had a 36-66 tick hole
+            # where every stoppage was and the client could only jump-cut --
+            # the viewer never saw what happened.
+            if self.replay and self.match_clock_frames % self.replay.sample_interval_ticks == 0:
+                self.replay.snapshot(
+                    self.match_clock_frames, self.positions, self.velocity,
+                    self.ball, self.ball_controller,
+                )
             if self.restart_timer == 0:
+                if self.restart_type == "penalty":
+                    self._take_penalty()
+                elif self.restart_type == "free_kick" and self.free_kick_kind == "shooting":
+                    self._take_direct_free_kick()
                 self.restart_type = None
                 self.restart_team = None
                 self.restart_player = None
@@ -1264,6 +1523,9 @@ class game:
         frame_result = self._resolve_goal_frame(prev_ball_xy, prev_ball_height)
         if frame_result == "goal":
             return
+
+        if self.ball_controller == -1:
+            self._body_check(prev_ball_xy)
         if frame_result == "rebound":
             # Ball is back in play just inside the line; skip the
             # out-of-bounds check this tick and let it run on.
@@ -1329,12 +1591,55 @@ class game:
             pass_bonus -= 0.15
         if self.ball_event == "tackle" and ball_speed < 3.0:
             pass_bonus += 0.08
-        agility_bonus = (player_attr.agility / 100.0) * 0.35
-        control_bonus = (player_attr.ballcontrol / 100.0) * 0.25
-        defending_bonus = (player_attr.defending / 100.0) * 0.20
+        agility_bonus = stat_ability(player_attr.agility) * 0.35
+        control_bonus = stat_ability(player_attr.ballcontrol) * 0.25
+        defending_bonus = stat_ability(player_attr.defending) * 0.20
 
         probability = base - speed_penalty - height_penalty + agility_bonus + control_bonus + defending_bonus + pass_bonus
         return float(np.clip(probability, 0.05, 0.95))
+
+    def _body_check(self, prev_xy) -> None:
+        """A ball cannot travel through a player.
+
+        step() only resolves a loose ball every decision_interval frames, and a
+        capture can be declined outright, so a ball could cross somebody clean
+        and carry on -- which is the thing that looks most obviously wrong.
+        Anyone the ball's path ACTUALLY crosses this frame gets a touch: they
+        take it if they can, and it comes off them if they cannot.
+        """
+        if float(self.ball[4]) > HEAD_MIN_HEIGHT:
+            return  # over him, not through him
+        cur = np.array(self.ball[0:2], dtype=float)
+        seg = cur - np.asarray(prev_xy, dtype=float)
+        length = _norm2(seg)
+        if length < 1e-6:
+            return
+        unit = seg / length
+        rel = self.positions - np.asarray(prev_xy, dtype=float)
+        along = np.clip(rel @ unit, 0.0, length)
+        perp = np.linalg.norm(rel - np.outer(along, unit), axis=1)
+        hits = np.flatnonzero(perp < BALL_TOUCH_RADIUS)
+        if hits.size == 0:
+            return
+
+        for i in hits[np.argsort(along[hits])]:
+            i = int(i)
+            if self.player_stun_cooldown[i] > 0:
+                continue
+            if self.ball_release_player == i and self.ball_release_cooldown > 0:
+                continue  # he just kicked it; it is leaving his own boot
+            if float(np.dot(self.positions[i] - np.asarray(prev_xy, dtype=float), seg)) <= 0.0:
+                continue  # he is behind the ball: it is leaving him, not hitting him
+            if self._attempt_capture(i):
+                return
+            # He could not take it cleanly -- but it hit him, so it stops dead
+            # at his feet instead of either ricocheting away or carrying on
+            # through him. A heavy touch, which is what a miscontrol looks
+            # like, and it leaves the ball there to be won.
+            self.ball[2:4] = self.ball[2:4] * BODY_TOUCH_KEEP + self.rng.normal(0.0, 0.8, size=2)
+            self.ball_capture_player = i
+            self.ball_capture_cooldown = CAPTURE_RETRY_FRAMES
+            return
 
     def _attempt_capture(self, index: int) -> bool:
         if self.ball_controller == index:
@@ -1350,10 +1655,14 @@ class game:
         if self.ball_capture_player == index and self.ball_capture_cooldown > 0:
             return False
 
-        if self.ball_release_player >= 0 and self.ball_release_cooldown > 0:
-            release_team = 0 if self.ball_release_player < 11 else 1
-            current_team = 0 if index < 11 else 1
-            if release_team == current_team:
+        # The passer is frozen out of their own pass for the full cooldown;
+        # their TEAMMATES only for TEAMMATE_RELEASE_BLOCK_FRAMES. Freezing the
+        # whole side for the full cooldown left the ball untouchable for 3-6m,
+        # so it phased through the man it was aimed at.
+        if self.ball_release_player == index and self.ball_release_cooldown > 0:
+            return False
+        if self.ball_release_player >= 0 and self.ball_release_team_cooldown > 0:
+            if (self.ball_release_player < 11) == (index < 11):
                 return False
 
         dist_to_ball = _norm2(self.ball[0:2] - self.positions[index])
@@ -1380,7 +1689,7 @@ class game:
         ball_motion = np.array(self.ball[2:4], dtype=float)
         if _norm2(ball_motion) > 0.0 and np.dot(player_to_ball, ball_motion) < -0.3:
             self.ball_capture_player = index
-            self.ball_capture_cooldown = 8
+            self.ball_capture_cooldown = CAPTURE_RETRY_FRAMES
             return False
 
         if is_keeper and self.ball_event == "shot":
@@ -1390,23 +1699,46 @@ class game:
                 return self._attempt_save(index)
 
         if pass_like_event and self.last_touch_team == current_team:
+            # What makes a pass hard to take is its speed RELATIVE to the
+            # receiver, and whether it is running with them or at them: one
+            # taken in stride is easy however hard it was hit.
+            my_vel = self.velocity[index]
+            my_speed = float(_norm2(my_vel))
+            rel_speed = float(_norm2(ball_motion - my_vel))
+            align = 0.0
+            if my_speed > 0.5 and ball_speed > 1e-6:
+                align = float(np.dot(ball_motion / ball_speed, my_vel / my_speed))
+            comfort = RECEIVE_COMFORT_SPEED * (1.0 + RECEIVE_ALIGN_BONUS * max(0.0, align))
             control_chance = (
-                0.8
-                + (self.all_players[index].attributes.composure / 100.0) * 0.10
-                + (self.all_players[index].attributes.ballcontrol / 100.0) * 0.20
-                + max(0.0, 1.0 - ball_speed / 18.0) * 0.15
+                RECEIVE_BASE
+                + stat_ability(self.all_players[index].attributes.composure) * 0.10
+                + stat_ability(self.all_players[index].attributes.ballcontrol) * 0.20
+                + max(0.0, 1.0 - rel_speed / comfort) * RECEIVE_STRIDE_WEIGHT
             )
-            if self.rng.random() < float(np.clip(control_chance, 0.60, 0.99)):
+            controlled = self.rng.random() < float(np.clip(control_chance, 0.35, 0.99))
+            if not controlled and rel_speed > RECEIVE_STUN_SPEED and align < 0.2:
+                # A hard ball taken facing the wrong way knocks them off
+                # balance -- it does not sail through them untouched.
+                self.player_stun_cooldown[index] = RECEIVE_STUN_FRAMES
+                # It comes off them, it does not pass through: most of the pace
+                # is killed, so a miscontrol is a heavy touch at their feet
+                # rather than a ball that carries on into touch.
+                self.ball[2:4] = (ball_motion * RECEIVE_DEFLECT_KEEP
+                                  + self.rng.normal(0.0, 1.2, size=2))
+                self.ball_capture_player = index
+                self.ball_capture_cooldown = CAPTURE_RETRY_FRAMES
+            if controlled:
                 passer = self.last_pass_player
                 if passer >= 0 and passer != index and (passer < 11) == (index < 11):
                     self.match_stats[passer]["passes_completed"] += 1
                 self.last_pass_player = -1
+                self.pass_receiver = -1
 
                 self.ball_controller = index
                 self.ball_capture_player = index
                 self.ball_event = "neutral"
                 self._register_touch(index)
-                self.ball_capture_cooldown = 8
+                self.ball_capture_cooldown = CAPTURE_RETRY_FRAMES
                 self.ball[0:2] = self.positions[index]
                 self.ball[2:4] = self.velocity[index]
                 self.ball[4] = 0.0
@@ -1436,6 +1768,20 @@ class game:
         success_chance = float(np.clip(success_chance + 0.15, 0.2, 0.98))
 
         if self.rng.random() < success_chance:
+            # A teammate winning a pass through THIS path (a deflection, a
+            # scrappy second ball) still completed it. Only the clean-control
+            # branch above credited it, so passes_completed read ~15 points
+            # below the side's real retention.
+            passer = self.last_pass_player
+            if (
+                pass_like_event
+                and passer >= 0
+                and passer != index
+                and (passer < 11) == (index < 11)
+            ):
+                self.match_stats[passer]["passes_completed"] += 1
+                self.last_pass_player = -1
+
             self.ball_controller = index
             self.ball_capture_player = index
             self.ball_event = "neutral"
@@ -1528,7 +1874,7 @@ class game:
             # Header at goal: _calculate_shot's aim, spread from heading.
             pressure = int(np.sum(np.linalg.norm(opponents - my_pos, axis=1) < 3.0))
             composure = float(getattr(attrs, "composure", 50))
-            sigma = max(0.9, (100.0 - head_attr) / 10.0 + pressure * (100.0 - composure) / 20.0)
+            sigma = max(0.9, max(0.0, 100.0 - head_attr) / 10.0 + pressure * max(0.0, 100.0 - composure) / 20.0)
             aim_x = (32.2 if self.rng.random() < 0.5 else 37.8) + self.rng.normal(0.0, sigma)
             aim_z = max(0.0, self.rng.uniform(0.2, 1.8) + self.rng.normal(0.0, sigma * 0.3))
             vec = np.array([aim_x, enemy_goal[1]]) - my_pos
@@ -1645,7 +1991,7 @@ class game:
         """`unit_vec` rotated by this passer's execution error -- see
         PASS_AIM_ERROR_DEGREES. Seeded rng, so still deterministic."""
         accuracy = float(getattr(self.all_players[index].attributes, "accuracy", 50))
-        sigma_deg = PASS_AIM_ERROR_DEGREES * max(0.0, 100.0 - accuracy) / 100.0
+        sigma_deg = PASS_AIM_ERROR_DEGREES * (1.0 - stat_ability(accuracy))
         sigma_deg *= PASS_AIM_ERROR_BY_TYPE.get(pass_type, 1.0)
         if sigma_deg <= 0.0:
             return unit_vec
@@ -1908,11 +2254,13 @@ class game:
             # Short enough that the kicker's side can still contest a cross on
             # its way down; a ball over their heads is kept off them by reach.
             self.ball_release_cooldown = 10 + int(min(15.0, launch_speed * 0.35))
+            self.ball_release_team_cooldown = TEAMMATE_RELEASE_BLOCK_FRAMES
             # A hop off the ground; lofted kicks overwrite ball_vz after this.
             self.ball[4] = 0.0
             self.ball_vz = self._launch_vz(0.0, 0.0, 0.6)
         else:
             self.ball_release_cooldown = 8 + int(min(8.0, launch_speed * 0.08))
+            self.ball_release_team_cooldown = TEAMMATE_RELEASE_BLOCK_FRAMES
             self.ball[4] = 0.0
             self.ball_vz = 0.0
 
@@ -1959,6 +2307,20 @@ class game:
                 if dist < 1e-8:
                     return
 
+                # Who this ball is FOR. Nothing tracked this before, so the man
+                # it was aimed at carried on with his own run and it rolled past
+                # him -- the "passes go straight through players" problem.
+                # Give and go: the man who played it pushes on instead of
+                # standing admiring it.
+                self.pass_and_move = index
+                self.pass_and_move_timer = PASS_AND_MOVE_FRAMES
+                mates = range(0, 11) if index < 11 else range(11, 22)
+                self.pass_receiver = min(
+                    (m for m in mates if m != index),
+                    key=lambda m: _norm2(self.positions[m] - target),
+                    default=-1,
+                )
+
                 if self.must_pass_next and self.must_pass_player == index:
                     self._clear_must_pass()
                 elif self.kickoff_pass_required and self.kickoff_pass_player == index:
@@ -1973,9 +2335,20 @@ class game:
                 # dead code), so the engine forces it here -- the same way a
                 # restart taken from a pitch corner is forced into a cross
                 # just below.
-                if self.pending_restart_pass_type == "throw_in" and self.restart_player == index:
+                if self.pending_restart_pass_type == "throw_in" and self.pending_restart_pass_player == index:
                     pass_type = "throw_in"
                     self.pending_restart_pass_type = None
+                    self.pending_restart_pass_player = -1
+                elif self.pending_restart_pass_type == "cross" and self.pending_restart_pass_player == index:
+                    # A delivery, not a square ball: a crossable free kick, or a
+                    # deep one hit long by a side chasing the game.
+                    pass_type = "cross"
+                    target = self._choose_restart_delivery(index)
+                    vec = target - self.positions[index]
+                    dist = _norm2(vec)
+                    unit_vec = vec / dist if dist > 1e-8 else unit_vec
+                    self.pending_restart_pass_type = None
+                    self.pending_restart_pass_player = -1
                 elif self.kickoff_pass_player == index:
                     px, py = self.positions[index]
                     if (px <= 5.0 or px >= PITCH_WIDTH - 5.0) and (py <= 5.0 or py >= PITCH_HEIGHT - 5.0):
@@ -2016,7 +2389,9 @@ class game:
                         "normal": ActionType.PASS,
                         "clearance": ActionType.CLEARANCE,
                         "cross": ActionType.CROSS,
-                        "throw_in": ActionType.THROW_IN,
+                        # Not THROW_IN: that is the award, and the client
+                        # banners it. This is the throw itself.
+                        "throw_in": ActionType.THROW_TAKEN,
                     }.get(pass_type, ActionType.PASS)
                     self.replay.event(self.match_clock_frames, pass_event, player_idx=index, team=0 if index < 11 else 1)
                 unit_vec = self._fuzz_pass_direction(index, unit_vec, pass_type)
@@ -2099,6 +2474,10 @@ class game:
                     self.velocity[holder_idx] = np.zeros(2, dtype=float)
                     self.player_stun_cooldown[index] = 20
                     self.player_stun_cooldown[holder_idx] = 20
+                elif self._is_foul(index, holder_idx, stat_diff):
+                    # Mistimed lunge rather than a clean beating.
+                    self._award_foul(index, holder_idx)
+                    return
                 else:
                     # Failed Tackle: Defender gets ankle-broken
                     self.visual_action[index] = "anklebreaker"
@@ -2115,6 +2494,335 @@ class game:
 
         elif action_type == "save":
             self._attempt_save(index)
+
+    def _choose_restart_delivery(self, index: int) -> np.ndarray:
+        """Where a set-piece delivery is aimed: the box, at whoever is in it.
+        Falls back to the penalty spot so a cross with nobody home still goes
+        somewhere sensible rather than out of play."""
+        team = 0 if index < 11 else 1
+        goal_y = PITCH_HEIGHT if team == 0 else 0.0
+        box_y = goal_y - 11.0 if team == 0 else 11.0
+        mates = [
+            i for i in self._fk_outfield(team, exclude={index})
+            if abs(float(self.positions[i][1]) - box_y) < 12.0
+        ]
+        if not mates:
+            return np.array([PITCH_WIDTH / 2.0, box_y])
+        pick = min(mates, key=lambda i: abs(float(self.positions[i][0]) - PITCH_WIDTH / 2.0))
+        return np.asarray(self.positions[pick], dtype=float)
+
+    def _arm_restart_pass(self, kind: str, player: int):
+        """Tag the restart's first touch.
+
+        Keeps its OWN player reference: restart_player is wiped the moment the
+        whistle goes, so the `restart_player == index` guard this used to rely
+        on could never be true by the time anyone actually played the ball --
+        which is why throw-ins were being released as ordinary passes.
+        """
+        self.pending_restart_pass_type = kind
+        self.pending_restart_pass_player = int(player)
+
+    def _clear_free_kick_ring(self, spot, attacking_team: int, exclude) -> None:
+        """Push the defending side out of the ten-yard ring."""
+        defending = 1 - attacking_team
+        goal_y = PITCH_HEIGHT if attacking_team == 0 else 0.0
+        away = np.array([0.0, 1.0 if goal_y < float(spot[1]) else -1.0])
+        spot = np.asarray(spot, dtype=float)
+        for i in self._fk_outfield(defending, exclude=exclude):
+            delta = np.asarray(self.positions[i], dtype=float) - spot
+            dist = _norm2(delta)
+            if dist >= WALL_DISTANCE:
+                continue
+            unit = delta / dist if dist > 1e-6 else away
+            self.positions[i] = spot + unit * WALL_DISTANCE
+
+    def _deficit(self, team: int) -> int:
+        """Goals this side is behind by, 0 if level or ahead. Every free kick
+        setup reads this: a team chasing the game commits more bodies."""
+        return max(0, int(self.scores[1 - team]) - int(self.scores[team]))
+
+    def _free_kick_kind(self, spot, team: int) -> str:
+        goal = np.array([PITCH_WIDTH / 2.0, PITCH_HEIGHT if team == 0 else 0.0])
+        dist = _norm2(goal - np.asarray(spot, dtype=float))
+        off_centre = abs(float(spot[0]) - PITCH_WIDTH / 2.0)
+        if dist <= FK_SHOOTING_RANGE and off_centre <= FK_SHOOTING_HALF_WIDTH:
+            return "shooting"
+        if dist <= FK_CROSS_RANGE:
+            return "crossable"
+        return "defensive"
+
+    def _fk_outfield(self, team: int, exclude=()) -> list:
+        return [
+            i for i in (range(0, 11) if team == 0 else range(11, 22))
+            if i not in self._keeper_indices and i not in exclude
+        ]
+
+    def _setup_defensive_free_kick(self, spot, team: int) -> int:
+        """Deep in their own half: a restart of play, not a chance.
+
+        A centre-half or holder takes it, the side in front of him pushes up to
+        meet it, and the defending side drops back into its shape. No wall --
+        nobody is shooting from here. A team chasing the game pushes further up
+        and launches it instead of playing out.
+        """
+        chase = min(self._deficit(team), FK_CHASE_BONUS_MAX)
+        taker = self._pick_role_slot(team, ("CB", "CDM", "LB", "RB"), 2)
+        forward = 1.0 if team == 0 else -1.0
+        self.positions[taker] = np.asarray(spot, dtype=float) - np.array([0.0, forward * 1.5])
+
+        others = self._fk_outfield(team, exclude={taker})
+        if chase:
+            # Behind, so this is a chance, not a restart: put bodies in the box
+            # for the ball he is about to launch. Pushing everyone up a few
+            # units left nobody to aim at.
+            box_y = 85.0 if team == 0 else 15.0
+            others.sort(key=lambda i: -float(self.positions[i][1]) * forward)
+            for i in others[: 2 + chase]:
+                self.positions[i] = np.array([
+                    PITCH_WIDTH / 2.0 + self.rng.uniform(-11.0, 11.0),
+                    box_y + self.rng.uniform(-4.0, 4.0),
+                ])
+            others = others[2 + chase:]
+        # Everyone else ahead of the ball pushes on.
+        push = 6.0 + chase * 4.0
+        for i in others:
+            y = float(self.positions[i][1]) + forward * push
+            self.positions[i][1] = float(np.clip(y, 2.0, PITCH_HEIGHT - 2.0))
+
+        # The defending side drops into its own shape rather than pressing a
+        # dead ball it cannot win.
+        for i in self._fk_outfield(1 - team):
+            slot = np.asarray(self.formation[i]["pos"], dtype=float)
+            self.positions[i] = 0.5 * self.positions[i] + 0.5 * slot
+
+        # Behind: hit it long. Level or ahead: play out.
+        self._arm_restart_pass("cross" if chase else "free_kick", taker)
+        return taker
+
+    def _setup_crossable_free_kick(self, spot, team: int) -> int:
+        """Wide, or too far out to shoot: a delivery into the box.
+
+        Set up like a corner -- bodies into the area, markers with them, a rest
+        line behind. How many go in scales with the deficit.
+        """
+        chase = min(self._deficit(team), FK_CHASE_BONUS_MAX)
+        taker = self._pick_role_slot(team, ("LM", "RM", "LW", "RW", "CM"), 7)
+        forward = 1.0 if team == 0 else -1.0
+        self.positions[taker] = np.asarray(spot, dtype=float) - np.array([0.0, forward * 1.5])
+
+        box_y = 85.0 if team == 0 else 15.0
+        runners = self._fk_outfield(team, exclude={taker})
+        runners.sort(key=lambda i: -float(self.positions[i][1]) * forward)
+        going_in = runners[: 3 + chase]
+        for i in going_in:
+            self.positions[i] = np.array([
+                PITCH_WIDTH / 2.0 + self.rng.uniform(-11.0, 11.0),
+                box_y + self.rng.uniform(-4.0, 4.0),
+            ])
+        # The rest hold a line behind the ball for the clearance.
+        for i in runners[3 + chase:]:
+            self.positions[i][1] = float(spot[1]) - forward * 8.0
+
+        markers = self._fk_outfield(1 - team)
+        markers.sort(key=lambda i: float(self.positions[i][1]) * forward, reverse=True)
+        for n, i in enumerate(markers[: len(going_in) + 1]):
+            self.positions[i] = np.array([
+                PITCH_WIDTH / 2.0 + self.rng.uniform(-10.0, 10.0),
+                box_y + forward * 3.0 + self.rng.uniform(-3.0, 3.0),
+            ])
+
+        self._arm_restart_pass("cross", taker)
+        return taker
+
+    def _setup_shooting_free_kick(self, spot, team: int) -> int:
+        """Close and central: the best striker of a ball has a go, over a wall.
+
+        Resolved by its own check at the whistle (_resolve_free_kick), not as
+        an open-play shot -- the keeper is set and the wall is in the way, which
+        the open-play save curve knows nothing about.
+        """
+        candidates = self._fk_outfield(team)
+        taker = max(
+            candidates,
+            key=lambda i: self.all_players[i].attributes.shooting * 0.7
+            + self.all_players[i].attributes.accuracy * 0.3,
+        )
+        forward = 1.0 if team == 0 else -1.0
+        self.positions[taker] = np.asarray(spot, dtype=float) - np.array([0.0, forward * 2.0])
+
+        self._place_wall(spot, team)
+        keeper = self._keeper_indices[1] if team == 0 else self._keeper_indices[0]
+        goal_y = PITCH_HEIGHT if team == 0 else 0.0
+        self.positions[keeper] = np.array([PITCH_WIDTH / 2.0, goal_y - forward * 0.5])
+        return taker
+
+    def _resolve_free_kick(self, taker: int, keeper: int):
+        """Beat the wall and hit the target, then beat a set keeper."""
+        attrs = self.all_players[taker].attributes
+        gk = self.all_players[keeper].attributes
+        placement = FK_PLACEMENT_MIN + FK_PLACEMENT_SPAN * stat_ability(
+            attrs.shooting * 0.7 + attrs.accuracy * 0.3
+        )
+        save = FK_SAVE_MIN + FK_SAVE_SPAN * stat_ability(
+            (gk.agility * 0.6 + gk.vision * 0.4 + gk.ballcontrol * 0.3) / 1.3
+        )
+        on_target = self.rng.random() < placement
+        blocked = self.rng.random() < FK_WALL_BLOCK
+        saved = self.rng.random() < save
+        return (on_target and not blocked and not saved), on_target, blocked
+
+    def _place_wall(self, spot, attacking_team: int) -> set:
+        """Stands three defenders across the ball-to-goal line, a legal distance
+        off it, picked by who is already nearest. Returns who was used."""
+        defending = 1 - attacking_team
+        goal_y = PITCH_HEIGHT if attacking_team == 0 else 0.0
+        to_goal = np.array([PITCH_WIDTH / 2.0, goal_y]) - spot
+        dist = _norm2(to_goal)
+        if dist < 1e-6:
+            return set()
+        unit = to_goal / dist
+        wall_centre = spot + unit * min(WALL_DISTANCE, dist * 0.5)
+        across = np.array([-unit[1], unit[0]])
+
+        outfield = [
+            i for i in (range(0, 11) if defending == 0 else range(11, 22))
+            if i not in self._keeper_indices
+        ]
+        outfield.sort(key=lambda i: _norm2(self.positions[i] - wall_centre))
+        used = set()
+        for n, i in enumerate(outfield[:WALL_PLAYERS]):
+            offset = (n - (WALL_PLAYERS - 1) / 2.0) * 1.0
+            self.positions[i] = wall_centre + across * offset
+            used.add(i)
+        return used
+
+    def _take_direct_free_kick(self):
+        """Strike it at the whistle. Unlike open play the keeper is set and a
+        wall is in the way, so this goes through _resolve_free_kick rather than
+        the open-play save curve, which knows about neither."""
+        taker = self.restart_player
+        if taker is None:
+            return
+        attacking = self.restart_team
+        keeper = self._keeper_indices[1] if attacking == 0 else self._keeper_indices[0]
+        scored, on_target, blocked = self._resolve_free_kick(taker, keeper)
+
+        goal_y = PITCH_HEIGHT if attacking == 0 else 0.0
+        side = 1.0 if self.rng.random() < 0.5 else -1.0
+        target_x = PITCH_WIDTH / 2.0 + side * (GOAL_WIDTH / 2.0 - 0.7)
+        if not on_target:
+            target_x += side * GOAL_WIDTH * 0.7
+
+        self.match_stats[taker]["shots"] += 1
+        self.last_shot_player = taker
+        self.last_shot_on_target = on_target
+        if on_target:
+            self.match_stats[taker]["shots_on_target"] += 1
+
+        vec = np.array([target_x, goal_y]) - self.positions[taker]
+        unit = vec / max(_norm2(vec), 1e-6)
+        self._release_ball(taker, unit, FREE_KICK_SHOT_SPEED, aerial=True, event_type="shot")
+        # Aim it FLAT. _flight_time defaulted to ground friction while the ball
+        # flies under air friction, so the estimate was far too long and
+        # _launch_vz answered with a lob: from 25 units it peaked at 5m against
+        # a 2.5m bar, and every free kick outside ~18 units sailed over.
+        flight = self._flight_time(_norm2(vec), FREE_KICK_SHOT_SPEED, friction=BALL_AIR_FRICTION)
+        self.ball_vz = min(
+            self._launch_vz(0.0, FREE_KICK_TARGET_HEIGHT, flight), FREE_KICK_MAX_VZ
+        )
+
+        if blocked and on_target:
+            # Into the wall: it comes straight back off them.
+            self.ball[2:4] = -self.ball[2:4] * 0.3
+        elif not scored and on_target:
+            self.match_stats[keeper]["saves"] += 1
+            self.ball[0:2] = self.positions[keeper]
+            self.ball[2:4] = np.zeros(2)
+            self.ball_controller = keeper
+            if self.replay:
+                self.replay.event(
+                    self.match_clock_frames, ActionType.SAVE,
+                    player_idx=keeper, team=0 if keeper < 11 else 1,
+                )
+
+    def _take_penalty(self):
+        """Resolve the spot kick, then leave the ball live for the rebound."""
+        taker = self.restart_player
+        if taker is None:
+            return
+        attacking = self.restart_team
+        keeper = self._keeper_indices[1] if attacking == 0 else self._keeper_indices[0]
+        scored, aim, dive, on_target = self._resolve_penalty(taker, keeper)
+
+        goal_y = PITCH_HEIGHT if attacking == 0 else 0.0
+        target_x = PITCH_WIDTH / 2.0 + aim * (GOAL_WIDTH / 2.0 - 0.6)
+        if not on_target:
+            target_x += (GOAL_WIDTH * 0.8) * (1 if aim >= 0 else -1)
+
+        self.match_stats[taker]["shots"] += 1
+        self.last_shot_player = taker
+        self.last_shot_on_target = on_target
+        vec = np.array([target_x, goal_y]) - self.positions[taker]
+        unit = vec / max(_norm2(vec), 1e-6)
+        self._release_ball(taker, unit, PENALTY_SHOT_SPEED, aerial=False, event_type="shot")
+        if on_target:
+            self.match_stats[taker]["shots_on_target"] += 1
+
+        self.positions[keeper] = np.array(
+            [PITCH_WIDTH / 2.0 + dive * KEEPER_REACH * 0.7, goal_y], dtype=float
+        )
+        if not scored and on_target:
+            # He read it: the ball dies at his hands rather than crossing.
+            self.match_stats[keeper]["saves"] += 1
+            self.ball[0:2] = self.positions[keeper]
+            self.ball[2:4] = np.zeros(2)
+            self.ball_controller = keeper
+            if self.replay:
+                self.replay.event(
+                    self.match_clock_frames, ActionType.SAVE,
+                    player_idx=keeper, team=0 if keeper < 11 else 1,
+                )
+
+    def _in_own_box(self, index: int, spot) -> bool:
+        """Is `spot` inside the penalty area index DEFENDS? The attacking-box
+        test at the state build is the mirror of this one."""
+        x, y = float(spot[0]), float(spot[1])
+        if not (14.0 < x < 56.0):
+            return False
+        return y < 18.0 if index < 11 else y > 82.0
+
+    def _is_foul(self, defender: int, holder: int, stat_diff: float) -> bool:
+        """Did a missed tackle take the man instead of the ball?
+
+        Rolled only on a FAILED tackle, so a clean challenge is never a foul.
+        Rises with aggression, with how badly the defender was outmatched (a
+        beaten man lunges), and with coming from behind -- headings pointing
+        the same way means he is chasing, not facing.
+        """
+        attrs = self.all_players[defender].attributes
+        from_behind = float(np.dot(self.heading[defender], self.heading[holder]))
+        chance = (
+            FOUL_BASE
+            + stat_ability(getattr(attrs, "aggression", 40)) * FOUL_AGGRESSION_WEIGHT
+            + max(0.0, -stat_diff / 100.0) * FOUL_OUTPACED_WEIGHT
+            + max(0.0, from_behind) * FOUL_FROM_BEHIND_WEIGHT
+        )
+        return self.rng.random() < float(np.clip(chance, 0.0, FOUL_MAX))
+
+    def _award_foul(self, offender: int, victim: int):
+        """Whistle. A foul in the offender's own box is a penalty, anything
+        else a free kick from the spot the victim was standing."""
+        spot = np.array(self.positions[victim], dtype=float)
+        self.match_stats[offender]["fouls"] += 1
+        self.velocity[offender] = np.zeros(2, dtype=float)
+        if self.replay:
+            self.replay.event(
+                self.match_clock_frames, ActionType.FOUL,
+                player_idx=offender, team=0 if offender < 11 else 1,
+            )
+        attacking_team = 0 if victim < 11 else 1
+        kind = "penalty" if self._in_own_box(offender, spot) else "free_kick"
+        self._begin_restart(kind, attacking_team, float(spot[0]), float(spot[1]))
 
     def _attempt_save(self, index: int) -> bool:
         """The one and only way a keeper stops a shot.
@@ -2172,6 +2880,13 @@ class game:
         if self.rng.random() >= save_chance: #beaten
             self.velocity[index] = np.zeros(2, dtype=float)
             self.player_stun_cooldown[index] = KEEPER_BEATEN_FRAMES
+            self.visual_action[index] = "beaten"
+            self.visual_action_timer[index] = KEEPER_BEATEN_FRAMES
+            if self.replay:
+                self.replay.event(
+                    self.match_clock_frames, ActionType.SAVE_FAILED,
+                    player_idx=index, team=0 if index < 11 else 1,
+                )
             return False
 
         self.match_stats[index]["saves"] += 1
@@ -2236,12 +2951,12 @@ class game:
 
         Quality scales with the keeper; difficulty comes from the shot -- how
         fast it is, and how far they have to move to reach where it will
-        cross the line. Anchored so a 100-rated keeper is near-certain on a
+        cross the line. Anchored so a keeper at STAT_CEILING is near-certain on a
         slow ball straight at them and about even money on a fast one at full
         stretch.
         """
-        save_stat = (gk_attrs.agility * 0.6) + (gk_attrs.vision * 0.4) + (gk_attrs.ballcontrol * 0.3)
-        quality = KEEPER_QUALITY_BASE + (1.0 - KEEPER_QUALITY_BASE) * min(1.0, save_stat / 100.0)
+        save_stat = ((gk_attrs.agility * 0.6) + (gk_attrs.vision * 0.4) + (gk_attrs.ballcontrol * 0.3)) / 1.3
+        quality = KEEPER_QUALITY_BASE + (1.0 - KEEPER_QUALITY_BASE) * min(1.0, save_stat / STAT_CEILING)
 
         speed_term = min(1.0, max(0.0, ball_speed / HARD_SHOT_SPEED))
         reach_term = min(1.0, max(0.0, lateral / KEEPER_REACH))
@@ -2250,6 +2965,38 @@ class game:
         )
 
         return float(np.clip(quality * (1.0 - MAX_DIFFICULTY_PENALTY * difficulty), 0.02, 0.99))
+
+    def _resolve_penalty(self, taker_index: int, keeper_index: int):
+        """A penalty is a guessing game, not a shot.
+
+        Deliberately NOT routed through _save_chance: that is calibrated for
+        open play and rates a slow central shot as the easiest possible save,
+        which is exactly what a penalty is -- so penalties would be saved far
+        too often. Here the taker picks a corner and the keeper independently
+        picks one, and the keeper only gets a save roll if he guessed right.
+
+        Both scales start at 0.80, so even a hopeless taker mostly hits his
+        spot and even a poor keeper saves the ones he reads. That keeps
+        conversion in the 60-70% band while still rewarding the good ones.
+
+        Returns (scored, aim, dive, on_target); aim/dive are -1 left, 0 middle,
+        1 right, from the taker's point of view.
+        """
+        attrs = self.all_players[taker_index].attributes
+        gk = self.all_players[keeper_index].attributes
+
+        placement = PENALTY_PLACEMENT_MIN + PENALTY_PLACEMENT_SPAN * stat_ability(
+            attrs.shooting * 0.8 + attrs.accuracy * 0.2
+        )
+        save = PENALTY_SAVE_MIN + PENALTY_SAVE_SPAN * stat_ability(
+            (gk.agility * 0.6 + gk.vision * 0.4 + gk.ballcontrol * 0.3) / 1.3
+        )
+
+        aim = int(self.rng.choice(PENALTY_SIDES))
+        dive = int(self.rng.choice(PENALTY_SIDES))
+        on_target = self.rng.random() < placement
+        read_it = dive == aim and self.rng.random() < save
+        return (on_target and not read_it), aim, dive, on_target
 
     def _players_deciding(self, dist_to_ball: np.ndarray) -> np.ndarray:
         """Boolean per player: does this round get a fresh decision from
@@ -2299,6 +3046,10 @@ class game:
 
     def step(self):
         self.step_count += 1
+        if self.pass_and_move_timer > 0:
+            self.pass_and_move_timer -= 1
+        if self.ball_release_team_cooldown > 0:
+            self.ball_release_team_cooldown -= 1
         if self.ball_release_cooldown > 0:
             self.ball_release_cooldown -= 1
         if self.ball_release_cooldown == 0:
@@ -2318,10 +3069,15 @@ class game:
         if self.ball_release_player >= 0 and self.ball_release_cooldown > 0 and self.ball_controller == self.ball_release_player:
             self.ball_controller = -1
 
-        if self.must_pass_next and self.ball_controller != self.must_pass_player:
-            self._clear_must_pass()
-        elif self.kickoff_pass_required and self.ball_controller != self.kickoff_pass_player:
-            self._clear_must_pass()
+        # Only ANOTHER player taking the ball clears this, never a loose one.
+        # A set piece leaves the ball on the deck with ball_controller == -1, and
+        # this ran before the restart guard below -- so must_pass was wiped on
+        # the first step and the taker was free to shoot instead of playing it.
+        if self.ball_controller >= 0:
+            if self.must_pass_next and self.ball_controller != self.must_pass_player:
+                self._clear_must_pass()
+            elif self.kickoff_pass_required and self.ball_controller != self.kickoff_pass_player:
+                self._clear_must_pass()
 
         if self.kickoff_timer > 0:
             self._maybe_kickoff()
@@ -2372,9 +3128,20 @@ class game:
                             ]) + self.rng.normal(0.0, 8.0, size=outfield.size)
                             self._attempt_capture(int(outfield[int(np.argmax(score))]))
             else:
-                closest_idx = int(np.argmin(distances))
-                if distances[closest_idx] < self.possession_radius + 1.5:
-                    self._attempt_capture(closest_idx)
+                # Offer it down the queue, not just to the nearest man. He may
+                # be inside his own capture lockout from a touch he just missed,
+                # and asking only him meant the ball rolled through a crowd
+                # untouched -- a third of all offers were refused this way, and
+                # in a third of those somebody else was stood in range.
+                order = np.argsort(distances)
+                for cand in order[:LOOSE_BALL_OFFERS]:
+                    cand = int(cand)
+                    if distances[cand] >= self.possession_radius + 1.5:
+                        break
+                    if self.ball_capture_player == cand and self.ball_capture_cooldown > 0:
+                        continue
+                    if self._attempt_capture(cand):
+                        break
 
             if self.ball_event in {"pass", "cross", "shot", "throw_in"}:
                 possesion = 1 if self.last_touch_team == 0 else -1
@@ -2457,6 +3224,10 @@ class game:
                 "in_attacking_box": bool(in_boxes[i]),
                 "pressure_count": int(pressure_counts[i]),
                 "teammates": self.positions[0:11] if home else self.positions[11:22],
+                "teammate_vel": self.velocity[0:11] if home else self.velocity[11:22],
+                "opponent_vel": self.velocity[11:22] if home else self.velocity[0:11],
+                "teammate_pace": self._pace[0:11] if home else self._pace[11:22],
+                "opponent_pace": self._pace[11:22] if home else self._pace[0:11],
                 "opponents": self.positions[11:22] if home else self.positions[0:11],
                 "formation_pos": self.formation[i]["pos"],
                 "my_role": self.formation[i]["role"],
@@ -2484,6 +3255,33 @@ class game:
                 "rng": self.rng,
             }
             intended_action = self.all_players[i].step(state)
+            # The intended receiver goes to meet the ball instead of running his
+            # own route past it. _chase_target keeps the meeting point in play.
+            if (
+                i == self.pass_and_move
+                and self.pass_and_move_timer > 0
+                and self.ball_controller != i
+            ):
+                fwd = 1.0 if i < 11 else -1.0
+                ahead = np.array([
+                    float(np.clip(self.positions[i][0] * 0.7 + (PITCH_WIDTH / 2.0) * 0.3, 2.0, PITCH_WIDTH - 2.0)),
+                    float(np.clip(self.positions[i][1] + fwd * PASS_AND_MOVE_PUSH, 2.0, PITCH_HEIGHT - 2.0)),
+                ])
+                intended_action = {
+                    "type": "move",
+                    "target": ahead,
+                    "speed_mod": pace_ability(self.all_players[i].attributes.speed) * 1.1,
+                }
+            if (
+                i == self.pass_receiver
+                and self.ball_controller == -1
+                and self.ball_event in {"pass", "cross", "throw_in"}
+            ):
+                intended_action = {
+                    "type": "move",
+                    "target": self.all_players[i]._chase_target(state),
+                    "speed_mod": pace_ability(self.all_players[i].attributes.speed) * 1.15,
+                }
             actions.append(intended_action)
             self._last_actions[i] = intended_action
             self.intent[i] = intended_action.get("intent") if intended_action else None

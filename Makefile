@@ -16,6 +16,8 @@
 #   make test-k K=keeper                                by name substring
 #   make sim                    10 matches, prints the shooting/keeper table
 #   make sim MATCHES=30 SEED=5  more matches, different seeds
+#   make tiers                  goals/match at every tier, bronze -> icon
+#   make tiers SEEDS=16         a bigger sample
 #
 # `sim` is the calibration harness, not a test: it prints shots, shots on
 # target, save rate, goals and how long the ball spends airborne, which is
@@ -48,9 +50,10 @@ PAGES_URL  := https://cemcoma.github.io/packedfootball/
 PYTHON  ?= python3
 PYTEST  := $(PYTHON) -m pytest
 MATCHES ?= 10
+SEEDS   ?= 8
 SEED    ?= 1
 
-.PHONY: test test-fast test-slow test-gap test-tiers test-one test-k sim \
+.PHONY: test test-fast test-slow test-gap test-tiers test-one test-k sim tiers \
         web serve-web deploy-web clean-web
 
 ## Everything. Config (testpaths, sys.path) comes from pytest.ini.
@@ -86,6 +89,11 @@ test-k:
 ## Balance harness -- simulate matches and print the shooting/keeper table.
 sim:
 	$(PYTHON) packedfootball/scripts/simulate_matches.py --matches $(MATCHES) --seed $(SEED)
+
+## Goals per match at every tier, same tier both sides. Faster and more
+## tunable than test-tiers, and it prints passing/throw-ins too.
+tiers:
+	$(PYTHON) packedfootball/scripts/tier_report.py --seeds $(SEEDS)
 
 ## Export the Godot client to $(BUILD_WEB).
 # --headless so it never opens the editor window. Godot creates the output

@@ -29,6 +29,7 @@ from gameEngine import (
     KEEPER_REACH,
     MAX_DIFFICULTY_PENALTY,
     SAVE_COMMIT_MARGIN,
+    STAT_CEILING,
 )
 
 KEEPER_A = 0    # defends y=0
@@ -74,13 +75,13 @@ def set_up_shot(g, cross_x, speed=20.0, keeper_x=GOAL_CENTER_X, distance=4.0, he
 
 def test_a_perfect_keeper_saves_an_easy_shot(match):
     """Slow ball, straight at them: the agreed ~100% anchor."""
-    chance = match._save_chance(FakeAttrs(100), ball_speed=5.0, lateral=0.0)
+    chance = match._save_chance(FakeAttrs(STAT_CEILING), ball_speed=5.0, lateral=0.0)
     assert chance >= 0.95
 
 
 def test_a_perfect_keeper_is_even_money_on_the_hardest_shot(match):
     """Fastest ball, full-stretch dive: the agreed ~50% anchor."""
-    chance = match._save_chance(FakeAttrs(100), ball_speed=HARD_SHOT_SPEED, lateral=KEEPER_REACH)
+    chance = match._save_chance(FakeAttrs(STAT_CEILING), ball_speed=HARD_SHOT_SPEED, lateral=KEEPER_REACH)
     assert chance == pytest.approx(1.0 - MAX_DIFFICULTY_PENALTY, abs=0.02)
 
 

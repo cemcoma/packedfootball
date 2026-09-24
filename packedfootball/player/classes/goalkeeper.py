@@ -1,4 +1,4 @@
-from game_config import GOAL_WIDTH, PITCH_HEIGHT, PITCH_WIDTH
+from game_config import pass_power, GOAL_WIDTH, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 from gameEngine import possession_radius
 from player.player import _norm2, player, ActionProfile
 import numpy as np
@@ -29,6 +29,10 @@ class GoalkeeperActionProfile(ActionProfile):
         "pass": 0.2, "clear": 3.0, "hold_defense": 2.0,
         "recover": 3.0, "contain": 1.2, "capture": 1.5, "dive": 2.0, "sweep": 1.0
     }
+
+KEEPER_CLEAR_SHARE = 0.5      # the other half goes to a centre-half
+KEEPER_OUTBALL_MAX_DEPTH = 30.0
+
 
 class Goalkeeper(player):
     primary_stats = ("passing", "agility", "ballcontrol")
@@ -64,15 +68,35 @@ class Goalkeeper(player):
             y = float(np.clip(point[1], PITCH_HEIGHT - PENALTY_BOX_DEPTH, PITCH_HEIGHT))
         return np.array([x, y], dtype=float)
 
+    def _centre_back_target(self, state: dict) -> np.ndarray:
+        """The nearest defender square of him, which is where a keeper rolls it.
+
+        Teammates carry no role in state, so they are picked by shape instead:
+        behind the halfway line and not far up the pitch. Falls back to the
+        closest man so this always returns somewhere.
+        """
+        mates = np.asarray(state.get("teammates", []), dtype=float)
+        my_pos = np.asarray(state["my_pos"], dtype=float)
+        goal_dir = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        deep = [
+            tm for tm in mates
+            if not np.array_equal(tm, my_pos)
+            and (float(tm[1]) - float(my_pos[1])) * goal_dir < KEEPER_OUTBALL_MAX_DEPTH
+        ]
+        pool = deep if deep else [tm for tm in mates if not np.array_equal(tm, my_pos)]
+        if not pool:
+            return my_pos
+        return min(pool, key=lambda tm: _norm2(np.asarray(tm) - my_pos))
+
     def _build_action(self, decision: str, state: dict) -> dict | None:
         if decision == "stop":
             return None
 
         elif decision == "pass":
-            best_target = self._choose_pass_target(state)
+            best_target = self._centre_back_target(state)
             dist = _norm2(best_target - state["my_pos"])
-            required_power = min(1.0, dist / 8.0)
-            actual_power = required_power * (self.attributes.power / 50.0)
+            required_power = pass_power(dist, self.attributes.power, 1.25, 50.0)
+            actual_power = required_power
             return {"type": "pass", "target": best_target, "power": actual_power}
 
         elif decision == "clear":
@@ -103,7 +127,7 @@ class Goalkeeper(player):
                 GOAL_CENTER_X - KEEPER_LINE_HALF_WIDTH,
                 GOAL_CENTER_X + KEEPER_LINE_HALF_WIDTH,
             )
-            burst_speed = max(1.2, (self.attributes.speed * 0.4 + self.attributes.agility * 1.6) / 100.0)
+            burst_speed = max(1.2, (pace_ability(self.attributes.speed) * 0.4 + stat_ability(self.attributes.agility) * 1.6))
 
             return {"type": "move", "target": np.array([target_x, keeper_y]), "speed_mod": burst_speed}
 
@@ -113,7 +137,7 @@ class Goalkeeper(player):
             return {
                 "type": "move",
                 "target": target,
-                "speed_mod": max(0.8, self.attributes.speed / 100.0),
+                "speed_mod": max(0.8, pace_ability(self.attributes.speed)),
             }
 
         elif decision in {"hold_defense", "contain", "recover", "recover_slow"}:
@@ -132,7 +156,7 @@ class Goalkeeper(player):
             # Caught upfield? Get back at full pace regardless of decision.
             if abs(float(state["my_pos"][1]) - keeper_y) > PENALTY_BOX_DEPTH * 0.5:
                 speed = 1.0
-            return {"type": "move", "target": np.array([target_x, keeper_y]), "speed_mod": (self.attributes.speed * speed) / 100.0}
+            return {"type": "move", "target": np.array([target_x, keeper_y]), "speed_mod": pace_ability(self.attributes.speed) * speed}
 
         elif decision == "save":
             return {"type": "save", "stat": self.attributes.agility}
@@ -146,27 +170,16 @@ class Goalkeeper(player):
         return self._decide_on_ball_defense(state)
 
     def _decide_on_ball_defense(self, state: dict) -> str:
-        if state.get("must_pass_next", False):
-            return "pass"
+        # No must_pass_next branch: a clearance releases the ball just as a pass
+        # does, so a goal kick can take the same 50/50. Forcing "pass" there sent
+        # every goal kick short, which is not what a keeper does.
 
-        actions = ["pass", "clear", "stop"]
-        pressure = state.get("pressure_count", 0)
-
-        t_pass = getattr(self.attributes, "pass_tendency", 50) * 0.8 * self.get_action_bias("pass")
-        t_clear = getattr(self.attributes, "clear_tendency", 50) * 1.5 * self.get_action_bias("clear")
-        t_stop = 40.0 * self.get_action_bias("stop")
-
-        if pressure > 0:
-            t_clear *= 4.0
-            t_pass *= 1.2
-            t_stop = 0.0
-
-        total = t_pass + t_clear + t_stop
-        if total <= 0:
+        # A keeper does one of two things: hoof it, or give it to a centre-half.
+        # He does not look for a progressive pass like an outfielder -- that is
+        # what had him trying to thread balls upfield from his own six-yard box.
+        if state.get("pressure_count", 0) > 0:
             return "clear"
-
-        probs = [t_pass / total, t_clear / total, t_stop / total]
-        return state["rng"].choice(actions, p=probs)
+        return "clear" if state["rng"].random() < KEEPER_CLEAR_SHARE else "pass"
 
     def _decide_off_ball_attack(self, state: dict) -> str:
         # Own team has the ball upfield: hold the line, stay set.

@@ -124,3 +124,33 @@ def test_corner_still_goes_to_the_right_flag(match):
     tick_until(match, lambda gg: gg.restart_type is not None, max_ticks=30)
     if match.restart_type == "corner":
         assert match.ball[0] in (0.0, PITCH_WIDTH)
+
+
+def test_set_piece_taker_stands_over_the_ball(match):
+    """A taker who is not at the ball silently drags it to himself.
+
+    _release_ball sets ball[0:2] = positions[owner], so whoever takes a set
+    piece teleports the ball to wherever he happens to be. When takers were
+    walked into position instead of placed, the penalty taker was still 32
+    units away when he struck it and the shot came from midfield -- and
+    nothing in the suite noticed. This is that invariant.
+    """
+    for kind, team in (("free_kick", 0), ("penalty", 0), ("free_kick", 1), ("penalty", 1)):
+        match._begin_restart(kind, team, out_x=30.0, out_y=70.0 if team == 0 else 30.0)
+        taker = match.restart_player
+        assert taker is not None, f"{kind} picked nobody to take it"
+        gap = float(np.linalg.norm(match.positions[taker] - np.array(match.ball[0:2])))
+        assert gap < 3.0, f"{kind} taker is {gap:.1f} units from the ball"
+
+
+def test_free_kick_clears_the_ten_yard_ring(match):
+    """Defenders must back off, or the man who just fouled is still stood over
+    the ball and free to concede another one straight away."""
+    match._begin_restart("free_kick", 0, out_x=35.0, out_y=60.0)
+    spot = np.array(match.ball[0:2])
+    keepers = set(match._keeper_indices)
+    inside = [
+        i for i in range(11, 22)
+        if i not in keepers and float(np.linalg.norm(match.positions[i] - spot)) < 9.0
+    ]
+    assert not inside, f"defenders {inside} still inside the ring"

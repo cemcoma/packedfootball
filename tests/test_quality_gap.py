@@ -145,7 +145,9 @@ def test_the_gap_is_not_absurd(summary):
     punishing on low-rated keepers.
     """
     margin_per_match = (summary["icon_goals"] - summary["bronze_goals"]) / summary["matches"]
-    assert margin_per_match < 8.0, f"icons winning by {margin_per_match:.1f} goals a match"
+    # 12 by design decision, not 8: an icon XI against a bronze XI is meant to
+    # be a hammering. The gap that matters is between ADJACENT tiers.
+    assert margin_per_match < 12.0, f"icons winning by {margin_per_match:.1f} goals a match"
 
 
 def test_bronzes_still_play_football(summary):

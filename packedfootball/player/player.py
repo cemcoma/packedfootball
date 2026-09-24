@@ -7,7 +7,13 @@ from game_config import (  # noqa: F401 -- the appearance/career names are re-ex
     HEAD_CONTACT_HEIGHT,
     PITCH_HEIGHT,
     PITCH_WIDTH,
+    PLAYER_BASE_SPEED,
     RATED_MATCHES_FOR_AVERAGE,
+    STAT_CEILING,
+    pace_ability,
+    stat_ability,
+    pass_power,
+    BASE_KICK_POW,
 )
 from dataclasses import dataclass, asdict
 from typing import Final
@@ -16,24 +22,42 @@ import numpy as np
 import math
 
 position = ["GK","CD","LB","RB","CDM","CM","CAM","LM","RM","CF","LW","RW"]
-base_speed:Final = 10.0
+base_speed: Final = PLAYER_BASE_SPEED   # see game_config: shared with gameEngine
 
 
 # Minimum spread (in pitch units at the goal line) on any shot's aim -- see
 # _calculate_shot.
 SHOT_VARIANCE_FLOOR = 0.9
 
+# A rolling ball loses this much speed per unit travelled (-ln of the ground
+# friction), and how far ahead of a runner a pass may be played.
+PASS_DECAY_PER_UNIT = 0.6931
+PASS_MAX_LEAD_SECONDS = 1.2
+
 # The opposition box, as gameEngine's in_boxes draws it, plus the depth a
 # cross is aimed into: a runner at the edge of the area counts, one further
 # out does not. See _box_runners.
 BOX_X_MIN: Final = 14.0
 BOX_X_MAX: Final = 56.0
-CROSS_TARGET_DEPTH: Final = 25.0
+CROSS_TARGET_DEPTH: Final = 20.0
+
+# Roughly how long a cross hangs, used to work out where a runner will be.
+CROSS_FLIGHT_SECONDS: Final = 1.0
 
 # How close to goal a wide player must be before an open lane inside is
 # worth leaving the touchline for. Below ~26 it never fires: that close from
 # the touchline is already the crossing zone. See _decide_wingplay.
 CUT_INSIDE_RANGE: Final = 38.0
+
+# How near the middle counts as having cut in: the drive ends here and the
+# full menu (shoot, pass) takes over again.
+CUT_INSIDE_DONE_X: Final = 9.0
+
+# Clearances: how far off his facing a man can hit one, how much he angles
+# it at the touchline, and how far he tries to put it.
+CLEAR_MAX_TURN: Final = math.radians(90.0)
+CLEAR_WIDE_BIAS: Final = 0.9
+CLEAR_DISTANCE: Final = 30.0
 
 @dataclass
 class Attributes: #out of 100, can be over
@@ -65,6 +89,16 @@ class Attributes: #out of 100, can be over
     composure: int = 70
     clear_tendency:int = 10
 
+    def __post_init__(self):
+        # The one gate every attribute passes through: generation, Firestore,
+        # the out-of-position copy, and items. Height is centimetres, not a skill.
+        for field in self.__dataclass_fields__:
+            if field in PHYSICAL_FIELDS:
+                continue
+            value = getattr(self, field)
+            if value < 0 or value > STAT_CEILING:
+                setattr(self, field, int(min(STAT_CEILING, max(0, value))))
+
 TENDENCY_FIELDS = {
     "pass_tendency", "shoot_tendency", "drible_tendency",
     "aggression", "composure", "clear_tendency"
@@ -87,6 +121,7 @@ DEFAULT_STATISTICS = {
     "saves": 0,
     "clean_sheets": 0,
     "goals_conceded": 0,
+    "fouls": 0,
     "rating_sum": 0.0,
     "rating_count": 0,
 }
@@ -104,6 +139,7 @@ MATCH_STAT_FIELDS = (
     "saves",
     "goals_conceded",
     "clean_sheets",
+    "fouls",
 )
 
 # APPEARANCE_SLOTS / APPEARANCE_OPTION_COUNTS / DEFAULT_APPEARANCE: see
@@ -143,6 +179,144 @@ class ActionProfile:
 
     def get_action_biases(self):
         return dict(self.action_biases)
+
+def _clip_lead_to_pitch(origin, unit, dist, margin=0.4):
+    """Cut a lead short where the ball would leave the pitch. Aiming past the
+    touchline parked the chaser ON the line (positions are clamped there) while
+    the ball rolled by untouched -- so cut it out at the line instead."""
+    t = float(dist)
+    for axis, size in ((0, PITCH_WIDTH), (1, PITCH_HEIGHT)):
+        d = float(unit[axis])
+        if d > 1e-9:
+            t = min(t, (size - margin - float(origin[axis])) / d)
+        elif d < -1e-9:
+            t = min(t, (margin - float(origin[axis])) / d)
+    return origin + unit * max(0.0, t)
+
+
+# -ln(BALL_GROUND_FRICTION): a rolling ball's speed decays by this per second.
+BALL_DECAY_PER_SECOND: Final = 0.6931
+INTERCEPT_HORIZON: Final = 2.5
+
+# Aim this much FURTHER down the ball's path than the earliest meeting point, so
+# the chaser is stood in the line waiting rather than arriving at the same
+# instant as the ball. At a 1.0 possession radius, meeting it exactly means any
+# error at all lets the ball straight past.
+INTERCEPT_LEAD_FACTOR: Final = 1.35
+
+# A lane is fully open once every defender is this many seconds off reaching
+# it; below that, openness falls off smoothly to 0.
+LANE_SAFE_MARGIN_SECONDS: Final = 0.45
+
+# What a fully blocked lane costs a pass option. Big enough to lose to an open
+# one, small enough that a tight forward ball can still beat a safe square one.
+LANE_BLOCKED_PENALTY: Final = 400.0
+
+
+def _ball_rolled(ball_speed: float, t: float) -> float:
+    """How far a rolling ball has travelled by time t."""
+    return (ball_speed / BALL_DECAY_PER_SECOND) * (1.0 - (0.5 ** t))
+
+
+def _ball_time_to(ball_speed: float, dist: float) -> float | None:
+    """Seconds for a rolling ball to cover `dist`, or None if it stops short."""
+    if ball_speed <= 1e-6:
+        return None
+    frac = 1.0 - (dist * BALL_DECAY_PER_SECOND / ball_speed)
+    if frac <= 1e-6:
+        return None
+    return -math.log2(frac)
+
+
+def _lane_openness(start, end, opponents, opponent_vels, opponent_paces, ball_speed):
+    """0..1 for how open a passing lane is: can any opponent get to it before
+    the ball does?
+
+    Replaces a binary distance gate that called an opponent 0.99m off the line
+    a blocked pass and one at 1.01m perfectly safe, ignored whether he was
+    moving, and could not tell a defender near the START of the lane (no time
+    to react, ball is past him) from one near the END (a full second to step
+    across).
+    """
+    start = np.asarray(start, dtype=float)
+    end = np.asarray(end, dtype=float)
+    segment = end - start
+    seg_len_sq = float(np.dot(segment, segment))
+    if seg_len_sq < 1e-8 or opponents is None:
+        return 1.0
+    opponents = np.asarray(opponents, dtype=float)
+    if opponents.size == 0:
+        return 1.0
+    seg_len = math.sqrt(seg_len_sq)
+
+    worst = 1.0
+    for i, opp in enumerate(opponents):
+        opp = np.asarray(opp, dtype=float)
+        projection = float(np.dot(opp - start, segment)) / seg_len_sq
+        clamped = min(1.0, max(0.0, projection))
+        meet = start + clamped * segment
+
+        ball_t = _ball_time_to(ball_speed, clamped * seg_len)
+        if ball_t is None:
+            continue                      # ball dies before this point: no threat
+
+        pace = float(opponent_paces[i]) if opponent_paces is not None else base_speed * 0.7
+        vel = np.asarray(opponent_vels[i], dtype=float) if opponent_vels is not None else np.zeros(2)
+        # Where he already is by the time the ball arrives, then how long the
+        # rest of the trip takes him.
+        projected = opp + vel * ball_t
+        opp_t = ball_t + _norm2(meet - projected) / max(pace, 1e-3)
+
+        margin = opp_t - ball_t
+        worst = min(worst, max(0.0, margin) / LANE_SAFE_MARGIN_SECONDS)
+        if worst <= 0.0:
+            return 0.0
+    return min(1.0, worst)
+
+
+def _intercept_point(ball_pos, ball_unit, ball_speed, chaser_pos, pace):
+    """Earliest point on the ball's path the chaser can actually get to, as
+    (point, seconds, reachable).
+
+    This replaces a `time_to_reach * 0.7` guess that systematically under-led,
+    so chasers arrived behind the ball -- survivable at a 2.0 possession radius,
+    fatal at 1.0. Decay is exponential in time so there is no closed form:
+    scan, then bisect the crossing. An unreachable ball gives back the closest
+    approach, so a bad pass is chased honestly rather than caught by magic.
+    """
+    ball_pos = np.asarray(ball_pos, dtype=float)
+    chaser_pos = np.asarray(chaser_pos, dtype=float)
+    pace = max(1e-3, float(pace))
+
+    def gap(t):
+        point = ball_pos + ball_unit * _ball_rolled(ball_speed, t)
+        return _norm2(point - chaser_pos) / pace - t
+
+    if gap(0.0) <= 0.0:
+        return ball_pos, 0.0, True
+
+    steps = 12
+    prev_t = 0.0
+    for i in range(1, steps + 1):
+        t = INTERCEPT_HORIZON * i / steps
+        if gap(t) <= 0.0:
+            lo, hi = prev_t, t
+            for _ in range(12):
+                mid = 0.5 * (lo + hi)
+                if gap(mid) <= 0.0:
+                    hi = mid
+                else:
+                    lo = mid
+            aim = min(hi * INTERCEPT_LEAD_FACTOR, INTERCEPT_HORIZON)
+            return ball_pos + ball_unit * _ball_rolled(ball_speed, aim), hi, True
+        prev_t = t
+
+    best_t = min(
+        (INTERCEPT_HORIZON * i / steps for i in range(steps + 1)),
+        key=lambda t: _norm2(ball_pos + ball_unit * _ball_rolled(ball_speed, t) - chaser_pos),
+    )
+    return ball_pos + ball_unit * _ball_rolled(ball_speed, best_t), best_t, False
+
 
 class player(ABC):
     # How much of the overall rating comes from primary_stats vs. every other
@@ -304,7 +478,7 @@ class player(ABC):
         if not self._is_progressive_ball_move(state):
             return ball_pos.copy()
 
-        player_speed_factor = max(0.4, min(1.5, self.attributes.speed / 100.0))
+        player_speed_factor = max(0.4, min(1.5, pace_ability(self.attributes.speed)))
         slow_ball_cutoff = max(1.5, base_speed * 0.2 * player_speed_factor)
         flight_cutoff = max(0.25, 0.25 * player_speed_factor)
 
@@ -364,13 +538,31 @@ class player(ABC):
             return 0
         my_pos = np.asarray(state["my_pos"], dtype=float)
         enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
-        inside = (
-            (teammates[:, 0] > BOX_X_MIN)
-            & (teammates[:, 0] < BOX_X_MAX)
-            & (np.abs(enemy_goal_y - teammates[:, 1]) <= CROSS_TARGET_DEPTH)
-            & ~np.all(np.isclose(teammates, my_pos), axis=1)
-        )
-        return int(np.sum(inside))
+        return len(self._cross_candidates(state))
+
+    def _cross_candidates(self, state: dict) -> list:
+        """(arrival_pos, velocity) for teammates a cross could actually find --
+        in the box now, or arriving there by the time the ball does. A man
+        running in counts: crossing only to bodies already stood there meant
+        the ball went to whoever was loitering outside the area instead."""
+        teammates = np.asarray(state.get("teammates", []), dtype=float)
+        if teammates.size == 0:
+            return []
+        vels = state.get("teammate_vel")
+        my_pos = np.asarray(state["my_pos"], dtype=float)
+        enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
+        out = []
+        for i, tm in enumerate(teammates):
+            if np.all(np.isclose(tm, my_pos)):
+                continue
+            vel = np.asarray(vels[i], dtype=float) if vels is not None else np.zeros(2)
+            arrival = tm + vel * CROSS_FLIGHT_SECONDS
+            if (
+                BOX_X_MIN < arrival[0] < BOX_X_MAX
+                and abs(enemy_goal_y - arrival[1]) <= CROSS_TARGET_DEPTH
+            ):
+                out.append((arrival, vel))
+        return out
 
     def _box_needs_bodies(self, state: dict) -> bool:
         """Ball in the final third, nobody in the box, and I'm near enough to
@@ -405,11 +597,11 @@ class player(ABC):
         if decision == "wing_run":
             enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
             target = np.array([touchline_x, enemy_goal_y - 6.0 * forward])
-            speed = max(1.0, (self.attributes.dribbling / 100.0) * 1.25)
+            speed = max(1.0, stat_ability(self.attributes.dribbling) * 1.25)
             return {"type": "move", "target": target, "speed_mod": speed, "intent": "wingplay"}
         if decision == "wide_run":
             ahead_y = float(np.clip(state["ball_pos"][1] + 12.0 * forward, 0.0, PITCH_HEIGHT))
-            return {"type": "move", "target": np.array([touchline_x, ahead_y]), "speed_mod": (self.attributes.speed * 0.9) / 100.0}
+            return {"type": "move", "target": np.array([touchline_x, ahead_y]), "speed_mod": pace_ability(self.attributes.speed) * 0.9}
         if decision == "attack_box":
             # Get on the end of a cross: near or far post side of the spot,
             # by which side of the pitch I'm on.
@@ -418,7 +610,7 @@ class player(ABC):
             target = np.array([PITCH_WIDTH / 2.0 + side, enemy_goal_y - 10.0 * forward])
             # Faster than dribbling: an unburdened run has to beat the cross
             # to the box, and a dribbler carries at ~1.0.
-            return {"type": "move", "target": target, "speed_mod": (self.attributes.speed / 100.0) * 1.3}
+            return {"type": "move", "target": target, "speed_mod": pace_ability(self.attributes.speed) * 1.3}
         return None
 
     def _cross_incoming(self, state: dict) -> bool:
@@ -496,11 +688,11 @@ class player(ABC):
             return self._predict_ball_landing_target(state)
         if ball_speed < 2.0:
             return ball_pos
-        my_speed = max(1.0, (self.attributes.speed / 100.0) * 10.0)
+        my_speed = max(1.0, pace_ability(self.attributes.speed) * base_speed)
         time_to_reach = _norm2(ball_pos - state["my_pos"]) / my_speed
         predict_time = min(time_to_reach * 0.7, 1.5)
-        lead_dist = (ball_speed / 0.6931) * (1.0 - (0.5 ** predict_time))
-        return ball_pos + (ball_vel / ball_speed) * lead_dist
+        lead_dist = _ball_rolled(ball_speed, predict_time)
+        return _clip_lead_to_pitch(ball_pos, ball_vel / ball_speed, lead_dist)
 
     def _best_progressive_pass_target(self, state: dict) -> np.ndarray | None:
         teammates = np.asarray(state["teammates"], dtype=float)
@@ -511,7 +703,7 @@ class player(ABC):
         best_target = None
         best_score = -1e9
 
-        for tm in teammates:
+        for tm_i, tm in enumerate(teammates):
             if np.array_equal(tm, my_pos): continue
 
             vec_to_tm = tm - my_pos
@@ -531,6 +723,7 @@ class player(ABC):
 
     def _choose_pass_target(self, state: dict) -> np.ndarray:
         teammates = state["teammates"]
+        teammate_vel = state.get("teammate_vel")
         opponents = state["opponents"]
         my_pos = state["my_pos"]
         goal_dir = 1.0 if state.get("a_direction", 1) == 1 else -1.0
@@ -538,35 +731,65 @@ class player(ABC):
         pass_options = []
         nearby_teammates = sum(1 for tm in teammates if _norm2(tm - my_pos) < 4.5)
 
-        for tm in teammates:
+        for tm_i, tm in enumerate(teammates):
             if np.array_equal(tm, my_pos): continue
 
             dist_to_tm = _norm2(tm - my_pos)
             nearest_opp_dist = np.min(np.linalg.norm(opponents - tm, axis=1))
 
             forward_progress = (tm[1] - my_pos[1]) * goal_dir
-            raw_score = -999.0
+            # Score the lane we will ACTUALLY pass down. The ball is played
+            # ahead of a moving receiver (_lead_pass), so judging the lane to
+            # where he stands now rated a path the ball never takes -- and a
+            # body sat in the real one went unseen.
+            aim = self._lead_pass(tm, my_pos, teammate_vel, tm_i)
+            ball_speed = pass_power(_norm2(aim - my_pos), self.attributes.power) * BASE_KICK_POW
+            openness = _lane_openness(
+                my_pos, aim, opponents, state.get("opponent_vel"),
+                state.get("opponent_pace"), ball_speed,
+            )
 
-            if self._is_pass_safe(my_pos, tm, opponents, line_width=1.0):
-                raw_score = (nearest_opp_dist * 20.0) + max(0.0, forward_progress * 30.0) - max(0.0, -forward_progress * 60.0) - (abs(tm[0] - my_pos[0]) * 0.3) - (dist_to_tm * 0.7)
-                if dist_to_tm < 4.5: raw_score -= 35.0
-                if nearby_teammates > 3: raw_score -= 12.0
+            # Safety used to outweigh progress 20:30, so the square or
+            # backward ball to a free man beat the forward one. Progress now
+            # leads, and going backwards is expensive.
+            raw_score = (nearest_opp_dist * 10.0) + max(0.0, forward_progress * 55.0) - max(0.0, -forward_progress * 110.0) - (abs(tm[0] - my_pos[0]) * 0.3) - (dist_to_tm * 0.7)
+            if dist_to_tm < 4.5: raw_score -= 35.0
+            if nearby_teammates > 3: raw_score -= 12.0
+            raw_score -= (1.0 - openness) * LANE_BLOCKED_PENALTY
 
             if _norm2(state["enemy_goal"] - tm) < _norm2(state["enemy_goal"] - my_pos):
                 raw_score += 18.0
             if forward_progress < 0.0:
-                raw_score -= 50.0
+                raw_score -= 80.0
 
-            pressure_penalty = state["pressure_count"] * (100 - self.attributes.composure) / 10.0
+            pressure_penalty = state["pressure_count"] * max(0.0, 100 - self.attributes.composure) / 10.0
             effective_vision = max(1.0, self.attributes.vision - pressure_penalty)
-            error_variance = 220.0 / effective_vision
+            error_variance = 220.0 / (100.0 * stat_ability(effective_vision))
 
             perceived_score = raw_score + state["rng"].normal(loc=0.0, scale=error_variance)
-            pass_options.append((perceived_score, tm))
+            pass_options.append((perceived_score, aim, tm_i))
 
         if not pass_options: return my_pos
         pass_options.sort(key=lambda x: x[0], reverse=True)
+        # Already the led point -- scored that way above.
         return pass_options[0][1]
+
+    def _lead_pass(self, target, my_pos, teammate_vel, tm_i):
+        """Pass into the runner's path. The ball takes real time to arrive, so
+        aiming at where they stand now puts it behind them."""
+        if teammate_vel is None:
+            return target
+        vel = np.asarray(teammate_vel[tm_i], dtype=float)
+        if _norm2(vel) < 0.5:
+            return target
+        dist = _norm2(target - my_pos)
+        v0 = pass_power(dist, self.attributes.power) * BASE_KICK_POW
+        k = PASS_DECAY_PER_UNIT
+        travel = 1.0 - (k * dist / max(v0, 1e-6))
+        if travel <= 1e-3:
+            return target
+        flight = min(-math.log(travel) / k, PASS_MAX_LEAD_SECONDS)
+        return target + vel * flight
 
     def _calculate_shot(self, state: dict) -> dict:
         goal_center_x = 35.0
@@ -579,17 +802,15 @@ class player(ABC):
         target_x = 32.2 if rng.choice([True, False]) else 37.8
         intended_target = np.array([target_x, goal_y, rng.uniform(0.5, 2.0)])
         
-        pressure_penalty = state["pressure_count"] * ((100.0 - self.attributes.composure) / 20.0)
+        pressure_penalty = state["pressure_count"] * (max(0.0, 100.0 - self.attributes.composure) / 20.0)
         dist = _norm2(np.array([goal_center_x, goal_y]) - state["my_pos"])
         unit_to_goal = (np.array([goal_center_x, goal_y]) - state["my_pos"]) / (dist + 0.001)
         
         heading_penalty = max(0.0, (0.8 - np.dot(state["my_heading"], unit_to_goal)) * 5.0) 
-        total_variance = ((100.0 - self.attributes.shooting) / 15.0) + pressure_penalty + heading_penalty
-        # A floor so even a perfect shooter isn't a laser -- but a low one.
-        # This was 2.1, which is what a 68-shooting player computes to
-        # unpenalised, so everyone from gold up shot with identical spread
-        # and a 96 was no more accurate than a 70. Now 96 -> ~0.9, 80 -> 1.3,
-        # 50 -> 3.3, and a calm icon in space is meant to hit the target.
+        strike = (self.attributes.power * 0.6) + (self.attributes.shooting * 0.4)
+        total_variance = ((100.0 / 15.0) * (1.0 - stat_ability(self.attributes.shooting))) + pressure_penalty + heading_penalty
+        # A floor so even a perfect shooter isn't a laser. Accuracy tops out at
+        # 100; shooting above that buys shot SPEED instead (see strike).
         total_variance = max(total_variance, SHOT_VARIANCE_FLOOR)
         
         actual_x = intended_target[0] + rng.normal(0, total_variance)
@@ -598,8 +819,42 @@ class player(ABC):
         return {
             "type": "shoot",
             "target_3d": [actual_x, goal_y, actual_z],
-            "power": min(1.0, dist / 4.0) * (self.attributes.power / 40.0)
+            "power": min(1.0, dist / 4.0) * (strike / 40.0)
         }
+
+    def _clearance_target(self, state: dict) -> np.ndarray:
+        """Where a defender hoofs it.
+
+        Away from his own goal and angled at the nearer touchline, but never
+        more than CLEAR_MAX_TURN off where he is already facing -- nobody
+        swivels 180 degrees to hit a clearance. Putting it out for a throw-in
+        is a perfectly good outcome; leaving it loose in his own box is not,
+        which is what the old "aim at a random far corner" did whenever that
+        corner was behind him.
+        """
+        my_pos = np.asarray(state["my_pos"], dtype=float)
+        own_goal = np.asarray(state.get("own_goal", my_pos), dtype=float)
+        away = my_pos - own_goal
+        if _norm2(away) < 1e-6:
+            away = np.array([0.0, 1.0 if state.get("a_direction", 1) == 1 else -1.0])
+        away = away / _norm2(away)
+
+        side = -1.0 if my_pos[0] < PITCH_WIDTH / 2.0 else 1.0
+        want = away + np.array([side * CLEAR_WIDE_BIAS, 0.0])
+        want = want / max(_norm2(want), 1e-6)
+
+        heading = np.asarray(state.get("my_heading", want), dtype=float)
+        if _norm2(heading) < 1e-6:
+            heading = want
+        else:
+            heading = heading / _norm2(heading)
+
+        angle = math.acos(float(np.clip(np.dot(heading, want), -1.0, 1.0)))
+        if angle > CLEAR_MAX_TURN:
+            turn = CLEAR_MAX_TURN * (1.0 if heading[0] * want[1] - heading[1] * want[0] > 0 else -1.0)
+            c, sn = math.cos(turn), math.sin(turn)
+            want = np.array([heading[0] * c - heading[1] * sn, heading[0] * sn + heading[1] * c])
+        return my_pos + want * CLEAR_DISTANCE
 
     def _choose_cross_target(self, state: dict) -> np.ndarray:
         teammates = np.asarray(state.get("teammates", []), dtype=float)
@@ -608,33 +863,29 @@ class player(ABC):
         goal_dir = 1.0 if state.get("a_direction", 1) == 1 else -1.0
         enemy_goal_y = PITCH_HEIGHT if goal_dir == 1 else 0.0
 
+        # Only men in (or arriving into) the box. Being unmarked used to be
+        # worth 8x its distance from goal, so the ball went to whoever was free
+        # OUTSIDE the area rather than to the danger.
         best_target = None
         best_score = -999.0
-
-        for tm in teammates:
-            if np.array_equal(tm, my_pos): continue
-
-            dist_to_goal = _norm2(np.array([35.0, enemy_goal_y]) - tm)
-        
-            if dist_to_goal > 35.0:
-                continue
-
-            nearest_opp_dist = np.min(np.linalg.norm(opponents - tm, axis=1)) if opponents.size > 0 else 10.0
-            
-            score = -dist_to_goal + (nearest_opp_dist * 8.0)
-            
+        for arrival, _vel in self._cross_candidates(state):
+            dist_to_goal = _norm2(np.array([35.0, enemy_goal_y]) - arrival)
+            off_centre = abs(arrival[0] - 35.0)
+            nearest_opp_dist = (
+                float(np.min(np.linalg.norm(opponents - arrival, axis=1)))
+                if opponents.size > 0 else 10.0
+            )
+            score = -(dist_to_goal * 1.5) - (off_centre * 0.8) + (nearest_opp_dist * 2.0)
             if score > best_score:
                 best_score = score
-                best_target = tm
+                best_target = arrival
 
         if best_target is None:
-            base_target = np.array([35.0, enemy_goal_y - (12.0 * goal_dir)])
+            # Nobody to find: hang it up at the spot rather than drilling it out
+            # of play. _decide_wingplay normally drops the latch before this.
+            base_target = np.array([35.0, enemy_goal_y - (11.0 * goal_dir)])
         else:
-            vec_to_goal = np.array([35.0, enemy_goal_y]) - best_target
-            dist = _norm2(vec_to_goal)
-            lead_dist = min(2.5, dist * 0.25)
-            lead = (vec_to_goal / (dist + 1e-5)) * lead_dist
-            base_target = best_target + lead
+            base_target = np.asarray(best_target, dtype=float)
 
         pressure_penalty = state.get("pressure_count", 0) * 5.0
         cross_stat = (self.attributes.passing * 0.6) + (self.attributes.vision * 0.4)
