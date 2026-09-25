@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://ulrndvhqpktd"]
 
 [ext_resource type="Script" uid="uid://df7qtspk6wifh" path="res://scripts/components/PlayerCardView.gd" id="1"]
-[ext_resource type="PackedScene" path="res://scenes/components/PlayerModelView.tscn" id="2"]
+[ext_resource type="PackedScene" uid="uid://dyr4mha5jhn0d" path="res://scenes/components/PlayerModelView.tscn" id="2"]
 
 [node name="PlayerCardView" type="Control" unique_id=29396887]
 custom_minimum_size = Vector2(110, 150)
@@ -70,7 +70,6 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Player"
 horizontal_alignment = 1
-clip_text = true
 
 [node name="TierLabel" type="Label" parent="Margin/Content" unique_id=1997875743]
 unique_name_in_owner = true

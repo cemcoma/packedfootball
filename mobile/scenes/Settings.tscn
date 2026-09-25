@@ -105,7 +105,6 @@ theme_override_constants/separation = 10
 [node name="LanguageLabel" type="Label" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol/LanguageRow" unique_id=651018003]
 custom_minimum_size = Vector2(90, 0)
 layout_mode = 2
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 13
 text = "Language"
 
@@ -121,7 +120,6 @@ theme_override_constants/separation = 10
 [node name="ThemeLabel" type="Label" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol/ThemeRow" unique_id=651018005]
 custom_minimum_size = Vector2(90, 0)
 layout_mode = 2
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 13
 text = "Theme"
 
@@ -137,7 +135,6 @@ theme_override_constants/separation = 10
 [node name="FontLabel" type="Label" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol/FontRow" unique_id=651018021]
 custom_minimum_size = Vector2(90, 0)
 layout_mode = 2
-size_flags_vertical = 4
 theme_override_font_sizes/font_size = 13
 text = "Font"
 
@@ -145,6 +142,20 @@ text = "Font"
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+
+[node name="ScaleRow" type="HBoxContainer" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol" unique_id=1523662654]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ScaleLabel" type="Label" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol/ScaleRow" unique_id=327181115]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Large Text"
+
+[node name="ScaleOption" type="CheckButton" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/LeftCol/ScaleRow" unique_id=1214311842]
+unique_name_in_owner = true
+layout_mode = 2
 
 [node name="RightCol" type="VBoxContainer" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns" unique_id=651018006]
 custom_minimum_size = Vector2(250, 0)

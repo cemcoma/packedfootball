@@ -66,6 +66,7 @@ const SUPPORT_URL := "https://cemcoma.github.io/packedfootball/support/"
 @onready var _language_option: OptionButton = %LanguageOption
 @onready var _theme_option: OptionButton = %ThemeOption
 @onready var _font_option: OptionButton = %FontOption
+@onready var _large_text_button: CheckButton = %ScaleOption
 @onready var _privacy_button: Button = %PrivacyButton
 @onready var _support_button: Button = %SupportButton
 @onready var _ad_privacy_button: Button = %AdPrivacyButton
@@ -126,6 +127,10 @@ func _ready() -> void:
 	_font_option.add_item(tr("Rounded"))
 	_font_option.select(FONT_KEYS.find(ThemeManager.font_key))
 	_font_option.item_selected.connect(_on_font_selected)
+	
+	# Initialize the toggle state
+	_large_text_button.button_pressed = ThemeManager.large_text
+	_large_text_button.toggled.connect(ThemeManager.set_large_text)
 
 
 func _on_language_selected(index: int) -> void:
@@ -144,7 +149,6 @@ func _on_theme_selected(index: int) -> void:
 func _on_font_selected(index: int) -> void:
 	if index >= 0 and index < FONT_KEYS.size():
 		ThemeManager.set_font(FONT_KEYS[index])
-
 
 ## The delete button is the one thing on this screen that should NOT look
 ## like the others -- red, quiet, and clearly a different kind of action.

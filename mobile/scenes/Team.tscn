@@ -163,6 +163,7 @@ horizontal_alignment = 1
 unique_name_in_owner = true
 layout_mode = 2
 horizontal_alignment = 1
+autowrap_mode = 3
 
 [node name="StatsInfoCol" type="VBoxContainer" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsPanel/StatsTopRow" unique_id=592961532]
 layout_mode = 2

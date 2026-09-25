@@ -5,8 +5,6 @@
 [ext_resource type="Script" uid="uid://cqrv7m2xk1wbe" path="res://scripts/components/CardCarousel.gd" id="3"]
 [ext_resource type="PackedScene" uid="uid://b8wq3k1pnv2xa" path="res://scenes/components/PackWalkoutStage.tscn" id="4"]
 
-[ext_resource type="PackedScene" path="res://scenes/components/ItemView.tscn" id="item_view"]
-
 [node name="PackReveal" type="Control" unique_id=1255259700]
 layout_mode = 3
 anchors_preset = 15
@@ -139,9 +137,9 @@ columns = 6
 
 [node name="Carousel" type="Control" parent="BrowseLayer/Margin/RootVBox" unique_id=1700100010]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 220)
+custom_minimum_size = Vector2(0, 250)
 layout_mode = 2
-size_flags_vertical = 3
+size_flags_vertical = 10
 script = ExtResource("3")
 
 [node name="FooterRow" type="HBoxContainer" parent="BrowseLayer/Margin/RootVBox" unique_id=1085272900]

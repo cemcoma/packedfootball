@@ -119,6 +119,7 @@ const BACKGROUNDS := {
 
 var mode: String = "dark"
 var font_key: String = DEFAULT_FONT
+var large_text: bool = false
 
 
 func _ready() -> void:
@@ -167,6 +168,27 @@ func set_font(new_font: String) -> void:
 	_save_display()
 	theme_changed.emit()
 
+func set_large_text(enabled: bool) -> void:
+	if enabled == large_text:
+		return
+	large_text = enabled
+	_apply_theme_resource()
+	_save_display()
+	theme_changed.emit()
+
+
+func _apply_font_sizes(theme: Theme) -> void:
+	# 16 is your standard size, 22 is a highly readable mobile bump
+	var target_size: int = 22 if large_text else 16
+	
+	# Set the baseline font size
+	theme.default_font_size = target_size
+	
+	# Force-override any hardcoded sizes in your .tres files (like Button)
+	for type_name in theme.get_font_size_type_list():
+		for entry in theme.get_font_size_list(type_name):
+			theme.set_font_size(entry, type_name, target_size)
+
 
 ## Swapping the root Window's theme is what makes every already-built
 ## Control pick up the new Button/Panel/Label styles without being
@@ -175,10 +197,11 @@ func set_font(new_font: String) -> void:
 func _apply_theme_resource() -> void:
 	var path := LIGHT_THEME if mode == "light" else DARK_THEME
 	if not ResourceLoader.exists(path):
-		return  # light theme not authored yet -- keep whatever's already applied
+		return  
 	var theme := load(path) as Theme
 	if theme != null:
 		_apply_font(theme)
+		_apply_font_sizes(theme) 
 		get_tree().root.theme = theme
 
 
@@ -198,15 +221,15 @@ func _apply_font(theme: Theme) -> void:
 	for type_name in theme.get_font_type_list():
 		for entry in theme.get_font_list(type_name):
 			theme.set_font(entry, type_name, font)
-
-
+			
+	
 func _save_display() -> void:
 	var config := ConfigFile.new()
-	config.load(SETTINGS_PATH)  # keep any other settings already in the file
+	config.load(SETTINGS_PATH)  
 	config.set_value("display", "theme_mode", mode)
 	config.set_value("display", "font", font_key)
+	config.set_value("display", "large_text", large_text) 
 	config.save(SETTINGS_PATH)
-
 
 func _load_saved_display() -> void:
 	var config := ConfigFile.new()
@@ -218,3 +241,6 @@ func _load_saved_display() -> void:
 	var saved_font = config.get_value("display", "font", DEFAULT_FONT)
 	if saved_font is String and FONTS.has(saved_font):
 		font_key = saved_font
+	var saved_large_text = config.get_value("display", "large_text", false)
+	if saved_large_text is bool:
+		large_text = saved_large_text

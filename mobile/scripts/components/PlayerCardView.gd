@@ -104,15 +104,43 @@ func set_card(card: PlayerCard) -> void:
 		
 	_overall_label.text = str(card.overall())
 	_position_label.text = card.position
-	_name_label.text = card.display_name()
 	_tier_label.text = PlayerCard.tier_label(card.tier)
 	_model_view.set_card(card)
+	
+	_auto_shrink_name(card.display_name())
+
 	# All three are per-CONTEXT, not per-card, and this view gets recycled
 	# (PackReveal reuses instances). Clear them so a card never inherits the
 	# last one's state; callers re-apply whichever apply to them.
 	set_out_of_position(false)
 	set_badge("")
 	set_celebrating(false)
+
+
+func _auto_shrink_name(name_str: String) -> void:
+	_name_label.text = name_str
+	_name_label.remove_theme_font_size_override("font_size")
+	
+	var max_width: float = size.x - 12.0
+	
+	var font: Font = _name_label.get_theme_font("font")
+	var starting_size: int = _name_label.get_theme_font_size("font_size")
+	
+	if starting_size <= 0:
+		starting_size = get_theme_default_font_size()
+		
+	var min_size: int = int(starting_size * 0.6)
+	
+	var current_size: int = starting_size
+	var string_size := font.get_string_size(name_str, HORIZONTAL_ALIGNMENT_LEFT, -1, current_size)
+	
+	while string_size.x > max_width and current_size > min_size:
+		current_size -= 1
+		string_size = font.get_string_size(name_str, HORIZONTAL_ALIGNMENT_LEFT, -1, current_size)
+		
+	if current_size < starting_size:
+		_name_label.add_theme_font_size_override("font_size", current_size)
+
 
 func set_kit(kit: KitDesign) -> void:
 	_model_view.set_kit(kit)

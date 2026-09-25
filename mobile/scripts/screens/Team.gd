@@ -305,6 +305,7 @@ func _populate_bench_grid(ids: Array, role: String = "") -> void:
 
 
 func _populate_stats_panel() -> void:
+	
 	var player_id: String = GameProfile.slot_assignment[selected_slot]
 	var card: PlayerCard = GameProfile.all_cards[player_id]
 	_stats_card_view.set_card(card)
@@ -319,7 +320,7 @@ func _populate_stats_panel() -> void:
 	for child in _stats_attr_grid.get_children():
 		_stats_attr_grid.remove_child(child)
 		child.queue_free()
-
+		
 	_stats_extra_country.text = "%s\n%s" % [
 		card.hometown, card.country
 	]
@@ -381,7 +382,7 @@ func _career_stat_text(card: PlayerCard, key: String) -> String:
 ## Lays the pairs out top-to-bottom and starts a new pair of columns at the
 ## bottom, rather than growing one column past the panel.
 func _fill_stat_grid(entries: Array) -> void:
-	_stats_attr_grid.columns = STAT_GRID_COLUMNS * 2
+	_stats_attr_grid.columns = STAT_GRID_COLUMNS
 	var rows := ceili(float(entries.size()) / STAT_GRID_COLUMNS)
 	for r in rows:
 		for c in STAT_GRID_COLUMNS:
@@ -392,7 +393,6 @@ func _fill_stat_grid(entries: Array) -> void:
 			else:
 				# Keeps the grid rectangular so the filled columns stay aligned.
 				_stats_attr_grid.add_child(Control.new())
-				_stats_attr_grid.add_child(Control.new())
 
 
 ## `highlight` marks a primary stat, in the accent -- same rule and same
@@ -400,21 +400,27 @@ func _fill_stat_grid(entries: Array) -> void:
 func _add_stat_row(label_text: String, value_text: String, highlight: bool = false) -> void:
 	var accent := ThemeManager.color("accent")
 
+	# Create a container for the pair that expands to fill its half of the grid
+	var pair_box := HBoxContainer.new()
+	pair_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
 	var name_label := Label.new()
 	name_label.text = label_text
+	# The name label takes the expansion duty, automatically eating up empty space
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if highlight:
 		name_label.add_theme_color_override("font_color", accent)
-	_stats_attr_grid.add_child(name_label)
+	pair_box.add_child(name_label)
 
 	var value_label := Label.new()
 	value_label.text = value_text
-	# Right-aligned and expanding, so the numbers line up and the gap between
-	# the two column pairs reads as a gap.
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if highlight:
 		value_label.add_theme_color_override("font_color", accent)
-	_stats_attr_grid.add_child(value_label)
+	pair_box.add_child(value_label)
+
+	# Add the single combined box to the grid
+	_stats_attr_grid.add_child(pair_box)
 
 
 func _update_stats_page_button() -> void:

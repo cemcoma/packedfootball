@@ -1196,6 +1196,8 @@ msgid "Pixel"
 msgstr ""
 msgid "Rounded"
 msgstr ""
+msgid "Large Text"
+msgstr ""
 
 msgid "Session"
 msgstr ""

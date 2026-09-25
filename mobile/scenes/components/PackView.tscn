@@ -7,19 +7,8 @@
 
 [sub_resource type="LabelSettings" id="LabelSettings_84nhg"]
 
-[sub_resource type="Theme" id="Theme_8aye7"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_84nhg"]
-bg_color = Color(0, 0, 0, 0.627451)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
 [node name="PackView" type="PanelContainer" unique_id=1511904029]
 custom_minimum_size = Vector2(158, 280)
-layout_mode = 3
-anchors_preset = 0
 offset_right = 158.0
 offset_bottom = 280.0
 script = ExtResource("1")
@@ -42,15 +31,9 @@ stretch_mode = 5
 
 [node name="Overlay" type="VBoxContainer" parent="Layout/PackArtRatio" unique_id=740358494]
 layout_mode = 2
+mouse_filter = 2
 theme_override_constants/separation = 2
 alignment = 1
-mouse_filter = 2
-
-[node name="TapButton" type="Button" parent="Layout/PackArtRatio" unique_id=740358600]
-unique_name_in_owner = true
-layout_mode = 2
-mouse_filter = 1
-flat = true
 
 [node name="SpacerTop" type="Control" parent="Layout/PackArtRatio/Overlay" unique_id=1659674711]
 custom_minimum_size = Vector2(0, 18)
@@ -105,6 +88,12 @@ horizontal_alignment = 1
 [node name="SpacerBottom2" type="Control" parent="Layout/PackArtRatio/Overlay" unique_id=5390657]
 custom_minimum_size = Vector2(0, 15)
 layout_mode = 2
+
+[node name="TapButton" type="Button" parent="Layout/PackArtRatio" unique_id=740358600]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 1
+flat = true
 
 [node name="Footer" type="VBoxContainer" parent="Layout" unique_id=153961355]
 layout_mode = 2
