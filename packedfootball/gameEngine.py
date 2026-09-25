@@ -165,7 +165,22 @@ from formations import get_formation, is_similar_position
 #         through the stoppage: tick() returns before the snapshot, so a replay
 #         used to have a hole where every stoppage was and the client could only
 #         jump-cut.
-ENGINE_VERSION: Final[str] = "3.0.0"
+#   3.1.0 the top and the bottom of the stat ladder both start telling.
+#         - shooting, heading and crossing accuracy now tell all the way to
+#           100. The floors on their aim spread bound at 86.5, 91 and 85, so
+#           everything above was identical -- an icon shot like a gold. Same
+#           shape of bug as the keeper weight sum. ~1 goal a match at icon,
+#           nothing at gold.
+#         - STAT_CURVE_GAMMA 1.0 -> 0.8, lifting the weak end of every stat.
+#           Bronze v bronze was 0.94 goals a match (a 0-0 league, the failure
+#           mode tier_report warns about) and is 1.94 over 32 matches a side;
+#           gold and icon move under 0.3 either way.
+#         - stat_ability keeps rising past 100 instead of clipping there (see
+#           game_config.STAT_OVERDRIVE). No card rolls above 96, so this
+#           changes nothing until items are equipped -- it is what makes them
+#           worth owning at all. Penalties gained a certainty cap because
+#           their scale already reached 0.99 at 100.
+ENGINE_VERSION: Final[str] = "3.1.0"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -263,6 +278,7 @@ PENALTY_PLACEMENT_SPAN: Final = 0.19
 PENALTY_SAVE_MIN: Final = 0.80
 PENALTY_SAVE_SPAN: Final = 0.19
 PENALTY_SIDES: Final = (-1, 0, 1)    # left / middle / right, from the taker
+PENALTY_CERTAINTY_CAP: Final = 0.99  # nobody is ever a sure thing, items or not
 
 KEEPER_QUALITY_BASE: Final = 0.55        # save odds floor before attributes
 HARD_SHOT_SPEED: Final = 37.0            # ball speed counting as "hard" (observed max)
@@ -326,6 +342,7 @@ BLOCK_FAST_RADIUS: Final = 1.5
 HEAD_MIN_HEIGHT: Final = 1.2
 HEAD_RADIUS: Final = 1.25             # lateral distance to be in a header contest
 HEAD_STANDING_BONUS: Final = 0.25    # standing reach above body height
+HEADER_SIGMA_FLOOR: Final = 0.3
 HEAD_JUMP_MAX: Final = 0.6           # extra reach at 100 heading/agility
 KEEPER_HAND_REACH: Final = 0.9       # arms up, on top of body height
 HEADER_SHOT_SPEED: Final = (14.0, 24.0)    # at heading 0 / 100
@@ -1852,7 +1869,9 @@ class game:
             # Header at goal: _calculate_shot's aim, spread from heading.
             pressure = int(np.sum(np.linalg.norm(opponents - my_pos, axis=1) < 3.0))
             composure = float(getattr(attrs, "composure", 50))
-            sigma = max(0.9, max(0.0, 100.0 - head_attr) / 10.0 + pressure * max(0.0, 100.0 - composure) / 20.0)
+            # Floor low enough that heading still tells up to 100; at 0.9 every
+            # header above 91 was identical.
+            sigma = max(HEADER_SIGMA_FLOOR, max(0.0, 100.0 - head_attr) / 10.0 + pressure * max(0.0, 100.0 - composure) / 20.0)
             aim_x = (32.2 if self.rng.random() < 0.5 else 37.8) + self.rng.normal(0.0, sigma)
             aim_z = max(0.0, self.rng.uniform(0.2, 1.8) + self.rng.normal(0.0, sigma * 0.3))
             vec = np.array([aim_x, enemy_goal[1]]) - my_pos
@@ -2963,12 +2982,14 @@ class game:
         attrs = self.all_players[taker_index].attributes
         gk = self.all_players[keeper_index].attributes
 
-        placement = PENALTY_PLACEMENT_MIN + PENALTY_PLACEMENT_SPAN * stat_ability(
+        # Capped: MIN + SPAN already lands at 0.99, and stat_ability keeps
+        # rising past 100, so an item-fed taker would never miss.
+        placement = min(PENALTY_CERTAINTY_CAP, PENALTY_PLACEMENT_MIN + PENALTY_PLACEMENT_SPAN * stat_ability(
             attrs.shooting * 0.8 + attrs.accuracy * 0.2
-        )
-        save = PENALTY_SAVE_MIN + PENALTY_SAVE_SPAN * stat_ability(
+        ))
+        save = min(PENALTY_CERTAINTY_CAP, PENALTY_SAVE_MIN + PENALTY_SAVE_SPAN * stat_ability(
             (gk.agility * 0.6 + gk.vision * 0.4 + gk.ballcontrol * 0.3) / 1.3
-        )
+        ))
 
         aim = int(self.rng.choice(PENALTY_SIDES))
         dive = int(self.rng.choice(PENALTY_SIDES))

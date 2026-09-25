@@ -9,24 +9,35 @@ extends Node
 ## decoding step the way replay bytes need.
 
 var _cards: Array = []  # PlayerCard
+## Items pulled in the same opening (see ItemData.gd). Separate from the
+## cards because they are revealed differently -- there is no walkout for an
+## item, it just appears beside the pulled cards.
+var _items: Array = []
 var pack_name: String = ""
 ## The pack art PackReveal.gd shakes open -- the same texture the Shop tile
 ## showed, so the reveal opens the pack the player actually tapped.
 var pack_texture: Texture2D = null
 
 
+## An item-only pack has no cards at all, so "pending" cannot mean "has
+## cards" any more.
 func has_pending() -> bool:
-	return not _cards.is_empty()
+	return not (_cards.is_empty() and _items.is_empty())
 
 
-func set_pending(name: String, cards: Array, texture: Texture2D = null) -> void:
+func set_pending(name: String, cards: Array, texture: Texture2D = null, items: Array = []) -> void:
 	pack_name = name
 	_cards = cards
+	_items = items
 	pack_texture = texture
 
 
 func cards() -> Array:
 	return _cards
+
+
+func items() -> Array:
+	return _items
 
 
 ## Called once PackReveal.gd has consumed a pending session -- so
@@ -35,4 +46,5 @@ func cards() -> Array:
 func clear() -> void:
 	pack_name = ""
 	_cards = []
+	_items = []
 	pack_texture = null

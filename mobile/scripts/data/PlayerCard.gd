@@ -153,6 +153,11 @@ var statistics: Dictionary = {"goals": 0, "assists": 0, "matches_played": 0}
 ## PlayerModelView.gd falls back to a mock look derived from player_id in
 ## that case rather than rendering nothing.
 var appearance: Dictionary = {}
+## Socketed equipment, as the server stores it (see ItemData.gd). Buffs are
+## NOT folded into `attributes`: overall(), SquadOptimizer and
+## GameProfile.average_overall() all read that raw, and the base card is what
+## gets written back. Use effective_attributes() to see a card as it plays.
+var items: Array = []
 # Holds the custom background texture based on the player's tier
 var background_texture: Texture2D = null
 
@@ -173,6 +178,8 @@ static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
 		card.attributes["heading"] = 50
 	card.statistics = _dict(fields, "statistics", {"goals": 0, "assists": 0, "matches_played": 0})
 	card.appearance = _dict(fields, "appearance", {})
+	# Absent on every card written before items existed.
+	card.items = ItemData.sanitize(fields.get("items"))
 	
 	# Load the corresponding background sprite
 	var sprite_path = "res://sprites/player_cards/%s.png" % card.tier
@@ -223,6 +230,34 @@ func resolved_appearance() -> Dictionary:
 ## overall() weights, so a screen can highlight exactly what the maths uses.
 func primary_stats() -> Array:
 	return PRIMARY_STATS_BY_POSITION.get(position, DEFAULT_PRIMARY_STATS)
+
+
+## The card as it actually plays: `attributes` plus every socketed item.
+## Mirrors game_state.fields_to_player, which does the same thing server-side
+## before handing the card to the match engine.
+func effective_attributes() -> Dictionary:
+	return ItemData.apply(attributes, items)
+
+
+## What the card rates WITH its equipment. overall() stays the rolled number,
+## because that is what a release payout, the squad optimiser and the
+## leaderboard all go by.
+func effective_overall() -> int:
+	if items.is_empty():
+		return overall()
+	var buffed := PlayerCard.new()
+	buffed.position = position
+	buffed.attributes = effective_attributes()
+	return buffed.overall()
+
+
+## How many item slots this card has, and how many are free.
+func item_capacity() -> int:
+	return ItemData.capacity(items)
+
+
+func free_item_slots() -> int:
+	return maxi(0, item_capacity() - items.size())
 
 
 func overall() -> int:

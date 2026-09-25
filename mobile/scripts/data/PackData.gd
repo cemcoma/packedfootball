@@ -69,6 +69,15 @@ var price_currency: String = "credits"
 var cards_per_pack: int = 0
 var rates: Dictionary = {}  # tier -> probability (0..1), e.g. {"bronze": 0.6, ...} -- odds disclosure
 var pos_rates: Dictionary = {}  # position category -> probability (0..1), e.g. {"goalkeeper": 0.25, ...}
+## Slots pinned to a fixed tier instead of rolled, as [{"tier", "count"}, ...].
+## Part of the disclosure: "1 guaranteed SPECIAL" is what the odds table below
+## it is the REMAINDER of, so showing one without the other would misstate
+## what a pack gives. [] for every pack that guarantees nothing.
+var guarantees: Array = []
+## Item drops -- rarity -> probability (0..1) -- and how many are rolled. Same
+## disclosure rules as the card odds; {} / 0 for a pack that sells no items.
+var item_rates: Dictionary = {}
+var items_per_pack: int = 0
 var max_opens = null  # int or null (unlimited)
 var times_opened: int = 0
 var remaining_opens = null  # int or null (unlimited)
@@ -90,6 +99,10 @@ static func from_fields(fields: Dictionary) -> PackData:
 	pack.cards_per_pack = _int(fields, "cards_per_pack")
 	pack.rates = _dict(fields, "rates", {})
 	pack.pos_rates = _dict(fields, "pos_rates", {})
+	var guarantees_raw = fields.get("guarantees")
+	pack.guarantees = guarantees_raw if guarantees_raw is Array else []
+	pack.item_rates = _dict(fields, "item_rates", {})
+	pack.items_per_pack = _int(fields, "items_per_pack", 0)
 	pack.max_opens = fields.get("max_opens")  # untyped var -- null is a valid value here, no coercion needed
 	pack.times_opened = _int(fields, "times_opened")
 	pack.remaining_opens = fields.get("remaining_opens")
@@ -100,6 +113,20 @@ static func from_fields(fields: Dictionary) -> PackData:
 	pack.unavailable_reason = _str(fields, "unavailable_reason")
 	pack.available_at = _str(fields, "available_at")
 	return pack
+
+
+## "1 guaranteed SPECIAL", or "" for a pack that pins nothing. Shown above the
+## odds table, because the table is the odds for the REMAINING slots.
+func guarantee_label() -> String:
+	var parts: Array = []
+	for entry in guarantees:
+		if not (entry is Dictionary):
+			continue
+		var count := int(entry.get("count", 1))
+		parts.append("%d x %s" % [count, PlayerCard.tier_label(str(entry.get("tier", "")))])
+	if parts.is_empty():
+		return ""
+	return tr("Guaranteed: %s") % ", ".join(parts)
 
 
 func is_limited() -> bool:

@@ -1,0 +1,223 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/screens/Items.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
+[ext_resource type="Script" path="res://scripts/components/SafeMargin.gd" id="3"]
+
+[node name="Items" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" parent="." instance=ExtResource("2")]
+layout_mode = 1
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+script = ExtResource("3")
+
+[node name="RootVBox" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HeaderRow" type="HBoxContainer" parent="Margin/RootVBox"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="TitleLabel" type="Label" parent="Margin/RootVBox/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "ITEMS"
+
+[node name="CountLabel" type="Label" parent="Margin/RootVBox/HeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 14
+text = "0 items"
+
+[node name="FilterDropdown" type="OptionButton" parent="Margin/RootVBox/HeaderRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="GridBackdrop" type="PanelContainer" parent="Margin/RootVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="GridBox" type="VBoxContainer" parent="Margin/RootVBox/GridBackdrop"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="HintLabel" type="Label" parent="Margin/RootVBox/GridBackdrop/GridBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Tap an item to socket it into a card. Socketing is permanent -- an item never comes back off."
+
+[node name="GridScroll" type="ScrollContainer" parent="Margin/RootVBox/GridBackdrop/GridBox"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="GridWrap" type="VBoxContainer" parent="Margin/RootVBox/GridBackdrop/GridBox/GridScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="EmptyLabel" type="Label" parent="Margin/RootVBox/GridBackdrop/GridBox/GridScroll/GridWrap"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "No items."
+
+[node name="ItemGrid" type="GridContainer" parent="Margin/RootVBox/GridBackdrop/GridBox/GridScroll/GridWrap"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 7
+
+[node name="FooterRow" type="HBoxContainer" parent="Margin/RootVBox"]
+layout_mode = 2
+
+[node name="BackButton" type="Button" parent="Margin/RootVBox/FooterRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Back to Team"
+
+[node name="Spacer" type="Control" parent="Margin/RootVBox/FooterRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BatchActionRow" type="HBoxContainer" parent="Margin/RootVBox/FooterRow"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="ExecuteBatchButton" type="Button" parent="Margin/RootVBox/FooterRow/BatchActionRow"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CancelBatchButton" type="Button" parent="Margin/RootVBox/FooterRow/BatchActionRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cancel"
+
+[node name="ToggleBatchButton" type="Button" parent="Margin/RootVBox/FooterRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Scrap"
+
+[node name="BatchConfirmOverlay" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="BatchConfirmOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.7)
+
+[node name="Center" type="CenterContainer" parent="BatchConfirmOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="BatchConfirmOverlay/Center"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+
+[node name="PanelMargin" type="MarginContainer" parent="BatchConfirmOverlay/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 18
+
+[node name="ConfirmVBox" type="VBoxContainer" parent="BatchConfirmOverlay/Center/Panel/PanelMargin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="BatchConfirmLabel" type="Label" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Scrap these items?
+
+You get"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="RewardRow" type="HBoxContainer" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="BatchConfirmRewardLabel" type="Label" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox/RewardRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "+0"
+
+[node name="BatchConfirmRewardIcon" type="TextureRect" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox/RewardRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(30, 30)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ConfirmFootnote" type="Label" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "These items are gone for good."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ConfirmButtons" type="HBoxContainer" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="ConfirmCancelButton" type="Button" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox/ConfirmButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Keep"
+
+[node name="ConfirmExecuteButton" type="Button" parent="BatchConfirmOverlay/Center/Panel/PanelMargin/ConfirmVBox/ConfirmButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Scrap"

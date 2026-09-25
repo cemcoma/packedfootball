@@ -81,6 +81,26 @@ RELEASE_CREDITS_BY_TIER = {
 # bad payout, not a broken button.
 RELEASE_CREDITS_DEFAULT = 10
 
+# What scrapping a spare ITEM pays, by rarity family -- packedfootball/
+# items.py's ITEM_VALUES keys. Deliberately a fraction of what a card of the
+# same rarity releases for: an item is a buff, not a footballer, and scrapping
+# has to stay worse than socketing or nobody would ever equip anything.
+# Only an UNEQUIPPED item can be scrapped; socketing is one-way.
+ITEM_SCRAP_CREDITS_BY_RARITY = {
+    "bronze": 5,
+    "silver": 10,
+    "gold": 25,
+    "platinum": 60,
+    "diamond": 150,
+    "special": 300,
+    "icon": 600,
+}
+ITEM_SCRAP_CREDITS_DEFAULT = 5
+
+# Same reasoning as RELEASE_BATCH_MAX: one transaction, so it has to stay a
+# size that commits comfortably.
+ITEM_SCRAP_BATCH_MAX = 30
+
 # How many cards one /player/release/batch call may release at once.
 #
 # The whole batch is ONE Firestore transaction, so this is really a cap on

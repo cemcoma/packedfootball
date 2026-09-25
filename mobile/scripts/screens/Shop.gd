@@ -435,7 +435,10 @@ func _on_buy_pressed(pack: PackData) -> void:
 	# /pack/open returns every balance now, not just credits -- a pack can be
 	# priced in any one of them, and apply_currency_balances ignores whichever
 	# keys are absent, so this is safe against an older backend too.
+	var items: Array = ItemData.sanitize(res.data.get("items"))
+
 	GameProfile.add_purchased_cards(cards)
+	GameProfile.add_purchased_items(items)
 	GameProfile.apply_inventory_cap(res.data.get("inventory_cap"))
 	GameProfile.apply_currency_balances(
 		res.data.get("credits_remaining"),
@@ -448,7 +451,7 @@ func _on_buy_pressed(pack: PackData) -> void:
 	# Shop.tscn's own _ready() reloads all of that fresh (including
 	# remaining_opens/sold-out state) the next time this scene is entered,
 	# which is exactly when it'll matter again.
-	PackSession.set_pending(pack.pack_name, cards, pack.get_texture())
+	PackSession.set_pending(pack.pack_name, cards, pack.get_texture(), items)
 	get_tree().change_scene_to_file("res://scenes/PackReveal.tscn")
 
 

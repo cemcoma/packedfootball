@@ -35,6 +35,7 @@ if str(_PACKEDFOOTBALL_DIR) not in sys.path:
 # imports read exactly as they did before the move.
 #
 # ruff: noqa: E402 -- these cannot move above the sys.path lines above.
+import items as item_rules
 from game_state import GameState, fields_to_player, player_to_fields
 from gameEngine import ENGINE_VERSION, game
 from formations import FORMATIONS, get_formation, is_similar_position
@@ -61,6 +62,7 @@ __all__ = [
     "generate_starter_roster",
     "tier_family",
     "get_formation",
+    "item_rules",
     "is_similar_position",
     "player_to_fields",
 ]

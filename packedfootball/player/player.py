@@ -27,7 +27,8 @@ base_speed: Final = PLAYER_BASE_SPEED   # see game_config: shared with gameEngin
 
 # Minimum spread (in pitch units at the goal line) on any shot's aim -- see
 # _calculate_shot.
-SHOT_VARIANCE_FLOOR = 0.9
+SHOT_VARIANCE_FLOOR = 0.25
+CROSS_ERROR_FLOOR = 0.4
 
 # A rolling ball loses this much speed per unit travelled (-ln of the ground
 # friction), and how far ahead of a runner a pass may be played.
@@ -354,6 +355,11 @@ class player(ABC):
             self.attributes = Attributes()
         else:
             self.attributes = attributes
+        # Socketed equipment (items.py). The rolled card, kept apart from
+        # .attributes so a loaded-and-resaved card cannot bake a buff in
+        # twice -- game_state.py is the only place that fills either.
+        self.items = []
+        self.base_attributes = self.attributes
         self.overall = self._calculate_overall()
 
     def getAttributes(self):
@@ -809,8 +815,9 @@ class player(ABC):
         heading_penalty = max(0.0, (0.8 - np.dot(state["my_heading"], unit_to_goal)) * 5.0) 
         strike = (self.attributes.power * 0.6) + (self.attributes.shooting * 0.4)
         total_variance = ((100.0 / 15.0) * (1.0 - stat_ability(self.attributes.shooting))) + pressure_penalty + heading_penalty
-        # A floor so even a perfect shooter isn't a laser. Accuracy tops out at
-        # 100; shooting above that buys shot SPEED instead (see strike).
+        # A floor so even a perfect shooter isn't a laser, but low enough that
+        # shooting still tells right up to 100 -- at 0.9 everything above 86 was
+        # identical, so an icon shot like a gold.
         total_variance = max(total_variance, SHOT_VARIANCE_FLOOR)
         
         actual_x = intended_target[0] + rng.normal(0, total_variance)
@@ -889,7 +896,9 @@ class player(ABC):
 
         pressure_penalty = state.get("pressure_count", 0) * 5.0
         cross_stat = (self.attributes.passing * 0.6) + (self.attributes.vision * 0.4)
-        error_scale = max(1.0, (100.0 - cross_stat + pressure_penalty) / 15.0)
+        # Floor low enough that crossing still separates up to 100 (was 1.0,
+        # which made everything above 85 identical).
+        error_scale = max(CROSS_ERROR_FLOOR, (100.0 - cross_stat + pressure_penalty) / 15.0)
         
         rng = state["rng"]
         fuzz_x = rng.normal(0, error_scale)

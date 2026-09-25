@@ -30,6 +30,7 @@ extends Control
 ## anything awaiting it would hang forever.
 
 const PLAYER_CARD_SCENE := preload("res://scenes/components/PlayerCardView.tscn")
+const ITEM_VIEW_SCENE := preload("res://scenes/components/ItemView.tscn")
 
 const ATTR_ROWS := [
 	["Stamina", "stamina"], ["Speed", "speed"], ["Agility", "agility"], ["Passing", "passing"],
@@ -57,6 +58,8 @@ const DEFAULT_WALKOUT_SCALE := 1.25
 @onready var _skip_hint_label: Label = %SkipHintLabel
 
 @onready var _browse_layer: Control = %BrowseLayer
+@onready var _items_heading: Label = %ItemsHeading
+@onready var _items_row: HBoxContainer = %ItemsRow
 @onready var _carousel: CardCarousel = %Carousel
 @onready var _back_button: Button = %BackButton
 
@@ -94,6 +97,10 @@ var _browse_views: Dictionary = {}
 var _browse_order: Array = []
 
 var _cards: Array = []  # PlayerCard, sorted worst -> best
+## Items pulled in the same opening. They get no walkout -- an item is a
+## modifier, not a signing -- so they appear as a row above the card strip
+## once the reveal is over.
+var _items: Array = []
 
 
 func _ready() -> void:
@@ -118,11 +125,14 @@ func _ready() -> void:
 	var pack_texture: Texture2D = PackSession.pack_texture
 	_cards = PackSession.cards().duplicate()
 	_cards.sort_custom(_is_worse_pull)
+	_items = PackSession.items().duplicate()
 	PackSession.clear()
 
 	if _cards.is_empty():
+		# An Equipment Pack has no cards at all, so there is nothing to walk
+		# out -- it goes straight to the browse state, where the item row is.
 		_stage.dismiss()
-		_show_browse_state()  # reached directly with nothing pending -- nothing to animate
+		_show_browse_state()
 		return
 
 	_play_reveal_sequence(pack_texture)
@@ -230,6 +240,7 @@ func _show_browse_state() -> void:
 	_reveal_layer.visible = false
 	_skip_catcher.visible = false
 	_skip_hint_label.visible = false
+	_populate_items()
 
 	# Best first, so the pull worth seeing is the one already centred and
 	# the rest queue up to its right.
@@ -253,6 +264,29 @@ func _show_browse_state() -> void:
 	_exit_sell_mode()
 	_carousel.snap_to(0, false)
 	_on_focus_changed(_carousel.focus_index())
+
+
+## The items from this opening, if any. Not tappable: they are already in the
+## bag by the time this screen runs (Shop credits them before changing scene),
+## and socketing one is a decision for the Items screen with a card in front
+## of you, not something to fire off mid-celebration.
+func _populate_items() -> void:
+	for child in _items_row.get_children():
+		_items_row.remove_child(child)
+		child.queue_free()
+
+	var has_items: bool = not _items.is_empty()
+	_items_heading.visible = has_items
+	_items_row.visible = has_items
+	if not has_items:
+		return
+
+	_items_heading.text = tr("ITEMS  ·  %d") % _items.size()
+	for item in ItemData.sort_best_first(_items):
+		var view: ItemView = ITEM_VIEW_SCENE.instantiate()
+		_items_row.add_child(view)
+		view.set_item(item)
+		view.set_tappable(false)
 
 
 ## The centred card is the one the panel describes, and the only one still

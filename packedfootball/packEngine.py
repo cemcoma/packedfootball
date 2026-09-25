@@ -8,6 +8,7 @@ from player.classes.midfielder import Midfielder, DefensiveMid, AttackingMid
 from player.classes.forward import Forward, Winger
 from game_config import POSITION_CATEGORIES, TIER_RANGES, tier_family  # noqa: F401
 from pack_database import PACK_DATABASE  # noqa: F401
+import items as item_rules
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
@@ -88,6 +89,15 @@ HEIGHT_PROFILES = {
     "RW": (175, 6),
 }
 HEIGHT_MIN, HEIGHT_MAX = 158, 205
+
+# How item drops split between the two product lines. Roughly one card in
+# eleven is a keeper, but a keeper item is useless on the other ten, so the
+# share is held well above 1/11 or nobody could ever kit their goalkeeper.
+PACK_ITEM_KEEPER_SHARE = 0.18
+
+# Of the item drops that come up at an extender rarity, how many are the slot
+# extender rather than a stat buff at that rarity.
+PACK_SLOT_EXTENDER_SHARE = 0.25
 
 
 def _roll_height(rng: random.Random, position: str) -> int:
@@ -247,7 +257,56 @@ class PackManager:
     def get_price(self, pack_id: str) -> int:
         return self.db.get(pack_id, {}).get("price", 0)
 
-    def open_pack(self, pack_id: str) -> list: #TODO: add different results in packs, like contract, equipment, rn just player
+    def _guaranteed_count(self, config: dict) -> int:
+        return sum(int(g.get("count", 1)) for g in config.get("guarantees", []) or [])
+
+    def _roll_one_card(self, tier: str, pos_choice: list, pos_weights: list):
+        """One card at a fixed tier. Extracted from open_pack unchanged, so
+        that a guaranteed card and a rolled one are generated identically."""
+        position_grand_choice = self.rng.choices(pos_choice, weights=pos_weights, k=1)[0]
+        category = POSITION_CATEGORIES.get(position_grand_choice, POSITION_CATEGORIES["attacker"])
+        # A one-position category (goalkeeper) skips the roll rather
+        # than spending a random draw on a foregone conclusion -- which
+        # keeps every existing pack seed rolling exactly as it did.
+        if len(category) == 1:
+            position = next(iter(category))
+        else:
+            position = self.rng.choices(list(category.keys()), weights=list(category.values()), k=1)[0]
+
+        attrs = self._generate_tier_attributes(tier, position)
+
+        player_class = PLAYER_CLASS_MAP.get(position, Midfielder)
+
+        country = self.rng.choice(COUNTRIES)
+        fname = self.rng.choice(FIRST_NAMES[country])
+        lname = self.rng.choice(LAST_NAMES[country])
+        hometown = self.rng.choice(CITIES[country])
+
+        return player_class(
+            fname=fname,
+            lname=lname,
+            tier=tier,
+            position=position,
+            attributes=attrs,
+            country=country,
+            hometown=hometown,
+            appearance=self._generate_appearance(),
+        )
+
+    def open_pack(self, pack_id: str) -> list:
+        """The cards in one opening. Items are a separate draw -- see
+        open_pack_items, which must be called AFTER this on the same manager.
+
+        A pack may pin some of its slots to a fixed tier:
+
+            "guarantees": [{"tier": "special", "count": 1}]
+
+        Those slots come off the TOP of cards_per_pack (a 5-card pack with one
+        guarantee rolls 4 from `rates` and gets a fifth special), and they are
+        drawn after the rolled ones. Both of those matter: a pack with no
+        `guarantees` key runs exactly the loop it always did, over exactly the
+        same draws, so every stored pack seed still replays card for card.
+        """
         config = self.db.get(pack_id)
         if not config:
             # Loud, not an empty list: every caller that builds a pool with
@@ -261,41 +320,57 @@ class PackManager:
         pos_choice = list(config["pos_rates"].keys())
         pos_weights = list(config["pos_rates"].values())
 
-        for _ in range(config["cards_per_pack"]):
+        guaranteed = self._guaranteed_count(config)
+        rolled_slots = max(0, int(config["cards_per_pack"]) - guaranteed)
+
+        for _ in range(rolled_slots):
             rolled_tier = self.rng.choices(tiers, weights=weights, k=1)[0]
+            new_cards.append(self._roll_one_card(rolled_tier, pos_choice, pos_weights))
 
-            position_grand_choice = self.rng.choices(pos_choice,weights=pos_weights,k=1)[0]
-            category = POSITION_CATEGORIES.get(position_grand_choice, POSITION_CATEGORIES["attacker"])
-            # A one-position category (goalkeeper) skips the roll rather
-            # than spending a random draw on a foregone conclusion -- which
-            # keeps every existing pack seed rolling exactly as it did.
-            if len(category) == 1:
-                position = next(iter(category))
-            else:
-                position = self.rng.choices(list(category.keys()), weights=list(category.values()), k=1)[0]
+        for guarantee in config.get("guarantees", []) or []:
+            for _ in range(int(guarantee.get("count", 1))):
+                new_cards.append(self._roll_one_card(guarantee["tier"], pos_choice, pos_weights))
 
-            attrs = self._generate_tier_attributes(rolled_tier, position)
-
-            player_class = PLAYER_CLASS_MAP.get(position, Midfielder)
-
-            country = self.rng.choice(COUNTRIES)
-            fname = self.rng.choice(FIRST_NAMES[country])
-            lname = self.rng.choice(LAST_NAMES[country])
-            hometown = self.rng.choice(CITIES[country])
-
-            new_player = player_class(
-                fname=fname,
-                lname=lname,
-                tier=rolled_tier,
-                position=position,
-                attributes=attrs,
-                country=country,
-                hometown=hometown,
-                appearance=self._generate_appearance(),
-            )
-
-            new_cards.append(new_player)
         return new_cards
+
+    def open_pack_items(self, pack_id: str) -> list:
+        """The items in one opening, or [] for a pack that sells none.
+
+        Drawn after every card, for the same reason guarantees are: a pack
+        with no `item_rates` spends no draws here at all, so adding items to
+        the catalog cannot change what an existing seed already rolled.
+
+            "item_rates": {"gold": 0.7, "diamond": 0.25, "icon": 0.05},
+            "items_per_pack": 2,
+        """
+        config = self.db.get(pack_id)
+        if not config:
+            raise KeyError(f"unknown pack {pack_id!r}; have {list(self.db)}")
+
+        item_rates = config.get("item_rates") or {}
+        count = int(config.get("items_per_pack") or 0)
+        if not item_rates or count <= 0:
+            return []
+
+        rarities = list(item_rates.keys())
+        weights = list(item_rates.values())
+        rolled = []
+        for _ in range(count):
+            rarity = self.rng.choices(rarities, weights=weights, k=1)[0]
+            kind = (
+                item_rules.KIND_KEEPER
+                if self.rng.random() < PACK_ITEM_KEEPER_SHARE
+                else item_rules.KIND_OUTFIELD
+            )
+            # The slot extender only ever drops at the rarity it is sold at,
+            # and even then it is the minority of those drops -- it is the
+            # rarest thing in the game and the only way past three slots.
+            if rarity in item_rules.SLOT_EXTENDER_RARITIES and self.rng.random() < PACK_SLOT_EXTENDER_SHARE:
+                rolled.append(item_rules.make_item(rarity, item_rules.SLOT_EXTENDER_STAT, item_rules.KIND_ANY))
+                continue
+            stat = self.rng.choice(item_rules.stats_for_kind(kind))
+            rolled.append(item_rules.make_item(rarity, stat, kind))
+        return rolled
 
     def _generate_tier_attributes(self, tier: str, position: str) -> Attributes:
         """Rolls a full Attributes set for one card: every skill attribute

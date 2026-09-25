@@ -77,6 +77,11 @@ func _ready() -> void:
 		_filter_dropdown.add_item(tr(entry[0]))
 	_filter_dropdown.select(0)
 
+	# Arriving mid-socket: the Items screen sent us here to choose a card, so
+	# the grid needs to say what a tap is going to do. Without this it is the
+	# ordinary inventory and the flow just looks like it lost the item.
+	_refresh_socket_hint()
+
 
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
 	_refresh()
@@ -220,7 +225,25 @@ func _on_card_pressed(player_id: String, is_xi: bool) -> void:
 		get_tree().change_scene_to_file("res://scenes/PlayerDetail.tscn")
 
 
+## The hint line doubles as the state of a pending socket. The Back button
+## abandons the pick rather than carrying it around: an item left pending
+## would put a Socket button on the next card opened from anywhere.
+func _refresh_socket_hint() -> void:
+	var pending: Dictionary = ItemSession.item()
+	if pending.is_empty():
+		return
+	_hint_label.text = (
+		tr("Pick a card to socket %s into. Back cancels.") % ItemData.label(pending)
+	)
+	_back_button.text = tr("Cancel")
+
+
 func _on_back_pressed() -> void:
+	if ItemSession.is_pending():
+		var back_to: String = ItemSession.return_scene
+		ItemSession.clear()
+		get_tree().change_scene_to_file(back_to)
+		return
 	get_tree().change_scene_to_file("res://scenes/TeamHub.tscn")
 
 func _on_toggle_batch_pressed() -> void:

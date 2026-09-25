@@ -41,7 +41,11 @@ FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "packedfootball")
 # priced in credits (main.py defaults it), so the dict comprehension below
 # simply skips it and nothing gets written for credit-priced packs.
 DEFINITION_FIELDS = (
-    "order", "name", "type", "description", "price", "price_currency", "cards_per_pack", "rates", "pos_rates", "sprite_key"
+    "order", "name", "type", "description", "price", "price_currency", "cards_per_pack", "rates", "pos_rates", "sprite_key",
+    # Equipment and guaranteed slots. Definitional, like rates -- and both are
+    # part of the odds disclosure, so a pack whose code entry gains one and
+    # whose Firestore doc doesn't would advertise the wrong thing.
+    "guarantees", "item_rates", "items_per_pack",
 )
 
 

@@ -14,10 +14,16 @@ extends Control
 ## have to compete with the flavor text for space:
 ##   0. Description -- name/type/flavor text, same description PackView
 ##      already shows on the box itself.
-##   1. Rates -- card tier odds (bronze/silver/... -> %), from PackData.rates.
+##   1. Rates -- card tier odds (bronze/silver/... -> %), from PackData.rates,
+##      under the guarantee line if the pack pins any slot to a tier. The two
+##      belong together: the table is the odds for the slots that are LEFT
+##      after the guaranteed ones, so either alone misstates the pack.
 ##   2. Position rates -- goalkeeper/defender/midfielder/attacker -> %,
 ##      from PackData.pos_rates.
-##   3. Availability -- If there is any limitations on the pack it is shown here
+##   3. Items -- item rarity odds, and how many drop. Its own page rather than
+##      more rows on page 1: an item and a card are different things and
+##      merging them into one table would read as one pool.
+##   4. Availability -- If there is any limitations on the pack it is shown here
 ##
 ## Row order on both odds pages is a fixed client-side list, NOT dictionary
 ## iteration order -- Firestore/JSON round-tripping doesn't guarantee a map
@@ -28,7 +34,7 @@ extends Control
 ## else client-side needs those four names today.
 
 const POSITION_CATEGORY_ORDER := ["goalkeeper", "defender", "midfielder", "attacker"]
-const PAGE_COUNT := 4
+const PAGE_COUNT := 5
 
 @onready var _panel_title: Label = %PanelTitle
 @onready var _type_label: Label = %TypeLabel
@@ -38,6 +44,10 @@ const PAGE_COUNT := 4
 @onready var _rates_empty_label: Label = %RatesEmptyLabel
 @onready var _position_rates_grid: GridContainer = %PositionRatesGrid
 @onready var _position_rates_empty_label: Label = %PositionRatesEmptyLabel
+@onready var _guarantee_label: Label = %GuaranteeLabel
+@onready var _item_rates_grid: GridContainer = %ItemRatesGrid
+@onready var _item_rates_empty_label: Label = %ItemRatesEmptyLabel
+@onready var _item_count_label: Label = %ItemCountLabel
 @onready var _availability_label: Label = %AvailabilityLabel
 @onready var _page_label: Label = %PageLabel
 @onready var _prev_button: Button = %PrevButton
@@ -60,6 +70,18 @@ func open_for(pack: PackData) -> void:
 	_description_label.text = pack.description if pack.description != "" else tr("No description available.")
 	_populate_grid(_rates_grid, _rates_empty_label, _odds_rows(pack.rates, PlayerCard.TIER_COLORS.keys()))
 	_populate_grid(_position_rates_grid, _position_rates_empty_label, _odds_rows(pack.pos_rates, POSITION_CATEGORY_ORDER))
+	var guarantee := pack.guarantee_label()
+	_guarantee_label.visible = guarantee != ""
+	_guarantee_label.text = guarantee
+	_populate_grid(
+		_item_rates_grid, _item_rates_empty_label,
+		_odds_rows(pack.item_rates, PlayerCard.TIER_COLORS.keys())
+	)
+	_item_count_label.text = (
+		tr("This pack contains %d items.") % pack.items_per_pack
+		if pack.items_per_pack > 0
+		else tr("This pack contains no items.")
+	)
 	if pack.remaining_opens != null or pack.expires_at != "":
 		_availability_text(pack.remaining_opens,pack.expires_at)
 	else:

@@ -1,24 +1,26 @@
 extends Control
 
-## Team hub: Squad or Inventory. Sits between Menu and the two screens that
-## actually do something, the same way Play.tscn sits in front of Quick
-## Match/Tournament -- Menu's "Team" button used to go straight to the squad
-## editor, and now lands here first.
+## Team hub: Squad, Inventory or Items. Sits between Menu and the three
+## screens that actually do something, the same way Play.tscn sits in front of
+## Quick Match/Tournament -- Menu's "Team" button used to go straight to the
+## squad editor, and now lands here first.
 ##
-## The split is what the two screens are FOR, not just where they live:
-## Squad is the eleven you play with (formation, who starts, the kit), and
-## Inventory is everything you own (browse, release, restyle). Only the
-## second has a size limit, which is why the counter belongs here and not on
-## the squad screen.
+## The split is what the screens are FOR, not just where they live: Squad is
+## the eleven you play with (formation, who starts, the kit), Inventory is
+## every card you own (browse, release, restyle), and Items is the equipment
+## waiting to be socketed into them. Only Inventory has a size limit, which is
+## why the counter belongs here and not on the squad screen.
 
 @onready var _squad_button: MenuTile = %SquadTile
 @onready var _inventory_button: MenuTile = %InventoryTile
+@onready var _items_button: MenuTile = %ItemsTile
 @onready var _back_button: Button = %BackButton
 
 
 func _ready() -> void:
 	_squad_button.pressed.connect(_on_squad_pressed)
 	_inventory_button.pressed.connect(_on_inventory_pressed)
+	_items_button.pressed.connect(_on_items_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
@@ -57,6 +59,13 @@ func _refresh_hints() -> void:
 			tr("Every player you own -- %d of them. Release or restyle any of them. Bench space %d / %d.")
 			% [owned, count, GameProfile.inventory_cap]
 		)
+	var spare: int = GameProfile.all_items.size()
+	if spare == 0:
+		_items_button.subtitle_text = tr("No spare equipment. Equipment Packs are in the Shop.")
+	else:
+		_items_button.subtitle_text = (
+			tr("%d spare items waiting for a card. Socketing one is permanent.") % spare
+		)
 	_apply_theme_colors()
 
 
@@ -66,6 +75,10 @@ func _on_squad_pressed() -> void:
 
 func _on_inventory_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/Inventory.tscn")
+
+
+func _on_items_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/Items.tscn")
 
 
 func _on_back_pressed() -> void:

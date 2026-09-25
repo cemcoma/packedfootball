@@ -223,7 +223,7 @@ STAT_SCALE: Final = STAT_CEILING / 100.0
 # deficits compound until a bronze card cannot function as a footballer.
 # A gamma below 1 lifts the weak end without touching the strong end.
 # 1.0 reproduces the old straight line exactly.
-STAT_CURVE_GAMMA: Final = 1.0
+STAT_CURVE_GAMMA: Final = 0.8
 
 # Slope. Below 1 it squeezes the spread toward STAT_CURVE_PIVOT, so a weak card
 # closes on a strong one WITHOUT the whole game speeding up (which is what
@@ -268,18 +268,34 @@ def pace_ability(stat: float, compress: float | None = None) -> float:
     c = SPEED_COMPRESS if compress is None else compress
     if c != 1.0:
         a = SPEED_PIVOT + (a - SPEED_PIVOT) * c
-    return min(1.0, max(0.0, a))
+    return max(0.0, a)
+
+
+# What one point above 100 is worth, as a fraction of a point below it. Cards
+# roll to 96; everything past that is items and boosters, and it has to be
+# worth owning without letting a kitted bronze outrun an icon.
+# A full +30 to STAT_CEILING buys 10.5% -- real, but a third of what the same
+# 30 points buy on the base axis.
+STAT_OVERDRIVE: Final = 0.35
 
 
 def stat_ability(stat: float, gamma: float | None = None, compress: float | None = None) -> float:
-    a = min(1.0, max(0.0, float(stat)) / 100.0)
+    """Raw stat -> ability. 1.0 at 100, and it KEEPS RISING above that.
+
+    Everything past 100 comes from items, so the tail is what makes them
+    worth owning; clipping here is what made them do nothing at all.
+    Callers that need a probability clamp their own result -- see
+    _resolve_penalty -- because a fraction of an ability is not a chance.
+    """
+    raw = max(0.0, float(stat))
+    a = min(1.0, raw / 100.0)
     g = STAT_CURVE_GAMMA if gamma is None else gamma
     if g != 1.0:
         a = a ** g
     c = STAT_CURVE_COMPRESS if compress is None else compress
     if c != 1.0:
         a = STAT_CURVE_PIVOT + (a - STAT_CURVE_PIVOT) * c
-    return min(1.0, max(0.0, a))
+    return max(0.0, min(1.0, a) + max(0.0, raw - 100.0) / 100.0 * STAT_OVERDRIVE)
 
 
 ### SUPER IMPORTANT ###

@@ -32,6 +32,9 @@ async def health():
 PROFILE_FIELDS = (
     "display_name", "credits", "bucks", "medals", "wins", "draws", "losses",
     "formation", "kit", "roster_player_ids",
+    # Unequipped items. Equipped ones ride along on each card, inside
+    # _card_payload -- neither costs a read of its own (see items.py).
+    "item_pool",
 )
 
 

@@ -97,17 +97,59 @@ def test_stamina_is_exposed_to_player_ai(match):
 
 
 @pytest.mark.slow
-def test_stamina_never_reaches_the_saved_card(make_match):
-    """Match state must not leak into what gets persisted to Firestore."""
+def test_match_state_never_reaches_the_saved_card(rosters, make_match):
+    """Match state must not leak into what gets persisted to Firestore.
+
+    Checked against a snapshot taken BEFORE kickoff rather than against the
+    player's own live attributes: the engine plays the roster objects
+    themselves (gameEngine builds all_players straight from team.players, no
+    copy), so comparing a card to itself after the match would pass no matter
+    what the match had done to it.
+    """
+    from dataclasses import asdict
     from game_state import player_to_fields
+
+    home, away = rosters
+    squad = list(home) + list(away)
+    before = [asdict(p.attributes) for p in squad]
 
     g = make_match(seed=12)
     g.run_match(max_steps=2000, render=False)
-    fields = player_to_fields(g.all_players[5])
-    assert "stamina" not in fields["statistics"]
-    # The stamina ATTRIBUTE is a card property and does belong here; the
-    # match pool is what must not appear.
-    assert fields["attributes"]["stamina"] == g.all_players[5].attributes.stamina
+
+    for card, snapshot in zip(squad, before):
+        fields = player_to_fields(card)
+        # The stamina POOL is match state; the stamina ATTRIBUTE is a card
+        # property and does belong in the save.
+        assert "stamina" not in fields["statistics"]
+        assert fields["attributes"] == snapshot
+
+
+@pytest.mark.slow
+def test_the_out_of_position_penalty_never_reaches_the_saved_card(rosters, make_match):
+    """_apply_out_of_position_penalty's docstring promises the scaling is a
+    per-match sim detail that never touches what is persisted. It makes a
+    SHALLOW copy, so the copy's .attributes are scaled while .base_attributes
+    still point at the card -- and player_to_fields writes the latter.
+
+    Worth its own test because the penalty is the one thing in the engine that
+    replaces a player's Attributes rather than reading them.
+    """
+    from game_state import player_to_fields
+
+    g = make_match(seed=12)
+    penalized = [
+        (i, p) for i, p in enumerate(g.all_players)
+        if p.attributes is not p.base_attributes
+    ]
+    if not penalized:
+        pytest.skip("this roster/formation pairing puts nobody out of position")
+
+    for _, p in penalized:
+        saved = player_to_fields(p)["attributes"]
+        assert saved["stamina"] == p.base_attributes.stamina
+        assert saved["stamina"] != p.attributes.stamina, (
+            "the penalty did not actually scale this card -- the test proves nothing"
+        )
 
 
 # ------------------------------------------------------------------- height

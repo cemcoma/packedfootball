@@ -62,7 +62,10 @@ const KEEPER_STAT_ROWS := [
 @onready var _career_heading: Label = %CareerHeading
 @onready var _career_grid: GridContainer = %CareerGrid
 
+@onready var _items_heading: Label = %ItemsHeading
+@onready var _items_row: HBoxContainer = %ItemsRow
 @onready var _status_label: Label = %StatusLabel
+@onready var _socket_button: Button = %SocketButton
 @onready var _customize_button: Button = %CustomizeButton
 @onready var _release_button: Button = %ReleaseButton
 @onready var _back_button: Button = %BackButton
@@ -75,15 +78,27 @@ const KEEPER_STAT_ROWS := [
 @onready var _confirm_button: Button = %ConfirmButton
 @onready var _cancel_button: Button = %CancelButton
 
+const ITEM_VIEW_SCENE := preload("res://scenes/components/ItemView.tscn")
+
 var _card: PlayerCard = null
 var _releasing: bool = false
+
+## Which action the one confirm overlay is currently asking about. There is a
+## single overlay and two irreversible things that use it, so it has to say
+## which -- a "Release" that scraps an item would be the worst possible bug
+## on the only screen in the app that deletes anything.
+var _confirm_action: String = "release"
+## Set when the socket would overwrite an occupied slot: the item that gets
+## DESTROYED, named in the request so the server never has to guess.
+var _replacing_item_id: String = ""
 
 
 func _ready() -> void:
 	_customize_button.pressed.connect(_on_customize_pressed)
+	_socket_button.pressed.connect(_on_socket_pressed)
 	_release_button.pressed.connect(_on_release_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
-	_confirm_button.pressed.connect(_on_confirm_release_pressed)
+	_confirm_button.pressed.connect(_on_confirm_pressed)
 	_cancel_button.pressed.connect(_on_cancel_release_pressed)
 
 	_confirm_overlay.visible = false
@@ -116,6 +131,7 @@ func _refresh() -> void:
 	_card_view.set_card(_card)
 
 	_refresh_skills()
+	_refresh_items()
 	_populate(_tendencies_grid, TENDENCY_ROWS, _attribute_text)
 	_populate_career()
 	_refresh_buttons()
@@ -179,8 +195,50 @@ func _add_row(grid: GridContainer, label_text: String, value_text: String, highl
 	grid.add_child(value_label)
 
 
+## Every socket this card has, filled or not, so "two of three used" reads at
+## a glance. Tapping a filled one picks it as the thing a pending socket would
+## destroy -- the only way to overwrite a full card.
+func _refresh_items() -> void:
+	for child in _items_row.get_children():
+		_items_row.remove_child(child)
+		child.queue_free()
+
+	var pending: Dictionary = ItemSession.item()
+	for i in range(_card.item_capacity()):
+		var view: ItemView = ITEM_VIEW_SCENE.instantiate()
+		_items_row.add_child(view)
+		if i < _card.items.size():
+			var equipped: Dictionary = _card.items[i]
+			view.set_item(equipped)
+			var id := ItemData.item_id(equipped)
+			view.set_selected(_replacing_item_id == id)
+			view.pressed.connect(_on_slot_pressed.bind(id))
+			view.set_tappable(not pending.is_empty())
+		else:
+			view.set_empty()
+			view.set_tappable(false)
+
+	var used := _card.items.size()
+	_items_heading.text = tr("EQUIPMENT  %d / %d") % [used, _card.item_capacity()]
+
+
+func _on_slot_pressed(id: String) -> void:
+	# A second tap clears the choice rather than locking it in -- nothing is
+	# destroyed until the confirm overlay is accepted.
+	_replacing_item_id = "" if _replacing_item_id == id else id
+	_refresh_items()
+	_refresh_buttons()
+
+
+## A buffed stat is shown as "74 (+4)" rather than just the total: the base
+## number is what a release payout and the leaderboard go by, and hiding it
+## would make an item look like a reroll of the card.
 func _attribute_text(key: String) -> String:
-	return str(int(_card.attributes.get(key, 0)))
+	var base := int(_card.attributes.get(key, 0))
+	var effective := int(_card.effective_attributes().get(key, base))
+	if effective == base:
+		return str(base)
+	return "%d (+%d)" % [base, effective - base]
 
 
 func _career_text(key: String) -> String:
@@ -211,6 +269,7 @@ func _is_starting() -> bool:
 ## thing you can't do is worse than showing nothing.
 func _refresh_buttons() -> void:
 	_customize_button.text = tr("Customize")
+	_refresh_socket_button()
 	if _is_starting():
 		_release_button.disabled = true
 		CurrencyDisplay.set_button_price(_release_button, tr("Release (in XI)"), 0)
@@ -219,6 +278,33 @@ func _refresh_buttons() -> void:
 		CurrencyDisplay.set_button_price(
 			_release_button, tr("Release"), PlayerCard.release_credits(_card.tier)
 		)
+
+
+## The Socket button only exists while an item is waiting to be placed (see
+## ItemSession) -- Player Detail is otherwise unchanged. When the card is full
+## it stays disabled until a slot has been tapped, because overwriting one
+## destroys what is in it and that is not a thing to do by accident.
+func _refresh_socket_button() -> void:
+	var pending: Dictionary = ItemSession.item()
+	_socket_button.visible = not pending.is_empty()
+	if pending.is_empty():
+		return
+
+	var kit: Array = _card.items
+	if _replacing_item_id != "":
+		kit = kit.filter(func(i): return ItemData.item_id(i) != _replacing_item_id)
+	var blocker := ItemData.equip_blocker(kit, pending, _card.position)
+	if blocker == "" :
+		_socket_button.disabled = _releasing
+		_socket_button.text = tr("Socket %s") % ItemData.label(pending)
+	elif _card.free_item_slots() <= 0 and ItemData.fits(pending, _card.position):
+		# The one blocker the player can clear from here: tap a slot to say
+		# which item gets destroyed.
+		_socket_button.disabled = true
+		_socket_button.text = tr("Tap a slot to replace")
+	else:
+		_socket_button.disabled = true
+		_socket_button.text = blocker
 
 
 ## Everything on this screen sits on the plain screen background rather than
@@ -259,9 +345,39 @@ func _on_customize_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/CustomizePlayer.tscn")
 
 
+## Socketing is irreversible, so it goes through the SAME confirm overlay the
+## only other irreversible action does, and the footnote spells out what is
+## destroyed rather than leaving it to be inferred.
+func _on_socket_pressed() -> void:
+	var pending: Dictionary = ItemSession.item()
+	if _releasing or pending.is_empty():
+		return
+
+	_confirm_action = "equip"
+	_confirm_label.text = tr("Socket %s into %s?\n\nThis cannot be undone.") % [
+		ItemData.label(pending), _card.full_name()
+	]
+	_confirm_reward_label.text = ItemData.label(pending)
+	_confirm_reward_label.add_theme_color_override("font_color", ItemData.color(pending))
+	_confirm_reward_icon.texture = null
+	_confirm_footnote.text = tr("Items can never be taken back off a card.")
+	if _replacing_item_id != "":
+		var doomed := _card.items.filter(
+			func(i): return ItemData.item_id(i) == _replacing_item_id
+		)
+		if not doomed.is_empty():
+			_confirm_footnote.text = (
+				tr("%s is destroyed to make room. Neither item can be taken back off.")
+				% ItemData.label(doomed[0])
+			)
+	_confirm_overlay.visible = true
+
+
 func _on_release_pressed() -> void:
 	if _releasing or _is_starting():
 		return
+	_confirm_action = "release"
+	_confirm_footnote.text = tr("This card is gone for good.")
 	_confirm_label.text = tr("Release %s?\n\n%s %s, overall %d.\n\nYou get") % [
 		_card.full_name(), PlayerCard.tier_label(_card.tier), _card.position, _card.overall()
 	]
@@ -277,6 +393,63 @@ func _on_release_pressed() -> void:
 
 func _on_cancel_release_pressed() -> void:
 	_confirm_overlay.visible = false
+
+
+## One overlay, two irreversible actions -- _confirm_action is what keeps
+## them apart.
+func _on_confirm_pressed() -> void:
+	if _confirm_action == "equip":
+		await _do_socket()
+	else:
+		await _on_confirm_release_pressed()
+
+
+func _do_socket() -> void:
+	var pending: Dictionary = ItemSession.item()
+	if _releasing or pending.is_empty():
+		return
+	_releasing = true
+	_confirm_button.disabled = true
+	_cancel_button.disabled = true
+	_set_status(tr("Socketing..."))
+
+	var body := {"player_id": _card.player_id, "item_id": ItemSession.item_id}
+	if _replacing_item_id != "":
+		body["replaces_item_id"] = _replacing_item_id
+	var res: Dictionary = await Backend.call_endpoint(
+		HTTPClient.METHOD_POST, "/item/equip", body
+	)
+
+	_releasing = false
+	_confirm_button.disabled = false
+	_cancel_button.disabled = false
+	_confirm_overlay.visible = false
+
+	if not res.ok:
+		# 409 is items.py's can_equip rejection -- a full card, a duplicate
+		# stat, or the wrong position. The button already checks all three, so
+		# reaching it means the cached card disagrees with Firestore; the
+		# server's own wording is the accurate one.
+		var detail = res.data.get("detail")
+		_set_status(
+			str(detail) if res.status == 409 and detail != null
+			else tr("Could not socket that item -- try again.")
+		)
+		_refresh_buttons()
+		return
+
+	# The SERVER's item list and pool, not a local guess at either -- the same
+	# fold-back CustomizePlayer does with its reply.
+	GameProfile.apply_equip_result(
+		_card.player_id, res.data.get("items"), res.data.get("item_pool")
+	)
+	ItemSession.clear()
+	_replacing_item_id = ""
+	_set_status(tr("Socketed."), true)
+	_refresh()
+	# Stay on the card rather than bouncing: the slot row now shows the item
+	# that just went in, which is the confirmation worth seeing. Back goes to
+	# the inventory as usual, whose own Back returns to the Items screen.
 
 
 func _on_confirm_release_pressed() -> void:

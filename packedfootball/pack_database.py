@@ -197,6 +197,60 @@ PACK_DATABASE = {
         "sprite_key":"CONFPack",
         "available_at": datetime.datetime(2026, 10, 15, 15, 0, tzinfo=datetime.timezone.utc)
     },
+    # Fills the 2,000 -> 50,000 credit hole in the ladder: before this the
+    # next thing to buy above a Platinum pack was an icon at twenty-five
+    # times the price, so there was nothing to spend on for weeks. The
+    # guarantee is what makes it worth 5,000 -- see the "guarantees" key,
+    # which pins one slot to a tier instead of rolling it.
+    "guaranteed_special": {
+        "active": True,
+        "order": 45,
+        "name": "Special Guarantee Pack",
+        "type": "special",
+        "description": "Five cards with one SPECIAL guaranteed, plus two items to socket into them.",
+        "price": 5000,
+        "cards_per_pack": 5,
+        "guarantees": [{"tier": "special", "count": 1}],
+        "rates": {"silver": 0.10, "gold": 0.35, "platinum": 0.40, "diamond": 0.14, "special": 0.009, "icon": 0.001},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "item_rates": {"silver": 0.35, "gold": 0.40, "platinum": 0.20, "diamond": 0.05},
+        "items_per_pack": 2,
+        "price_currency":"credits",
+        "sprite_key":"StandardPack1"
+    },
+    # Items only, no cards. The recurring sink: socketing is one-way, so
+    # every upgrade destroys the item it replaces and a squad is never
+    # finished the way it would be with removable ones.
+    "item_standard": {
+        "active": True,
+        "order": 15,
+        "name": "Equipment Pack",
+        "type": "standard",
+        "description": "Three items to socket into your cards. Permanent, and they replace whatever is already there.",
+        "price": 300,
+        "cards_per_pack": 0,
+        "rates": {},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "item_rates": {"bronze": 0.45, "silver": 0.30, "gold": 0.20, "platinum": 0.05},
+        "items_per_pack": 3,
+        "price_currency":"credits",
+        "sprite_key":"StandardPack1"
+    },
+    "item_premium": {
+        "active": True,
+        "order": 25,
+        "name": "Premium Equipment Pack",
+        "type": "standard",
+        "description": "Three high-grade items, with a shot at the slot extender -- the only way past three slots.",
+        "price": 1500,
+        "cards_per_pack": 0,
+        "rates": {},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "item_rates": {"silver": 0.20, "gold": 0.40, "platinum": 0.25, "diamond": 0.13, "icon": 0.02},
+        "items_per_pack": 3,
+        "price_currency":"credits",
+        "sprite_key":"StandardPack1"
+    },
     "promo_testers": {
         "active": True,
         "order": 95,

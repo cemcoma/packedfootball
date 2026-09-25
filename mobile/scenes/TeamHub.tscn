@@ -64,6 +64,15 @@ title_text = "Inventory"
 hero = true
 min_height = 150
 
+[node name="ItemsTile" parent="Margin/RootVBox/TileRow" unique_id=1950000012 instance=ExtResource("menutile")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+title_text = "Items"
+accent_key = "warning"
+hero = true
+min_height = 150
+
 [node name="Spacer2" type="Control" parent="Margin/RootVBox" unique_id=1950000013]
 layout_mode = 2
 size_flags_vertical = 3

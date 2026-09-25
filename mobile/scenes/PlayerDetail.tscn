@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_cjegr"]
 [ext_resource type="PackedScene" uid="uid://ulrndvhqpktd" path="res://scenes/components/PlayerCardView.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/components/ItemView.tscn" id="item_view"]
 
 [node name="PlayerDetail" type="Control" unique_id=1970000001]
 layout_mode = 3
@@ -79,6 +80,17 @@ theme_override_font_sizes/font_size = 12
 text = "--"
 horizontal_alignment = 1
 autowrap_mode = 2
+
+[node name="ItemsHeading" type="Label" parent="Margin/RootVBox/Body/CardPanel/CardColumn" unique_id=1970000060]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "EQUIPMENT"
+
+[node name="ItemsRow" type="HBoxContainer" parent="Margin/RootVBox/Body/CardPanel/CardColumn" unique_id=1970000061]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
 
 [node name="AttributesPanel" type="PanelContainer" parent="Margin/RootVBox/Body" unique_id=1970000200]
 unique_name_in_owner = true
@@ -180,6 +192,12 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 13
 autowrap_mode = 2
+
+[node name="SocketButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1970000062]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "Socket"
 
 [node name="CustomizeButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1970000027]
 unique_name_in_owner = true

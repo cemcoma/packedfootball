@@ -133,6 +133,12 @@ async def list_packs(uid: str = Depends(verify_id_token)):
                 "cards_per_pack": doc.get("cards_per_pack"),
                 "rates": doc.get("rates", {}),
                 "pos_rates": doc.get("pos_rates", {}),
+                # Everything the odds popup discloses (App Store 3.1.1). A
+                # pack that sells none of these sends the empty defaults, so
+                # the client renders exactly the table it always did.
+                "guarantees": doc.get("guarantees", []),
+                "item_rates": doc.get("item_rates", {}),
+                "items_per_pack": doc.get("items_per_pack", 0),
                 "max_opens": max_opens,
                 "times_opened": times_opened,
                 "remaining_opens": (max_opens - times_opened) if max_opens is not None else None,
@@ -187,10 +193,23 @@ async def open_pack(req: OpenPackRequest, uid: str = Depends(verify_id_token)):
         raise HTTPException(402, f"Not enough {price_currency}")
 
     seed = secrets.randbits(63)
-    cards = PackManager({req.pack_id: config}, seed=seed).open_pack(req.pack_id)
+    # One manager for both draws, in this order: items are rolled from the
+    # rng AFTER every card, which is what lets a pack gain an item_rates
+    # table without changing what its old seeds already rolled.
+    manager = PackManager({req.pack_id: config}, seed=seed)
+    cards = manager.open_pack(req.pack_id)
+    items = manager.open_pack_items(req.pack_id)
 
     remaining = profile[price_currency] - price
-    await state.update_profile_fields({price_currency: remaining})
+    profile_update = {price_currency: remaining}
+    if items:
+        # Appended to the bag on users/{uid}, which /account/bootstrap
+        # already reads -- items get no documents of their own. ArrayUnion
+        # rather than read-modify-write: two packs opened at once would
+        # otherwise each append to the array they read, and one lot of items
+        # would vanish. Every item carries its own id, so nothing dedupes.
+        profile_update["item_pool"] = firestore.ArrayUnion(items)
+    await state.update_profile_fields(profile_update)
     for card in cards:
         await state.add_inventory_card(card)
     await packs_client.set_document(pack_path, {"times_opened": firestore.Increment(1)}, merge=True)
@@ -208,6 +227,7 @@ async def open_pack(req: OpenPackRequest, uid: str = Depends(verify_id_token)):
         "medals_remaining": balances["medals"],
         "inventory_count": len(inventory) + len(cards),
         "inventory_cap": INVENTORY_CAP,
+        "items": items,
         "cards": [
             {**player_to_fields(c), "player_id": c.player_id, "doc_id": getattr(c, "doc_id", None)}
             for c in cards

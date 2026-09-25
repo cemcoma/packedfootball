@@ -26,6 +26,9 @@ extends Node
 ## Any balance or the energy bar moved. CurrencyHud's strip is on every
 ## screen, so anything that changes a number has to say so here.
 signal currencies_changed
+## The item bag or a card's equipment changed -- the Items grid and any
+## open card detail both redraw off this.
+signal items_changed
 
 const DEFAULT_FORMATION := "4-4-2"
 
@@ -62,6 +65,10 @@ var kit: String = ""
 var formation: String = DEFAULT_FORMATION
 var slot_assignment: Array = []  # player_ids, "" where empty, index == formation slot index
 var all_cards: Dictionary = {}  # player_id -> PlayerCard, every owned card (roster + bench)
+## Unequipped items, newest last -- the bag on users/{uid} (see ItemData.gd).
+## Equipped ones live on their card's `items` instead, so a card and its
+## equipment always arrive together and this never has to be joined against.
+var all_items: Array = []
 
 # Snapshot of what's actually saved in Firestore, refreshed by load_all() and
 # by a successful save_team() -- comparing against the live fields above is
@@ -211,6 +218,7 @@ func _apply_profile_fields(doc: Dictionary) -> void:
 	kit = _str(doc, "kit", "")
 	var counters = doc.get("ad_counters")
 	ad_counters = counters if counters is Dictionary else {}
+	all_items = ItemData.sanitize(doc.get("item_pool"))
 	currencies_changed.emit()
 
 
@@ -466,6 +474,9 @@ func reset() -> void:
 	formation = DEFAULT_FORMATION
 	slot_assignment = []
 	all_cards = {}
+	# Cleared with everything else: a second account signing in on the same
+	# running app must not briefly see the first one's equipment.
+	all_items = []
 	saved_formation = DEFAULT_FORMATION
 	saved_slot_assignment = []
 	ad_counters = {}
@@ -475,6 +486,30 @@ func add_purchased_cards(cards: Array) -> void:
 	for card in cards:
 		var typed_card: PlayerCard = card
 		all_cards[typed_card.player_id] = typed_card
+
+
+## Items just pulled from a pack, appended to the bag.
+func add_purchased_items(items: Array) -> void:
+	for item in ItemData.sanitize(items):
+		all_items.append(item)
+	items_changed.emit()
+
+
+## Folds an /item/equip reply back in: the SERVER's item list for the card and
+## the pool it left behind, never a local guess at either. Mirrors how
+## CustomizePlayer applies its own reply.
+func apply_equip_result(player_id: String, card_items, item_pool) -> void:
+	if all_cards.has(player_id):
+		var card: PlayerCard = all_cards[player_id]
+		card.items = ItemData.sanitize(card_items)
+	all_items = ItemData.sanitize(item_pool)
+	items_changed.emit()
+
+
+## Folds an /item/scrap reply back in.
+func apply_item_pool(item_pool) -> void:
+	all_items = ItemData.sanitize(item_pool)
+	items_changed.emit()
 
 func apply_currency_balances(new_credits = null, new_bucks = null, new_medals = null) -> void:
 	if typeof(new_credits) in [TYPE_INT, TYPE_FLOAT]:

@@ -37,6 +37,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
 
+import items as item_rules
 from player.player import Attributes, DEFAULT_STATISTICS
 
 # What a brand-new profile starts with -- game_config.py's, re-exported.
@@ -50,7 +51,13 @@ from game_config import (  # noqa: F401
 
 
 def player_to_fields(p) -> dict:
-    """Serializes a player object into plain data Firestore can store."""
+    """Serializes a player object into plain data Firestore can store.
+
+    Writes the ROLLED attributes, never the item-buffed ones: fields_to_player
+    keeps the base on .base_attributes precisely so that loading a kitted card
+    and saving it again doesn't add its items in a second time, and a third,
+    every time the roster is written.
+    """
     return {
         "fname": p.fname,
         "lname": p.lname,
@@ -58,9 +65,10 @@ def player_to_fields(p) -> dict:
         "position": p.position,
         "country": p.country,
         "hometown": p.hometown,
-        "attributes": asdict(p.attributes),
+        "attributes": asdict(getattr(p, "base_attributes", None) or p.attributes),
         "statistics": dict(p.statistics),
         "appearance": dict(p.appearance),
+        "items": list(getattr(p, "items", []) or []),
     }
 
 
@@ -82,6 +90,13 @@ def fields_to_player(fields: dict, player_class_map: dict, default_class):
     # field existed would otherwise load without the key and KeyError the first
     # time record_match touched it.
     p.statistics = {**DEFAULT_STATISTICS, **fields["statistics"]}
+    # The one place equipment is applied. Everything downstream -- the match
+    # engine, .overall, the squad optimiser -- then reads a card that already
+    # has its buffs, while .base_attributes keeps what to write back.
+    p.items = item_rules.sanitize(fields.get("items"), fields["position"])
+    p.base_attributes = attrs
+    p.attributes = item_rules.effective_attributes(attrs, p.items)
+    p.overall = p._calculate_overall()
     return p
 
 
@@ -186,6 +201,7 @@ class GameState:
                 "roster_player_ids": list(roster_player_ids),
                 "formation": default_formation,
                 "kit": DEFAULT_KIT,
+                "item_pool": [],
             }
             await self.client.set_document(f"users/{uid}", doc, merge=False)
             return {
@@ -199,6 +215,7 @@ class GameState:
                 "roster": list(default_roster),
                 "formation": default_formation,
                 "kit": DEFAULT_KIT,
+                "item_pool": [],
             }
         return {
             "credits": doc.get("credits", DEFAULT_STARTING_CREDITS),
@@ -212,6 +229,9 @@ class GameState:
             "formation": doc.get("formation", DEFAULT_FORMATION),
             # Absent on every account created before kits existed.
             "kit": doc.get("kit", DEFAULT_KIT),
+            # Unequipped items. Absent on every account older than items,
+            # which sanitize_pool reads as an empty bag.
+            "item_pool": item_rules.sanitize_pool(doc.get("item_pool")),
         }
 
     async def update_profile_fields(self, fields: dict) -> None:

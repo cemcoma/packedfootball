@@ -18,6 +18,8 @@
 #   make sim MATCHES=30 SEED=5  more matches, different seeds
 #   make tiers                  goals/match at every tier, bronze -> icon
 #   make tiers SEEDS=16         a bigger sample
+#   make items         what a kit is worth; does the ladder survive it
+#   make godot-check   load every script/scene items touched, headless
 #
 # `sim` is the calibration harness, not a test: it prints shots, shots on
 # target, save rate, goals and how long the ball spends airborne, which is
@@ -54,7 +56,7 @@ SEEDS   ?= 8
 SEED    ?= 1
 
 .PHONY: test test-fast test-slow test-gap test-tiers test-one test-k sim tiers \
-        web serve-web deploy-web clean-web
+        items godot-check web serve-web deploy-web clean-web
 
 ## Everything. Config (testpaths, sys.path) comes from pytest.ini.
 test:
@@ -94,6 +96,21 @@ sim:
 ## tunable than test-tiers, and it prints passing/throw-ins too.
 tiers:
 	$(PYTHON) packedfootball/scripts/tier_report.py --seeds $(SEEDS)
+
+## What a kit is worth, and whether a kitted bronze still loses to a plain
+## gold. Run this after ANY change to item values, slots or the stat curve.
+items:
+	$(PYTHON) packedfootball/scripts/item_report.py --seeds $(SEEDS)
+
+## Load every script and scene items touched, headless. Not a test runner --
+## it catches parse errors and broken scene references, which is what actually
+## breaks in GDScript. --import first so a newly added class_name is in the
+## global class cache; without it every file using it fails for that alone.
+godot-check:
+	@test -x "$(GODOT)" || { echo "Godot binary not found at: $(GODOT)"; exit 1; }
+	"$(GODOT)" --headless --path $(MOBILE_DIR) --import >/dev/null 2>&1 || true
+	"$(GODOT)" --headless --path $(MOBILE_DIR) --script scripts/dev/check_scripts.gd 2>&1 \
+		| grep -E '^(ok|FAIL)|Parse Error|failures'
 
 ## Export the Godot client to $(BUILD_WEB).
 # --headless so it never opens the editor window. Godot creates the output

@@ -5,6 +5,8 @@
 [ext_resource type="Script" uid="uid://cqrv7m2xk1wbe" path="res://scripts/components/CardCarousel.gd" id="3"]
 [ext_resource type="PackedScene" uid="uid://b8wq3k1pnv2xa" path="res://scenes/components/PackWalkoutStage.tscn" id="4"]
 
+[ext_resource type="PackedScene" path="res://scenes/components/ItemView.tscn" id="item_view"]
+
 [node name="PackReveal" type="Control" unique_id=1255259700]
 layout_mode = 3
 anchors_preset = 15
@@ -90,6 +92,19 @@ theme_override_constants/separation = 10
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "PACK OPENED"
+
+[node name="ItemsHeading" type="Label" parent="BrowseLayer/Margin/RootVBox" unique_id=1700100050]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "ITEMS"
+
+[node name="ItemsRow" type="HBoxContainer" parent="BrowseLayer/Margin/RootVBox" unique_id=1700100051]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
 
 [node name="DetailPanel" type="PanelContainer" parent="BrowseLayer/Margin/RootVBox" unique_id=1700100001]
 unique_name_in_owner = true
