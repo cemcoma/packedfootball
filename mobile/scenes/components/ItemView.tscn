@@ -3,13 +3,36 @@
 [ext_resource type="Script" path="res://scripts/components/ItemView.gd" id="1"]
 
 [node name="ItemView" type="Control"]
-custom_minimum_size = Vector2(104, 78)
+custom_minimum_size = Vector2(110, 150)
 layout_mode = 3
 anchors_preset = 0
-offset_right = 104.0
-offset_bottom = 78.0
+offset_right = 110.0
+offset_bottom = 150.0
 mouse_filter = 2
 script = ExtResource("1")
+
+[node name="BackgroundTexture" type="TextureRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Scrim" type="ColorRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.35)
 
 [node name="Frame" type="Panel" parent="."]
 unique_name_in_owner = true
@@ -17,6 +40,20 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="FrameInner" type="Panel" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 2.0
+offset_top = 2.0
+offset_right = -2.0
+offset_bottom = -2.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
@@ -30,34 +67,78 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 theme_override_constants/margin_left = 6
-theme_override_constants/margin_top = 4
+theme_override_constants/margin_top = 6
 theme_override_constants/margin_right = 6
-theme_override_constants/margin_bottom = 4
+theme_override_constants/margin_bottom = 6
 
 [node name="Content" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
-theme_override_constants/separation = 0
+theme_override_constants/separation = 2
 
-[node name="ValueLabel" type="Label" parent="Margin/Content"]
+[node name="TopRow" type="BoxContainer" parent="Margin/Content"]
+layout_mode = 2
+
+[node name="ValueLabel" type="Label" parent="Margin/Content/TopRow"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 22
+size_flags_horizontal = 2
+theme_override_font_sizes/font_size = 24
 text = "+0"
 horizontal_alignment = 1
+
+[node name="KindLabel" type="Label" parent="Margin/Content/TopRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 8
+theme_override_font_sizes/font_size = 11
+text = "OUT"
+horizontal_alignment = 2
+
+[node name="ArtSlot" type="Control" parent="Margin/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="ItemSprite" type="TextureRect" parent="Margin/Content/ArtSlot"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="SpriteFallback" type="Label" parent="Margin/Content/ArtSlot"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 26
+text = "PAS"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="StatLabel" type="Label" parent="Margin/Content"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
-text = "Stat"
+theme_override_font_sizes/font_size = 13
+text = "Passing"
 horizontal_alignment = 1
 autowrap_mode = 2
-clip_text = true
+max_lines_visible = 2
 
 [node name="RarityLabel" type="Label" parent="Margin/Content"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 10
+theme_override_font_sizes/font_size = 11
 text = "Bronze"
 horizontal_alignment = 1
 clip_text = true

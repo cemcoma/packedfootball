@@ -320,7 +320,7 @@ func _open_buy_confirm(pack: PackData) -> void:
 	_confirming_pack = pack
 	_buy_confirm_art.texture = pack.get_texture()
 	_buy_confirm_title.text = pack.pack_name
-	_buy_confirm_cards.text = tr("%d cards") % pack.cards_per_pack
+	_buy_confirm_cards.text = tr("%d cards") % pack.contents_count()
 	_buy_confirm_price_label.text = tr("Price")
 	_buy_confirm_price.set_amount(pack.price_currency, pack.price)
 	_buy_confirm_price.set_sizes(18, 16)
@@ -378,8 +378,14 @@ func _balance_for(currency_key: String) -> int:
 ## it, so the backend refuses that outright (see its INVENTORY_CAP) and this
 ## greys the button out to match rather than letting the user find out after
 ## they commit.
+##
+## An item-only pack needs no bench space; the old maxi(1, ...) floor made it
+## unbuyable on a full bench, stricter than the backend.
 func _has_room_for(pack: PackData) -> bool:
-	return GameProfile.inventory_space() >= maxi(1, pack.cards_per_pack)
+	var needed: int = pack.bench_slots_needed()
+	if needed <= 0:
+		return true
+	return GameProfile.inventory_space() >= needed
 
 
 func _on_buy_pressed(pack: PackData) -> void:

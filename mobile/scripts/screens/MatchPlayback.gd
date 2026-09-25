@@ -346,9 +346,11 @@ var _is_real_match: bool = false #for local testing demo replays
 @onready var _home_name_label: Label = %HomeNameLabel
 @onready var _away_name_label: Label = %AwayNameLabel
 @onready var _score_label: Label = %ScoreLabel
-@onready var _home_color_swatch: ColorRect = %HomeColorSwatch
-@onready var _away_color_swatch: ColorRect = %AwayColorSwatch
+@onready var _home_color_swatch: KitSwatch = %HomeColorSwatch
+@onready var _away_color_swatch: KitSwatch = %AwayColorSwatch
 @onready var _timer_label: Label = %TimerLabel
+@onready var _scoreboard_panel: PanelContainer = %ScoreboardPanel
+@onready var _timer_panel: Panel = %TimerPanel
 
 @onready var _pause_button: Button = %PauseButton
 @onready var _camera_toggle_button: Button = %CameraToggleButton
@@ -406,6 +408,9 @@ func _ready() -> void:
 
 	_resolve_team_colors()  # before _setup_scoreboard -- it paints the swatches
 	_setup_scoreboard()
+	# The scoreboard's frames are baked StyleBoxFlats, so a dark/light swap
+	# has to rebuild them.
+	ThemeManager.theme_changed.connect(_style_scoreboard)
 	_build_legend()
 	_pre_match_teams_label.text = tr("%s vs %s") % [roster.get("home_name", tr("Home")), roster.get("away_name", tr("Away"))]
 	# Only a real match has a roster worth opening -- the bundled demo's
@@ -434,9 +439,31 @@ func _ready() -> void:
 func _setup_scoreboard() -> void:
 	_home_name_label.text = roster.get("home_name", tr("Home"))
 	_away_name_label.text = roster.get("away_name", tr("Away"))
-	_home_color_swatch.color = _team_color(0)
-	_away_color_swatch.color = _team_color(1)
+	# The kit, not just its primary colour -- two clubs in the same blue are
+	# told apart by the pattern, exactly as they are on the pitch.
+	if _team_kits.size() == 2:
+		_home_color_swatch.set_design(_team_kits[0])
+		_away_color_swatch.set_design(_team_kits[1])
 	_update_score_label()
+	_style_scoreboard()
+
+
+## The scoreboard wears the same frame as every other panel in the app.
+func _style_scoreboard() -> void:
+	var accent := ThemeManager.color("accent")
+	var muted := ThemeManager.color("surface_border")
+	_scoreboard_panel.add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, muted, 3, true, Vector2(0, 0))
+	)
+	_timer_panel.add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, accent, 2, false, Vector2(6, 2))
+	)
+	_home_color_swatch.set_border(muted)
+	_away_color_swatch.set_border(muted)
+	_home_name_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
+	_away_name_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
+	_score_label.add_theme_color_override("font_color", ThemeManager.color("heading"))
+	_timer_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
 
 ## The ball's flash colours -- all the key there is now that players act
 ## out what they do.
@@ -477,7 +504,6 @@ func _build_legend() -> void:
 ## otherwise be indistinguishable for 90 minutes, and real football solves
 ## exactly this with a change kit: the AWAY side is the one that changes,
 ## the home side always wears what it picked.
-## TODO: Have the teams actually wear the kit
 func _resolve_team_colors() -> void:
 	var home_kit := KitDesign.parse(roster.get("home_kit", ""))
 	var away_kit := KitDesign.parse(roster.get("away_kit", ""))

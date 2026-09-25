@@ -120,6 +120,27 @@ static func label(item: Dictionary) -> String:
 	return "+%d %s" % [value(item), stat_label(item)]
 
 
+## "GK" / "OUT" -- which product line this item belongs to, for the badge in
+## the corner of the card where a player card carries its position.
+static func kind_badge(item: Dictionary) -> String:
+	match kind(item):
+		KIND_KEEPER:
+			return TranslationServer.translate("GK")
+		KIND_ANY:
+			return ""
+		_:
+			return TranslationServer.translate("OUT")
+
+
+## What the card shows in place of art, until sprites/items/<stat>.png exists.
+## The stat's first three letters -- short enough to read at card size, and
+## the same rule for the extender, whose "+2" the value label already carries.
+static func stat_glyph(item: Dictionary) -> String:
+	if item.is_empty():
+		return "+"
+	return stat_label(item).substr(0, 3).to_upper()
+
+
 static func scrap_credits(item: Dictionary) -> int:
 	return int(SCRAP_CREDITS.get(PlayerCard.tier_family(rarity(item)), 5))
 

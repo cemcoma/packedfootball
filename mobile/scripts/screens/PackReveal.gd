@@ -58,8 +58,6 @@ const DEFAULT_WALKOUT_SCALE := 1.25
 @onready var _skip_hint_label: Label = %SkipHintLabel
 
 @onready var _browse_layer: Control = %BrowseLayer
-@onready var _items_heading: Label = %ItemsHeading
-@onready var _items_row: HBoxContainer = %ItemsRow
 @onready var _carousel: CardCarousel = %Carousel
 @onready var _back_button: Button = %BackButton
 
@@ -86,6 +84,9 @@ const DEFAULT_WALKOUT_SCALE := 1.25
 ## Sell mode turns a tap from "inspect this card" into "mark it for release".
 var _sell_mode: bool = false
 var _selected_ids: Array = []
+## Item ids picked for scrapping. Separate list because they go to a
+## different endpoint -- /item/scrap, not /player/release/batch.
+var _selected_item_ids: Array = []
 var _selling: bool = false
 ## player_id -> its PlayerCardView. Built by the walkout for the cards that
 ## get one and by the strip for the rest, then kept so selecting a card
@@ -97,10 +98,14 @@ var _browse_views: Dictionary = {}
 var _browse_order: Array = []
 
 var _cards: Array = []  # PlayerCard, sorted worst -> best
-## Items pulled in the same opening. They get no walkout -- an item is a
-## modifier, not a signing -- so they appear as a row above the card strip
-## once the reveal is over.
+## Items pulled in the same opening. They get no WALKOUT -- an item is a
+## modifier, not a signing -- but they do go in the same carousel, after the
+## cards, so one pack reveals as one strip.
 var _items: Array = []
+## The item views, in strip order. A carousel index at or past
+## _browse_order.size() is an item, which is how the detail panel and the
+## sell mode tell the two apart.
+var _item_views: Array = []
 
 
 func _ready() -> void:
@@ -130,7 +135,7 @@ func _ready() -> void:
 
 	if _cards.is_empty():
 		# An Equipment Pack has no cards at all, so there is nothing to walk
-		# out -- it goes straight to the browse state, where the item row is.
+		# out -- it goes straight to the strip, which the items are added to.
 		_stage.dismiss()
 		_show_browse_state()
 		return
@@ -240,7 +245,6 @@ func _show_browse_state() -> void:
 	_reveal_layer.visible = false
 	_skip_catcher.visible = false
 	_skip_hint_label.visible = false
-	_populate_items()
 
 	# Best first, so the pull worth seeing is the one already centred and
 	# the rest queue up to its right.
@@ -260,33 +264,19 @@ func _show_browse_state() -> void:
 			view.set_card(card) 
 		_browse_views[card.player_id] = view
 
+	# Items come after every card: best card centred first is the point of the
+	# order above, and an item is never the headline of a pack that had cards.
+	_item_views.clear()
+	for item in ItemData.sort_best_first(_items):
+		var item_view: ItemView = ITEM_VIEW_SCENE.instantiate()
+		_carousel.add_view(item_view)
+		item_view.set_item(item)
+		_item_views.append(item_view)
+
 	_browse_layer.visible = true
 	_exit_sell_mode()
 	_carousel.snap_to(0, false)
 	_on_focus_changed(_carousel.focus_index())
-
-
-## The items from this opening, if any. Not tappable: they are already in the
-## bag by the time this screen runs (Shop credits them before changing scene),
-## and socketing one is a decision for the Items screen with a card in front
-## of you, not something to fire off mid-celebration.
-func _populate_items() -> void:
-	for child in _items_row.get_children():
-		_items_row.remove_child(child)
-		child.queue_free()
-
-	var has_items: bool = not _items.is_empty()
-	_items_heading.visible = has_items
-	_items_row.visible = has_items
-	if not has_items:
-		return
-
-	_items_heading.text = tr("ITEMS  ·  %d") % _items.size()
-	for item in ItemData.sort_best_first(_items):
-		var view: ItemView = ITEM_VIEW_SCENE.instantiate()
-		_items_row.add_child(view)
-		view.set_item(item)
-		view.set_tappable(false)
 
 
 ## The centred card is the one the panel describes, and the only one still
@@ -298,6 +288,10 @@ func _on_focus_changed(index: int) -> void:
 		if view != null:
 			view.set_celebrating(i == index, PlayerCard.tier_color(card.tier))
 
+	var item_index: int = index - _browse_order.size()
+	if item_index >= 0 and item_index < _item_views.size():
+		_show_item_detail(_item_views[item_index].item())
+		return
 	if index < 0 or index >= _browse_order.size():
 		_clear_card_detail()
 		return
@@ -310,7 +304,22 @@ func _on_card_tapped(index: int) -> void:
 	if index != _carousel.focus_index():
 		_carousel.snap_to(index)
 		return
-	if not _sell_mode or index < 0 or index >= _browse_order.size():
+	if not _sell_mode:
+		return
+
+	var item_index: int = index - _browse_order.size()
+	if item_index >= 0 and item_index < _item_views.size():
+		var view: ItemView = _item_views[item_index]
+		var item_id: String = ItemData.item_id(view.item())
+		if _selected_item_ids.has(item_id):
+			_selected_item_ids.erase(item_id)
+		else:
+			_selected_item_ids.append(item_id)
+		view.set_selected(_selected_item_ids.has(item_id))
+		_update_sell_ui()
+		return
+
+	if index < 0 or index >= _browse_order.size():
 		return
 
 	var player_id: String = _browse_order[index].player_id
@@ -320,6 +329,26 @@ func _on_card_tapped(index: int) -> void:
 		_selected_ids.append(player_id)
 	_restyle_card(player_id)
 	_update_sell_ui()
+
+
+## An item centred in the strip. Same panel as a card's, because it is the
+## same strip -- what changes is what there is to say about it.
+func _show_item_detail(item: Dictionary) -> void:
+	_detail_name_label.text = ItemData.label(item)
+	_detail_meta_label.text = tr("Item  ·  %s  ·  %s") % [
+		PlayerCard.tier_label(ItemData.rarity(item)),
+		tr("Goalkeepers") if ItemData.kind(item) == ItemData.KIND_KEEPER else tr("Outfield")
+	]
+	_detail_origin_label.text = tr("Socket it from the Items screen. It cannot be taken back off.")
+
+	for child in _detail_attr_grid.get_children():
+		_detail_attr_grid.remove_child(child)
+		child.queue_free()
+	if ItemData.is_slot_extender(item):
+		_add_attr_cells(tr("Item slots"), ItemData.SLOT_EXTENDER_BONUS, true)
+	else:
+		_add_attr_cells(ItemData.stat_label(item), ItemData.value(item), true)
+	_add_attr_cells(tr("Scrap value"), ItemData.scrap_credits(item), false)
 
 
 func _show_card_detail(card: PlayerCard) -> void:
@@ -401,12 +430,20 @@ func _total_payout() -> int:
 		var card: PlayerCard = GameProfile.all_cards.get(pid)
 		if card != null:
 			total += PlayerCard.release_credits(card.tier)
+	for view in _item_views:
+		if _selected_item_ids.has(ItemData.item_id(view.item())):
+			total += ItemData.scrap_credits(view.item())
 	return total
+
+
+func _selected_count() -> int:
+	return _selected_ids.size() + _selected_item_ids.size()
 
 
 func _on_quick_sell_pressed() -> void:
 	_sell_mode = true
 	_selected_ids.clear()
+	_selected_item_ids.clear()
 	_quick_sell_button.visible = false
 	_sell_action_row.visible = true
 	_update_sell_ui()
@@ -415,25 +452,29 @@ func _on_quick_sell_pressed() -> void:
 func _exit_sell_mode() -> void:
 	_sell_mode = false
 	_selected_ids.clear()
-	_quick_sell_button.visible = not _browse_views.is_empty()
+	_selected_item_ids.clear()
+	# An item-only pack still has something to sell.
+	_quick_sell_button.visible = not (_browse_views.is_empty() and _item_views.is_empty())
 	_sell_action_row.visible = false
 	_sell_confirm_overlay.visible = false
 	for pid in _browse_views.keys():
 		_restyle_card(pid)
+	for view in _item_views:
+		view.set_selected(false)
 
 
 func _update_sell_ui() -> void:
 	CurrencyDisplay.set_button_price(
-		_sell_selected_button, tr("Sell %d") % _selected_ids.size(), _total_payout()
+		_sell_selected_button, tr("Sell %d") % _selected_count(), _total_payout()
 	)
-	_sell_selected_button.disabled = _selected_ids.is_empty() or _selling
+	_sell_selected_button.disabled = _selected_count() == 0 or _selling
 
 
 func _on_sell_selected_pressed() -> void:
-	if _selected_ids.is_empty() or _selling:
+	if _selected_count() == 0 or _selling:
 		return
-	_sell_confirm_label.text = tr("Release %d player(s) for %s credits?\n\nThis cannot be undone.") % [
-		_selected_ids.size(), CurrencyDisplay.format_amount(_total_payout())
+	_sell_confirm_label.text = tr("Sell %d of these for %s credits?\n\nThis cannot be undone.") % [
+		_selected_count(), CurrencyDisplay.format_amount(_total_payout())
 	]
 	_sell_confirm_overlay.visible = true
 
@@ -451,17 +492,40 @@ func _on_sell_confirm_pressed() -> void:
 	_sell_cancel_button.disabled = true
 
 	var sold := _selected_ids.duplicate()
-	var res: Dictionary = await Backend.call_endpoint(
-		HTTPClient.METHOD_POST, "/player/release/batch", {"player_ids": sold}
-	)
+	var scrapped := _selected_item_ids.duplicate()
+
+	# Cards and items are two endpoints, so one can succeed and the other
+	# fail; each result is folded in on its own.
+	var res: Dictionary = {"ok": true, "data": {}}
+	if not sold.is_empty():
+		res = await Backend.call_endpoint(
+			HTTPClient.METHOD_POST, "/player/release/batch", {"player_ids": sold}
+		)
+	var item_res: Dictionary = {"ok": true, "data": {}}
+	if not scrapped.is_empty():
+		item_res = await Backend.call_endpoint(
+			HTTPClient.METHOD_POST, "/item/scrap", {"item_ids": scrapped}
+		)
 
 	_selling = false
 	_sell_confirm_button.disabled = false
 	_sell_cancel_button.disabled = false
 	_sell_confirm_overlay.visible = false
 
+	if item_res.get("ok", false) and not scrapped.is_empty():
+		GameProfile.apply_item_pool(item_res.data.get("item_pool"))
+		GameProfile.apply_currency_balances(item_res.data.get("credits_remaining"))
+		for view in _item_views.duplicate():
+			if scrapped.has(ItemData.item_id(view.item())):
+				_items.erase(view.item())
+				_item_views.erase(view)
+				_carousel.remove_view(view)
+				view.queue_free()
+	elif not scrapped.is_empty():
+		push_warning("Item scrap failed. Status: %d" % item_res.get("status", 0))
+
 	if not res.get("ok", false):
-		print("Pack quick sell failed. Status: ", res.get("status"))
+		push_warning("Pack quick sell failed. Status: %d" % res.get("status", 0))
 		_update_sell_ui()
 		return
 

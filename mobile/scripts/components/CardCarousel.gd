@@ -54,7 +54,11 @@ func _ready() -> void:
 
 ## Appends a card to the right-hand end of the strip. The card is taken
 ## over whole: it stops taking input and it is sized and placed from here.
-func add_view(view: PlayerCardView) -> void:
+##
+## Typed Control, not PlayerCardView: nothing below reads anything but the
+## generic Control members, and an ItemView is card-shaped and belongs in the
+## same strip -- a pack that drops both reveals both the same way.
+func add_view(view: Control) -> void:
 	add_child(view)
 	_go_deaf(view)
 	view.size = view.get_combined_minimum_size()
@@ -70,7 +74,7 @@ func add_view(view: PlayerCardView) -> void:
 
 ## Takes a card out of the strip without freeing it -- the caller owns it.
 ## The focus lands on whatever card fills the gap.
-func remove_view(view: PlayerCardView) -> void:
+func remove_view(view: Control) -> void:
 	var i: int = _views.find(view)
 	if i < 0:
 		return

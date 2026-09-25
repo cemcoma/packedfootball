@@ -87,10 +87,12 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "EQUIPMENT"
 
-[node name="ItemsRow" type="HBoxContainer" parent="Margin/RootVBox/Body/CardPanel/CardColumn" unique_id=1970000061]
+[node name="ItemsRow" type="GridContainer" parent="Margin/RootVBox/Body/CardPanel/CardColumn" unique_id=1970000061]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 4
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 4
+columns = 3
 
 [node name="AttributesPanel" type="PanelContainer" parent="Margin/RootVBox/Body" unique_id=1970000200]
 unique_name_in_owner = true

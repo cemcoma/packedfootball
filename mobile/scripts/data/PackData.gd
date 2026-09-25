@@ -69,10 +69,8 @@ var price_currency: String = "credits"
 var cards_per_pack: int = 0
 var rates: Dictionary = {}  # tier -> probability (0..1), e.g. {"bronze": 0.6, ...} -- odds disclosure
 var pos_rates: Dictionary = {}  # position category -> probability (0..1), e.g. {"goalkeeper": 0.25, ...}
-## Slots pinned to a fixed tier instead of rolled, as [{"tier", "count"}, ...].
-## Part of the disclosure: "1 guaranteed SPECIAL" is what the odds table below
-## it is the REMAINDER of, so showing one without the other would misstate
-## what a pack gives. [] for every pack that guarantees nothing.
+## Slots pinned to a tier instead of rolled, [{"tier", "count"}, ...]. The
+## odds table is the remainder after these, so both are disclosed together.
 var guarantees: Array = []
 ## Item drops -- rarity -> probability (0..1) -- and how many are rolled. Same
 ## disclosure rules as the card odds; {} / 0 for a pack that sells no items.
@@ -113,6 +111,17 @@ static func from_fields(fields: Dictionary) -> PackData:
 	pack.unavailable_reason = _str(fields, "unavailable_reason")
 	pack.available_at = _str(fields, "available_at")
 	return pack
+
+
+## Everything in one opening. Items are drawn as cards and share the reveal
+## carousel, so they count -- an Equipment Pack is 3, not 0.
+func contents_count() -> int:
+	return cards_per_pack + items_per_pack
+
+
+## Only cards take bench space; items are a field on users/{uid}.
+func bench_slots_needed() -> int:
+	return cards_per_pack
 
 
 ## "1 guaranteed SPECIAL", or "" for a pack that pins nothing. Shown above the

@@ -63,7 +63,7 @@ const KEEPER_STAT_ROWS := [
 @onready var _career_grid: GridContainer = %CareerGrid
 
 @onready var _items_heading: Label = %ItemsHeading
-@onready var _items_row: HBoxContainer = %ItemsRow
+@onready var _items_row: GridContainer = %ItemsRow
 @onready var _status_label: Label = %StatusLabel
 @onready var _socket_button: Button = %SocketButton
 @onready var _customize_button: Button = %CustomizeButton
@@ -207,6 +207,7 @@ func _refresh_items() -> void:
 	for i in range(_card.item_capacity()):
 		var view: ItemView = ITEM_VIEW_SCENE.instantiate()
 		_items_row.add_child(view)
+		view.set_compact(true)
 		if i < _card.items.size():
 			var equipped: Dictionary = _card.items[i]
 			view.set_item(equipped)

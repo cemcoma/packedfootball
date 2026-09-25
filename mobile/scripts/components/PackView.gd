@@ -56,7 +56,7 @@ func _on_info_button_pressed() -> void:
 func set_pack(pack: PackData) -> void:
 	_pack = pack
 	_name_label.text = pack.pack_name
-	_cards_label.text = tr("%d cards") % pack.cards_per_pack
+	_cards_label.text = tr("%d cards") % pack.contents_count()
 	_limited_label.text = pack.limited_label()
 	_limited_label.visible = pack.is_limited()
 	_price_amount.set_amount(pack.price_currency, pack.price)

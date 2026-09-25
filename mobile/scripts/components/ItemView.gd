@@ -1,77 +1,105 @@
 class_name ItemView
 extends Control
 
-## Reusable tile for one equipment item -- the ItemView.tscn template filled
-## in and made tappable, exactly the arrangement PlayerCardView uses for
-## cards. Used by the Items grid, the Player Detail slot row and the pack
-## reveal, so there is one tile to redesign rather than three.
-##
-## An item is a plain Dictionary in this project (see ItemData.gd), not a
-## class, so this takes one and reads it through ItemData's accessors rather
-## than reaching into the short keys itself.
-##
-## Rarity colour comes from PlayerCard.TIER_COLORS: items and cards share one
-## rarity scale, so a gold item has to read as a gold at a glance.
+## One equipment item, drawn as a card: the same size and rarity background as
+## PlayerCardView, with a per-stat sprite where the portrait goes.
+## Art paths: sprites/player_cards/<rarity>.png and sprites/items/<stat>.png,
+## both ResourceLoader.exists()-guarded, falling back to text.
 
 signal pressed
 
-## Matches PlayerCardView's, so an item tile and a card tile have the same
-## corner radius when they sit next to each other.
-const CORNER := 8
-const BORDER_WIDTH := 3
+## Must match PlayerCardView.tscn's size -- CardCarousel spaces the strip off
+## the widest view it holds.
+const CARD_SIZE := Vector2(110, 150)
 
-## The empty-slot tile Player Detail shows for a socket with nothing in it.
-const EMPTY_STAT := ""
+## Player Detail's slot row: five full-size cards would be 550px against a
+## 180px card column.
+const COMPACT_SIZE := Vector2(52, 70)
 
-@onready var _frame: Panel = %Frame
+const ITEM_SPRITE_DIR := "res://sprites/items/"
+const CARD_SPRITE_DIR := "res://sprites/player_cards/"
+
+## Keeps the labels readable over the busier card backs.
+const SCRIM := Color(0, 0, 0, 0.35)
+const SELECTED_ALPHA := 0.5
+
+@onready var _background: TextureRect = %BackgroundTexture
+@onready var _scrim: ColorRect = %Scrim
 @onready var _value_label: Label = %ValueLabel
+@onready var _kind_label: Label = %KindLabel
+@onready var _sprite: TextureRect = %ItemSprite
+@onready var _sprite_fallback: Label = %SpriteFallback
 @onready var _stat_label: Label = %StatLabel
 @onready var _rarity_label: Label = %RarityLabel
+@onready var _frame: Panel = %Frame
+@onready var _frame_inner: Panel = %FrameInner
 @onready var _tap_button: Button = %TapButton
 @onready var _selection: Panel = %Selection
 
 var _item: Dictionary = {}
 var _is_empty: bool = false
 var _selected: bool = false
+var _compact: bool = false
 
 
 func _ready() -> void:
+	custom_minimum_size = CARD_SIZE
 	_tap_button.pressed.connect(func() -> void: pressed.emit())
-	# The frame colour is baked into a StyleBoxFlat, so a dark/light swap has
-	# to rebuild it -- same reason PlayerCardView listens.
 	ThemeManager.theme_changed.connect(_restyle)
+	_scrim.color = SCRIM
 	_restyle()
 
 
-## The item this tile shows. Clears the per-context state (selection) so a
-## recycled tile can't keep the previous item's tint, the same contract
-## PlayerCardView.set_card has.
+## Clears the selection too, so a recycled tile can't keep the last one's.
 func set_item(item: Dictionary) -> void:
 	_item = item
 	_is_empty = false
 	_selected = false
 	if not is_node_ready():
 		await ready
+
 	_value_label.text = "+%d" % (
 		ItemData.SLOT_EXTENDER_BONUS if ItemData.is_slot_extender(item) else ItemData.value(item)
 	)
+	_kind_label.text = ItemData.kind_badge(item)
 	_stat_label.text = ItemData.stat_label(item)
 	_rarity_label.text = PlayerCard.tier_label(ItemData.rarity(item))
+	_apply_background(ItemData.rarity(item))
+	_apply_sprite(ItemData.stat(item))
 	_restyle()
 
 
-## An unfilled socket. Drawn as the same tile so a card's three slots line up
-## whether or not they are filled.
+## An unfilled socket: same shape, no art.
 func set_empty() -> void:
 	_item = {}
 	_is_empty = true
 	_selected = false
 	if not is_node_ready():
 		await ready
-	_value_label.text = "+"
+
+	_value_label.text = ""
+	_kind_label.text = ""
 	_stat_label.text = tr("Empty")
 	_rarity_label.text = ""
+	_background.texture = null
+	_sprite.visible = false
+	_sprite_fallback.visible = true
+	_sprite_fallback.text = "+"
 	_restyle()
+
+
+## Small enough for a row of sockets. Safe to call before or after set_item.
+func set_compact(compact: bool) -> void:
+	_compact = compact
+	if not is_node_ready():
+		await ready
+	custom_minimum_size = COMPACT_SIZE if compact else CARD_SIZE
+	size = custom_minimum_size
+	_kind_label.visible = not compact
+	_rarity_label.visible = not compact
+	_stat_label.visible = not compact
+	_value_label.add_theme_font_size_override("font_size", 13 if compact else 24)
+	_sprite_fallback.add_theme_font_size_override("font_size", 13 if compact else 26)
 
 
 func set_selected(selected: bool) -> void:
@@ -79,6 +107,7 @@ func set_selected(selected: bool) -> void:
 	if not is_node_ready():
 		await ready
 	_selection.visible = selected
+	modulate.a = SELECTED_ALPHA if selected else 1.0
 
 
 func item() -> Dictionary:
@@ -91,29 +120,62 @@ func set_tappable(tappable: bool) -> void:
 	_tap_button.disabled = not tappable
 
 
+## The same card back a player of this rarity gets.
+func _apply_background(rarity: String) -> void:
+	var path := CARD_SPRITE_DIR + PlayerCard.tier_family(rarity) + ".png"
+	_background.texture = load(path) if ResourceLoader.exists(path) else null
+	_scrim.visible = _background.texture != null
+
+
+## The stat's own art, or its name in large type until that art exists.
+func _apply_sprite(stat: String) -> void:
+	var path := ITEM_SPRITE_DIR + stat + ".png"
+	var texture: Texture2D = load(path) if ResourceLoader.exists(path) else null
+	_sprite.texture = texture
+	_sprite.visible = texture != null
+	_sprite_fallback.visible = texture == null
+	if texture == null:
+		_sprite_fallback.text = ItemData.stat_glyph(_item)
+
+
 func _restyle() -> void:
 	if not is_node_ready():
 		return
 	var accent := ThemeManager.color("accent")
-	var heading := ThemeManager.color("heading")
 	var muted := ThemeManager.color("surface_border")
-
-	# An empty socket is drawn muted and hollow so a full card and a card with
-	# room are told apart without reading a number.
 	var edge: Color = muted if _is_empty else ItemData.color(_item)
-	var fill: Color = MenuTile.BASE_FILL
-	if not _is_empty:
-		# A wash of the rarity colour, not the colour itself: the labels have
-		# to stay readable on all seven.
-		fill = MenuTile.BASE_FILL.lerp(edge, 0.18)
-	_frame.add_theme_stylebox_override(
-		"panel", MenuTile.pixel_frame(fill, edge, BORDER_WIDTH, true)
+
+	var on_art: bool = _background.texture != null
+	_apply_frame(on_art, edge)
+	var title: Color = MenuTile.TITLE_COLOR if on_art else edge
+	_value_label.add_theme_color_override("font_color", muted if _is_empty else title)
+	_sprite_fallback.add_theme_color_override("font_color", muted if _is_empty else title)
+	_stat_label.add_theme_color_override(
+		"font_color", muted if _is_empty else MenuTile.TITLE_COLOR
 	)
+	_kind_label.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+	_rarity_label.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+	# Border-only: MenuTile.pixel_frame forces its own FILL_ALPHA on, which
+	# painted the whole tile black over the art.
 	_selection.add_theme_stylebox_override(
-		"panel", MenuTile.pixel_frame(Color(0, 0, 0, 0), accent, BORDER_WIDTH, true)
+		"panel", PlayerCardView._ring_style(3, PlayerCardView.CARD_CORNER + 2, accent)
 	)
 	_selection.visible = _selected
+	modulate.a = SELECTED_ALPHA if _selected else 1.0
 
-	_value_label.add_theme_color_override("font_color", muted if _is_empty else edge)
-	_stat_label.add_theme_color_override("font_color", muted if _is_empty else heading)
-	_rarity_label.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+
+## Border-only over card art: MenuTile.pixel_frame forces its own FILL_ALPHA
+## on, which paints an opaque rectangle over the art. Two-tone because a bare
+## rarity edge vanishes on its own rarity -- gold on gold.
+func _apply_frame(on_art: bool, edge: Color) -> void:
+	if not on_art:
+		_frame.add_theme_stylebox_override("panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, edge, 3, true))
+		_frame_inner.visible = false
+		return
+	_frame.add_theme_stylebox_override(
+		"panel", PlayerCardView._ring_style(3, PlayerCardView.CARD_CORNER, PlayerCardView.RING_SHADE)
+	)
+	_frame_inner.add_theme_stylebox_override(
+		"panel", PlayerCardView._ring_style(2, PlayerCardView.CARD_CORNER - 2, edge)
+	)
+	_frame_inner.visible = true

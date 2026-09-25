@@ -93,19 +93,6 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "PACK OPENED"
 
-[node name="ItemsHeading" type="Label" parent="BrowseLayer/Margin/RootVBox" unique_id=1700100050]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_override_font_sizes/font_size = 13
-text = "ITEMS"
-
-[node name="ItemsRow" type="HBoxContainer" parent="BrowseLayer/Margin/RootVBox" unique_id=1700100051]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_override_constants/separation = 6
-
 [node name="DetailPanel" type="PanelContainer" parent="BrowseLayer/Margin/RootVBox" unique_id=1700100001]
 unique_name_in_owner = true
 layout_mode = 2
