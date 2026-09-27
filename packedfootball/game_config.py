@@ -18,7 +18,7 @@ replay wire format in replay.py.
 Mirrored on the client -- change both ends together:
   PITCH_* / GOAL_*            mobile/scripts/screens/MatchPlayback.gd
   FORMATIONS, POSITION_GROUPS mobile/scripts/data/Formations.gd
-  TIER_RANGES, tier_family    mobile/scripts/data/PlayerCard.gd
+  tier_family                 mobile/scripts/data/PlayerCard.gd
   APPEARANCE_*                mobile/scripts/data/PlayerAppearance.gd
   RATED_MATCHES_FOR_AVERAGE   mobile/scripts/data/PlayerCard.gd
 """
@@ -67,6 +67,29 @@ POSSESSION_RADIUS: Final = 1.0
 # Minimum distance between two players' centres. Wide bodies jam the middle and
 # passes hit legs.
 PLAYER_RADIUS: Final = 0.6
+
+
+# =============================================================================
+# Penalties
+# =============================================================================
+#
+# Read by BOTH the match engine's _resolve_penalty and the shootout minigame, so
+# they live here rather than in either -- a spot kick has to mean the same thing
+# in a match and in a shootout.
+#
+# A penalty is a guessing game, not a shot: the taker picks a corner, the keeper
+# independently picks one, and the keeper only gets a save roll if he guessed
+# right. Both scales floor at 0.80, so even a poor taker mostly hits his spot
+# and even a poor keeper saves the ones he reads -- which is what keeps
+# conversion in the 60-70% band while still rewarding the good ones.
+PENALTY_PLACEMENT_MIN: Final = 0.80
+PENALTY_PLACEMENT_SPAN: Final = 0.19
+PENALTY_SAVE_MIN: Final = 0.80
+PENALTY_SAVE_SPAN: Final = 0.19
+PENALTY_SIDES: Final = (-1, 0, 1)    # left / middle / right, from the taker
+PENALTY_CERTAINTY_CAP: Final = 0.99  # nobody is ever a sure thing, items or not
+# Distance from the goal line to the spot.
+PENALTY_SPOT_DISTANCE: Final = 11.0
 
 
 # =============================================================================
@@ -213,22 +236,19 @@ FORMATIONS = {
 # items land -- it has no copy yet.
 STAT_CEILING: Final = 130
 
-# Every stat-derived formula divides by STAT_CEILING instead of 100, and any
-# further divisor is scaled by this, so a stat at the same FRACTION of the
-# axis produces the same value it did on the old 0-100 axis.
-STAT_SCALE: Final = STAT_CEILING / 100.0
-
-
 # Raw stat -> 0..1 ability. Linear made a 50 exactly half a 100, and those
 # deficits compound until a bronze card cannot function as a footballer.
 # A gamma below 1 lifts the weak end without touching the strong end.
 # 1.0 reproduces the old straight line exactly.
+#
+# Not the lever for a sterile bottom tier -- 0.75 was tried and cost silver and
+# gold ~0.4 goals each while leaving bronze where it was (4.0.0 History).
 STAT_CURVE_GAMMA: Final = 0.8
 
 # Slope. Below 1 it squeezes the spread toward STAT_CURVE_PIVOT, so a weak card
 # closes on a strong one WITHOUT the whole game speeding up (which is what
 # gamma alone does). The pivot sits near a gold card, so gold is the fixed point.
-STAT_CURVE_COMPRESS: Final = 1.0
+STAT_CURVE_COMPRESS: Final = 0.70
 STAT_CURVE_PIVOT: Final = 0.72
 
 
@@ -256,10 +276,17 @@ def pass_power(dist: float, power_stat: float, urgency: float = 1.0,
     return max(0.05, min(needed, power_stat / max_div))
 
 
+# How much of `defending` becomes a player's press-vs-contain rate. Pressing is
+# defending's job; aggression only sets how often they commit to a tackle. The
+# scale is what holds the rate where it was -- defending's mean is about double
+# aggression's, so a raw swap tripled it. Gives bronze 28% up to icon 42%.
+PRESS_FROM_DEFENDING: Final = 0.55
+
+
 # Pace only. Even a poor footballer is quick -- what they lack is technique --
 # so the speed spread is narrowed while shooting/passing/control keep theirs.
 # This is what stops a better card simply outrunning you to every ball.
-SPEED_COMPRESS: Final = 1.0
+SPEED_COMPRESS: Final = 0.60
 SPEED_PIVOT: Final = 0.72
 
 
@@ -312,17 +339,20 @@ def stat_ability(stat: float, gamma: float | None = None, compress: float | None
 # PlayerCard.TIER_COLORS / RELEASE_CREDITS).
 #
 # Plain "special" is the family's own baseline
+#
+# NON-OVERLAPPING, and they must stay that way -- diamond (75,82) against
+# special (80,85) meant half of each tier rolled inside the other.
 TIER_RANGES = {
-    "bronze": (45, 54),
-    "silver": (54, 64),
-    "gold": (62, 70),
-    "platinum": (70, 77),
-    "diamond": (75, 82),
-    "special": (80, 85),
-    "special_conf": (82, 87),
-    "special_cont": (83, 88),
-    "special_champ": (84, 89),
-    "icon": (93,96)
+    "bronze": (52, 60),
+    "silver": (60, 67),
+    "gold": (67, 74),
+    "platinum": (74, 80),
+    "diamond": (79, 83),
+    "special": (83, 86),
+    "special_conf": (84, 87),
+    "special_cont": (85, 88),
+    "special_champ": (86, 89),
+    "icon": (89, 92)
 }
 
 

@@ -132,6 +132,7 @@ async def list_packs(uid: str = Depends(verify_id_token)):
                 "price_currency": doc.get("price_currency", "credits"),
                 "cards_per_pack": doc.get("cards_per_pack"),
                 "rates": doc.get("rates", {}),
+                "slot_rates": doc.get("slot_rates", {}),
                 "pos_rates": doc.get("pos_rates", {}),
                 # Everything the odds popup discloses (App Store 3.1.1). A
                 # pack that sells none of these sends the empty defaults, so

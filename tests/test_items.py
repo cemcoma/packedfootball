@@ -19,7 +19,14 @@ import pytest
 
 import items as item_rules
 from conftest import Team
-from game_config import STAT_CEILING, STAT_OVERDRIVE, pace_ability, stat_ability
+from game_config import (
+    STAT_CURVE_COMPRESS,
+    STAT_CURVE_PIVOT,
+    STAT_CEILING,
+    STAT_OVERDRIVE,
+    pace_ability,
+    stat_ability,
+)
 from game_state import fields_to_player, player_to_fields
 from gameEngine import game
 from packEngine import PLAYER_CLASS_MAP, generate_starter_roster
@@ -35,23 +42,36 @@ def _card(**overrides):
 # --- the overdrive tail -----------------------------------------------------
 
 
+# What a raw 100 is worth. Not 1.0 any more: STAT_CURVE_COMPRESS squeezes the
+# whole base axis toward STAT_CURVE_PIVOT, so the top of it comes down too.
+ANCHOR_100 = STAT_CURVE_PIVOT + (1.0 - STAT_CURVE_PIVOT) * STAT_CURVE_COMPRESS
+
+
 def test_overdrive_is_continuous_and_rising_through_100():
     """The bug this replaces: everything above 100 returned exactly 1.0."""
     ladder = [stat_ability(s) for s in (90, 96, 100, 104, 112, 130)]
     assert ladder == sorted(ladder)
-    assert ladder[2] == pytest.approx(1.0)
+    assert ladder[2] == pytest.approx(ANCHOR_100)
     # Strictly rising past the old clip, not flat.
-    assert ladder[3] > ladder[2] > 0.99
-    assert ladder[-1] == pytest.approx(1.0 + 0.30 * STAT_OVERDRIVE)
+    assert ladder[3] > ladder[2]
+    assert ladder[-1] == pytest.approx(ANCHOR_100 + 0.30 * STAT_OVERDRIVE)
 
 
 def test_overdrive_is_worth_less_than_the_base_axis():
     """A kitted bronze must not outrun an icon. Twelve points of pure
     overdrive buy materially less than the twelve below the anchor -- measured
-    either side of 100 so neither span straddles it."""
+    either side of 100 so neither span straddles it.
+
+    The threshold is 0.75, not the 0.5 it was while STAT_CURVE_COMPRESS was
+    off: compression shrinks the base axis and leaves the tail alone, so the
+    same STAT_OVERDRIVE now buys a larger SHARE of a base point (0.43 -> 0.62
+    at compress 0.70). That is deliberate -- it is what makes items worth
+    owning on a maxed card -- but the tail must stay the worse deal, so this
+    guard stays, one notch looser.
+    """
     below = stat_ability(100) - stat_ability(88)
     above = stat_ability(112) - stat_ability(100)
-    assert above < below * 0.5
+    assert above < below * 0.75
 
 
 def test_pace_carries_the_tail_too():
@@ -99,7 +119,7 @@ def test_a_stacked_document_keeps_only_one_per_stat():
     card.items = [item_rules.make_item("icon", "speed") for _ in range(3)]
     loaded = _round_trip(card)
     assert len(loaded.items) == 1
-    assert loaded.attributes.speed == 82
+    assert loaded.attributes.speed == 70 + item_rules.ITEM_VALUES["icon"]
 
 
 def test_keeper_items_do_not_fit_outfielders():
@@ -114,7 +134,7 @@ def test_keeper_items_do_not_fit_outfielders():
 def test_effective_attributes_does_not_touch_the_base_card():
     attrs = Attributes(shooting=90)
     buffed = item_rules.effective_attributes(attrs, [item_rules.make_item("icon", "shooting")])
-    assert buffed.shooting == 102
+    assert buffed.shooting == 90 + item_rules.ITEM_VALUES["icon"]
     assert attrs.shooting == 90, "the rolled card was mutated"
 
 
@@ -147,13 +167,14 @@ def test_saving_a_kitted_card_twice_does_not_stack_the_buff():
     fields = player_to_fields(card)
     assert fields["attributes"]["shooting"] == 80
 
+    kitted = 80 + item_rules.ITEM_VALUES["gold"]
     loaded = _round_trip(card)
-    assert loaded.attributes.shooting == 84
+    assert loaded.attributes.shooting == kitted
     assert loaded.base_attributes.shooting == 80
 
     for _ in range(3):
         loaded = _round_trip(loaded)
-    assert loaded.attributes.shooting == 84, "the buff compounded across saves"
+    assert loaded.attributes.shooting == kitted, "the buff compounded across saves"
     assert player_to_fields(loaded)["attributes"]["shooting"] == 80
 
 

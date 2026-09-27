@@ -7,10 +7,15 @@ from typing import Final
 
 from replay import ActionType, ReplayRecorder
 from game_config import (  # noqa: F401
+    PENALTY_CERTAINTY_CAP,
+    PENALTY_PLACEMENT_MIN,
+    PENALTY_PLACEMENT_SPAN,
+    PENALTY_SAVE_MIN,
+    PENALTY_SAVE_SPAN,
+    PENALTY_SIDES,
     STAT_CEILING,
     pace_ability,
     stat_ability,
-    STAT_SCALE,
     BALL_AIR_FRICTION,
     BALL_GRAVITY,
     BALL_GROUND_FRICTION,
@@ -180,7 +185,63 @@ from formations import get_formation, is_similar_position
 #           changes nothing until items are equipped -- it is what makes them
 #           worth owning at all. Penalties gained a certainty cap because
 #           their scale already reached 0.99 at 100.
-ENGINE_VERSION: Final[str] = "3.1.0"
+#   4.0.0 the tier ladder stops being a cliff, and tackling becomes a stat.
+#         - STAT_CURVE_COMPRESS 1.0 -> 0.70 and SPEED_COMPRESS 1.0 -> 0.60.
+#           Both levers existed and were switched off. Measured over 12
+#           matches a pair: platinum v diamond went from 0% wins / 0% unbeaten
+#           to 42% / 50%, bronze v silver 0% -> 25%, silver v gold 0% -> 25%,
+#           and the bronze v icon margin fell from 11.5 goals a match to ~4.5.
+#         - TIER_RANGES respaced and no longer overlapping. diamond was (75,82)
+#           against special (80,85), so half of each tier rolled inside the
+#           other. The bottom is lifted (bronze 45-54 -> 52-60: at ~49
+#           ballcontrol a card cannot receive a pass, which is an absolute-level
+#           problem, not a gap one) and the top pulled down (icon 93-96 ->
+#           89-92, which was the largest single jump on the ladder).
+#         - Tackling, defending and aggression were three names for one stat's
+#           job. Now: TACKLING decides the duel (it was `defending`, and
+#           `tackling` was read by NOTHING while being a primary stat for CB,
+#           fullback and CDM and sellable as an item); DEFENDING does the
+#           positional work, including the press/contain roll it took over from
+#           aggression; AGGRESSION decides how often a player commits to a
+#           challenge at all.
+#           The tackle/contain split is aggression-only, against a constant
+#           rather than against defending, so the better side gets better
+#           challenges and not more of them. The 160 in t_contain is calibrated:
+#           dropping defending out of it raised every card's challenge rate from
+#           ~33% to 50%, which sampled the quality gap half again as often and
+#           measured bronze v silver DOWN from 33% to 8%.
+#         - What was tried and rejected, both measured: routing the eight
+#           raw-stat-over-100 formulas through stat_ability so compression
+#           reaches them (bronze v gold 12% -> 0%), and flattening the tackle
+#           duel itself via TACKLE_DUEL_SPREAD 100 -> 150 (gold v platinum
+#           33% -> 0%). A flatter duel keeps the ball with whoever has it, and
+#           the underdog's problem is progression, not retention.
+#         - Still open: a four-tier gap is ~0%, not the ~10% intended. The
+#           underdog's shots a match fall away faster than the per-step win
+#           rates do, so a side that cannot work an opening cannot draw 0-0
+#           either. See scripts/ladder_report.py (`make ladder`).
+#   4.0.1 a player only clears when somebody is actually pressing them.
+#         t_clear was a flat clear_tendency weight with no pressure term at all
+#         on the defender (the midfielder had a *0.1, which was not enough), so
+#         an unpressed centre-back in his own third cleared 71% of the time --
+#         57% of ALL clearances were happening with nobody within 3 units.
+#         Since 3.0.0 a clearance flies where the man FACES, so on a touchline
+#         that is a throw-in to the other side. Measured over 12 matches:
+#         unpressed clearances 7.1 a match -> 0, all clearances 12.3 -> 5.9,
+#         throw-ins 3.1 -> 1.8. pressure == 1 is untouched: one man in front is
+#         real pressure and clearing is a fair answer to it.
+#   4.0.2 a keeper who dives the wrong way at a penalty stays beaten.
+#         _resolve_penalty only lets him save what he READ, but _take_penalty
+#         then left the ball live with a FRESH shot id (_release_ball bumps it
+#         for event_type "shot"), so his stale save_attempted_shot let the
+#         open-play machinery hand him a second, independent roll -- through
+#         _save_chance, the one curve a penalty is deliberately kept away from.
+#         He dived left, the ball went right, and he re-dived and kept it out.
+#         The guess now CLAIMS the shot id, and a beaten keeper is put on the
+#         floor for KEEPER_BEATEN_FRAMES like any other. Measured over 69
+#         matches: 15 wrong-way dives on target, 0 of them saved (was ~2 in 3),
+#         conversion 62%, still inside the designed 60-70% band.
+ENGINE_VERSION: Final[str] = "4.0.2"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -226,13 +287,11 @@ STAMINA_RECOVERY_PER_STEP: Final = 0.010 # paid back only while barely moving
 STAMINA_RECOVERY_EFFORT: Final = 0.25
 STAMINA_MIN_SPEED_FACTOR: Final = 0.65   # pace kept when completely empty
 
-# --- Goalkeeping -----------------------------------------------------------
-# A save is one roll per shot, and how likely it is depends on the SHOT, not
-# just the keeper. Anchors: a 100-rated keeper saves ~100% of an easy shot
-# (slow, straight at them) and ~50% of a hard one (fast, full stretch).
-# Fouls. Rolled only on a failed tackle, so a clean challenge never gives one.
-# Tuned for roughly six anklebreakers per foul: the game stops too much
-# otherwise, and being skinned is the more interesting outcome anyway.
+# Points of (tackling - ballcontrol) that move the steal chance by 1.0 from its
+# 0.40 base. Raising it does NOT help underdogs -- 150 was tried and the ladder
+# got worse (4.0.0 History).
+TACKLE_DUEL_SPREAD: Final = 100.0
+
 FOUL_BASE: Final = 0.065
 FOUL_AGGRESSION_WEIGHT: Final = 0.12
 FOUL_OUTPACED_WEIGHT: Final = 0.165
@@ -272,13 +331,7 @@ WALL_DISTANCE: Final = 9.15
 WALL_PLAYERS: Final = 3
 PENALTY_SHOT_SPEED: Final = 26.0
 
-# Penalties. Both scales floor at 0.80 -- see _resolve_penalty for why.
-PENALTY_PLACEMENT_MIN: Final = 0.80
-PENALTY_PLACEMENT_SPAN: Final = 0.19
-PENALTY_SAVE_MIN: Final = 0.80
-PENALTY_SAVE_SPAN: Final = 0.19
-PENALTY_SIDES: Final = (-1, 0, 1)    # left / middle / right, from the taker
-PENALTY_CERTAINTY_CAP: Final = 0.99  # nobody is ever a sure thing, items or not
+# Penalty scales live in game_config -- the shootout minigame reads them too.
 
 KEEPER_QUALITY_BASE: Final = 0.55        # save odds floor before attributes
 HARD_SHOT_SPEED: Final = 37.0            # ball speed counting as "hard" (observed max)
@@ -293,8 +346,6 @@ SAVE_COMMIT_MARGIN: Final = 1.0
 # the instant a shot left the boot, from clear across the box.
 SAVE_ENGAGE_DISTANCE: Final = 6.0
 SAVE_ENGAGE_TIME: Final = 0.45
-
-# BALL_GRAVITY / HEAD_CONTACT_HEIGHT: see game_config.py (imported above).
 
 # A ball this fast can only be blocked from within this distance of it.
 BLOCK_FAST_SPEED: Final = 12.0
@@ -2439,11 +2490,13 @@ class game:
             dist = _norm2(self.positions[index] - self.positions[holder_idx])
             
             if dist <= 2.0:
-                defender_stat = action["stat"]
+                # tackling decides the duel; aggression already decided whether
+                # to challenge at all, and defending does the positional work.
+                tackling = action["stat"]
                 attacker_stat = self.all_players[holder_idx].attributes.ballcontrol
 
-                stat_diff = defender_stat - attacker_stat
-                steal_chance = float(np.clip(0.40 + (stat_diff / 100.0), 0.10, 0.90))
+                stat_diff = tackling - attacker_stat
+                steal_chance = float(np.clip(0.40 + (stat_diff / TACKLE_DUEL_SPREAD), 0.10, 0.90))
 
                 self.match_stats[index]["tackles"] += 1
 
@@ -2464,7 +2517,7 @@ class game:
                         tackle_vector_norm = 1.0
 
                     unit_vec = tackle_vector / tackle_vector_norm
-                    launch_power = base_kick_pow * (0.25 + (defender_stat / 100.0) * 0.75)
+                    launch_power = base_kick_pow * (0.25 + (tackling / 100.0) * 0.75)
 
                     self._release_ball(holder_idx, unit_vec, launch_power, aerial=(launch_power > 15.0 or abs(unit_vec[1]) > 0.7), event_type="tackle")
                     self.velocity[index] = np.zeros(2, dtype=float)
@@ -2765,9 +2818,24 @@ class game:
         if on_target:
             self.match_stats[taker]["shots_on_target"] += 1
 
+        # THE GUESS WAS HIS ATTEMPT. _release_ball has just opened a new shot
+        # id, and without claiming it the open-play machinery hands a keeper who
+        # dived the wrong way a second, independent roll -- through
+        # _save_chance, the one curve a penalty is deliberately kept away from
+        # (it rates a slow central ball as the easiest save there is). That is
+        # how a keeper who went the wrong way still kept it out.
+        self.save_attempted_shot[keeper] = self.active_shot_id
+
         self.positions[keeper] = np.array(
             [PITCH_WIDTH / 2.0 + dive * KEEPER_REACH * 0.7, goal_y], dtype=float
         )
+        if scored:
+            # Committed the wrong way, or read it and still beaten: either way
+            # he is going down, not popping back up for another dive.
+            self.velocity[keeper] = np.zeros(2, dtype=float)
+            self.player_stun_cooldown[keeper] = KEEPER_BEATEN_FRAMES
+            self.visual_action[keeper] = "beaten"
+            self.visual_action_timer[keeper] = KEEPER_BEATEN_FRAMES
         if not scored and on_target:
             # He read it: the ball dies at his hands rather than crossing.
             self.match_stats[keeper]["saves"] += 1

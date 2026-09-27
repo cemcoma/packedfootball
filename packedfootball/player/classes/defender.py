@@ -1,5 +1,5 @@
 from player.player import _norm2, player, ActionProfile
-from game_config import pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
+from game_config import PRESS_FROM_DEFENDING, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
 # Where a full-back stands in to cover the middle when no centre-back is
@@ -187,7 +187,7 @@ class Defender(player):
             return {"type": "move", "target": shifted_target, "speed_mod": pace_ability(self.attributes.speed) * speed_mult}
             
         elif decision == "tackle":
-            return {"type": "tackle", "stat": self.attributes.defending}
+            return {"type": "tackle", "stat": self.attributes.tackling}
             
         elif decision == "capture":
             return {"type": "capture", "stat": self.attributes.ballcontrol}
@@ -264,7 +264,16 @@ class Defender(player):
         if pressure > 1:
             t_clear += (pressure * 40)
             t_pass += (pressure * 12)
-        
+        elif pressure == 0:
+            # Nobody within 3 units in front, so there is nothing to clear FROM.
+            # A clearance here just concedes possession, and since 3.0.0 it flies
+            # where the player FACES -- which on a touchline is straight out for
+            # a throw-in. Play it instead; _choose_pass_target will take a
+            # sideways or backward ball when no progressive one exists, so the
+            # progressive-pass starve above must not apply either.
+            t_clear = 0.0
+            t_pass = self.attributes.pass_tendency * 0.45 * self.get_action_bias("pass")
+
         t_pass = max(0.0, t_pass)
         t_dribble = max(1.0, t_dribble)
         t_clear = max(0.0, t_clear)
@@ -342,14 +351,18 @@ class Defender(player):
 
         if dist_to_ball < 2.0:
             actions = ["tackle", "contain"]
+            # Aggression alone, so the better side gets better challenges and
+            # not more of them. The 160 holds the overall rate at the ~33% it
+            # was when defending sat in t_contain -- 50% sampled the quality
+            # gap half again as often and cost the underdog badly.
             t_tackle = max(1.0, self.attributes.aggression * 1.5)
-            t_contain = max(1.0, getattr(self.attributes, "defending", 50) + max(0, 100 - self.attributes.aggression))
+            t_contain = max(1.0, 160.0 - self.attributes.aggression)
             probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
             return state["rng"].choice(actions, p=probs)
 
         if dist_to_ball < 15.0:
             if ball_pressure_count >= 2: return "contain"
-            return "press" if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "aggression", 40)) else "contain"
+            return "press" if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING) else "contain"
 
         actions = ["hold_defense", "man_mark"]
         t_hold = 50.0 * self.get_action_bias("hold_defense")

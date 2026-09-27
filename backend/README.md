@@ -384,8 +384,9 @@ along with `replay.FORMAT_VERSION` and the existing `seed`. Seed + engine
 version together reproduce a reported match exactly, which is what makes a
 bug report or a dispute investigable after the engine has moved on.
 
-It is a **string**, `MAJOR.MINOR.PATCH` (currently `"2.2.0"`) -- bump it
-whenever match behaviour changes:
+It is a **string**, `MAJOR.MINOR.PATCH` -- bump it whenever match behaviour
+changes. The current value is whatever the constant says; this page does not
+repeat it, because a second copy only ever goes stale:
 
 | | means | effect on a stored match |
 | --- | --- | --- |

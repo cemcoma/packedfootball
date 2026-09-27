@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 from conftest import PITCH_HEIGHT, Team, launch_ball, quiesce
+from game_config import TIER_RANGES
 from gameEngine import (
     CROSS_ARRIVAL_HEIGHT,
     HEAD_MIN_HEIGHT,
@@ -104,7 +105,11 @@ def test_backfill_rolls_deterministically():
     spec.loader.exec_module(module)
     a = module.roll_heading("abc123", "CB", "gold")
     assert a == module.roll_heading("abc123", "CB", "gold")
-    assert 62 + 4 <= a <= 70  # top half of gold's range: CB is primary
+    # CB heading is primary, i.e. the top half of the tier's range. Derived
+    # from TIER_RANGES rather than written out, so a respace can't silently
+    # turn this into a test of nothing.
+    low, high = TIER_RANGES["gold"]
+    assert low + (high - low) // 2 <= a <= high
 
 
 # ----------------------------------------------------------------- reach
@@ -299,7 +304,7 @@ def test_header_goal_is_credited_to_the_header(rosters):
         g.run_match(max_steps=4000, render=False)
         events = g.replay._events
         for k, e in enumerate(events):
-            if e[1] != ActionType.GOAL:
+            if e[1] != ActionType.GOAL or k == 0:
                 continue
             # An own goal credits the player who put it in, on the far side
             # from the team that scored (see ENGINE_VERSION 2.2.1) -- a header
@@ -307,9 +312,14 @@ def test_header_goal_is_credited_to_the_header(rosters):
             # attribution this test is about.
             if (e[2] < 11) != (e[3] == 0):
                 continue
-            prior = [x for x in events[:k] if x[1] in (ActionType.HEADER, ActionType.SHOOT)]
-            if prior and prior[-1][1] == ActionType.HEADER and (prior[-1][2] < 11) == (e[3] == 0):
-                assert e[2] == prior[-1][2]
+            # The header has to be the event IMMEDIATELY before the goal, i.e.
+            # it went straight in. Scanning back for the last HEADER/SHOOT
+            # instead matched a header from the previous half -- a passage with
+            # no shot in it leaves a stale one on top of that filter, and the
+            # tap-in that followed is correctly credited to the finisher.
+            prev = events[k - 1]
+            if prev[1] == ActionType.HEADER and (prev[2] < 11) == (e[3] == 0):
+                assert e[2] == prev[2]
                 found = True
         if found:
             break

@@ -46,6 +46,9 @@ DEFINITION_FIELDS = (
     # part of the odds disclosure, so a pack whose code entry gains one and
     # whose Firestore doc doesn't would advertise the wrong thing.
     "guarantees", "item_rates", "items_per_pack",
+    # Per-slot tier odds -- "slot_rates": {"0": {...}}. Keys are slot indexes as
+    # STRINGS because a Firestore map cannot take ints.
+    "slot_rates",
 )
 
 

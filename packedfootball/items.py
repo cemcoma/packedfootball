@@ -5,7 +5,7 @@ because game_config.stat_ability keeps rising past 100 (see STAT_OVERDRIVE).
 A point above 100 is worth about a third of a point below it, so a fully
 kitted bronze plays like a better bronze, never like an icon.
 
-WHERE ITEMS LIVE. Nowhere of their own. An equipped item is an entry in the
+WHERE ITEMS LIVE: Nowhere of their own. An equipped item is an entry in the
 `items` array on players/{player_id}, which is already read whenever the card
 is; an unequipped one is an entry in `item_pool` on users/{uid}, already read
 once at /account/bootstrap. Both are a few dozen bytes against a 1 MiB
@@ -43,14 +43,18 @@ SLOT_EXTENDER_STAT = "slots"
 # Rarity -> how many points the item is worth. Reuses TIER_RANGES' family
 # names, which is the project's one rarity ordering -- colour, sort order and
 # the odds disclosure all already go by it (PlayerCard.TIER_COLORS).
+# Anchored on the ladder: one tier step is ~+0.043 ability, and a gold item's
+# +7 buys exactly that -- one gold item is worth one tier on the stat it
+# touches. Flat at the top on purpose: +20 would buy most of the whole
+# bronze-to-diamond gap from one of four slots.
 ITEM_VALUES = {
-    "bronze": 2,
-    "silver": 3,
-    "gold": 4,
-    "platinum": 6,
-    "diamond": 8,
-    "special": 10,
-    "icon": 12,
+    "bronze": 3,
+    "silver": 5,
+    "gold": 7,
+    "platinum": 9,
+    "diamond": 11,
+    "special": 13,
+    "icon": 15,
 }
 
 # What the slot extender is worth at each rarity it is sold at. It is not a

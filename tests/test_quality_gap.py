@@ -1,6 +1,7 @@
 """Does card quality actually mean anything?
 
-An XI of icons (95-100) against an XI of bronzes (45-53) is the bluntest
+An XI of icons against an XI of bronzes -- the two ends of TIER_RANGES --
+is the bluntest
 possible version of that question. Before the shooting/goalkeeping rebalance
 the save roll was a function of keeper attributes alone -- no shot speed, no
 dive distance -- and a bronze keeper was very nearly as good as an icon one.
@@ -130,7 +131,7 @@ def summary(mismatch):
 
 def test_icons_outscore_bronzes(summary):
     assert summary["icon_goals"] > summary["bronze_goals"], (
-        "an XI of 95-100 rated cards did not outscore an XI of 45-53 rated ones -- "
+        "an XI of icon-tier cards did not outscore an XI of bronze ones -- "
         "card quality is not reaching the sim"
     )
 

@@ -216,3 +216,51 @@ def test_keeper_decisions_are_reproducible(make_match):
     da = [a.all_players[KEEPER_A]._decide_off_ball_defense(keeper_state(a, KEEPER_A, (GOAL_CENTER_X, 9.0))) for _ in range(20)]
     db = [b.all_players[KEEPER_A]._decide_off_ball_defense(keeper_state(b, KEEPER_A, (GOAL_CENTER_X, 9.0))) for _ in range(20)]
     assert da == db
+
+
+# ----------------------------------------------------------------- penalties
+
+
+def _take_rigged_penalty(g, *, aim, dive, on_target, taker=9, attacking=0):
+    """One spot kick with the guess forced, so a test can ask about the case it
+    cares about instead of hunting seeds for it."""
+    scored = on_target and aim != dive
+    g.restart_player = taker
+    g.restart_team = attacking
+    g._resolve_penalty = lambda t, k: (scored, aim, dive, on_target)
+    g._take_penalty()
+    keeper = g._keeper_indices[1] if attacking == 0 else g._keeper_indices[0]
+    return keeper, scored
+
+
+def test_a_keeper_who_dives_the_wrong_way_cannot_save_the_penalty(make_match):
+    """The bug: _resolve_penalty only lets him save what he READ, but the ball
+    was then left live under a FRESH shot id, so the open-play machinery handed
+    him a second roll and he re-dived onto a ball he had already lost.
+
+    The guess has to CLAIM that shot id, or a penalty is two chances.
+    """
+    g = make_match()
+    keeper, scored = _take_rigged_penalty(g, aim=1, dive=-1, on_target=True)
+    assert scored, "wrong way on an on-target kick has to be a goal"
+    assert g.save_attempted_shot[keeper] == g.active_shot_id, (
+        "the keeper's one save attempt was not consumed by the guess -- he can re-dive"
+    )
+    assert g._attempt_save(keeper) is False, "he got a second attempt anyway"
+
+
+def test_a_beaten_keeper_is_left_on_the_floor(make_match):
+    g = make_match()
+    keeper, _ = _take_rigged_penalty(g, aim=1, dive=-1, on_target=True)
+    assert g.player_stun_cooldown[keeper] > 0
+    assert g.visual_action[keeper] == "beaten"
+
+
+def test_a_keeper_who_reads_it_still_keeps_it_out(make_match):
+    """The other direction: consuming the attempt must not break a real save."""
+    g = make_match()
+    keeper, scored = _take_rigged_penalty(g, aim=1, dive=1, on_target=True)
+    assert not scored
+    assert g.ball_controller == keeper
+    assert g.match_stats[keeper]["saves"] == 1
+    assert g.player_stun_cooldown[keeper] == 0, "he saved it, he is not beaten"

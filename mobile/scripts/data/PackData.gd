@@ -57,6 +57,18 @@ static func _dict(fields: Dictionary, key: String, default: Dictionary) -> Dicti
 	return value if value is Dictionary else default
 
 
+## slot_rates keyed by slot index as a STRING. Normalised because the lookup
+## against it fails silently: a numeric key would fall through to `rates`, and
+## the odds table would quietly show the generic slot for every card.
+static func _slot_rates(fields: Dictionary) -> Dictionary:
+	var raw := _dict(fields, "slot_rates", {})
+	var out: Dictionary = {}
+	for key in raw.keys():
+		if raw[key] is Dictionary:
+			out[String(key)] = raw[key]
+	return out
+
+
 var pack_id: String = ""  # the pack's slug
 var pack_name: String = ""
 var type: String = "standard"
@@ -68,6 +80,10 @@ var price: int = 0
 var price_currency: String = "credits"
 var cards_per_pack: int = 0
 var rates: Dictionary = {}  # tier -> probability (0..1), e.g. {"bronze": 0.6, ...} -- odds disclosure
+## Per-slot overrides of `rates`, keyed by slot index as a STRING:
+## {"0": {"icon": 0.01, ...}}. A slot not named here uses `rates`. Must be
+## disclosed too -- a headline slot with better odds is the product.
+var slot_rates: Dictionary = {}
 var pos_rates: Dictionary = {}  # position category -> probability (0..1), e.g. {"goalkeeper": 0.25, ...}
 ## Slots pinned to a tier instead of rolled, [{"tier", "count"}, ...]. The
 ## odds table is the remainder after these, so both are disclosed together.
@@ -96,6 +112,7 @@ static func from_fields(fields: Dictionary) -> PackData:
 	pack.price_currency = _str(fields, "price_currency", "credits")
 	pack.cards_per_pack = _int(fields, "cards_per_pack")
 	pack.rates = _dict(fields, "rates", {})
+	pack.slot_rates = _slot_rates(fields)
 	pack.pos_rates = _dict(fields, "pos_rates", {})
 	var guarantees_raw = fields.get("guarantees")
 	pack.guarantees = guarantees_raw if guarantees_raw is Array else []
@@ -122,20 +139,6 @@ func contents_count() -> int:
 ## Only cards take bench space; items are a field on users/{uid}.
 func bench_slots_needed() -> int:
 	return cards_per_pack
-
-
-## "1 guaranteed SPECIAL", or "" for a pack that pins nothing. Shown above the
-## odds table, because the table is the odds for the REMAINING slots.
-func guarantee_label() -> String:
-	var parts: Array = []
-	for entry in guarantees:
-		if not (entry is Dictionary):
-			continue
-		var count := int(entry.get("count", 1))
-		parts.append("%d x %s" % [count, PlayerCard.tier_label(str(entry.get("tier", "")))])
-	if parts.is_empty():
-		return ""
-	return tr("Guaranteed: %s") % ", ".join(parts)
 
 
 func is_limited() -> bool:

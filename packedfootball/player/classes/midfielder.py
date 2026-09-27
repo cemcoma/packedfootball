@@ -1,5 +1,5 @@
 from player.player import _norm2, player, ActionProfile
-from game_config import pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
+from game_config import PRESS_FROM_DEFENDING, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
 class MidfielderActionProfile(ActionProfile):
@@ -207,7 +207,7 @@ class Midfielder(player):
             
         # --- Dispossession ---
         elif decision == "tackle":
-            return {"type": "tackle", "stat": self.attributes.defending}
+            return {"type": "tackle", "stat": self.attributes.tackling}
             
         elif decision == "capture":
             return {"type": "capture", "stat": self.attributes.ballcontrol}
@@ -341,7 +341,9 @@ class Midfielder(player):
                 t_wing *= 0.3
                 t_stop = 0
         elif pressure == 0:
-            t_clear *= 0.1
+            # Was *0.1, which still left an unpressed midfielder hoofing it --
+            # 57% of all clearances were happening with nobody within 3 units.
+            t_clear = 0.0
             t_dribble += (self.attributes.speed * 2.0) + 60.0
             t_pass -= 18.0
             t_stop += 15
@@ -440,15 +442,19 @@ class Midfielder(player):
 
         if dist_to_ball < 2.0:
             actions = ["tackle", "contain"]
+            # Aggression alone, so the better side gets better challenges and
+            # not more of them. The 160 holds the overall rate at the ~33% it
+            # was when defending sat in t_contain -- 50% sampled the quality
+            # gap half again as often and cost the underdog badly.
             t_tackle = max(1.0, self.attributes.aggression * 1.5)
-            t_contain = max(1.0, getattr(self.attributes, "defending", 50) + max(0, 100 - self.attributes.aggression))
+            t_contain = max(1.0, 160.0 - self.attributes.aggression)
             probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
             return state["rng"].choice(actions, p=probs)
 
         if dist_to_ball < 15.0:
             if ball_pressure_count >= 2:
                 return "contain"
-            if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "aggression", 40)):
+            if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING):
                 return "press"
             else:
                 return "contain"

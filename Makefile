@@ -18,6 +18,7 @@
 #   make sim MATCHES=30 SEED=5  more matches, different seeds
 #   make tiers                  goals/match at every tier, bronze -> icon
 #   make tiers SEEDS=16         a bigger sample
+#   make ladder                 how often the WORSE side wins, tier vs tier
 #   make items         what a kit is worth; does the ladder survive it
 #   make godot-check   load every script/scene items touched, headless
 #
@@ -56,7 +57,7 @@ SEEDS   ?= 8
 SEED    ?= 1
 
 .PHONY: test test-fast test-slow test-gap test-tiers test-one test-k sim tiers \
-        items godot-check web serve-web deploy-web clean-web
+        ladder items godot-check web serve-web deploy-web clean-web
 
 ## Everything. Config (testpaths, sys.path) comes from pytest.ini.
 test:
@@ -96,6 +97,11 @@ sim:
 ## tunable than test-tiers, and it prints passing/throw-ins too.
 tiers:
 	$(PYTHON) packedfootball/scripts/tier_report.py --seeds $(SEEDS)
+
+## How often the WORSE side takes something off the better one, tier vs tier.
+## tiers/test-tiers only play a tier against itself; this is the GAP harness.
+ladder:
+	$(PYTHON) packedfootball/scripts/ladder_report.py --seeds $(SEEDS)
 
 ## What a kit is worth, and whether a kitted bronze still loses to a plain
 ## gold. Run this after ANY change to item values, slots or the stat curve.

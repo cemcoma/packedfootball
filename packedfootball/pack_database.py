@@ -53,10 +53,12 @@ PACK_DATABASE = {
         "order": 10,
         "name": "Standard Player Pack",
         "type": "standard",
-        "description": "A reliable pack of everyday talent. Mostly bronze and silver, with a shot at gold.",
+        "description": "Two everyday players and a piece of kit. Mostly bronze, with a shot at silver.",
         "price": 100,
-        "cards_per_pack": 3,
-        "rates": {"bronze": 0.60, "silver": 0.30, "gold": 0.075, "platinum": 0.025, "diamond": 0.0},
+        "cards_per_pack": 2,
+        "items_per_pack": 1,
+        "item_rates": {"bronze": 0.55, "silver": 0.30, "gold": 0.15},
+        "rates": {"bronze": 0.85, "silver": 0.15},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits",
         "sprite_key":"StandardPack1"
@@ -66,10 +68,12 @@ PACK_DATABASE = {
         "order": 20,
         "name": "Jumbo Player Pack",
         "type": "standard",
-        "description": "Ten cards in one pull. Better odds than Standard Player Pack.",
+        "description": "Six cards and two pieces of kit in one pull. Better odds than Standard Player Pack.",
         "price": 500,
-        "cards_per_pack": 10,
-        "rates": {"bronze": 0.40, "silver": 0.40, "gold": 0.15, "platinum": 0.05, "diamond": 0.0},
+        "cards_per_pack": 6,
+        "items_per_pack": 2,
+        "item_rates": {"bronze": 0.45, "silver": 0.35, "gold": 0.20},
+        "rates": {"bronze": 0.70, "silver": 0.28, "gold": 0.02},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits",
         "sprite_key":"StandardPack1"
@@ -79,10 +83,12 @@ PACK_DATABASE = {
         "order": 35,
         "name": "Gold Player Pack",
         "type": "standard",
-        "description": "Standard gold pack. Mostly golds with chance to get diamonds",
+        "description": "Mostly golds, a piece of kit, and a slim shot at a platinum.",
         "price": 1000,
-        "cards_per_pack": 3,
-        "rates": {"bronze": 0.00, "silver": 0.40, "gold": 0.50, "platinum": 0.09, "diamond": 0.01},
+        "cards_per_pack": 2,
+        "items_per_pack": 1,
+        "item_rates": {"silver": 0.35, "gold": 0.45, "platinum": 0.20},
+        "rates": {"silver": 0.35, "gold": 0.63, "platinum": 0.02},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits",
         "sprite_key":"StandardPack1"
@@ -92,38 +98,29 @@ PACK_DATABASE = {
         "order": 40,
         "name": "Platinum Player Pack",
         "type": "standard",
-        "description": "Standard platinum pack. High rated players ready for any matchup. Rare chance to get special and icons!",
+        "description": "High rated players ready for any matchup, plus kit. Rare chance at a diamond.",
         "price": 2000,
-        "cards_per_pack": 3,
-        "rates": {"bronze": 0.0, "silver": 0.15, "gold": 0.35, "platinum": 0.40, "diamond": 0.095, "special": 0.004, "icon":0.001},
+        "cards_per_pack": 2,
+        "items_per_pack": 1,
+        "item_rates": {"gold": 0.45, "platinum": 0.40, "diamond": 0.15},
+        "rates": {"gold": 0.45, "platinum": 0.53, "diamond": 0.02},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits",
         "sprite_key":"StandardPack1"
     },
     
-    "icon_forward": {
-        "active": True,
-        "order": 30,
-        "name": "Icon Forward Pack",
-        "type": "special",
-        "description": "One guaranteed icon-tier forward. Extremely limited -- once they're gone, they're gone.",
-        "price": 50000,
-        "cards_per_pack": 1,
-        "rates": {"icon":1.0},
-        "pos_rates": {"attacker":1},
-        "price_currency":"credits",
-        "sprite_key":"StandardPack1",
-        "visible":True
-    },
+    # RETIRED. A guaranteed icon for credits was ~10 days of grinding, which is
+    # the whole reason nothing was left to chase by week two. Icons are bucks
+    # only now, and only as a CHANCE -- see the icon_chance_* packs.
     "tournament_small": {
         "active": True,
         "order": 40,
         "name": "Small Tournament Player Pack",
         "type": "tournament",
         "description": "One tournament ready player at your service.",
-        "price": 1,
+        "price": 2,
         "cards_per_pack": 1,
-        "rates": {"bronze": 0.0, "silver": 0.15, "gold": 0.45, "platinum": 0.35, "diamond": 0.05},
+        "rates": {"silver": 0.30, "gold": 0.55, "platinum": 0.15},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"medals",
         "sprite_key":"TorunamentPack1"
@@ -133,10 +130,12 @@ PACK_DATABASE = {
         "order": 50,
         "name": "Medium Tournament Player Pack",
         "type": "tournament",
-        "description": "Medium 3 player pack. Better odds than Small Tournament Winner Player Pack.",
-        "price": 3,
-        "cards_per_pack": 3,
-        "rates": {"bronze": 0.0, "silver": 0.12, "gold": 0.45, "platinum": 0.35, "diamond": 0.08},
+        "description": "Two players and a piece of kit. Better odds than the Small Tournament Player Pack.",
+        "price": 5,
+        "cards_per_pack": 2,
+        "items_per_pack": 1,
+        "item_rates": {"gold": 0.45, "platinum": 0.40, "diamond": 0.15},
+        "rates": {"gold": 0.50, "platinum": 0.45, "diamond": 0.05},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"medals",
         "sprite_key":"TournamentPack1"
@@ -146,17 +145,19 @@ PACK_DATABASE = {
         "order": 60,
         "name": "Premium Tournament Player Pack",
         "type": "tournament",
-        "description": "Premium 3 player pack. Only for the real tournament grinders. Chance to get an icon card!",
-        "price": 5,
-        "cards_per_pack": 3,
-        "rates": {"bronze": 0.0, "silver": 0.145, "gold": 0.35, "platinum": 0.4, "diamond": 0.10, "icon":0.005},
+        "description": "One card for the real tournament grinders, plus two pieces of kit. The only pack with a shot at a SPECIAL.",
+        "price": 10,
+        "cards_per_pack": 1,
+        "items_per_pack": 2,
+        "item_rates": {"gold": 0.35, "platinum": 0.40, "diamond": 0.25},
+        "rates": {"platinum": 0.85, "diamond": 0.10, "special": 0.05},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"medals",
         "sprite_key":"TournamentPack2"
     },
     "promo_champions": {
         "active": False,
-        "order": 70,
+        "order": 90,
         "name": "Champions Promo Pack",
         "type": "timed",
         "description": "The champions season is here! Take your chances for a special Champions player now!",
@@ -185,7 +186,7 @@ PACK_DATABASE = {
     },
     "promo_conference": {
         "active": False,
-        "order": 90,
+        "order": 70,
         "name": "Conference Promo Pack",
         "type": "timed",
         "description": "Conference challenge is here! Take your chances for a special Conference player now!",
@@ -197,23 +198,24 @@ PACK_DATABASE = {
         "sprite_key":"CONFPack",
         "available_at": datetime.datetime(2026, 10, 15, 15, 0, tzinfo=datetime.timezone.utc)
     },
-    # Fills the 2,000 -> 50,000 credit hole in the ladder: before this the
-    # next thing to buy above a Platinum pack was an icon at twenty-five
-    # times the price, so there was nothing to spend on for weeks. The
-    # guarantee is what makes it worth 5,000 -- see the "guarantees" key,
-    # which pins one slot to a tier instead of rolling it.
-    "guaranteed_special": {
+    # The top of the CREDIT ladder, and where diamonds come from. It replaced a
+    # guaranteed-special pack at this same price: a guarantee meant a player
+    # could hold a special on day one, which is what left nothing to chase.
+    # One slot carries the real chance (slot_rates), the other two are Platinum
+    # pack odds -- so the pack is affordable and the diamond is still luck.
+    # Per-pack diamond chance is 1 - 0.90*0.98*0.98 = 13.6%.
+    "standard_diamond": {
         "active": True,
         "order": 45,
-        "name": "Special Guarantee Pack",
-        "type": "special",
-        "description": "Five cards with one SPECIAL guaranteed, plus two items to socket into them.",
+        "name": "Diamond Player Pack",
+        "type": "standard",
+        "description": "Three high-rated players and two pieces of kit. The headline card has a real shot at a diamond.",
         "price": 5000,
-        "cards_per_pack": 5,
-        "guarantees": [{"tier": "special", "count": 1}],
-        "rates": {"silver": 0.10, "gold": 0.35, "platinum": 0.40, "diamond": 0.14, "special": 0.009, "icon": 0.001},
+        "cards_per_pack": 3,
+        "rates": {"gold": 0.45, "platinum": 0.53, "diamond": 0.02},
+        "slot_rates": {"0": {"platinum": 0.80, "diamond": 0.20}},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "item_rates": {"silver": 0.35, "gold": 0.40, "platinum": 0.20, "diamond": 0.05},
+        "item_rates": {"gold": 0.40, "platinum": 0.40, "diamond": 0.20},
         "items_per_pack": 2,
         "price_currency":"credits",
         "sprite_key":"StandardPack1"
@@ -225,7 +227,7 @@ PACK_DATABASE = {
         "active": True,
         "order": 15,
         "name": "Equipment Pack",
-        "type": "standard",
+        "type": "equipment",
         "description": "Three items to socket into your cards. Permanent, and they replace whatever is already there.",
         "price": 300,
         "cards_per_pack": 0,
@@ -240,7 +242,7 @@ PACK_DATABASE = {
         "active": True,
         "order": 25,
         "name": "Premium Equipment Pack",
-        "type": "standard",
+        "type": "equipment",
         "description": "Three high-grade items, with a shot at the slot extender -- the only way past three slots.",
         "price": 1500,
         "cards_per_pack": 0,
@@ -265,6 +267,36 @@ PACK_DATABASE = {
         "sprite_key":"CHAMPPack",
         "available_at": datetime.datetime(2026, 10, 15, 15, 0, tzinfo=datetime.timezone.utc)
     },
+    # THE ONLY ROUTE TO AN ICON, and it is a 1% chance on one slot rather than
+    # a guarantee. Bucks-priced and windowed, so a player can save toward a
+    # known date; the window itself is available_at/expires_at on the Firestore
+    # doc, never here, so it opens and closes without a redeploy.
+    #
+    # Priced at 20 so a free player (~12 bucks a week) can reach one every
+    # couple of weeks: ~30 openings a year at 1% is roughly a one-in-three
+    # chance of an icon in a year, with specials and diamonds off slot 0 in the
+    # meantime. Copy this entry per drop, with its own name and sprite.
+    #
+    # BEFORE SETTING active: True -- routers/packs._pack_unavailable_reason
+    # checks `active`, max_opens and expires_at, but NOT available_at, so
+    # `active: True` plus a future available_at is purchasable immediately. Set
+    # active only when the window is actually open, or fix that gate first.
+    "icon_chance_1": {
+        "active": False,
+        "order": 5,
+        "name": "Icon Chance Pack",
+        "type": "timed",
+        "description": "Three players and a piece of kit. The headline card can be an ICON -- one in a hundred.",
+        "price": 20,
+        "cards_per_pack": 3,
+        "items_per_pack": 1,
+        "item_rates": {"silver": 0.20, "gold": 0.40, "platinum": 0.25, "diamond": 0.13, "icon": 0.02},
+        "rates": {"gold": 0.45, "platinum": 0.53, "diamond": 0.02},
+        "slot_rates": {"0": {"platinum": 0.44, "diamond": 0.35, "special": 0.20, "icon": 0.01}},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"bucks",
+        "sprite_key":"CHAMPPack"
+    },
 }
 
 
@@ -284,4 +316,5 @@ PACK_TYPES = {
     "tournament": 20,
     "special": 30,
     "timed": 40,
+    "equipment":50
 }

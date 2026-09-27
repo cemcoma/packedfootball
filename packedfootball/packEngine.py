@@ -306,6 +306,15 @@ class PackManager:
         drawn after the rolled ones. Both of those matter: a pack with no
         `guarantees` key runs exactly the loop it always did, over exactly the
         same draws, so every stored pack seed still replays card for card.
+
+        A pack may also give one slot better odds than the rest:
+
+            "slot_rates": {"0": {"platinum": 0.99, "icon": 0.01}}
+
+        Keys are the slot index as a STRING (Firestore maps cannot take ints),
+        and `rates` is the fallback for any slot not named. One draw per slot
+        either way, so seeds still replay: a pack with no `slot_rates` key
+        picks from exactly the same table it always did.
         """
         config = self.db.get(pack_id)
         if not config:
@@ -319,12 +328,20 @@ class PackManager:
         weights = list(config["rates"].values())
         pos_choice = list(config["pos_rates"].keys())
         pos_weights = list(config["pos_rates"].values())
+        # Keys are normalised to str because this lookup FAILS SILENTLY: a map
+        # written with numeric keys (a Firestore console edit, a different
+        # serializer) would fall through to `rates` and roll the generic odds
+        # while the shop advertised the better ones.
+        slot_rates = {str(k): v for k, v in (config.get("slot_rates") or {}).items()}
 
         guaranteed = self._guaranteed_count(config)
         rolled_slots = max(0, int(config["cards_per_pack"]) - guaranteed)
 
-        for _ in range(rolled_slots):
-            rolled_tier = self.rng.choices(tiers, weights=weights, k=1)[0]
+        for slot in range(rolled_slots):
+            table = slot_rates.get(str(slot))
+            slot_tiers = list(table.keys()) if table else tiers
+            slot_weights = list(table.values()) if table else weights
+            rolled_tier = self.rng.choices(slot_tiers, weights=slot_weights, k=1)[0]
             new_cards.append(self._roll_one_card(rolled_tier, pos_choice, pos_weights))
 
         for guarantee in config.get("guarantees", []) or []:

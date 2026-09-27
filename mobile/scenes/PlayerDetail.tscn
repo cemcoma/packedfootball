@@ -4,7 +4,6 @@
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_cjegr"]
 [ext_resource type="PackedScene" uid="uid://ulrndvhqpktd" path="res://scenes/components/PlayerCardView.tscn" id="4"]
-[ext_resource type="PackedScene" path="res://scenes/components/ItemView.tscn" id="item_view"]
 
 [node name="PlayerDetail" type="Control" unique_id=1970000001]
 layout_mode = 3
@@ -60,17 +59,20 @@ theme_override_constants/separation = 18
 [node name="CardPanel" type="PanelContainer" parent="Margin/RootVBox/Body" unique_id=1970000203]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 0
+size_flags_vertical = 3
 
 [node name="CardColumn" type="VBoxContainer" parent="Margin/RootVBox/Body/CardPanel" unique_id=1970000010]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="CardView" parent="Margin/RootVBox/Body/CardPanel/CardColumn" unique_id=1970000011 instance=ExtResource("4")]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(180, 250)
+[node name="CardFit" type="AspectRatioContainer" parent="Margin/RootVBox/Body/CardPanel/CardColumn" unique_id=1970000205]
 layout_mode = 2
-size_flags_horizontal = 0
+size_flags_vertical = 3
+ratio = 0.72
+
+[node name="CardView" parent="Margin/RootVBox/Body/CardPanel/CardColumn/CardFit" unique_id=1970000011 instance=ExtResource("4")]
+unique_name_in_owner = true
+layout_mode = 2
 
 [node name="OriginLabel" type="Label" parent="Margin/RootVBox/Body/CardPanel/CardColumn" unique_id=1970000012]
 unique_name_in_owner = true
@@ -90,33 +92,40 @@ text = "EQUIPMENT"
 [node name="ItemsRow" type="GridContainer" parent="Margin/RootVBox/Body/CardPanel/CardColumn" unique_id=1970000061]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_vertical = 0
 theme_override_constants/h_separation = 4
 theme_override_constants/v_separation = 4
 columns = 3
 
-[node name="AttributesPanel" type="PanelContainer" parent="Margin/RootVBox/Body" unique_id=1970000200]
+[node name="StatsRow" type="HBoxContainer" parent="Margin/RootVBox/Body" unique_id=1970000204]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 18
+
+[node name="AttributesPanel" type="PanelContainer" parent="Margin/RootVBox/Body/StatsRow" unique_id=1970000200]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="AttributesColumn" type="VBoxContainer" parent="Margin/RootVBox/Body/AttributesPanel" unique_id=1970000013]
+[node name="AttributesColumn" type="VBoxContainer" parent="Margin/RootVBox/Body/StatsRow/AttributesPanel" unique_id=1970000013]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="AttributesHeading" type="Label" parent="Margin/RootVBox/Body/AttributesPanel/AttributesColumn" unique_id=1970000014]
+[node name="AttributesHeading" type="Label" parent="Margin/RootVBox/Body/StatsRow/AttributesPanel/AttributesColumn" unique_id=1970000014]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "Attributes"
 
-[node name="AttributesScroll" type="ScrollContainer" parent="Margin/RootVBox/Body/AttributesPanel/AttributesColumn" unique_id=1970000015]
+[node name="AttributesScroll" type="ScrollContainer" parent="Margin/RootVBox/Body/StatsRow/AttributesPanel/AttributesColumn" unique_id=1970000015]
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="AttributesGrid" type="GridContainer" parent="Margin/RootVBox/Body/AttributesPanel/AttributesColumn/AttributesScroll" unique_id=1970000016]
+[node name="AttributesGrid" type="GridContainer" parent="Margin/RootVBox/Body/StatsRow/AttributesPanel/AttributesColumn/AttributesScroll" unique_id=1970000016]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -124,29 +133,29 @@ theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 2
 columns = 2
 
-[node name="TendenciesPanel" type="PanelContainer" parent="Margin/RootVBox/Body" unique_id=1970000201]
+[node name="TendenciesPanel" type="PanelContainer" parent="Margin/RootVBox/Body/StatsRow" unique_id=1970000201]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="TendenciesColumn" type="VBoxContainer" parent="Margin/RootVBox/Body/TendenciesPanel" unique_id=1970000017]
+[node name="TendenciesColumn" type="VBoxContainer" parent="Margin/RootVBox/Body/StatsRow/TendenciesPanel" unique_id=1970000017]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="TendenciesHeading" type="Label" parent="Margin/RootVBox/Body/TendenciesPanel/TendenciesColumn" unique_id=1970000018]
+[node name="TendenciesHeading" type="Label" parent="Margin/RootVBox/Body/StatsRow/TendenciesPanel/TendenciesColumn" unique_id=1970000018]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "Tendencies"
 
-[node name="TendenciesScroll" type="ScrollContainer" parent="Margin/RootVBox/Body/TendenciesPanel/TendenciesColumn" unique_id=1970000019]
+[node name="TendenciesScroll" type="ScrollContainer" parent="Margin/RootVBox/Body/StatsRow/TendenciesPanel/TendenciesColumn" unique_id=1970000019]
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="TendenciesGrid" type="GridContainer" parent="Margin/RootVBox/Body/TendenciesPanel/TendenciesColumn/TendenciesScroll" unique_id=1970000020]
+[node name="TendenciesGrid" type="GridContainer" parent="Margin/RootVBox/Body/StatsRow/TendenciesPanel/TendenciesColumn/TendenciesScroll" unique_id=1970000020]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -154,29 +163,29 @@ theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 2
 columns = 2
 
-[node name="CareerPanel" type="PanelContainer" parent="Margin/RootVBox/Body" unique_id=1970000202]
+[node name="CareerPanel" type="PanelContainer" parent="Margin/RootVBox/Body/StatsRow" unique_id=1970000202]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="CareerColumn" type="VBoxContainer" parent="Margin/RootVBox/Body/CareerPanel" unique_id=1970000021]
+[node name="CareerColumn" type="VBoxContainer" parent="Margin/RootVBox/Body/StatsRow/CareerPanel" unique_id=1970000021]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 4
 
-[node name="CareerHeading" type="Label" parent="Margin/RootVBox/Body/CareerPanel/CareerColumn" unique_id=1970000022]
+[node name="CareerHeading" type="Label" parent="Margin/RootVBox/Body/StatsRow/CareerPanel/CareerColumn" unique_id=1970000022]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "Career"
 
-[node name="CareerScroll" type="ScrollContainer" parent="Margin/RootVBox/Body/CareerPanel/CareerColumn" unique_id=1970000023]
+[node name="CareerScroll" type="ScrollContainer" parent="Margin/RootVBox/Body/StatsRow/CareerPanel/CareerColumn" unique_id=1970000023]
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="CareerGrid" type="GridContainer" parent="Margin/RootVBox/Body/CareerPanel/CareerColumn/CareerScroll" unique_id=1970000024]
+[node name="CareerGrid" type="GridContainer" parent="Margin/RootVBox/Body/StatsRow/CareerPanel/CareerColumn/CareerScroll" unique_id=1970000024]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
