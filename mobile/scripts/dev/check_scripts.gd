@@ -35,6 +35,16 @@ const SCRIPTS := [
 	"res://scripts/autoload/ItemSession.gd",
 	"res://scripts/autoload/GameProfile.gd",
 	"res://scripts/autoload/PackSession.gd",
+	"res://scripts/components/PitchDraw.gd",
+	"res://scripts/data/PlayerFigure.gd",
+	"res://scripts/screens/MatchPlayback.gd",
+	"res://scripts/screens/Play.gd",
+	"res://scripts/screens/Minigames.gd",
+	"res://scripts/screens/Shootout.gd",
+	"res://scripts/autoload/ShootoutSession.gd",
+	"res://scripts/autoload/MatchSession.gd",
+	"res://scripts/screens/MatchResult.gd",
+	"res://scripts/screens/MatchStats.gd",
 ]
 
 const SCENES := [
@@ -46,6 +56,11 @@ const SCENES := [
 	"res://scenes/PackReveal.tscn",
 	"res://scenes/Inventory.tscn",
 	"res://scenes/Shop.tscn",
+	"res://scenes/Play.tscn",
+	"res://scenes/Minigames.tscn",
+	"res://scenes/Shootout.tscn",
+	"res://scenes/MatchResult.tscn",
+	"res://scenes/MatchStats.tscn",
 ]
 
 func _init() -> void:

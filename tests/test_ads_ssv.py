@@ -143,6 +143,49 @@ def test_unknown_track_is_refused():
         ads.grant_in_tx(tx, "users/u", "nope", T0)
 
 
+# ------------------------------------------------------------- shootout retry
+
+
+def test_the_retry_track_grants_the_counter_and_nothing_else():
+    """It buys an attempt at today's shootout, which /shootout/daily/start
+    reads off the counter. It must not touch a balance."""
+    tx = FakeTx({"users/u": _profile()})
+    paid = ads.grant_in_tx(tx, "users/u", "shootout_retry", T0)
+
+    assert paid["ad_counters"]["shootout_retry"]["watched"] == 1
+    assert "credits_remaining" not in paid and "energy" not in paid
+    written = dict(tx.writes)["users/u"]
+    assert set(written) == {"ad_counters", "last_ad_date", "last_ad_grant_at"}
+    assert tx.docs["users/u"]["credits"] == 100
+    assert tx.docs["users/u"][energy_service.ENERGY_FIELD] == 3
+
+
+def test_the_retry_track_allows_exactly_one_a_day():
+    tx = FakeTx({"users/u": _profile()})
+    for _ in range(config.PENALTY_SHOOTOUT_AD_RETRIES_PER_DAY):
+        ads.grant_in_tx(tx, "users/u", "shootout_retry", T0)
+    with pytest.raises(ads.AdRewardRefused):
+        ads.grant_in_tx(tx, "users/u", "shootout_retry", T0)
+
+
+def test_the_retry_counter_zeroes_on_the_next_game_day():
+    tx = FakeTx({"users/u": _profile(ad_counters={"shootout_retry": 1})})
+    paid = ads.grant_in_tx(tx, "users/u", "shootout_retry", T0 + timedelta(days=1))
+    assert paid["ad_counters"]["shootout_retry"]["watched"] == 1
+
+
+def test_a_registered_track_with_no_rule_is_refused_not_paid_energy(monkeypatch):
+    """The energy branch used to be a catch-all `else`, so a track added to
+    track_caps without a grant rule silently paid energy."""
+    real_caps = ads.track_caps()
+    monkeypatch.setattr(ads, "track_caps", lambda: {**real_caps, "mystery_track": 3})
+    monkeypatch.setattr(ads, "TRACKS", tuple(real_caps) + ("mystery_track",))
+    tx = FakeTx({"users/u": _profile()})
+    with pytest.raises(ads.AdRewardRefused):
+        ads.grant_in_tx(tx, "users/u", "mystery_track", T0)
+    assert tx.writes == []
+
+
 def test_status_counters_read_zero_after_the_day_rolls():
     profile = _profile(ad_counters={"buck_track": 2})
     assert ads.counters(profile, ads.game_date(T0))["buck_track"]["watched"] == 2

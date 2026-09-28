@@ -54,15 +54,6 @@ const DIVE_STRAIGHT_UNITS := 1.0
 const FIGURE_FULL_DETAIL_PX := 26.0
 const FACING_MIN_SPEED := 0.6
 const RUN_CYCLE_SPEED := 0.09
-const ZOOM_VISIBLE_Y_SPAN := 36.0
-# How far past each goal line the camera may show. Has to cover the goal
-# itself (2 units deep, drawn at y -2..0 and 100..102) plus a figure's worth
-# of overhang, since a keeper on their line is drawn FIGURE_HEIGHT_UNITS
-# upward from it.
-const CAMERA_MARGIN_UNITS := 4.5
-# ...and past each touchline, so a ball rolling out for a throw-in stays
-# in frame instead of stopping at the screen's edge.
-const CAMERA_SIDE_MARGIN_UNITS := 2.0
 
 # A goal STOPS the replay -- playback_tick does not advance -- for this many
 # REAL seconds, so there is time to actually watch the celebration. The
@@ -78,7 +69,7 @@ const CELEBRATION_RUN_SPEED := 7.0
 const CELEBRATION_RUN_BACK := 0.6
 const CELEBRATION_TEAMMATE_STAGGER := 0.13
 # The net the ball runs into during a celebration: the goal's footprint as
-# _draw_goal draws it (GOAL_WIDTH = 7.5 centred on x = 35, 2 units deep,
+# PitchDraw.draw_goal draws it (GOAL_WIDTH = 7.5 centred on x = 35, 2 deep,
 # GOAL_POST_RADIUS = 0.25), and the engine's own friction for the last
 # yard of the shot (gameEngine.py: 0.5 ** dt per second).
 const GOAL_DEPTH_UNITS := 2.0
@@ -1166,69 +1157,10 @@ func _interpolated_state() -> Dictionary:
 	}
 
 
-# Ported from gameEngine.py's render(): "full" fits the whole pitch into
-# this box (here, with zero letterboxing -- FULL_MODE_BOX_SIZE's 378x540
-# already matches the pitch's own 70x100 aspect ratio); "zoom" follows the
-# ball with a fixed *vertical* (goal-to-goal) span so up/down-field context
-# stays consistent, letting the horizontal (sideline) span be whatever that
-# implies for this box's current aspect ratio.
-#
-# Since "zoom" mode fills the full (landscape) viewport width -- see
-# _update_pitch_canvas_size -- that implied horizontal span (~80 units) is
-# now routinely *wider* than the pitch itself (70 units), which the normal
-# ball-following clamp below was never built for: clamping a span wider
-# than its own bounds to `[0, bounds - span]` (a negative upper bound)
-# collapses to a single fixed value of 0 regardless of the ball's actual
-# position, pinning the pitch flush to the screen's left edge with all the
-# leftover width bunched on the right instead of following the ball or
-# even just sitting centered. Handled as its own case: when the span is
-# too wide to pan at all, center it on the pitch's own midline instead
-# (the pitch reads as centered with a bit of grass showing past both
-# touchlines, rather than lopsided) -- panning still works normally the
-# moment the span is narrow enough to fit (e.g. back in "full" mode's
-# narrower box, or if this box's aspect ratio ever changes).
+# "full" and "zoom" are gameEngine.py render()'s two cameras; the maths is
+# PitchDraw's, so the shootout frames the same pitch the same way.
 func _compute_camera(ball_pos: Vector2) -> Dictionary:
-	var w := size.x
-	var h := size.y
-
-	if camera_mode == "full":
-		# Fit the pitch PLUS the margin behind each goal line, so both goals
-		# and both keepers are in frame rather than cropped off at y=0/100.
-		var full_height := PITCH_HEIGHT + CAMERA_MARGIN_UNITS * 2.0
-		var scale := minf(w / PITCH_WIDTH, h / full_height)
-		var offset_x := (w - PITCH_WIDTH * scale) / 2.0
-		var offset_y := (h - full_height * scale) / 2.0
-		return {"scale": scale, "cam_x": -offset_x / scale, "cam_y": -offset_y / scale - CAMERA_MARGIN_UNITS}
-
-	# Tightened from 45 when players became figures rather than dots: at 45
-	# a character is 38px and the customization nobody can see isn't worth
-	# selling. 36 puts it at ~48px while still showing most of the pitch's
-	# width and about a third of its length.
-	var visible_y_span := ZOOM_VISIBLE_Y_SPAN
-	var visible_x_span := visible_y_span * (w / h)
-	var scale := h / visible_y_span
-
-	var cam_x: float
-	if visible_x_span >= PITCH_WIDTH:
-		cam_x = (PITCH_WIDTH - visible_x_span) / 2.0
-	else:
-		cam_x = clampf(
-			ball_pos.x - visible_x_span / 2.0,
-			-CAMERA_SIDE_MARGIN_UNITS,
-			PITCH_WIDTH + CAMERA_SIDE_MARGIN_UNITS - visible_x_span
-		)
-	# The vertical clamp used to stop dead on the goal lines, which meant the
-	# top of the screen WAS y=0: a keeper standing on their line had their
-	# whole figure drawn above it and off-screen, and the goal (which lives
-	# at y -2..0) was never visible at all. Letting the camera run
-	# CAMERA_MARGIN_UNITS past each end is what puts the keeper, the goal and
-	# a ball in the net on screen.
-	var cam_y := clampf(
-		ball_pos.y - visible_y_span / 2.0,
-		-CAMERA_MARGIN_UNITS,
-		maxf(-CAMERA_MARGIN_UNITS, PITCH_HEIGHT + CAMERA_MARGIN_UNITS - visible_y_span)
-	)
-	return {"scale": scale, "cam_x": cam_x, "cam_y": cam_y}
+	return PitchDraw.compute_camera(size, ball_pos, camera_mode)
 
 
 # Local to PitchCanvas -- (0, 0) is this box's own top-left, not the
@@ -1236,109 +1168,9 @@ func _compute_camera(ball_pos: Vector2) -> Dictionary:
 # docstring) is what keeps anything landing outside this box's current
 # `size` from actually showing.
 func _pitch_to_screen(p: Vector2, cam: Dictionary) -> Vector2:
-	# cam's values come back typed as Variant (Dictionary access), which
-	# GDScript's `:=` type inference can't always resolve through an
-	# operator like `*` -- pulling them into explicitly-typed locals first
-	# sidesteps that everywhere below, rather than fighting it call by call.
-	var scale: float = cam.scale
-	var cam_x: float = cam.cam_x
-	var cam_y: float = cam.cam_y
-	return Vector2((p.x - cam_x) * scale, (p.y - cam_y) * scale)
+	return PitchDraw.to_screen(p, cam)
 
 
-# Outline of a pitch-space rect (px, py, pw, ph), matching gameEngine.py's
-# render()'s draw_pitch_rect helper -- same dimensions, ported 1:1 (outer
-# boundary, halfway line, center circle, both penalty/six-yard boxes).
-func _draw_pitch_rect_outline(cam: Dictionary, px: float, py: float, pw: float, ph: float, color: Color, width: float) -> void:
-	var scale: float = cam.scale
-	var top_left := _pitch_to_screen(Vector2(px, py), cam)
-	var size: Vector2 = Vector2(pw, ph) * scale
-	draw_rect(Rect2(top_left, size), color, false, width)
-
-
-func _draw_pitch_lines(cam: Dictionary) -> void:
-	var scale: float = cam.scale
-	var line_color := Color(1.0, 1.0, 1.0, 0.9)
-	var line_width := 1.5
-
-	_draw_pitch_rect_outline(cam, 0.0, 0.0, PITCH_WIDTH, PITCH_HEIGHT, line_color, line_width)
-
-	draw_line(
-		_pitch_to_screen(Vector2(0.0, PITCH_HEIGHT / 2.0), cam),
-		_pitch_to_screen(Vector2(PITCH_WIDTH, PITCH_HEIGHT / 2.0), cam),
-		line_color,
-		line_width
-	)
-
-	var center := _pitch_to_screen(Vector2(PITCH_WIDTH / 2.0, PITCH_HEIGHT / 2.0), cam)
-	draw_arc(center, 9.15 * scale, 0.0, TAU, 48, line_color, line_width)
-	draw_circle(center, 2.0, line_color)
-
-	# Penalty boxes + six-yard boxes, top and bottom -- same dimensions as
-	# gameEngine.py's render().
-	_draw_pitch_rect_outline(cam, 14.0, 0.0, 42.0, 18.0, line_color, line_width)
-	_draw_pitch_rect_outline(cam, 26.0, 0.0, 18.0, 5.5, line_color, line_width)
-	_draw_pitch_rect_outline(cam, 14.0, 82.0, 42.0, 18.0, line_color, line_width)
-	_draw_pitch_rect_outline(cam, 26.0, 94.5, 18.0, 5.5, line_color, line_width)
-
-
-# Goal frame + netting. goal_y is 0 (top) or PITCH_HEIGHT (bottom); depth_dir
-# is which way the goal extends beyond the pitch boundary (-1 for the top
-# goal, +1 for the bottom one). GOAL_WIDTH/depth match game_config.py's own
-# goal-mouth dimensions (GOAL_WIDTH=7.5, centered on x=35).
-func _draw_goal(cam: Dictionary, goal_y: float, depth_dir: float) -> void:
-	var half_width := 3.75
-	var depth := 2.0
-	var left_x := 35.0 - half_width
-	var right_x := 35.0 + half_width
-	var back_y := goal_y + depth_dir * depth
-
-	var top_left := _pitch_to_screen(Vector2(left_x, goal_y), cam)
-	var top_right := _pitch_to_screen(Vector2(right_x, goal_y), cam)
-	var back_left := _pitch_to_screen(Vector2(left_x, back_y), cam)
-	var back_right := _pitch_to_screen(Vector2(right_x, back_y), cam)
-
-	# Dark backing inside the goal mouth. Without it the goal is a white
-	# wireframe on green and a white ball sitting in the net disappears into
-	# the crosshatch -- this is what makes a goal read as a goal.
-	draw_colored_polygon(
-		PackedVector2Array([top_left, top_right, back_right, back_left]),
-		Color(0.05, 0.16, 0.10, 0.55)
-	)
-
-	# Netting: a light crosshatch inside the goal's footprint.
-	var net_color := Color(1.0, 1.0, 1.0, 0.35)
-	var net_divisions := 5
-	for i in range(net_divisions + 1):
-		var t := float(i) / net_divisions
-		draw_line(top_left.lerp(top_right, t), back_left.lerp(back_right, t), net_color, 1.0)
-		draw_line(top_left.lerp(back_left, t), top_right.lerp(back_right, t), net_color, 1.0)
-
-	# Posts + back of the net.
-	var post_color := Color.WHITE
-	draw_line(top_left, back_left, post_color, 3.0)
-	draw_line(top_right, back_right, post_color, 3.0)
-	draw_line(back_left, back_right, post_color, 3.0)
-	draw_line(top_left, top_right, post_color, 4.0)
-
-
-func _draw_corner_quarter(cam: Dictionary, corner: Vector2, start_angle: float, end_angle: float) -> void:
-	var scale: float = cam.scale
-	var base := _pitch_to_screen(corner, cam)
-
-	var arc_radius := 2.0 * scale
-	var point_count := 16  # Higher count makes the curve smoother
-	draw_arc(base, arc_radius, start_angle, end_angle, point_count, Color.WHITE, 2.0, true)
-
-
-# Everything drawn on PitchCanvas is raw CanvasItem calls, not themed Control
-# nodes -- AppTheme.tres's project-wide Label shadow (see mobile/README.md's
-# "Naked text" section) has no effect here at all, so text drawn directly
-# over the pitch (which is a busy, moving, colored scene, unlike a flat
-# panel background) needs its own manual shadow: the same string drawn
-# twice, once offset in dark and mostly-transparent, once for real on top.
-# Shadow alpha rides on the real text's own alpha so a fading banner's
-# shadow fades with it instead of leaving a lingering dark smudge behind.
 func _draw_string_with_shadow(
 	font: Font, pos: Vector2, text: String, alignment: int, width: float, font_size: int, color: Color
 ) -> void:
@@ -1369,20 +1201,11 @@ func _draw() -> void:
 	var cam := _compute_camera(state["ball"])
 	var scale: float = cam.scale
 
-	# Grass fill: clip_contents (set on this node in Match.tscn) guarantees
-	# nothing drawn below ever shows outside this box's current `size`
-	# (378x540 in "full" mode, the whole viewport in "zoom" -- see
-	# _update_pitch_canvas_size), so a flat full-box fill is correct in both
-	# modes with no extra math.
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.09, 0.47, 0.22))
-
-	_draw_pitch_lines(cam)
-	_draw_goal(cam, 0.0, -1.0)
-	_draw_goal(cam, PITCH_HEIGHT, 1.0)
-	_draw_corner_quarter(cam, Vector2(0, 0), 0.0, PI / 2.0)
-	_draw_corner_quarter(cam, Vector2(PITCH_WIDTH, 0), PI / 2.0, PI)
-	_draw_corner_quarter(cam, Vector2(PITCH_WIDTH, PITCH_HEIGHT), PI, 3.0 * PI / 2.0)
-	_draw_corner_quarter(cam, Vector2(0, PITCH_HEIGHT), -PI / 2.0, 0.0)
+	# The ground. clip_contents (set on this node in Match.tscn) guarantees
+	# nothing drawn below shows outside this box's current `size` (378x540 in
+	# "full" mode, the whole viewport in "zoom"), so PitchDraw's flat full-box
+	# grass fill is correct in both modes with no extra math.
+	PitchDraw.draw_pitch(self, cam, size)
 
 	_update_trail(state)
 	_draw_trail(cam)

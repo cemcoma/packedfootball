@@ -77,6 +77,15 @@ func roster() -> Dictionary:
 	return _roster
 
 
+## Your own name on the scoreboard. A local test match (see is_local) can run
+## signed out with a generated home side the script named, which is the only
+## time the response's name beats the profile's.
+func _home_name(raw) -> String:
+	if GameProfile.display_name == "" and raw is String and raw != "":
+		return raw
+	return GameProfile.display_name_or_you()
+
+
 func has_match_stats() -> bool:
 	return player_match_stats.size() == PLAYERS_PER_TEAM * 2
 
@@ -118,11 +127,9 @@ func set_from_match_response(data: Dictionary) -> void:
 	var formations: Array = formations_raw if formations_raw is Array else []
 
 	var players_raw = data.get("roster")
-	# A local test match (see is_local) can run signed out, with a generated
-	# home side named by the script; a real match always has a display name.
 	var home_name_raw = data.get("home_display_name")
 	_roster = {
-		"home_name": GameProfile.display_name if GameProfile.display_name != "" else (home_name_raw if home_name_raw is String else "You"),
+		"home_name": _home_name(home_name_raw),
 		"away_name": opponent_display_name,
 		"home_kit": kits[0] if kits.size() > 0 and kits[0] is String else "",
 		"away_kit": kits[1] if kits.size() > 1 and kits[1] is String else "",

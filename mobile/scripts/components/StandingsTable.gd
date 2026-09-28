@@ -143,6 +143,9 @@ func _header_label(column: Dictionary, align: HorizontalAlignment) -> Label:
 func _build_row(row: Dictionary) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(0, ROW_HEIGHT)
+	# PASS, not the STOP a PanelContainer defaults to: a STOP node under the finger
+	# swallows the touch and the ScrollContainer never sees the drag.
+	panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	panel.add_theme_stylebox_override("panel", _row_style(row))
 
 	var margin := MarginContainer.new()

@@ -41,6 +41,7 @@ from routers import (
     matches,
     packs,
     players,
+    shootout,
     tournaments,
     ads
 )
@@ -68,5 +69,6 @@ for _router in (
     tournaments.router,
     ads.router,
     claims.router,
+    shootout.router,
 ):
     app.include_router(_router)

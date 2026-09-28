@@ -43,7 +43,7 @@ def test_seeded_matches_are_reproducible(make_match):
 def test_quiesce_lets_the_ball_move(match):
     """A fresh game is mid-kickoff and tick() early-returns before physics."""
     quiesce(match)
-    match.ball[:] = [35.0, 50.0, 0.0, 20.0, 0.0]
+    match.ball[:] = [35.0, 50.0, 0.0, 20.0, 0.0, 0.0]   # x, y, vx, vy, height, vz
     y0 = match.ball[1]
     match.tick(1 / 60)
     assert match.ball[1] > y0

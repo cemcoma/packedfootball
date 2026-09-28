@@ -38,6 +38,7 @@ AdManager="*uid://d1x5ac4vymns1"
 LocaleManager="*res://scripts/autoload/LocaleManager.gd"
 CurrencyHud="*res://scripts/autoload/CurrencyHud.gd"
 TournamentSession="*res://scripts/autoload/TournamentSession.gd"
+ShootoutSession="*res://scripts/autoload/ShootoutSession.gd"
 
 [display]
 
@@ -53,6 +54,7 @@ enabled=PackedStringArray("res://addons/admob/plugin.cfg", "res://addons/godotx_
 
 [gui]
 
+common/default_scroll_deadzone=12
 theme/custom="res://theme/AppTheme.tres"
 
 [input_devices]

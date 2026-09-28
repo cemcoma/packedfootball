@@ -90,6 +90,17 @@ PENALTY_SIDES: Final = (-1, 0, 1)    # left / middle / right, from the taker
 PENALTY_CERTAINTY_CAP: Final = 0.99  # nobody is ever a sure thing, items or not
 # Distance from the goal line to the spot.
 PENALTY_SPOT_DISTANCE: Final = 11.0
+# How hard a spot kick is struck, in units/second.
+PENALTY_SHOT_SPEED: Final = 26.0
+# Frames the staged scene holds before he strikes it (the run-up).
+PENALTY_SETUP_FRAMES: Final = 10
+
+# A full-stretch dive in lateral units, and the share of it a keeper covers
+# when he commits to a corner. Shared so a dive carries the same distance in a
+# shootout as in a match -- the shootout scaled it off the goal's half-width
+# instead and came up short of the corners it was diving for.
+KEEPER_REACH: Final = 6.2
+PENALTY_KEEPER_DIVE_FRACTION: Final = 0.7
 
 
 # =============================================================================

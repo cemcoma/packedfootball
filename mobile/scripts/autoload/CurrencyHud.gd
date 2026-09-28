@@ -16,8 +16,9 @@ const BAR_SCENE := preload("res://scenes/components/CurrencyBar.tscn")
 ## has to stay the thing nothing draws over.
 const LAYER := 64
 
-## Screens with no balances to show: no profile loaded yet, or a live match.
-const HIDDEN_SCENES := ["Splash", "Auth", "Match"]
+## Screens with no balances to show: no profile loaded yet, or a live match --
+## a shootout counts, it is a match played a kick at a time.
+const HIDDEN_SCENES := ["Splash", "Auth", "Match", "Shootout"]
 
 ## What the strip costs the screen below it. A measured height would be read
 ## before the bar has been laid out, and a header that jumps once the real

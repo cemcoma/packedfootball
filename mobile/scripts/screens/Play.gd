@@ -17,6 +17,9 @@ extends Control
 ## backend picks an opponent AND simulates the match AND persists the
 ## result before it ever replies 
 ##
+## Minigames leads to the minigames hub (Minigames.tscn) -- the daily-reward
+## modes, which cost no energy and can be played once a day each.
+##
 ## Tournament leads to the tournament hub (Tournament.tscn), which offers the
 ## daily league -- ten matches a day in a group of six, drawn from your own
 ## tier, with promotion and relegation settled overnight.
@@ -29,6 +32,7 @@ extends Control
 @onready var _status_label: Label = %StatusLabel
 @onready var _quick_match_button: MenuTile = %QuickMatchTile
 @onready var _tournament_button: MenuTile = %TournamentTile
+@onready var _minigames_button: MenuTile = %MinigamesTile
 @onready var _back_button: Button = %BackButton
 
 
@@ -96,6 +100,7 @@ var _check_started_msec: int = 0
 func _ready() -> void:
 	_quick_match_button.pressed.connect(_on_quick_match_pressed)
 	_tournament_button.pressed.connect(_on_tournament_pressed)
+	_minigames_button.pressed.connect(_on_minigames_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 
 	_setup_testing_panel()
@@ -104,7 +109,7 @@ func _ready() -> void:
 	_apply_theme_colors()
 
 
-## The two tiles restyle themselves. Everything else here is a plain Button
+## The tiles restyle themselves. Everything else here is a plain Button
 ## sitting straight on the background, including the testing panel's controls
 ## -- that panel is a bare VBox, not a frame.
 func _apply_theme_colors() -> void:
@@ -199,6 +204,10 @@ static func _int(data: Dictionary, key: String, default: int) -> int:
 
 func _on_tournament_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/Tournament.tscn")
+
+
+func _on_minigames_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/Minigames.tscn")
 
 
 func _on_back_pressed() -> void:

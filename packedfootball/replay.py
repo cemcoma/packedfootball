@@ -83,7 +83,9 @@ class ReplayRecorder:
     def snapshot(self, tick: int, positions, velocity, ball, ball_controller: int) -> None:
         # Same quantisation as _q, done on the whole sample at once: the
         # per-player layout is x, y, vx, vy, then the ball's x, y, vx, vy,
-        # height (see gameEngine.py's ball array comment). np.rint rounds
+        # height (see gameEngine.py's ball array comment). The [:5] drops the
+        # ball's vz: the wire carries the height it reached, not that velocity.
+        # np.rint rounds
         # half-to-even exactly as Python's round() does.
         per_player = np.concatenate([np.asarray(positions, dtype=float), np.asarray(velocity, dtype=float)], axis=1)
         raw = np.concatenate([per_player.ravel(), np.asarray(ball[:5], dtype=float)]) * POSITION_SCALE

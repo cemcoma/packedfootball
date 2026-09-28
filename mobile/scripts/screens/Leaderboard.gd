@@ -267,6 +267,9 @@ func _build_row(entry: Dictionary) -> Control:
 
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(0, ROW_HEIGHT)
+	# PASS, not the STOP a PanelContainer defaults to: a STOP node under the finger
+	# swallows the touch and the ScrollContainer never sees the drag.
+	panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	# Hard-edged like every other panel; the podium colours still carry the
 	# rank, and the border is what separates a row from its neighbour.
 	var style := StyleBoxFlat.new()
@@ -315,6 +318,7 @@ func _build_row(entry: Dictionary) -> Control:
 	# PlayerCardView and PackView.
 	var button := Button.new()
 	button.flat = true
+	button.mouse_filter = Control.MOUSE_FILTER_PASS
 	button.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	button.pressed.connect(_on_row_pressed.bind(entry))
 	panel.add_child(button)

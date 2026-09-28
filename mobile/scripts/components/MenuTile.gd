@@ -171,6 +171,15 @@ func set_tile_disabled(value: bool) -> void:
 	_restyle()
 
 
+## A control at the tile's right end, for an action the tile can't take itself
+## -- the ad that buys another go at a mode already spent for today. It stays
+## pressable while the tile is disabled: _ready's click-through pass has
+## already run, and it sits above the tile, so the touch lands on it.
+func add_side_control(control: Control) -> void:
+	control.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	$Body/Row.add_child(control)
+
+
 ## For a subtitle that carries a state rather than just context -- TeamHub's
 ## inventory counter goes amber once the club is full, which is the point it
 ## stops being a fact and starts being a blocker.

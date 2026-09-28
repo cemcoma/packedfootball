@@ -109,6 +109,9 @@ func _build_options() -> void:
 		var buttons: Array = []
 		for index in range(PlayerAppearance.option_count(slot)):
 			var button := Button.new()
+			# PASS, not the STOP a Button defaults to: a STOP node under the finger
+			# swallows the touch and the ScrollContainer never sees the drag.
+			button.mouse_filter = Control.MOUSE_FILTER_PASS
 			if is_color:
 				button.custom_minimum_size = SWATCH_SIZE
 				button.tooltip_text = PlayerAppearance.option_name(slot, index)

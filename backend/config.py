@@ -520,6 +520,53 @@ WEEKLY_TOURNAMENT_SETTLE_LOOKBACK_WEEKS = 2
 WEEKLY_TOURNAMENT_MAX_GROUPS_PER_REQUEST = 5
 WEEKLY_TOURNAMENT_OPPONENT_MAX_ATTEMPTS = 5
 
+# -- minigames ----------------------------------------------------------------
+
+# One shootout a day, on the tournament clock (12:00 Istanbul, see
+# TOURNAMENT_DAY_OFFSET_HOURS). Showing up is what pays: rewards ramp across a
+# 15-day cycle, and finishing one PRESTIGES the player -- a reset that pays
+# better than the cycle before it, so day 16 beats day 1 without day 1 ever
+# becoming worthless.
+PENALTY_SHOOTOUT_CYCLE_DAYS = 15
+PENALTY_SHOOTOUT_BASE_CREDITS = 100       # day 1, prestige 0, a loss
+PENALTY_SHOOTOUT_WIN_MULTIPLIER = 3.0
+PENALTY_SHOOTOUT_DAY_STEP = 0.05          # of base, per day into the cycle
+PENALTY_SHOOTOUT_PRESTIGE_STEP = 0.20     # of base, per completed cycle
+PENALTY_SHOOTOUT_PRESTIGE_MAX = 4         # the ramp stops compounding here
+# Prestige 0..MAX inclusive. Also the width of the bot grid below, so raising
+# the cap adds a reward step and a column of bots together.
+PENALTY_SHOOTOUT_PRESTIGE_LEVELS = PENALTY_SHOOTOUT_PRESTIGE_MAX + 1
+
+# Paid for finishing day 15. Flat, NOT multiplied by prestige: a bounded
+# hard-currency faucet whatever the reward ramp does.
+PENALTY_SHOOTOUT_CYCLE_BONUS = {"bucks": 10}
+
+# The bot gets better as the cycle goes on, day 1 bronze to day 15 special.
+# Difficulty tracks the DAY, never prestige -- a returning player meets the
+# same day-1 bot a veteran does. Index is day - 1; icon is deliberately absent.
+PENALTY_SHOOTOUT_BOT_LADDER = (
+    "bronze", "bronze", "silver", "silver", "silver",
+    "gold", "gold", "gold", "platinum", "platinum",
+    "platinum", "diamond", "diamond", "diamond", "special",
+)
+assert len(PENALTY_SHOOTOUT_BOT_LADDER) == PENALTY_SHOOTOUT_CYCLE_DAYS
+
+# The tier ladder the prestige nudge steps along. Ends at special: an icon bot
+# is not a difficulty setting.
+PENALTY_SHOOTOUT_TIER_ORDER = (
+    "bronze", "silver", "gold", "platinum", "diamond", "special",
+)
+
+# Prestige nudges the card MIX inside the day's tier, never the tier itself:
+# at prestige 4 roughly a third of the bot's XI rolls one tier up. Day 15 is
+# already at the top of the ladder, so the nudge is skipped there.
+PENALTY_SHOOTOUT_PRESTIGE_NUDGE = 0.08    # share rolling a tier up, per prestige
+
+# One ad, one retry. The cap IS the allowance -- services/ads.py enforces it
+# with the same per-day counter every other ad track uses.
+PENALTY_SHOOTOUT_AD_RETRIES_PER_DAY = 1
+
+
 # -- match bug reports --------------------------------------------------------
 
 # What a player can tag a report with (POST /match/report). Keys are what

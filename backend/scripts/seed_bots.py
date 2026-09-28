@@ -53,6 +53,11 @@ from game_state import player_to_fields
 from packEngine import COUNTRIES, generate_starter_roster  # noqa: E402
 from services.account import DisplayNameError, display_name_key, validate_display_name  # noqa: E402
 from services.match import BOT_UID_PREFIX  # noqa: E402
+from services.minigames import (  # noqa: E402
+    bot_pool_path as minigames_bot_pool_path,
+    bot_rates as minigames_bot_rates,
+    bot_tier_for_day as minigames_bot_tier_for_day,
+)
 from services.tournament import (  # noqa: E402
     bot_card_rates as tournament_bot_card_rates,
     bot_pool_path,
@@ -99,17 +104,18 @@ def load_names(db, rng: random.Random) -> list[str]:
     return names
 
 
-def make_bot(rng: random.Random, tier: int, display_name: str) -> tuple[str, dict]:
+def make_bot(rng: random.Random, rates: dict, display_name: str, extra: dict) -> tuple[str, dict]:
+    """One stored bot. `extra` is what marks which pool it belongs to -- a
+    league tier, or a day and prestige of the shootout grid."""
     country = rng.choice(COUNTRIES)
     formation = rng.choice(list(FORMATIONS.keys()))
-    rates = tournament_bot_card_rates(tier) or {"silver": 1.0}
     roster = generate_starter_roster(formation, seed=rng.getrandbits(63), tier_rates=rates)
     primary, secondary = rng.choice(KIT_PALETTES)
     pattern = rng.choice(("solid", "stripes","quarters"))
     bot_id = f"{BOT_UID_PREFIX}{secrets.token_hex(6)}"
     return bot_id, {
         "display_name": display_name,
-        "tier": tier,
+        **extra,
         "formation": formation,
         "kit": f"v1;pattern={pattern};primary={primary};secondary={secondary}",
         "players": [player_to_fields(p) for p in roster],
@@ -118,6 +124,56 @@ def make_bot(rng: random.Random, tier: int, display_name: str) -> tuple[str, dic
         "losses": 0,
         "created_at": firestore.SERVER_TIMESTAMP,
     }
+
+
+def seed_shootout_grid(db, rng: random.Random, names: list[str], dry_run: bool) -> None:
+    """The daily shootout's opponents: one named bot per (day, prestige) cell.
+
+    A 15 x PRESTIGE_LEVELS grid, so a player meets the same manager on day 12
+    every cycle and a different one once they prestige. The day sets the tier
+    (bronze up to special) and prestige only leans the mix one step up it --
+    see services/minigames.bot_rates.
+
+    Idempotent per cell: a cell that already holds a bot is left alone, so a
+    rerun only fills the gaps and a widened grid only adds its new column.
+    """
+    days = config.PENALTY_SHOOTOUT_CYCLE_DAYS
+    levels = config.PENALTY_SHOOTOUT_PRESTIGE_LEVELS
+    print(f"\nShootout grid: {days} day(s) x {levels} prestige level(s)")
+
+    for day in range(1, days + 1):
+        pool_ref = db.document(minigames_bot_pool_path(day))
+        pool = pool_ref.get()
+        existing = list((pool.to_dict() or {}).get("uids") or []) if pool.exists else []
+        missing = max(0, levels - len(existing))
+        tier = minigames_bot_tier_for_day(day)
+        if missing == 0:
+            print(f"  day {day:>2} ({tier}): complete")
+            continue
+        if missing > len(names):
+            print(f"  only {len(names)} name(s) left for {missing} bot(s) -- add more to {NAMES_FILE.name}")
+            missing = len(names)
+        print(f"  day {day:>2} ({tier}): {len(existing)} bot(s), creating {missing}")
+        if missing == 0 or dry_run:
+            continue
+
+        batch = db.batch()
+        new_ids = []
+        for prestige in range(len(existing), len(existing) + missing):
+            rates = minigames_bot_rates(day, prestige)
+            bot_id, doc = make_bot(
+                rng, rates, names.pop(),
+                {"shootout_day": day, "shootout_prestige": prestige},
+            )
+            batch.set(db.collection("bots").document(bot_id), doc)
+            new_ids.append(bot_id)
+            tiers = " ".join(sorted({p["tier"] for p in doc["players"]}))
+            print(f"    p{prestige} {bot_id}  {doc['display_name']:<24} {doc['formation']:<6} {tiers}")
+        batch.set(pool_ref, {"day": day, "uids": existing + new_ids})
+        batch.commit()
+
+    if dry_run:
+        print("Dry run, nothing changed.")
 
 
 def main() -> int:
@@ -150,7 +206,8 @@ def main() -> int:
         batch = db.batch()
         new_ids = []
         for _ in range(missing):
-            bot_id, doc = make_bot(rng, tier, names.pop())
+            rates = tournament_bot_card_rates(tier) or {"silver": 1.0}
+            bot_id, doc = make_bot(rng, rates, names.pop(), {"tier": tier})
             batch.set(db.collection("bots").document(bot_id), doc)
             new_ids.append(bot_id)
             tiers = " ".join(sorted({p["tier"] for p in doc["players"]}))
@@ -158,6 +215,7 @@ def main() -> int:
         batch.set(pool_ref, {"tier": tier, "uids": existing + new_ids})
         batch.commit()
 
+    seed_shootout_grid(db, rng, names, args.dry_run)
     return 0
 
 

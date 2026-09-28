@@ -83,7 +83,8 @@ func _ready() -> void:
 	var my_score: int = score[0] if score.size() == 2 else 0
 	var opp_score: int = score[1] if score.size() == 2 else 0
 	var opponent_name: String = MatchSession.opponent_display_name if MatchSession.opponent_display_name != "" else tr("Opponent")
-	
+	var my_name: String = GameProfile.display_name_or_you()
+
 	# Decision: dont show that they are bots the user doesnt need to know
 	if MatchSession.opponent_is_bot:
 		pass
@@ -99,14 +100,14 @@ func _ready() -> void:
 		_outcome_label.text = tr("You Lost")
 		_outcome_label.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
 
-	_score_label.text = tr("You %d - %d %s") % [my_score, opp_score, opponent_name]
+	_score_label.text = tr("%s %d - %d %s") % [my_name, my_score, opp_score, opponent_name]
 	# The logo beside it is what says which currency this is -- the name
 	# never appears on screen. Texture set here rather than in the scene
 	# so CurrencyDisplay.ICONS stays the only place a logo path lives.
 	_credits_label.text = "+%s" % CurrencyDisplay.format_amount(MatchSession.credits_earned)
 	_credits_icon.texture = CurrencyDisplay.icon_for("credits")
 
-	_populate_scorers(tr("You"), MatchSession.TEAM_HOME, _home_scorers)
+	_populate_scorers(my_name, MatchSession.TEAM_HOME, _home_scorers)
 	_populate_scorers(opponent_name, MatchSession.TEAM_AWAY, _away_scorers)
 	_populate_summary()
 

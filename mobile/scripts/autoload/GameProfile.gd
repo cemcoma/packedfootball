@@ -407,6 +407,13 @@ func get_best_player() -> PlayerCard:
 func average_overall() -> int:
 	return SquadOptimizer.squad_overall(formation, slot_assignment, all_cards)
 
+## What to call the player on screen -- their own name wherever a screen would
+## otherwise say "You". The fallback is only for a profile that hasn't loaded:
+## signed out, or a local test match.
+func display_name_or_you() -> String:
+	return display_name if display_name != "" else tr("You")
+
+
 func set_display_name(new_name: String) -> Dictionary:
 	var res: Dictionary = await Backend.call_endpoint(
 		HTTPClient.METHOD_POST, "/account/display_name", {"display_name": new_name}

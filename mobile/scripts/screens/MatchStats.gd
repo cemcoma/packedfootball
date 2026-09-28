@@ -90,7 +90,7 @@ func _ready() -> void:
 	var opp_score: int = score[1] if score.size() == 2 else 0
 	var opponent_name: String = MatchSession.opponent_display_name if MatchSession.opponent_display_name != "" else tr("Opponent")
 	_title_label.text = tr("Match Statistics   %d - %d") % [my_score, opp_score]
-	_home_header.text = tr("You")
+	_home_header.text = GameProfile.display_name_or_you()
 	_away_header.text = opponent_name
 
 	_populate_list(MatchSession.TEAM_HOME, _home_list)
@@ -127,6 +127,9 @@ func _populate_list(team: int, into: VBoxContainer) -> void:
 		var position: String = position_raw if position_raw is String else "--"
 
 		var button := Button.new()
+		# PASS, not the STOP a Button defaults to: a STOP node under the finger
+		# swallows the touch and the ScrollContainer never sees the drag.
+		button.mouse_filter = Control.MOUSE_FILTER_PASS
 		button.custom_minimum_size = Vector2(0, 30)
 		button.toggle_mode = true
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -173,7 +176,9 @@ func _refresh_detail() -> void:
 	var tier: String = tier_raw if tier_raw is String else ""
 
 	_detail_name.text = MatchSession.player_name(_selected_index)
-	var side := tr("You") if _selected_index < MatchSession.PLAYERS_PER_TEAM else _away_header.text
+	# Both sides read off the headers, so the two places a side is named can't
+	# disagree about what to call it.
+	var side := _home_header.text if _selected_index < MatchSession.PLAYERS_PER_TEAM else _away_header.text
 	_detail_sub.text = "%s  -  %s  -  %s" % [position, PlayerCard.tier_label(tier), side]
 
 	if _show_career:

@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" path="res://scenes/components/CurrencyAmount.tscn" id="2"]
 
 [node name="DealView" type="PanelContainer"]
+mouse_filter = 1
 custom_minimum_size = Vector2(200, 250)
 layout_mode = 2
 script = ExtResource("1")
@@ -60,6 +61,7 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 11
 
 [node name="Spacer" type="Control" parent="Margin/VBox"]
+mouse_filter = 2
 layout_mode = 2
 size_flags_vertical = 3
 
@@ -70,6 +72,7 @@ layout_mode = 2
 autowrap_mode = 2
 
 [node name="RedeemButton" type="Button" parent="Margin/VBox"]
+mouse_filter = 1
 unique_name_in_owner = true
 layout_mode = 2
 text = "Redeem"

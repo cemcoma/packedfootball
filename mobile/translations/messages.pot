@@ -1001,7 +1001,7 @@ msgid "Draw"
 msgstr ""
 msgid "You Lost"
 msgstr ""
-msgid "You %d - %d %s"
+msgid "%s %d - %d %s"
 msgstr ""
 msgid "Match stats unavailable for this match."
 msgstr ""
@@ -1348,4 +1348,190 @@ msgstr ""
 msgid "GK"
 msgstr ""
 msgid "Sell %d of these for %s credits?\n\nThis cannot be undone."
+msgstr ""
+
+# -------- Minigames hub & daily shootout
+
+msgid "Minigames"
+msgstr ""
+
+msgid "A reward every day. Play one, come back tomorrow for a bigger one."
+msgstr ""
+
+msgid "MINIGAMES"
+msgstr ""
+
+msgid "One play a day, every day. The reward grows the longer the run -- miss a day and it starts over."
+msgstr ""
+
+msgid "Shootout"
+msgstr ""
+
+msgid "Free Kicks"
+msgstr ""
+
+msgid "Beat the wall and the keeper from range."
+msgstr ""
+
+msgid "Keepy-Uppy"
+msgstr ""
+
+msgid "One touch at a time, for as long as you last."
+msgstr ""
+
+msgid "Couldn't reach the shootout -- try again."
+msgstr ""
+
+msgid "Shootout in progress -- pick up where you left off."
+msgstr ""
+
+msgid "Played today. Day %d of %d unlocks in %s."
+msgstr ""
+
+msgid "Day %d of %d"
+msgstr ""
+
+msgid " · Prestige %d"
+msgstr ""
+
+msgid " · %s to win, %s to play"
+msgstr ""
+
+msgid " · Finish the cycle for a bonus"
+msgstr ""
+
+msgid "a moment"
+msgstr ""
+
+msgid "%dh %dm"
+msgstr ""
+
+msgid "You've played today's shootout. Come back after the reset."
+msgstr ""
+
+msgid "Today's shootout is done. Watch an ad to try again, or come back tomorrow."
+msgstr ""
+
+msgid "Couldn't start the shootout -- try again."
+msgstr ""
+
+msgid "That kick didn't go through -- try again."
+msgstr ""
+
+msgid "Setting up..."
+msgstr ""
+
+msgid "Pick your corner"
+msgstr ""
+
+msgid "Guess which way they dive"
+msgstr ""
+
+msgid "Left"
+msgstr ""
+
+msgid "Middle"
+msgstr ""
+
+msgid "Right"
+msgstr ""
+
+msgid "First kick"
+msgstr ""
+
+msgid "Scored!"
+msgstr ""
+
+msgid "They scored."
+msgstr ""
+
+msgid "Keeper got it."
+msgstr ""
+
+msgid "Wide!"
+msgstr ""
+
+msgid "They missed."
+msgstr ""
+
+msgid "Not today"
+msgstr ""
+
+msgid "You won!"
+msgstr ""
+
+msgid "You lost"
+msgstr ""
+
+msgid "No reward this time."
+msgstr ""
+
+msgid "Cycle complete -- prestige %d!"
+msgstr ""
+
+msgid "Watch an ad for another life"
+msgstr ""
+
+msgid "Watch ad: +1 life"
+msgstr ""
+
+msgid "You've got another life -- tap Shootout to play."
+msgstr ""
+
+msgid "AIM"
+msgstr ""
+
+msgid "DIVE"
+msgstr ""
+
+msgid "YOU SHOOT"
+msgstr ""
+
+msgid "%s SHOOTS"
+msgstr ""
+
+msgid "YOUR AIM"
+msgstr ""
+
+msgid "YOUR DIVE"
+msgstr ""
+
+msgid "Dive to save it -- which way?"
+msgstr ""
+
+msgid "They"
+msgstr ""
+
+# -------- Shootout: kick-order picker -------------------------------------
+msgid "PICK YOUR PENALTY TAKERS"
+msgstr ""
+
+msgid "Tap a player on the right to add him to the kick order. Tap a pick on the left to take it back."
+msgstr ""
+
+msgid "KICK ORDER"
+msgstr ""
+
+msgid "SQUAD"
+msgstr ""
+
+msgid "PEN"
+msgstr ""
+
+msgid "Sudden death"
+msgstr ""
+
+msgid "Auto-select"
+msgstr ""
+
+msgid "Send"
+msgstr ""
+
+msgid "Couldn't load your squad -- go back and try again."
+msgstr ""
+
+msgid "All set -- send your order to start."
+msgstr ""
+
+msgid "%d of %d picked. Tap Auto-select to fill the rest, then Send."
 msgstr ""

@@ -34,6 +34,9 @@ def track_caps() -> dict[str, int]:
     return {
         "buck_track": len(config.AD_REWARD_PATH),
         "energy_track": config.AD_ENERGY_MAX,
+        # The daily shootout's retry. The cap IS the allowance: one ad, one
+        # extra attempt, refused here rather than by the shootout.
+        "shootout_retry": config.PENALTY_SHOOTOUT_AD_RETRIES_PER_DAY,
     }
 
 
@@ -110,7 +113,7 @@ def grant_in_tx(tx, user_path: str, track: str, now: datetime | None = None) -> 
             credits_remaining=updates["credits"],
             bucks_remaining=updates["bucks"],
         )
-    else:
+    elif track == "energy_track":
         current, anchor = energy_service.from_profile(profile, now)
         if current >= config.ENERGY_MAX:
             raise AdRewardRefused("energy already full")
@@ -120,6 +123,15 @@ def grant_in_tx(tx, user_path: str, track: str, now: datetime | None = None) -> 
             now.isoformat() if new_energy >= config.ENERGY_MAX else anchor.isoformat()
         )
         result.update(energy=new_energy)
+    elif track == "shootout_retry":
+        # The counter above IS the reward: it buys one more attempt at today's
+        # shootout, which /shootout/daily/start reads. Nothing else to pay, and
+        # nothing here has to know whether the player actually lost.
+        pass
+    else:
+        # Named in track_caps but with no rule here. This used to be the energy
+        # branch's `else`, so a new track silently paid energy.
+        raise AdRewardRefused(f"no grant rule for {track!r}")
 
     result["ad_counters"] = counters({**profile, **updates}, today)
     tx.set(user_path, updates, merge=True)

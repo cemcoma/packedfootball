@@ -252,6 +252,9 @@ const CELEBRATE_ROCK_SPEED := 1.10
 const CELEBRATE_STEP_SPEED := 2.20      # running on the spot
 const CELEBRATE_KNEEL_DROP := 0.14      # how much shorter a kneeling figure is (fraction of height)
 const CELEBRATE_WIDE_STANCE := 0.12     # extra spread per leg for a wide stance
+# POSE_DEJECTED: upper arms up past the ears, forearms folded over the hair.
+const DEJECTED_ARM_H := 0.46            # shoulder (CELEBRATE_ARM_Y) to the top of the head
+const DEJECTED_FOREARM_H := 0.08
 
 const LEGS_STAND := "stand"
 const LEGS_WIDE := "wide"
@@ -335,6 +338,8 @@ const POSE_KICK := "kick"
 const POSE_LUNGE := "lunge"
 const POSE_REACH := "reach"
 const POSE_CELEBRATE := "celebrate"
+## Hands on the head, standing still: a missed penalty.
+const POSE_DEJECTED := "dejected"
 
 ## Keeper gloves. Not from the appearance palette on purpose -- gloves are
 ## equipment, not a look you rolled, and white is what reads as "that one is
@@ -609,6 +614,9 @@ static func draw_into(
 					swing = sin(clock * CELEBRATE_STEP_SPEED) * RUN_SWING
 		# The held pose's sways run off the faster clock.
 		phase = clock
+	elif pose == POSE_DEJECTED:
+		arms = "head"
+		pose = POSE_IDLE
 
 	# An action (pose names an ACTIONS recipe, phase is seconds into it)
 	# becomes limb amplitudes, and the pose itself a plain stand. The old
@@ -679,7 +687,7 @@ static func draw_into(
 	_draw_torso(canvas, body, w, h, shirt, trim, pattern, lunge * TORSO_LUNGE_TILT, lean, detail)
 	# Arms under the head, except when the hand is ON the face.
 	var arm_lift := (kick + lunge) * float(motion.get("arm", 0.0))
-	if arms == "shush":
+	if arms in ["shush", "head"]:
 		_draw_head(canvas, body, w, h, skin, hair, appearance, facing, lean, detail)
 		_draw_arms(canvas, body, w, h, trim, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
 	else:
@@ -809,7 +817,7 @@ static func _draw_arms(
 	# "swing" is the ordinary run-cycle arms, driven by the leg swing
 	# draw_into computed for a LEGS_STEP celebration; every other arm pose
 	# is its own gesture. A throw or a dive borrows the raised arms.
-	if (pose == POSE_CELEBRATE and celebration_arms != "swing") or celebration_arms == "up":
+	if (pose == POSE_CELEBRATE and celebration_arms != "swing") or celebration_arms in ["up", "head"]:
 		_draw_celebrating_arms(canvas, feet, w, h, sleeve, hand, celebration_arms, lean, phase if pose == POSE_CELEBRATE else 0.0)
 		return
 
@@ -871,6 +879,14 @@ static func _draw_celebrating_arms(
 			for ax in [left_x - flare, right_x + flare]:
 				_rect(canvas, feet, w, h, ax, CELEBRATE_BACK_Y, arm_w, h * CELEBRATE_BACK_H, sleeve)
 				_rect(canvas, feet, w, h, ax, CELEBRATE_BACK_Y - HAND_H, arm_w, h * HAND_H, hand)
+		"head":
+			# Hands on the head (POSE_DEJECTED): both upper arms straight up,
+			# forearms folded in over the hair so the hands meet in the middle.
+			var top := CELEBRATE_ARM_Y + DEJECTED_ARM_H - DEJECTED_FOREARM_H
+			for ax in [left_x, right_x]:
+				_rect(canvas, feet, w, h, ax, CELEBRATE_ARM_Y, arm_w, h * DEJECTED_ARM_H, sleeve)
+			_rect(canvas, feet, w, h, left_x, top, right_x + arm_w - left_x, h * DEJECTED_FOREARM_H, sleeve)
+			_rect(canvas, feet, w, h, lean - arm_w, top, arm_w * 2.0, h * DEJECTED_FOREARM_H, hand)
 		"cradle":
 			# Forearms stacked across the front at waist height, one a
 			# little above the other, hands on opposite ends. The rocking

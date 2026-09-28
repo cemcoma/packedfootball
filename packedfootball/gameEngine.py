@@ -7,11 +7,15 @@ from typing import Final
 
 from replay import ActionType, ReplayRecorder
 from game_config import (  # noqa: F401
+    KEEPER_REACH,
     PENALTY_CERTAINTY_CAP,
+    PENALTY_KEEPER_DIVE_FRACTION,
     PENALTY_PLACEMENT_MIN,
     PENALTY_PLACEMENT_SPAN,
     PENALTY_SAVE_MIN,
     PENALTY_SAVE_SPAN,
+    PENALTY_SETUP_FRAMES,
+    PENALTY_SHOT_SPEED,
     PENALTY_SIDES,
     STAT_CEILING,
     pace_ability,
@@ -303,7 +307,6 @@ FOUL_MAX: Final = 0.36
 # restart. The buildup (backing off the ball, the run-up) is the replay's job:
 # holding the sim still for two seconds only made players twitch on screen.
 FREE_KICK_SETUP_FRAMES: Final = 10
-PENALTY_SETUP_FRAMES: Final = 10
 
 # Free kicks come in three shapes, measured from the goal being attacked.
 # Close and central is a shot; anywhere else in the final third is a cross;
@@ -329,13 +332,12 @@ FREE_KICK_TARGET_HEIGHT: Final = 1.2
 FREE_KICK_MAX_VZ: Final = 6.5
 WALL_DISTANCE: Final = 9.15
 WALL_PLAYERS: Final = 3
-PENALTY_SHOT_SPEED: Final = 26.0
 
-# Penalty scales live in game_config -- the shootout minigame reads them too.
+# Penalty scales, shot speed and keeper reach live in game_config -- the
+# shootout minigame reads them too.
 
 KEEPER_QUALITY_BASE: Final = 0.55        # save odds floor before attributes
 HARD_SHOT_SPEED: Final = 37.0            # ball speed counting as "hard" (observed max)
-KEEPER_REACH: Final = 6.2                # lateral units = a full-stretch dive
 SAVE_DIFFICULTY_SPEED_WEIGHT: Final = 0.5
 SAVE_DIFFICULTY_REACH_WEIGHT: Final = 0.5
 MAX_DIFFICULTY_PENALTY: Final = 0.5      # hardest shot halves the save chance
@@ -548,9 +550,9 @@ class game:
         self.heading[0:11] = [0.0, 1.0] 
         self.heading[11:22] = [0.0, -1.0] 
 
-        self.ball = np.array([35.0, 50.0, 0.0, 0.0, 0.0,],float) # (x,y,vx,vy,height)
-        # Vertical velocity, units/s. Engine-only: the replay records height.
-        self.ball_vz = 0.0
+        # (x, y, vx, vy, height, vz). vz is units/s and engine-only: the replay
+        # records height, not the velocity that got the ball there.
+        self.ball = np.array([35.0, 50.0, 0.0, 0.0, 0.0, 0.0], float)
         self.scores = [0, 0]
         self.last_goal_team = None
         self.post_hits = 0      # woodwork strikes, feeds stoppage time
@@ -673,7 +675,7 @@ class game:
             self.ball[0:2] = self.positions[self.ball_controller]
             self.ball[2:4] = self.velocity[self.ball_controller]
             self.ball[4] = 0.0
-            self.ball_vz = 0.0
+            self.ball[5] = 0.0
 
     def _pick_role_slot(self, team: int, preferred_roles: tuple, fallback_local_index: int) -> int:
         """Finds the first slot on `team` whose formation role matches, in
@@ -763,8 +765,7 @@ class game:
             self.kickoff_timer -= 1
             kickoff_player = self._kickoff_player_for_team()
             self.positions[kickoff_player] = np.array([35.0, 50.0], dtype=float)
-            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
-            self.ball_vz = 0.0
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0, 0.0]
             self.ball_controller = kickoff_player
             self._set_must_pass_for_player(kickoff_player)
             if self.kickoff_timer == 0:
@@ -809,15 +810,13 @@ class game:
         if restart_type == "kickoff":
             kickoff_player = self._kickoff_player_for_team(team)
             self.positions[kickoff_player] = np.array([35.0, 50.0], dtype=float)
-            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
-            self.ball_vz = 0.0
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0, 0.0]
             self.ball_controller = kickoff_player
             self._set_must_pass_for_player(kickoff_player)
             return
 
         if restart_type == "throw_in":
-            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
-            self.ball_vz = 0.0
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0, 0.0]
             self.ball_controller = -1
             return
 
@@ -869,13 +868,11 @@ class game:
             for p in d_box:
                 self.positions[p] = [35.0 + self.rng.uniform(-12, 12), defending_y + self.rng.uniform(-3, 3)]
 
-            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
-            self.ball_vz = 0.0
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0, 0.0]
             self.ball_controller = -1
             return
         if restart_type == "goal_kick":
-            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
-            self.ball_vz = 0.0
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0, 0.0]
             self.ball_controller = -1
             return
 
@@ -909,15 +906,13 @@ class game:
             self.kickoff_team = self.restart_team
             kickoff_player = self._kickoff_player_for_team(self.kickoff_team)
             self.positions[kickoff_player] = np.array([35.0, 50.0], dtype=float)
-            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0]
-            self.ball_vz = 0.0
+            self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0, 0.0]
             self.ball_controller = kickoff_player
             self._set_must_pass_for_player(kickoff_player)
             self.kickoff_timer = 30
         elif restart_type == "free_kick":
             spot = np.array([out_x, out_y if out_y is not None else 50.0], dtype=float)
-            self.ball[:] = [spot[0], spot[1], 0.0, 0.0, 0.0]
-            self.ball_vz = 0.0
+            self.ball[:] = [spot[0], spot[1], 0.0, 0.0, 0.0, 0.0]
             # Three different set pieces wearing one name -- see each setup.
             self.free_kick_kind = self._free_kick_kind(spot, self.restart_team)
             if self.free_kick_kind == "shooting":
@@ -949,8 +944,7 @@ class game:
         elif restart_type == "penalty":
             goal_y = PITCH_HEIGHT if self.restart_team == 0 else 0.0
             spot_y = goal_y - 11.0 if self.restart_team == 0 else 11.0
-            self.ball[:] = [PITCH_WIDTH / 2.0, spot_y, 0.0, 0.0, 0.0]
-            self.ball_vz = 0.0
+            self.ball[:] = [PITCH_WIDTH / 2.0, spot_y, 0.0, 0.0, 0.0, 0.0]
             taker = self._pick_role_slot(self.restart_team, ("ST", "CF", "CAM", "LW", "RW"), 9)
             self.restart_player = taker
             back = -1.5 if self.restart_team == 0 else 1.5
@@ -976,16 +970,14 @@ class game:
             corner_y = PITCH_HEIGHT if self.restart_team == 0 else 0.0
             
             self.positions[corner_player] = [corner_x, corner_y]
-            self.ball[:] = [corner_x, corner_y, 0.0, 0.0, 0.0]
-            self.ball_vz = 0.0
+            self.ball[:] = [corner_x, corner_y, 0.0, 0.0, 0.0, 0.0]
             self.ball_controller = corner_player
             self._set_must_pass_for_player(corner_player)
             
         elif restart_type == "goal_kick":
             keeper = 0 if self.restart_team == 0 else 11
             self.restart_player = keeper
-            self.ball[:] = [self.positions[keeper][0], self.positions[keeper][1], 0.0, 0.0, 0.0]
-            self.ball_vz = 0.0
+            self.ball[:] = [self.positions[keeper][0], self.positions[keeper][1], 0.0, 0.0, 0.0, 0.0]
             self.ball_controller = keeper
             self._set_must_pass_for_player(keeper)
         elif restart_type == "throw_in":
@@ -1002,8 +994,7 @@ class game:
 
             self._shift_shape_toward(throw_point, self.restart_team)
             self.positions[throw_player] = throw_point.copy()
-            self.ball[:] = [throw_x, throw_y, 0.0, 0.0, 0.0]
-            self.ball_vz = 0.0
+            self.ball[:] = [throw_x, throw_y, 0.0, 0.0, 0.0, 0.0]
             self.ball_controller = throw_player
             self._set_must_pass_for_player(throw_player)
             # Survives restart_timer expiring (which clears restart_type), so
@@ -1543,11 +1534,11 @@ class game:
         if self.ball_controller == -1:
             self.ball[0] += self.ball[2] * dt
             self.ball[1] += self.ball[3] * dt
-            self.ball_vz -= BALL_GRAVITY * dt
-            self.ball[4] += self.ball_vz * dt
+            self.ball[5] -= BALL_GRAVITY * dt
+            self.ball[4] += self.ball[5] * dt
             if self.ball[4] <= 0.0:
                 self.ball[4] = 0.0
-                self.ball_vz = 0.0
+                self.ball[5] = 0.0
 
             lofted = self.ball[4] > 0.0 and self.ball_event in LOFTED_EVENTS
             friction = (BALL_AIR_FRICTION if lofted else BALL_GROUND_FRICTION) ** dt
@@ -1560,7 +1551,7 @@ class game:
             self.ball[0:2] = self.positions[self.ball_controller]
             self.ball[2:4] = self.velocity[self.ball_controller]
             self.ball[4] = 0.0
-            self.ball_vz = 0.0
+            self.ball[5] = 0.0
 
         # Goal frame FIRST. A ball crossing the goal plane is a goal or a
         # rebound off the woodwork; either way the out-of-bounds branch below
@@ -1788,7 +1779,7 @@ class game:
                 self.ball[0:2] = self.positions[index]
                 self.ball[2:4] = self.velocity[index]
                 self.ball[4] = 0.0
-                self.ball_vz = 0.0
+                self.ball[5] = 0.0
                 self.visual_action[index] = "recieved_pass"
                 self.visual_action_timer[index] = 15
                 if self.replay:
@@ -1836,7 +1827,7 @@ class game:
             self.ball[0:2] = self.positions[index]
             self.ball[2:4] = self.velocity[index]
             self.ball[4] = 0.0
-            self.ball_vz = 0.0
+            self.ball[5] = 0.0
             if ball_height > 0.5:
                 self.velocity[index] *= 0.65
             return True
@@ -1878,7 +1869,7 @@ class game:
         self.ball[0:2] = self.positions[index]
         self.ball[2:4] = deflection * max(3.0, ball_speed * self.rng.uniform(0.5, 0.9))
         self.ball[4] = max(0.0, ball_height * 0.5)
-        self.ball_vz = 0.0
+        self.ball[5] = 0.0
         self.velocity[index] *= 0.4
 
         if _norm2(self.ball[2:4]) <= max(2.0, self.all_players[index].attributes.speed * 0.12):
@@ -1890,7 +1881,7 @@ class game:
             self.ball[0:2] = self.positions[index]
             self.ball[2:4] = self.velocity[index]
             self.ball[4] = 0.0
-            self.ball_vz = 0.0
+            self.ball[5] = 0.0
             return True
         return False
 
@@ -1933,7 +1924,7 @@ class game:
             self.last_shot_player = index
             self._release_ball(index, unit, speed, aerial=True, event_type="shot")
             self.ball[4] = ball_height
-            self.ball_vz = self._launch_vz(ball_height, aim_z, self._flight_time(dist, speed))
+            self.ball[5] = self._launch_vz(ball_height, aim_z, self._flight_time(dist, speed))
             crossing = self.predict_goal_crossing(1 - team)
             self.last_shot_on_target = bool(crossing and crossing["on_target"])
         elif _norm2(own_goal - my_pos) <= HEADER_CLEAR_RANGE:
@@ -1949,7 +1940,7 @@ class game:
             speed = HEADER_CLEAR_SPEED[0] + (HEADER_CLEAR_SPEED[1] - HEADER_CLEAR_SPEED[0]) * skill
             self._release_ball(index, unit, speed, aerial=True, event_type="clearance")
             self.ball[4] = ball_height
-            self.ball_vz = self._launch_vz(ball_height, 0.0, 1.0 + 0.4 * skill)
+            self.ball[5] = self._launch_vz(ball_height, 0.0, 1.0 + 0.4 * skill)
         else:
             # Flick-on to the nearest teammate ahead, else straight on.
             teammates = self.positions[0:11] if team == 0 else self.positions[11:22]
@@ -1964,7 +1955,7 @@ class game:
             self.match_stats[index]["passes"] += 1
             self._release_ball(index, unit, HEADER_FLICK_SPEED, aerial=True, event_type="pass")
             self.ball[4] = ball_height
-            self.ball_vz = self._launch_vz(ball_height, 0.0, 0.5)
+            self.ball[5] = self._launch_vz(ball_height, 0.0, 0.5)
 
         self.velocity[index] *= 0.5
         self.visual_action[index] = "header"
@@ -2014,7 +2005,7 @@ class game:
         The single source of truth for "is this shot going in" -- the keeper's
         decision, the save roll and the shots-on-target stat all read it, so
         they can never disagree. Straight-line projection in the plane, with
-        the same vertical arc tick() integrates (ball_vz under BALL_GRAVITY);
+        the same vertical arc tick() integrates (ball[5] under BALL_GRAVITY);
         the ball has no curve, so this is exact rather than an approximation.
         """
         goal_y = 0.0 if defending_team == 0 else PITCH_HEIGHT
@@ -2029,7 +2020,7 @@ class game:
             return None
 
         cross_x = float(self.ball[0]) + float(self.ball[2]) * time_to_line
-        cross_z = max(0.0, float(self.ball[4]) + self.ball_vz * time_to_line - 0.5 * BALL_GRAVITY * time_to_line ** 2)
+        cross_z = max(0.0, float(self.ball[4]) + self.ball[5] * time_to_line - 0.5 * BALL_GRAVITY * time_to_line ** 2)
 
         inner_min, inner_max = self.goal_frame_bounds()
         on_target = inner_min <= cross_x <= inner_max and cross_z < GOAL_HEIGHT
@@ -2107,7 +2098,7 @@ class game:
         # frame rather than sailing on through.
         if inner_min <= cross_x <= inner_max and cross_z < GOAL_HEIGHT + GOAL_POST_RADIUS * 2.0:
             self._rebound_off_frame(np.array([cross_x, plane_y]), np.array([0.0, inward]), plane_y)
-            self.ball_vz = -abs(self.ball_vz) * POST_REBOUND_DAMPING
+            self.ball[5] = -abs(self.ball[5]) * POST_REBOUND_DAMPING
             return "rebound"
 
         # Either post. A post is a vertical cylinder, so the normal runs from
@@ -2303,14 +2294,14 @@ class game:
             # its way down; a ball over their heads is kept off them by reach.
             self.ball_release_cooldown = 10 + int(min(15.0, launch_speed * 0.35))
             self.ball_release_team_cooldown = TEAMMATE_RELEASE_BLOCK_FRAMES
-            # A hop off the ground; lofted kicks overwrite ball_vz after this.
+            # A hop off the ground; lofted kicks overwrite ball[5] after this.
             self.ball[4] = 0.0
-            self.ball_vz = self._launch_vz(0.0, 0.0, 0.6)
+            self.ball[5] = self._launch_vz(0.0, 0.0, 0.6)
         else:
             self.ball_release_cooldown = 8 + int(min(8.0, launch_speed * 0.08))
             self.ball_release_team_cooldown = TEAMMATE_RELEASE_BLOCK_FRAMES
             self.ball[4] = 0.0
-            self.ball_vz = 0.0
+            self.ball[5] = 0.0
 
         self.ball[0:2] = self.positions[owner_index]
         self.ball[2:4] = direction * launch_speed
@@ -2445,7 +2436,7 @@ class game:
                 unit_vec = self._fuzz_pass_direction(index, unit_vec, pass_type)
                 self._release_ball(index, unit_vec, power, aerial=aerial, event_type=event_type)
                 if launch_vz is not None:
-                    self.ball_vz = launch_vz
+                    self.ball[5] = launch_vz
 
         elif action_type == "shoot":
             if self.ball_controller == index:
@@ -2470,7 +2461,7 @@ class game:
                 self.ball[2] = unit_xy[0] * shot_speed
                 self.ball[3] = unit_xy[1] * shot_speed
                 self.ball[4] = 0.0
-                self.ball_vz = launch_vz
+                self.ball[5] = launch_vz
                 crossing = self.predict_goal_crossing(1 if index < 11 else 0)
                 self.last_shot_on_target = bool(crossing and crossing["on_target"])
                 # The crossing above picks which of the two shot events this is.
@@ -2777,7 +2768,7 @@ class game:
         # _launch_vz answered with a lob: from 25 units it peaked at 5m against
         # a 2.5m bar, and every free kick outside ~18 units sailed over.
         flight = self._flight_time(_norm2(vec), FREE_KICK_SHOT_SPEED, friction=BALL_AIR_FRICTION)
-        self.ball_vz = min(
+        self.ball[5] = min(
             self._launch_vz(0.0, FREE_KICK_TARGET_HEIGHT, flight), FREE_KICK_MAX_VZ
         )
 
@@ -2827,7 +2818,8 @@ class game:
         self.save_attempted_shot[keeper] = self.active_shot_id
 
         self.positions[keeper] = np.array(
-            [PITCH_WIDTH / 2.0 + dive * KEEPER_REACH * 0.7, goal_y], dtype=float
+            [PITCH_WIDTH / 2.0 + dive * KEEPER_REACH * PENALTY_KEEPER_DIVE_FRACTION, goal_y],
+            dtype=float,
         )
         if scored:
             # Committed the wrong way, or read it and still beaten: either way
@@ -2978,7 +2970,7 @@ class game:
             self.ball[0:2] = self.positions[index]
             self.ball[2:4] = self.velocity[index]
             self.ball[4] = 0.0
-            self.ball_vz = 0.0
+            self.ball[5] = 0.0
 
             self.velocity[index] = np.zeros(2, dtype=float)
             self.player_stun_cooldown[index] = 6  # Faster recovery for catching safely
@@ -3005,7 +2997,7 @@ class game:
             self.ball[0:2] = self.positions[index]
             self.ball[2:4] = deflect_dir * max(6.0, ball_speed * 0.7)
             self.ball[4] = max(0.5, float(self.ball[4]))
-            self.ball_vz = self.rng.uniform(2.0, 6.0)
+            self.ball[5] = self.rng.uniform(2.0, 6.0)
 
             self.velocity[index] = np.zeros(2, dtype=float)
             self.player_stun_cooldown[index] = 30  # Longer recovery for diving
@@ -3277,7 +3269,7 @@ class game:
                 "ball_pos": ball_pos,
                 "ball_velocity": ball_velocity,
                 "ball_height": ball_height,
-                "ball_vz": self.ball_vz,
+                "ball_vz": float(self.ball[5]),
                 "my_pos": self.positions[i],
                 "my_velocity": self.velocity[i],
                 "my_heading": self.heading[i],

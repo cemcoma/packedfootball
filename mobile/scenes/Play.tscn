@@ -78,6 +78,15 @@ accent_key = "medals"
 hero = true
 min_height = 130
 
+[node name="MinigamesTile" parent="Margin/RootVBox" unique_id=1950000200 instance=ExtResource("menutile")]
+unique_name_in_owner = true
+layout_mode = 2
+title_text = "Minigames"
+subtitle_text = "A reward every day. Play one, come back tomorrow for a bigger one."
+accent_key = "accent"
+hero = true
+min_height = 96
+
 [node name="Spacer3" type="Control" parent="Margin/RootVBox" unique_id=1931392042]
 layout_mode = 2
 size_flags_vertical = 3
