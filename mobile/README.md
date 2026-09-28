@@ -38,7 +38,7 @@ Fixed 960x540 viewport, landscape orientation, fixed-aspect stretch.
 5. Open `mobile/` as a project in **Godot 4.7** and run it.
 
 The app opens on Splash (resumes a saved session while the logo animates),
-then Auth (sign in / register) or straight to Menu.
+then Auth (Play Now as a guest / sign in) or straight to Menu.
 
 **Splash artwork** -- `sprites/splash/` is generated, not hand-edited. After
 changing `sprites/title.png` or `sprites/backgrounds/title_background.jpg`:
@@ -86,7 +86,7 @@ This is a gameplay test build, not a shipping target.
 
 | Scene | Script | What it does |
 | --- | --- | --- |
-| `Auth.tscn` | `Auth.gd` | Sign in / register / guest. Register also takes a manager name. |
+| `Auth.tscn` | `Auth.gd` | Play Now (anonymous guest) / sign in / password reset. Guests secure their account from Settings. |
 | `Menu.tscn` | `Menu.gd` | Navigation hub plus an account panel (name, squad overall, W/D/L) and currency chips. |
 | `Play.tscn` | `Play.gd` | Mode select: Quick Match and Tournament. |
 | `Match.tscn` | `MatchPlayback.gd` | Replay playback with a HUD. |

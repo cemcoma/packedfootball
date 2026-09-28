@@ -193,6 +193,19 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "Session"
 
+[node name="GuestHintLabel" type="Label" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/RightCol" unique_id=1658000401]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Playing as a guest"
+
+[node name="SecureAccountButton" type="Button" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/RightCol" unique_id=1658000402]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "Secure Account"
+
 [node name="LogoutButton" type="Button" parent="Margin/OuterVBox/CenterContainer/SettingsPanel/PanelMargin/Columns/RightCol" unique_id=1658000256]
 unique_name_in_owner = true
 layout_mode = 2
@@ -291,3 +304,119 @@ custom_minimum_size = Vector2(140, 40)
 layout_mode = 2
 disabled = true
 text = "Delete Forever"
+
+[node name="SecureOverlay" type="Control" parent="." unique_id=1658000410]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="SecureOverlay" unique_id=1658000411]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.7)
+
+[node name="Center" type="CenterContainer" parent="SecureOverlay" unique_id=1658000412]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="SecurePanel" type="PanelContainer" parent="SecureOverlay/Center" unique_id=1658000413]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(600, 0)
+layout_mode = 2
+
+[node name="PanelMargin" type="MarginContainer" parent="SecureOverlay/Center/SecurePanel" unique_id=1658000414]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 16
+
+[node name="SecureVBox" type="VBoxContainer" parent="SecureOverlay/Center/SecurePanel/PanelMargin" unique_id=1658000415]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="SecureTitleLabel" type="Label" parent="SecureOverlay/Center/SecurePanel/PanelMargin/SecureVBox" unique_id=1658000416]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Secure your account"
+horizontal_alignment = 1
+
+[node name="SecureHintLabel" type="Label" parent="SecureOverlay/Center/SecurePanel/PanelMargin/SecureVBox" unique_id=1658000417]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Add an email and password to keep this club on any device."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="LinkEmailField" type="LineEdit" parent="SecureOverlay/Center/SecurePanel/PanelMargin/SecureVBox" unique_id=1658000418]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+placeholder_text = "Email"
+
+[node name="LinkPasswordRow" type="HBoxContainer" parent="SecureOverlay/Center/SecurePanel/PanelMargin/SecureVBox" unique_id=1658000419]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="LinkPasswordField" type="LineEdit" parent="SecureOverlay/Center/SecurePanel/PanelMargin/SecureVBox/LinkPasswordRow" unique_id=1658000420]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Password"
+secret = true
+
+[node name="LinkConfirmField" type="LineEdit" parent="SecureOverlay/Center/SecurePanel/PanelMargin/SecureVBox/LinkPasswordRow" unique_id=1658000421]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Confirm password"
+secret = true
+
+[node name="ShowLinkPasswordButton" type="Button" parent="SecureOverlay/Center/SecurePanel/PanelMargin/SecureVBox/LinkPasswordRow" unique_id=1658000422]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 44)
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+text = "Show"
+
+[node name="SecureStatusLabel" type="Label" parent="SecureOverlay/Center/SecurePanel/PanelMargin/SecureVBox" unique_id=1658000423]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 16)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="SecureButtons" type="HBoxContainer" parent="SecureOverlay/Center/SecurePanel/PanelMargin/SecureVBox" unique_id=1658000424]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="SecureCancelButton" type="Button" parent="SecureOverlay/Center/SecurePanel/PanelMargin/SecureVBox/SecureButtons" unique_id=1658000425]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Cancel"
+
+[node name="SecureConfirmButton" type="Button" parent="SecureOverlay/Center/SecurePanel/PanelMargin/SecureVBox/SecureButtons" unique_id=1658000426]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+text = "Secure Account"

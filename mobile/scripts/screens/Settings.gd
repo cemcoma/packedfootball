@@ -13,6 +13,9 @@ extends Control
 ## taken, too short, bad characters. The status line under the field is
 ## where that lands.
 ##
+## A guest (anonymous account) gets Secure Account, which links an email and
+## password to the same uid; until then Log Out needs a second tap.
+##
 ## Delete Account is what App Store guideline 5.1.1(v) requires of any app
 ## with sign-up: the user has to be able to remove the account from inside
 ## the app. It is deliberately hard to hit by accident -- a flat button
@@ -51,6 +54,9 @@ const FONT_KEYS := ["pixel", "rounded"]
 ## fixed word is the same speed bump in every language.
 const DELETE_CONFIRM_WORD := "DELETE"
 
+## How long a guest's first Log Out tap stays armed.
+const LOGOUT_ARM_SEC := 5.0
+
 ## The store-facing pages, published next to the web build by `make
 ## deploy-web` from site/ at the repo root. App Store guideline 5.1.1 wants
 ## the privacy policy reachable from inside the app, not only from the
@@ -80,6 +86,18 @@ const SUPPORT_URL := "https://cemcoma.github.io/packedfootball/support/"
 @onready var _delete_confirm_button: Button = %DeleteConfirmButton
 @onready var _settings_panel: PanelContainer = %SettingsPanel
 @onready var _delete_panel: PanelContainer = %Panel
+@onready var _guest_hint_label: Label = %GuestHintLabel
+@onready var _secure_account_button: Button = %SecureAccountButton
+@onready var _secure_overlay: Control = %SecureOverlay
+@onready var _secure_panel: PanelContainer = %SecurePanel
+@onready var _secure_hint_label: Label = %SecureHintLabel
+@onready var _link_email_field: LineEdit = %LinkEmailField
+@onready var _link_password_field: LineEdit = %LinkPasswordField
+@onready var _link_confirm_field: LineEdit = %LinkConfirmField
+@onready var _show_link_password_button: Button = %ShowLinkPasswordButton
+@onready var _secure_status_label: Label = %SecureStatusLabel
+@onready var _secure_cancel_button: Button = %SecureCancelButton
+@onready var _secure_confirm_button: Button = %SecureConfirmButton
 @onready var _section_headers: Array[Label] = [
 	%AccountHeader, %DisplayHeader, %LinksHeader, %SessionHeader,
 ]
@@ -88,6 +106,7 @@ const SUPPORT_URL := "https://cemcoma.github.io/packedfootball/support/"
 const DANGER_ON_LIGHT := Color(0.70, 0.13, 0.10)
 
 var _busy: bool = false
+var _logout_armed: bool = false
 
 
 func _ready() -> void:
@@ -103,12 +122,17 @@ func _ready() -> void:
 	_delete_cancel_button.pressed.connect(_on_delete_cancel_pressed)
 	_delete_confirm_button.pressed.connect(_on_delete_confirm_pressed)
 	_delete_field.text_changed.connect(_on_delete_field_changed)
+	_setup_secure_form()
+	KeyboardDock.attach($DeleteConfirmOverlay/Center)
+	KeyboardDock.attach($SecureOverlay/Center)
 
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
 	_apply_theme_colors()
 
 	_name_field.text = GameProfile.display_name
 	_delete_overlay.visible = false
+	_secure_overlay.visible = false
+	_refresh_guest_ui()
 
 	# Index order follows LocaleManager.codes().
 	for code in LocaleManager.codes():
@@ -160,6 +184,11 @@ func _apply_theme_colors() -> void:
 	)
 	_delete_account_button.add_theme_color_override("font_color", danger)
 	_delete_footnote.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+	_guest_hint_label.add_theme_color_override("font_color", ThemeManager.color("warning"))
+	_secure_hint_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
+	_secure_panel.add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("accent"), 3, true)
+	)
 
 	# The form sits on the tiles' frame instead of straight on the background
 	# photo, where every control had to fight the crowd behind it.
@@ -219,13 +248,117 @@ func _on_back_pressed() -> void:
 
 
 func _on_logout_pressed() -> void:
-	# The only way back to the login screen: boot always tries a silent
-	# resume first, so without this a device with a saved session can never
-	# reach Auth again to register or switch accounts (see main.py's own
-	# Log Out button for the same reasoning).
+	if _busy:
+		return
+	# A guest has no email to sign back in with, so the first tap only warns.
+	if FirebaseAuth.is_guest and not _logout_armed:
+		_logout_armed = true
+		_logout_button.text = tr("Log Out Anyway")
+		_set_status(tr("Guest account: logging out deletes this club and its purchases for good. Secure it first to keep it."))
+		get_tree().create_timer(LOGOUT_ARM_SEC).timeout.connect(_disarm_logout)
+		return
+	# Nobody can reach a guest's club once it's signed out, so it's deleted
+	# rather than left on leaderboards and holding its name.
+	if FirebaseAuth.is_guest:
+		_busy = true
+		_logout_button.disabled = true
+		_set_status(tr("Deleting..."))
+		var ok: bool = await GameProfile.delete_account()
+		_busy = false
+		_logout_button.disabled = false
+		if not ok:
+			_disarm_logout()
+			_set_status(tr("Could not delete the account -- try again."))
+			return
+	_leave_to_auth()
+
+
+## Drops the session and returns to Auth. Boot always tries a silent resume
+## first, so this is the only way back there to switch accounts.
+func _leave_to_auth() -> void:
 	FirebaseAuth.sign_out()
 	GameProfile.reset()
 	get_tree().change_scene_to_file("res://scenes/Auth.tscn")
+
+
+func _disarm_logout() -> void:
+	_logout_armed = false
+	_logout_button.text = tr("Log Out / Switch Account")
+
+
+func _refresh_guest_ui() -> void:
+	_guest_hint_label.visible = FirebaseAuth.is_guest
+	_secure_account_button.visible = FirebaseAuth.is_guest
+
+
+# -- secure account -------------------------------------------------------------
+
+
+func _setup_secure_form() -> void:
+	_secure_account_button.pressed.connect(_on_secure_account_pressed)
+	_secure_cancel_button.pressed.connect(_on_secure_cancel_pressed)
+	_secure_confirm_button.pressed.connect(_on_secure_confirm_pressed)
+	_show_link_password_button.toggled.connect(_on_show_link_password_toggled)
+	_link_email_field.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_EMAIL_ADDRESS
+	_link_password_field.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_PASSWORD
+	_link_confirm_field.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_PASSWORD
+	_link_email_field.text_submitted.connect(func(_t): _link_password_field.grab_focus())
+	_link_password_field.text_submitted.connect(func(_t): _link_confirm_field.grab_focus())
+	_link_confirm_field.text_submitted.connect(func(_t): _on_secure_confirm_pressed())
+
+
+func _on_secure_account_pressed() -> void:
+	for field in [_link_email_field, _link_password_field, _link_confirm_field]:
+		field.text = ""
+	_secure_status_label.text = ""
+	_secure_overlay.visible = true
+	_link_email_field.grab_focus()
+
+
+func _on_secure_cancel_pressed() -> void:
+	if _busy:
+		return
+	get_viewport().gui_release_focus()
+	_secure_overlay.visible = false
+
+
+## One toggle for both fields: the same secret typed twice.
+func _on_show_link_password_toggled(shown: bool) -> void:
+	_link_password_field.secret = not shown
+	_link_confirm_field.secret = not shown
+	_show_link_password_button.text = tr("Hide") if shown else tr("Show")
+
+
+func _on_secure_confirm_pressed() -> void:
+	if _busy:
+		return
+	get_viewport().gui_release_focus()
+	var email := _link_email_field.text.strip_edges()
+	var problem := FirebaseAuth.credentials_problem(email, _link_password_field.text)
+	if problem == "" and _link_confirm_field.text != _link_password_field.text:
+		problem = tr("Passwords do not match.")
+	if problem != "":
+		_secure_status_label.text = problem
+		return
+
+	_set_secure_busy(true)
+	_secure_status_label.text = tr("Securing your account...")
+	var res: Dictionary = await FirebaseAuth.link_email(email, _link_password_field.text)
+	_set_secure_busy(false)
+	if not res.ok:
+		_secure_status_label.text = res.error
+		return
+	_secure_overlay.visible = false
+	_refresh_guest_ui()
+	_set_status(tr("Account secured. Sign in with %s on any device.") % email, true)
+
+
+func _set_secure_busy(busy: bool) -> void:
+	_busy = busy
+	for field in [_link_email_field, _link_password_field, _link_confirm_field]:
+		field.editable = not busy
+	_secure_cancel_button.disabled = busy
+	_secure_confirm_button.disabled = busy
 
 
 # -- delete account -------------------------------------------------------------
@@ -268,9 +401,6 @@ func _on_delete_confirm_pressed() -> void:
 		_set_status(tr("Could not delete the account -- try again."))
 		return
 
-	# Gone server-side; drop the session the same way Log Out does. The
-	# saved refresh token would otherwise let the next launch try to
-	# resume an account that no longer exists.
-	FirebaseAuth.sign_out()
-	GameProfile.reset()
-	get_tree().change_scene_to_file("res://scenes/Auth.tscn")
+	# Gone server-side; the saved refresh token would otherwise let the next
+	# launch try to resume an account that no longer exists.
+	_leave_to_auth()

@@ -422,21 +422,12 @@ func set_display_name(new_name: String) -> Dictionary:
 		display_name = str(res.data.get("display_name", new_name))
 	return res
 
-func check_display_name(new_name: String) -> Dictionary:
-	var res: Dictionary = await Backend.call_endpoint(
-		HTTPClient.METHOD_GET, "/account/name_available?display_name=" + new_name.uri_encode()
-	)
-	if not res.ok:
-		return {"available": true, "reason": ""}
-	return {"available": bool(res.data.get("available", true)), "reason": str(res.data.get("reason", ""))}
-
 func delete_account() -> bool:
 	var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_DELETE, "/account")
 	return res.ok
 
 
-## The wording for a refused name, from the backend's reason code -- one
-## place, since both the registration form and Settings show it.
+## The wording for a refused name, from the backend's reason code.
 static func display_name_problem(reason: String) -> String:
 	match reason:
 		"taken":

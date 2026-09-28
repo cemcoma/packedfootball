@@ -33,26 +33,62 @@ layout_mode = 2
 theme_override_constants/separation = 12
 
 [node name="titleTexture" type="TextureRect" parent="CenterContainer/VBoxContainer" unique_id=77850285]
-custom_minimum_size = Vector2(300, 170)
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 148)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
 texture = ExtResource("3_xv86k")
 expand_mode = 1
 
+[node name="LandingPanelActual" type="PanelContainer" parent="CenterContainer/VBoxContainer" unique_id=1360042201]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_styles/panel = ExtResource("4_cmkj7")
+
+[node name="LandingPanel" type="VBoxContainer" parent="CenterContainer/VBoxContainer/LandingPanelActual" unique_id=1360042202]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="PlayNowButton" type="Button" parent="CenterContainer/VBoxContainer/LandingPanelActual/LandingPanel" unique_id=1360042203]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 52)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 20
+text = "Play Now"
+
+[node name="HaveAccountButton" type="Button" parent="CenterContainer/VBoxContainer/LandingPanelActual/LandingPanel" unique_id=1360042204]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 44)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "I Have an Account"
+
+[node name="LandingHintLabel" type="Label" parent="CenterContainer/VBoxContainer/LandingPanelActual/LandingPanel" unique_id=1360042205]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
+theme_override_font_sizes/font_size = 12
+text = "Your club is saved on this phone. Secure it in Settings to play on other devices."
+horizontal_alignment = 1
+autowrap_mode = 2
+
 [node name="PanelSignActual" type="PanelContainer" parent="CenterContainer/VBoxContainer" unique_id=1217740627]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 theme_override_styles/panel = ExtResource("4_cmkj7")
 
 [node name="SignInPanel" type="VBoxContainer" parent="CenterContainer/VBoxContainer/PanelSignActual" unique_id=1895767963]
-unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 12
 
 [node name="EmailField" type="LineEdit" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel" unique_id=1190867701]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 0)
+custom_minimum_size = Vector2(300, 44)
 layout_mode = 2
 size_flags_horizontal = 4
 placeholder_text = "Email"
@@ -65,6 +101,7 @@ theme_override_constants/separation = 6
 
 [node name="PasswordField" type="LineEdit" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel/PasswordRow" unique_id=1526269496]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "Password"
@@ -72,14 +109,11 @@ secret = true
 
 [node name="ShowPasswordButton" type="Button" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel/PasswordRow" unique_id=1526269501]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(64, 0)
+custom_minimum_size = Vector2(64, 44)
 layout_mode = 2
+focus_mode = 0
 toggle_mode = true
 text = "Show"
-
-[node name="SpacerSign" type="Control" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel" unique_id=1942721573]
-custom_minimum_size = Vector2(0, 10)
-layout_mode = 2
 
 [node name="ButtonRow" type="HBoxContainer" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel" unique_id=369270470]
 layout_mode = 2
@@ -93,15 +127,15 @@ custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 text = "Sign In"
 
-[node name="ShowRegisterButton" type="Button" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel/ButtonRow" unique_id=1225551461]
+[node name="BackFromSignInButton" type="Button" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel/ButtonRow" unique_id=1225551461]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
-text = "Register"
+text = "Back"
 
 [node name="ForgotPasswordButton" type="Button" parent="CenterContainer/VBoxContainer/PanelSignActual/SignInPanel" unique_id=1342631550]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 32)
+custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
 size_flags_horizontal = 4
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -111,86 +145,6 @@ theme_override_font_sizes/font_size = 13
 text = "Forgot password?"
 flat = true
 
-[node name="RegisterPanelActual" type="PanelContainer" parent="CenterContainer/VBoxContainer" unique_id=1231795789]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_override_styles/panel = ExtResource("4_cmkj7")
-
-[node name="RegisterPanel" type="VBoxContainer" parent="CenterContainer/VBoxContainer/RegisterPanelActual" unique_id=363502048]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="RegisterHintLabel" type="Label" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel" unique_id=508521106]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
-theme_override_font_sizes/font_size = 12
-text = "Create a manager account"
-horizontal_alignment = 1
-autowrap_mode = 2
-
-[node name="DisplayNameField" type="LineEdit" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel" unique_id=1589369783]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 0)
-layout_mode = 2
-size_flags_horizontal = 4
-placeholder_text = "Manager name"
-
-[node name="RegisterEmailField" type="LineEdit" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel" unique_id=1025260188]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 0)
-layout_mode = 2
-size_flags_horizontal = 4
-placeholder_text = "Email"
-
-[node name="RegisterPasswordRow" type="HBoxContainer" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel" unique_id=2050492650]
-custom_minimum_size = Vector2(300, 0)
-layout_mode = 2
-size_flags_horizontal = 4
-theme_override_constants/separation = 6
-
-[node name="RegisterPasswordField" type="LineEdit" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel/RegisterPasswordRow" unique_id=2050492644]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-placeholder_text = "Password"
-secret = true
-
-[node name="ShowRegisterPasswordButton" type="Button" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel/RegisterPasswordRow" unique_id=2050492651]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(64, 0)
-layout_mode = 2
-toggle_mode = true
-text = "Show"
-
-[node name="RegisterConfirmPasswordField" type="LineEdit" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel" unique_id=2050492645]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 0)
-layout_mode = 2
-size_flags_horizontal = 4
-placeholder_text = "Confirm password"
-secret = true
-
-[node name="RegisterButtonRow" type="HBoxContainer" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel" unique_id=1375750417]
-layout_mode = 2
-size_flags_horizontal = 4
-theme_override_constants/separation = 12
-alignment = 1
-
-[node name="CreateAccountButton" type="Button" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel/RegisterButtonRow" unique_id=408670809]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-text = "Create Account"
-
-[node name="BackToSignInButton" type="Button" parent="CenterContainer/VBoxContainer/RegisterPanelActual/RegisterPanel/RegisterButtonRow" unique_id=461958947]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-text = "Back"
-
 [node name="ResetPanelActual" type="PanelContainer" parent="CenterContainer/VBoxContainer" unique_id=1940000100]
 unique_name_in_owner = true
 visible = false
@@ -198,13 +152,13 @@ layout_mode = 2
 theme_override_styles/panel = ExtResource("4_cmkj7")
 
 [node name="ResetPanel" type="VBoxContainer" parent="CenterContainer/VBoxContainer/ResetPanelActual" unique_id=1940000101]
-unique_name_in_owner = true
-visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
 [node name="ResetHintLabel" type="Label" parent="CenterContainer/VBoxContainer/ResetPanelActual/ResetPanel" unique_id=1940000102]
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
+size_flags_horizontal = 4
 theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
 theme_override_font_sizes/font_size = 12
 text = "Enter your email and we'll send you a link to reset your password."
@@ -213,7 +167,7 @@ autowrap_mode = 2
 
 [node name="ResetEmailField" type="LineEdit" parent="CenterContainer/VBoxContainer/ResetPanelActual/ResetPanel" unique_id=1940000103]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 0)
+custom_minimum_size = Vector2(300, 44)
 layout_mode = 2
 size_flags_horizontal = 4
 placeholder_text = "Email"
@@ -236,19 +190,32 @@ custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 text = "Back"
 
-[node name="Control" type="Control" parent="CenterContainer/VBoxContainer" unique_id=1280548356]
-custom_minimum_size = Vector2(0, 10)
+[node name="StatusSlot" type="Control" parent="CenterContainer/VBoxContainer" unique_id=1280548356]
+custom_minimum_size = Vector2(0, 80)
 layout_mode = 2
+mouse_filter = 2
 
-[node name="WorkingSpinner" parent="CenterContainer/VBoxContainer" unique_id=1280548400 instance=ExtResource("5_spinner")]
+[node name="StatusLabel" type="Label" parent="CenterContainer/VBoxContainer/StatusSlot" unique_id=551010979]
 unique_name_in_owner = true
-visible = false
-custom_minimum_size = Vector2(56, 56)
-layout_mode = 2
-
-[node name="StatusLabel" type="Label" parent="CenterContainer/VBoxContainer" unique_id=551010979]
-unique_name_in_owner = true
-layout_mode = 2
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+grow_horizontal = 2
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 14
 horizontal_alignment = 1
 autowrap_mode = 2
+
+[node name="WorkingSpinner" parent="CenterContainer/VBoxContainer/StatusSlot" unique_id=1280548400 instance=ExtResource("5_spinner")]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(40, 40)
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -20.0
+offset_top = 36.0
+offset_right = 20.0
+offset_bottom = 76.0
+grow_horizontal = 2

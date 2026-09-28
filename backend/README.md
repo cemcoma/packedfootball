@@ -107,7 +107,7 @@ Credentials automatically -- no key file.
 | --- | --- |
 | `GET /health` | Liveness check. |
 | `POST /account/bootstrap` | The one call a sign-in makes. Idempotent: creates the profile plus an 11-card bronze starter roster on a uid's first ever call, then always answers with `profile`, `roster` (cards in lineup order), `inventory` (bench cards with their `doc_id`), `inventory_cap` and `energy`, so the client never fetches cards one by one. |
-| `GET /account/name_available` | Unauthenticated. Whether `?display_name=` passes the rules and is free -- the registration form asks before creating the Auth user. Advisory only. |
+| `GET /account/name_available` | Unauthenticated. Whether `?display_name=` passes the rules and is free -- no current client calls it (guests start as `uid[:8]` and rename in Settings). Advisory only. |
 | `POST /account/display_name` | Renames the manager, uniquely: reserves `display_names/{key}` in the same transaction as the name. 400 with a reason code, 409 when taken. |
 | `POST /claim` | One door for every reward that is earned silently and paid on a tap. Body `{"type": ...}` plus what the type needs; today `tournament_full_day` and `tournament_full_week` (optional `period_id` + `group_id`, default the caller's current entry in that format). Pays once, returns `rewards` and every `*_remaining` balance. |
 | `DELETE /account` | Deletes the account: profile, inventory, every owned card, games it started, its name reservation, its seat in an unsettled tournament group, then the Firebase Auth user (last, so a failed attempt can be retried). Keeps `iap_transactions` and games it only played in as the opponent. Backfill old accounts' name reservations with `scripts/sync_display_names.py`. |
@@ -291,8 +291,8 @@ Display names are **unique**, case- and spacing-insensitive
 (`services/account.py`): `display_names/{key}` reservations are written in
 the same transaction as the name, and `firestore.rules` no longer lets the
 client write `display_name` directly, so nothing can skip the reservation.
-`GET /account/name_available` lets the registration form ask before the
-Auth user exists.
+`GET /account/name_available` answers the same check without an account;
+no current client calls it.
 
 `DELETE /account` is what App Store guideline 5.1.1(v) requires. It removes
 the profile, inventory pointers, every owned `players/{id}`, games the

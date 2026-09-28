@@ -19,7 +19,7 @@ const SECURE_TOKEN_URL := "https://securetoken.googleapis.com/v1/token"
 const SESSION_PATH := "user://session.json"
 
 ## Firebase's own minimum -- signUp rejects anything shorter with
-## WEAK_PASSWORD. Checked client-side too (see Auth.gd) so the obvious case
+## WEAK_PASSWORD. Checked client-side too (see credentials_problem) so the obvious case
 ## never costs a round trip.
 const MIN_PASSWORD_LENGTH := 6
 
@@ -46,11 +46,19 @@ const ERROR_MESSAGES := {
 	"TOO_MANY_ATTEMPTS_TRY_LATER": "Too many attempts -- please wait a bit and try again.",
 	"RESET_PASSWORD_EXCEED_LIMIT": "Too many reset emails sent -- please wait a bit and try again.",
 	"OPERATION_NOT_ALLOWED": "Email sign-in isn't enabled for this app.",
+	"ADMIN_ONLY_OPERATION": "Guest play isn't enabled for this app.",
+	"INVALID_ID_TOKEN": "Your session expired. Restart the app and try again.",
+	"TOKEN_EXPIRED": "Your session expired. Restart the app and try again.",
+	"CREDENTIAL_TOO_OLD_LOGIN_AGAIN": "Your session expired. Restart the app and try again.",
 }
 
 var uid: String = ""
 var id_token: String = ""
 var refresh_token: String = ""
+
+## An anonymous account: no email yet, so it only lives on this device until
+## link_email() secures it. Read from the ID token, so it survives a resume.
+var is_guest: bool = false
 
 ## True once try_resume_session() has run this launch (Splash does it first).
 var resume_attempted: bool = false
@@ -141,11 +149,58 @@ func _apply_auth_payload(data: Dictionary) -> void:
 	id_token = data.get("idToken", "")
 	refresh_token = data.get("refreshToken", "")
 	uid = data.get("localId", "")
+	is_guest = _token_is_anonymous(id_token)
 
 
-func register_with_email(email: String, password: String) -> Dictionary:
+## The ID token is a JWT; its payload names the sign-in provider.
+static func _token_is_anonymous(token: String) -> bool:
+	var parts := token.split(".")
+	if parts.size() < 2:
+		return false
+	var b64 := parts[1].replace("-", "+").replace("_", "/")
+	b64 += "=".repeat((4 - b64.length() % 4) % 4)
+	var claims = JSON.parse_string(Marshalls.base64_to_raw(b64).get_string_from_utf8())
+	if not (claims is Dictionary) or not (claims.get("firebase") is Dictionary):
+		return false
+	return claims["firebase"].get("sign_in_provider", "") == "anonymous"
+
+
+## The checks that don't need Firebase to answer. Returns the message to show,
+## or "" when the pair is worth sending.
+static func credentials_problem(email: String, password: String) -> String:
+	if email.strip_edges() == "":
+		return TranslationServer.translate("Please enter your email.")
+	if password == "":
+		return TranslationServer.translate("Please enter your password.")
+	if password.length() < MIN_PASSWORD_LENGTH:
+		return TranslationServer.translate("Password must be at least %d characters.") % MIN_PASSWORD_LENGTH
+	return ""
+
+
+## A new anonymous account: signUp with no email or password.
+func sign_in_as_guest() -> Dictionary:
 	var url := "%s:signUp?key=%s" % [IDENTITY_TOOLKIT_URL, FirebaseConfig.FIREBASE_API_KEY]
-	var res := await _post_json(url, {"email": email, "password": password, "returnSecureToken": true})
+	var res := await _post_json(url, {"returnSecureToken": true})
+	if not res.ok:
+		return res
+	_apply_auth_payload(res.data)
+	_persist_refresh_token()
+	return {"ok": true, "uid": uid}
+
+
+## Adds an email/password to the signed-in guest. The uid stays the same, so
+## everything already saved under it carries over.
+##
+## signUp with an idToken is how Firebase's own SDKs link a password;
+## accounts:update refuses to set an email while enumeration protection is on.
+func link_email(email: String, password: String) -> Dictionary:
+	# Linking needs a live ID token, and ours may be over an hour old.
+	if not await _refresh_id_token():
+		return {"ok": false, "error": TranslationServer.translate("Can't reach the server. Check your internet connection.")}
+	var url := "%s:signUp?key=%s" % [IDENTITY_TOOLKIT_URL, FirebaseConfig.FIREBASE_API_KEY]
+	var res := await _post_json(
+		url, {"idToken": id_token, "email": email, "password": password, "returnSecureToken": true}
+	)
 	if not res.ok:
 		return res
 	_apply_auth_payload(res.data)
@@ -202,6 +257,7 @@ func _refresh_id_token() -> bool:
 	id_token = data.get("id_token", "")
 	refresh_token = data.get("refresh_token", "")
 	uid = data.get("user_id", "")
+	is_guest = _token_is_anonymous(id_token)
 	if id_token == "":
 		return false
 	_persist_refresh_token()
@@ -212,6 +268,7 @@ func sign_out() -> void:
 	uid = ""
 	id_token = ""
 	refresh_token = ""
+	is_guest = false
 	_clear_persisted_refresh_token()
 
 
