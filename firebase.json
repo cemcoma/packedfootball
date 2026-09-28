@@ -2,5 +2,12 @@
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "firebase-hosting",
+    "ignore": ["**/.*"],
+    "redirects": [
+      {"source": "/", "destination": "https://cemcoma.github.io/packedfootball/", "type": 301}
+    ]
   }
 }

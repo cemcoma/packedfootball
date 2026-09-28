@@ -74,7 +74,7 @@ def validate_formation_positions(profile: dict) -> None:
     client lied about its roster/formation pairing.
 
     Called for both sides BEFORE anything about this match gets written to
-    Firestore (see /match/simulate) -- a rejected request leaves no trace at
+    Firestore -- a rejected request leaves no trace at
     all: no games/{id} doc created, and this never touches either user's
     own saved roster/formation.
     """
@@ -86,8 +86,8 @@ def validate_formation_positions(profile: dict) -> None:
 
 
 def run_match(caller_profile: dict, opponent_profile: dict, seed: int) -> dict:
-    """Runs one simulated match and returns everything both /match/simulate
-    and /match/quick need for their HTTP response: the score, the base64
+    """Runs one simulated match and returns everything the match endpoints
+    need for their HTTP response: the score, the base64
     replay (see packedfootball/replay.py's ReplayRecorder), and every
     player from both sides serialized in the exact index order
     gameEngine.game.all_players uses (caller's 11, then opponent's 11) --
@@ -139,7 +139,7 @@ def teams_snapshot(uid: str, caller_profile: dict, opponent_uid: str, opponent_p
     (legitimately, or from tampering) look different by the time anyone
     checks afterwards, so this is the actual record of what was played,
     independent of whatever either account's cards look like now. Shared
-    by both /match/simulate and /match/quick so a dispute or bug gets
+    by every match mode so a dispute or bug gets
     investigated against the same shape regardless of which mode it was.
     """
     return {
@@ -266,7 +266,7 @@ async def pick_opponent_from_candidates(
 
     The user document is read with get_document rather than
     load_or_create_profile, which would CREATE a profile for a uid that
-    doesn't have one -- the same trap /match/simulate guards against.
+    doesn't have one.
 
     `max_attempts` bounds the worst case; None means "try them all", which is
     what Quick Match wants since its candidate list is already filtered.

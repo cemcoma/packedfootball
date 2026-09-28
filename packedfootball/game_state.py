@@ -137,7 +137,9 @@ class GameState:
 
     async def _load_player(self, player_id: str):
         fields = await self.client.get_document(f"players/{player_id}")
-        if fields is None:
+        # roster_player_ids and inventory pointers are client-writable, so a card
+        # this account doesn't own is treated as missing.
+        if fields is None or fields.get("owner_uid") != self.client.uid:
             return None
         p = self._to_player(fields)
         p.player_id = player_id
@@ -150,6 +152,8 @@ class GameState:
         round trip's latency -- which is why /account/bootstrap hands the
         client its squad from here instead of letting it fetch card by card.
         """
+        # Deduped too: the same card listed eleven times is not eleven players.
+        player_ids = list(dict.fromkeys(player_ids))
         players = await asyncio.gather(*(self._load_player(pid) for pid in player_ids))
         return [p for p in players if p is not None]
 

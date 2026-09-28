@@ -7,7 +7,7 @@ extends Node
 ## change_scene_to_file(), so something has to hold it in between.
 ##
 ## MatchPlayback.gd checks has_pending() on _ready(): true means play THIS
-## match (decoded from a real /match/quick or /match/simulate response);
+## match (decoded from a real /match/quick response);
 ## false means fall back to the bundled local test replay, same as before
 ## this existed -- so the offline demo path (no backend, no signed-in
 ## account needed) keeps working unchanged.
@@ -90,7 +90,7 @@ func has_match_stats() -> bool:
 	return player_match_stats.size() == PLAYERS_PER_TEAM * 2
 
 
-## `data` is a /match/quick (or /match/simulate) response body verbatim --
+## `data` is a /match/quick response body verbatim --
 ## must have at least "replay" (base64 string) and "roster" (Array of
 ## player-field Dictionaries, 22 entries, caller's 11 then opponent's 11 --
 ## see backend/main.py's _run_match). Silently leaves has_pending() false

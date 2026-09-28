@@ -306,7 +306,7 @@ PACK_DATABASE = {
         "sprite_key":"StandardPack1"
     },
     "promo_testers": {
-        "active": True,
+        "active": False,
         "order": 95,
         "name": "Test Pack",
         "type": "timed",

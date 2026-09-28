@@ -82,7 +82,7 @@ static func _to_signed16(value: int) -> int:
 
 
 ## For a replay that arrived over the network (backend/main.py's
-## /match/quick or /match/simulate, base64-decoded by the caller) rather
+## /match/quick, base64-decoded by the caller) rather
 ## than a local file. Godot has no "parse a binary format straight out of
 ## a PackedByteArray" reader with the same get_8()/get_16()/get_32() API
 ## FileAccess offers, so this writes the bytes to a scratch file in the

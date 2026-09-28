@@ -49,6 +49,10 @@ SITE_DIR   := site
 PORT       ?= 8060
 BRANCH     := gh-pages
 PAGES_URL  := https://cemcoma.github.io/packedfootball/
+# Firebase Hosting serves only firebase-hosting/ (app-ads.txt): AdMob reads it
+# from a domain root, and GitHub Pages only gives us a subfolder.
+FIREBASE_PROJECT := packedfootball
+HOSTING_URL      := https://packedfootball.web.app/
 
 PYTHON  ?= python3
 PYTEST  := $(PYTHON) -m pytest
@@ -57,7 +61,7 @@ SEEDS   ?= 8
 SEED    ?= 1
 
 .PHONY: test test-fast test-slow test-gap test-tiers test-one test-k sim tiers \
-        ladder items godot-check web serve-web deploy-web clean-web
+        ladder items godot-check web serve-web deploy-web deploy-ads clean-web
 
 ## Everything. Config (testpaths, sys.path) comes from pytest.ini.
 test:
@@ -143,7 +147,7 @@ serve-web: web
 
 ## Build, then publish $(BUILD_WEB) -- the game and the site/ pages -- to
 ## the gh-pages branch without touching your current branch or working
-## tree (uses a throwaway git worktree).
+## tree (uses a throwaway git worktree). Also pushes app-ads.txt to Firebase.
 deploy-web: web
 	@set -e; \
 	tmp=$$(mktemp -d); \
@@ -167,6 +171,12 @@ deploy-web: web
 	fi; \
 	cd - >/dev/null; \
 	git worktree remove --force "$$tmp"
+	@$(MAKE) --no-print-directory deploy-ads
+
+## Publish firebase-hosting/ (just app-ads.txt) to Firebase Hosting. No build.
+deploy-ads:
+	firebase deploy --only hosting --project $(FIREBASE_PROJECT)
+	@echo "Deployed: $(HOSTING_URL)app-ads.txt"
 
 clean-web:
 	rm -rf $(MOBILE_DIR)/build

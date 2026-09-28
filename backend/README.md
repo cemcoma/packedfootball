@@ -66,8 +66,17 @@ gcloud run deploy packedfootball-backend \
   --region europe-west3 \
   --allow-unauthenticated \
   --max-instances 3 \
-  --cpu-boost \
-  --env-vars-file backend/.env
+  --cpu-boost
+```
+
+The deploy passes no env flags on purpose: `--set-env-vars` and
+`--env-vars-file` replace the service's whole variable set, which is how the
+webhook secrets were once wiped. Set or change a secret on its own, and every
+later deploy keeps it:
+
+```sh
+gcloud run services update packedfootball-backend --region europe-west3 \
+  --update-env-vars REVENUECAT_WEBHOOK_SECRET=...,TOURNAMENT_ADMIN_SECRET=...
 ```
 
 Deploy to the same region as your Firestore database. `gcloud builds
@@ -128,7 +137,6 @@ Credentials automatically -- no key file.
 | `GET /leaderboard/users` | Ranks `users/{uid}` by `wins`, same paging; entries carry `wins`/`draws`/`losses` and `is_me`. |
 | `GET /manager/{uid}` | Another manager as everyone may see them: name, record, tournament tier, kit, and their XI in formation order. What a leaderboard row opens. 404 for an unknown uid, never creates a profile. |
 | `POST /match/quick` | Finds an opponent (real account or bot), spends energy, simulates, rewards, persists. |
-| `POST /match/simulate` | Ranked challenge against a named `opponent_uid`. |
 | `POST /match/report` | Files a bug report against a match the caller played: `game_id`, a `category` from `MATCH_REPORT_CATEGORIES`, optional text. One `match_reports/{game_id}_{uid}` doc per player per match, carrying the game's seed and engine version; the rosters as played are already on `games/{id}.teams`, so the match can be re-run exactly. Triage with `scripts/list_match_reports.py`. |
 | `GET /tournament/today` | Everything the tournament screen needs in one response; settles any overdue day first and carries yesterday's result in `pending_results`. |
 | `POST /tournament/join` | Joins today's group in the caller's tier. Refused in the last hour of the day. |

@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .DS_Store
+.firebase/
 mobile/scripts/config/FirebaseConfig.gd
 mobile/scripts/config/RevenueCatConfig.gd
 mobile/addons/
