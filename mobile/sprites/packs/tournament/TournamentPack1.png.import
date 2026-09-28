@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://jy6t3g5ql7ky"
-path="res://.godot/imported/StandardPack1.png-ccb90af3dcb0a96a778fc85dd9a79856.ctex"
+uid="uid://8npeoyglayo1"
+path="res://.godot/imported/TournamentPack1.png-85b09348a030357879c8e3df715fab97.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/packs/StandardPack1.png"
-dest_files=["res://.godot/imported/StandardPack1.png-ccb90af3dcb0a96a778fc85dd9a79856.ctex"]
+source_file="res://sprites/packs/tournament/TournamentPack1.png"
+dest_files=["res://.godot/imported/TournamentPack1.png-85b09348a030357879c8e3df715fab97.ctex"]
 
 [params]
 

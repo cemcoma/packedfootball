@@ -23,6 +23,9 @@ so "what's on sale right now" is answerable without a redeploy.
 The deals catalog (deal_database.py) has the same relationship with its
 own Firestore collection. Tier keys are game_config.TIER_RANGES'; position
 keys are game_config.POSITION_CATEGORIES'.
+
+sprite_key names the art at mobile/sprites/packs/<type>/<sprite_key>.png;
+missing art falls back to standard/StandardPack1.
 """
 
 import datetime
@@ -91,7 +94,7 @@ PACK_DATABASE = {
         "rates": {"silver": 0.35, "gold": 0.63, "platinum": 0.02},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits",
-        "sprite_key":"StandardPack1"
+        "sprite_key":"StandardGold"
     },
     "standard_plat": {
         "active": True,
@@ -106,7 +109,7 @@ PACK_DATABASE = {
         "rates": {"gold": 0.45, "platinum": 0.53, "diamond": 0.02},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits",
-        "sprite_key":"StandardPack1"
+        "sprite_key":"StandardPlatinum"
     },
     
     # RETIRED. A guaranteed icon for credits was ~10 days of grinding, which is
@@ -123,7 +126,7 @@ PACK_DATABASE = {
         "rates": {"silver": 0.30, "gold": 0.55, "platinum": 0.15},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"medals",
-        "sprite_key":"TorunamentPack1"
+        "sprite_key":"TournamentPack1"
     },
     "tournament_medium": {
         "active": True,
@@ -154,6 +157,55 @@ PACK_DATABASE = {
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"medals",
         "sprite_key":"TournamentPack2"
+    },
+    # The premium storefront: bucks only. Each headline card (slot 0) is never
+    # below the pack's name; premium_diamond is the only one selling specials.
+    "premium_gold": {
+        "active": True,
+        "order": 10,
+        "name": "Gold Premium Pack",
+        "type": "premium",
+        "description": "Two golds or better and a piece of kit, with a real shot at a platinum.",
+        "price": 5,
+        "cards_per_pack": 2,
+        "items_per_pack": 1,
+        "item_rates": {"silver": 0.20, "gold": 0.50, "platinum": 0.30},
+        "rates": {"gold": 0.75, "platinum": 0.22, "diamond": 0.03},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"bucks",
+        "sprite_key":"PremiumPack1"
+    },
+    "premium_plat": {
+        "active": True,
+        "order": 20,
+        "name": "Platinum Premium Pack",
+        "type": "premium",
+        "description": "Three players and two pieces of kit. The headline card is a platinum or better, with a big shot at a diamond.",
+        "price": 20,
+        "cards_per_pack": 3,
+        "items_per_pack": 2,
+        "item_rates": {"gold": 0.30, "platinum": 0.45, "diamond": 0.25},
+        "rates": {"gold": 0.30, "platinum": 0.65, "diamond": 0.05},
+        "slot_rates": {"0": {"platinum": 0.60, "diamond": 0.40}},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"bucks",
+        "sprite_key":"PremiumPack1"
+    },
+    "premium_diamond": {
+        "active": True,
+        "order": 30,
+        "name": "Diamond Premium Pack",
+        "type": "premium",
+        "description": "Three players and two pieces of kit. The headline card is a diamond at worst -- and one in five is a SPECIAL.",
+        "price": 30,
+        "cards_per_pack": 3,
+        "items_per_pack": 2,
+        "item_rates": {"platinum": 0.45, "diamond": 0.45, "special": 0.10},
+        "rates": {"gold": 0.20, "platinum": 0.70, "diamond": 0.10},
+        "slot_rates": {"0": {"diamond": 0.80, "special": 0.20}},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "price_currency":"bucks",
+        "sprite_key":"PremiumPack1"
     },
     "promo_champions": {
         "active": False,
@@ -218,7 +270,7 @@ PACK_DATABASE = {
         "item_rates": {"gold": 0.40, "platinum": 0.40, "diamond": 0.20},
         "items_per_pack": 2,
         "price_currency":"credits",
-        "sprite_key":"StandardPack1"
+        "sprite_key":"StandardDiamond"
     },
     # Items only, no cards. The recurring sink: socketing is one-way, so
     # every upgrade destroys the item it replaces and a squad is never
@@ -313,6 +365,7 @@ PACK_DATABASE = {
 # the client never learns the rules.
 PACK_TYPES = {
     "standard": 10,
+    "premium": 15,
     "tournament": 20,
     "special": 30,
     "timed": 40,

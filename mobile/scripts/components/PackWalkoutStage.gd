@@ -16,7 +16,7 @@ extends Control
 ## shape when none of them exist. Slots: aura, rays, beam, spark.
 
 const EFFECT_DIR := "res://sprites/effects"
-const FALLBACK_PACK := "res://sprites/packs/StandardPack1.png"
+const FALLBACK_PACK := PackData.FALLBACK_TEXTURE
 
 ## Per tier FAMILY: how long the buildup runs, how hard the pack shakes at
 ## the end of it, how strong the god-rays are (0 = none) and how many

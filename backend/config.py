@@ -344,9 +344,9 @@ TOURNAMENT_MIN_GROUP_FOR_PROMOTION = 3
 
 TOURNAMENT_REWARD_MIN_MATCHES = 1
 
-# The medal is here rather than only on the podium because medals are now the
-# only route to a special (tournament_premium sells a 5% chance at one), and a
-# currency that only the top four of a group ever see is not a route.
+# The medal is here rather than only on the podium because medals are the free
+# route to a special (tournament_premium sells a 5% chance at one; the bucks
+# route is premium_diamond), and a currency only the top four ever see is not a route.
 #
 # Playing every one of the day's matches pays this, on top of placement --
 # but only when CLAIMED (POST /claim, type "tournament_full_day"), so the

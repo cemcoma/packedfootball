@@ -20,22 +20,19 @@ extends PanelContainer
 signal pressed  ## the pack itself was tapped -- see Shop.gd, which opens the buy confirmation.
 signal info_pressed  ## "i" button tapped -- see Shop.gd, which opens PackInfoPopup for this pack.
 
-## How faded a pack draws when it can't be bought right now (not on sale
-## yet, sold out, can't afford it, no room). Still tappable -- see above.
-const UNAVAILABLE_ALPHA := 0.55
-
 @onready var _name_label: Label = %NameLabel
 @onready var _cards_label: Label = %CardsLabel
 @onready var _limited_label: Label = %LimitedLabel
 @onready var _price_amount: CurrencyAmount = %PriceAmount
 @onready var _price_panel: PanelContainer = %PricePanel
-@onready var _tag_label: Label = %TagLabel
+@onready var _status_bar: PanelContainer = %StatusBar
+@onready var _status_label: Label = %StatusLabel
 @onready var _tap_button: Button = %TapButton
 @onready var _info_button: Button = %InfoButton
 @onready var _pack_texture: TextureRect = %PackTexture
 
 var _pack: PackData = null
-var _affordable: bool = true
+var _shortfall: String = ""
 
 
 func _ready() -> void:
@@ -83,24 +80,25 @@ func _restyle() -> void:
 		"panel",
 		MenuTile.pixel_frame(MenuTile.BASE_FILL.lightened(0.06), accent, 2, false, Vector2(4, 2))
 	)
+	var warning := ThemeManager.color("warning")
+	_status_bar.add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, warning, 2, true, Vector2(4, 6))
+	)
+	_status_label.add_theme_color_override("font_color", warning)
 
 
-func set_affordable(can_afford: bool) -> void:
-	_affordable = can_afford
+## Why the player can't open this pack right now ("Not enough cash", "Bench
+## full"), or "" when they can -- see Shop.gd's _shortfall_for.
+func set_shortfall(reason: String) -> void:
+	_shortfall = reason
 	_refresh_state()
 
 
-## Single source of truth for how the box reads, since both set_pack()
-## (pack just loaded/changed) and set_affordable() (balance changed, pack
-## unchanged) need to re-derive it. "Unavailable" always wins over "can't
-## afford" -- a teased pack shows its tag regardless of whether the player
-## could otherwise afford it. Neither state disables the tap: the
-## confirmation popup is where the reason is spelled out.
+## An unbuyable pack wears a bar across its art saying why; "unavailable"
+## wins over a shortfall. The tap stays live: the buy popup spells it out.
 func _refresh_state() -> void:
 	if _pack == null:
 		return
-	_tag_label.visible = not _pack.available
-	if not _pack.available:
-		_tag_label.text = _pack.tag_text()
-	var buyable := _pack.available and _affordable
-	_pack_texture.modulate.a = 1.0 if buyable else UNAVAILABLE_ALPHA
+	var reason := _pack.tag_text() if not _pack.available else _shortfall
+	_status_label.text = reason
+	_status_bar.visible = reason != ""

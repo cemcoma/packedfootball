@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cw8vr0qytgoyu" path="res://scripts/components/PackView.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/CurrencyAmount.tscn" id="2"]
-[ext_resource type="Texture2D" uid="uid://jy6t3g5ql7ky" path="res://sprites/packs/StandardPack1.png" id="2_4opi3"]
+[ext_resource type="Texture2D" uid="uid://jy6t3g5ql7ky" path="res://sprites/packs/standard/StandardPack1.png" id="2_4opi3"]
 [ext_resource type="Texture2D" uid="uid://i6v2g4col8ei" path="res://sprites/icons/info_icon.png" id="4_mp5dl"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_84nhg"]
@@ -68,20 +68,31 @@ mouse_filter = 2
 layout_mode = 2
 size_flags_vertical = 3
 
+[node name="StatusBar" type="PanelContainer" parent="Layout/PackArtRatio/Overlay" unique_id=906613517]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 2
+
+[node name="StatusLabel" type="Label" parent="Layout/PackArtRatio/Overlay/StatusBar" unique_id=1340277958]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Not enough cash"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="SpacerMid" type="Control" parent="Layout/PackArtRatio/Overlay" unique_id=1873402215]
+mouse_filter = 2
+layout_mode = 2
+size_flags_vertical = 3
+
 [node name="LimitedLabel" type="Label" parent="Layout/PackArtRatio/Overlay" unique_id=2129620869]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 horizontal_alignment = 1
-
-[node name="TagLabel" type="Label" parent="Layout/PackArtRatio/Overlay" unique_id=2044178063]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.7, 0.3, 1)
-theme_override_font_sizes/font_size = 12
-horizontal_alignment = 1
-autowrap_mode = 2
 
 [node name="CardsLabel" type="Label" parent="Layout/PackArtRatio/Overlay" unique_id=1352483796]
 unique_name_in_owner = true

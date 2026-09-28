@@ -163,6 +163,20 @@ def test_slot_rates_survive_numeric_keys():
     assert number_tiers == text_tiers, f"numeric keys rolled {number_tiers}, text keys {text_tiers}"
 
 
+def test_the_premium_storefront_is_bucks_only_and_one_pack_sells_specials():
+    premium = {slug: cfg for slug, cfg in PACK_DATABASE.items() if cfg.get("type") == "premium"}
+    assert premium, "no premium packs in the catalog"
+    for slug, cfg in premium.items():
+        assert cfg.get("price_currency") == "bucks", f"{slug} is not priced in bucks"
+    sells_specials = {
+        slug
+        for slug, cfg in premium.items()
+        for table in [cfg["rates"], *(cfg.get("slot_rates") or {}).values()]
+        if any(tier_family(tier) == "special" for tier in table)
+    }
+    assert sells_specials == {"premium_diamond"}, sells_specials
+
+
 def test_every_guarantee_names_a_real_tier():
 
     for slug, cfg in PACK_DATABASE.items():

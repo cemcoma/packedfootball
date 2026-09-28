@@ -296,15 +296,23 @@ func _populate_packs_grid() -> void:
 		var view: PackView = PACK_VIEW_SCENE.instantiate()
 		_packs_grid.add_child(view)
 		view.set_pack(typed_pack)
-		view.set_affordable(
-			_balance_for(typed_pack.price_currency) >= typed_pack.price and _has_room_for(typed_pack)
-		)
+		view.set_shortfall(_shortfall_for(typed_pack))
 		view.pressed.connect(_open_buy_confirm.bind(typed_pack))
 		view.info_pressed.connect(_on_info_pressed.bind(typed_pack))
 
 
 func _on_info_pressed(pack: PackData) -> void:
 	_info_popup.open_for(pack)
+
+
+## The short reason on a pack's bar, "" when it can be opened. Same order as
+## the buy popup's footnote: bench space before balance.
+func _shortfall_for(pack: PackData) -> String:
+	if not _has_room_for(pack):
+		return tr("Bench full")
+	if _balance_for(pack.price_currency) < pack.price:
+		return tr("Not enough %s") % CurrencyDisplay.lowercase_label_for(pack.price_currency)
+	return ""
 
 
 # -- buy confirmation ---------------------------------------------------------

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dgfwrddhoueon"
-path="res://.godot/imported/CONFPack.png-1da3aab7a4112e5b2d131b3af7f78759.ctex"
+uid="uid://bnfgrud4gdhtx"
+path="res://.godot/imported/CHAMPPack.png-123a95db60b8bc8d35d7999a47366356.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/packs/CONFPack.png"
-dest_files=["res://.godot/imported/CONFPack.png-1da3aab7a4112e5b2d131b3af7f78759.ctex"]
+source_file="res://sprites/packs/timed/CHAMPPack.png"
+dest_files=["res://.godot/imported/CHAMPPack.png-123a95db60b8bc8d35d7999a47366356.ctex"]
 
 [params]
 

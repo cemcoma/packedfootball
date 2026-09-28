@@ -426,7 +426,7 @@ Firestore and are never written by a deploy:
 
 **Storefront order.** Categories are ordered by `pack_types/{type}.order`
 -- one small doc per value a pack's `type` takes (`standard`, `tournament`,
-`special`, `timed`). `seed_packs.py` creates the missing ones from
+`special`, `timed`, `equipment`, `premium`). `seed_packs.py` creates the missing ones from
 `pack_database.PACK_TYPES`; after that the doc is the truth and reordering
 is a console edit, never a deploy (a sync never touches it). Within a type
 packs sort by their own `order`, then id. A type with no doc is not hidden:

@@ -165,14 +165,14 @@ func tag_text() -> String:
 		return unavailable_reason
 	return TranslationServer.translate("Not available")
 
+## Pack art lives at res://sprites/packs/<type>/<sprite_key>.png; missing art
+## falls back to the standard pack.
+const FALLBACK_TEXTURE := "res://sprites/packs/standard/StandardPack1.png"
+
+
 func get_texture() -> Texture2D:
 	if sprite_key != "":
-		var specific_path := "res://sprites/packs/%s.png" % sprite_key
-		if ResourceLoader.exists(specific_path):
-			return load(specific_path)
-
-	var type_path := "res://sprites/packs/%s.png" % type.to_lower()
-	if ResourceLoader.exists(type_path):
-		return load(type_path)
-
-	return load("res://sprites/packs/StandardPack1.png")
+		var path := "res://sprites/packs/%s/%s.png" % [type.to_lower(), sprite_key]
+		if ResourceLoader.exists(path):
+			return load(path)
+	return load(FALLBACK_TEXTURE)
