@@ -29,6 +29,7 @@ enum ActionType {
 	SAVE_FAILED = 20,
 	FREE_KICK_SHOT = 21,
 	THROW_TAKEN = 22,
+	BLOCK = 23,
 }
 
 const POSITION_SCALE := 100.0

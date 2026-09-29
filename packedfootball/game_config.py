@@ -104,6 +104,49 @@ PENALTY_KEEPER_DIVE_FRACTION: Final = 0.7
 
 
 # =============================================================================
+# Direct free kicks
+# =============================================================================
+#
+# Physics, not a roll: read by gameEngine and the free-kick minigame through
+# free_kick.py. Pairs are (at ability 0, at ability 1). Tune against
+# scripts/free_kick_report.py (`make fk-report`).
+WALL_DISTANCE: Final = 9.15
+WALL_PLAYERS: Final = 3
+FREE_KICK_SHOT_SPEED: Final = (24.0, 31.0)   # units/s, from power
+# Side spin turns the ball FK_MAGNUS_SIDE rad/s per unit; top spin adds
+# FK_MAGNUS_TOP * speed of downward pull. Spin fades to FK_SPIN_DECAY a second.
+FK_MAGNUS_SIDE: Final = 0.25
+FK_MAGNUS_TOP: Final = 0.50
+FK_SPIN_DECAY: Final = 0.7
+FK_SIDE_SPIN: Final = (0.6, 1.0)
+FK_TOP_SPIN: Final = (0.6, 1.0)
+# Where the AI aims: this far inside the post, at this height.
+FK_AIM_INSET: Final = 0.9
+FK_AIM_HEIGHT_OVER: Final = 1.7
+FK_AIM_HEIGHT_AROUND: Final = 1.1
+# Execution error at technique 0, scaled down by (1 - ability).
+FK_AIM_ERROR_DEG: Final = 15.0
+FK_LIFT_ERROR: Final = 3.5
+FK_SPIN_ERROR: Final = 0.5
+# Off his line to deal with a ball into the box: further the likelier that
+# is (gameEngine._fk_pass_chance, 0 -> 1). A shot can go over him from there.
+FK_KEEPER_OFF_LINE: Final = (2.5, 5.0)
+# The keeper reads it this long after he can see it past the wall (his eyes at
+# FK_KEEPER_EYE_HEIGHT), then moves across at his dive speed.
+FK_KEEPER_REACTION: Final = (0.40, 0.18)
+FK_KEEPER_REACTION_JITTER: Final = 0.05
+FK_KEEPER_EYE_HEIGHT: Final = 1.7
+FK_KEEPER_DIVE_SPEED: Final = (4.0, 8.0)
+FK_KEEPER_ARM_REACH: Final = 1.5
+FK_KEEPER_CATCH_REACH: Final = 0.7
+FK_CATCH_SPEED: Final = (18.0, 28.0)         # hardest ball he holds, from handling
+FK_BODY_RADIUS: Final = 0.45
+FK_BODY_RESTITUTION: Final = 0.3
+FK_PARRY_RESTITUTION: Final = 0.35
+FK_FLIGHT_MAX_FRAMES: Final = 150
+
+
+# =============================================================================
 # Positions
 # =============================================================================
 

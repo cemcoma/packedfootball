@@ -67,6 +67,7 @@ class ActionType(IntEnum):
     SAVE_FAILED = 20
     FREE_KICK_SHOT = 21
     THROW_TAKEN = 22
+    BLOCK = 23          # a free kick meeting a body (gameEngine._fk_flight_tick)
 
 
 def _q(value: float) -> int:

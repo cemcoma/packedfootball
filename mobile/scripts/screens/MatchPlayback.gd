@@ -129,8 +129,9 @@ const EVENT_ACTIONS := {
 	ReplayReader.ActionType.ANKLEBREAKER: "tackle",
 	ReplayReader.ActionType.FOUL: "tackle",
 	ReplayReader.ActionType.FREE_KICK: "pass",
-	ReplayReader.ActionType.FREE_KICK_SHOT: "shoot",
+	# No FREE_KICK_SHOT: the strike is its own SHOOT event, so he kicks once.
 	ReplayReader.ActionType.PENALTY: "shoot",
+	ReplayReader.ActionType.BLOCK: "header",   # placeholder until a block pose exists
 	# Beaten: he goes down and stays down, with a red shadow under him.
 	ReplayReader.ActionType.SAVE_FAILED: "dive",
 	ReplayReader.ActionType.SAVE: "dive",
@@ -999,7 +1000,7 @@ func _process_events(current_tick: float) -> void:
 			ball_flash_color = _action_color(event_type)
 		if TRAIL_ACTIONS.has(event_type):
 			_start_trail(event_type, float(event["tick"]))
-		elif event_type == ReplayReader.ActionType.SAVE:
+		elif event_type in [ReplayReader.ActionType.SAVE, ReplayReader.ActionType.BLOCK]:
 			_stop_trail()  # the shot is dealt with; what's lit fades out
 
 		if event_type == ReplayReader.ActionType.GOAL:

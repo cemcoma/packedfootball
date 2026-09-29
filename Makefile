@@ -20,6 +20,7 @@
 #   make tiers SEEDS=16         a bigger sample
 #   make ladder                 how often the WORSE side wins, tier vs tier
 #   make items         what a kit is worth; does the ladder survive it
+#   make fk-report     what a direct free kick turns into, taker v keeper tier
 #   make godot-check   load every script/scene items touched, headless
 #
 # `sim` is the calibration harness, not a test: it prints shots, shots on
@@ -59,9 +60,10 @@ PYTEST  := $(PYTHON) -m pytest
 MATCHES ?= 10
 SEEDS   ?= 8
 SEED    ?= 1
+KICKS   ?= 200
 
 .PHONY: test test-fast test-slow test-gap test-tiers test-one test-k sim tiers \
-        ladder items godot-check web serve-web deploy-web deploy-ads clean-web
+        ladder items fk-report godot-check web serve-web deploy-web deploy-ads clean-web
 
 ## Everything. Config (testpaths, sys.path) comes from pytest.ini.
 test:
@@ -111,6 +113,11 @@ ladder:
 ## gold. Run this after ANY change to item values, slots or the stat curve.
 items:
 	$(PYTHON) packedfootball/scripts/item_report.py --seeds $(SEEDS)
+
+## Direct free kicks are flown, not rolled: this is what the FK_* constants in
+## game_config are tuned against.
+fk-report:
+	$(PYTHON) packedfootball/scripts/free_kick_report.py --kicks $(KICKS)
 
 ## Load every script and scene items touched, headless. Not a test runner --
 ## it catches parse errors and broken scene references, which is what actually
