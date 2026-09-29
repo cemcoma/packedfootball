@@ -170,7 +170,7 @@ PACK_DATABASE = {
         "cards_per_pack": 2,
         "items_per_pack": 1,
         "item_rates": {"silver": 0.20, "gold": 0.50, "platinum": 0.30},
-        "rates": {"gold": 0.75, "platinum": 0.22, "diamond": 0.03},
+        "rates": {"gold": 0.8, "platinum": 0.20},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"bucks",
         "sprite_key":"PremiumPack1"
@@ -317,7 +317,6 @@ PACK_DATABASE = {
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
         "price_currency":"credits",
         "sprite_key":"CHAMPPack",
-        "available_at": datetime.datetime(2026, 10, 15, 15, 0, tzinfo=datetime.timezone.utc)
     },
     # THE ONLY ROUTE TO AN ICON, and it is a 1% chance on one slot rather than
     # a guarantee. Bucks-priced and windowed, so a player can save toward a

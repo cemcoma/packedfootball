@@ -178,7 +178,7 @@ def seed_shootout_grid(db, rng: random.Random, names: list[str], dry_run: bool) 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--per-tier", type=int, default=10, help="How many bots each league tier should have")
+    parser.add_argument("--per-tier", type=int, default=20, help="How many bots each league tier should have")
     parser.add_argument("--dry-run", action="store_true", help="Report only, write nothing")
     args = parser.parse_args()
 
