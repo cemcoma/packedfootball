@@ -1,4 +1,4 @@
-from player.player import CUT_INSIDE_DONE_X, SHOT_PATIENCE, _norm2, player, ActionProfile
+from player.player import CUT_INSIDE_DONE_X, SHOT_PATIENCE, _clamp, _count_within, _norm2, player, ActionProfile
 from game_config import PRESS_FROM_DEFENDING, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
@@ -117,7 +117,7 @@ class Forward(player):
             my_x = state["my_pos"][0]
             inside_x = my_x + (35.0 - my_x) * 0.6
             lead_y = state["my_pos"][1] + (18.0 if state.get("a_direction", 1) == 1 else -18.0)
-            diagonal_target = np.array([inside_x, np.clip(lead_y, 0.0, PITCH_HEIGHT)])
+            diagonal_target = np.array([inside_x, _clamp(lead_y, 0.0, PITCH_HEIGHT)])
             dribble_speed = max(1.0, stat_ability(self.attributes.dribbling) * 1.3)
             return {
                 "type": "move",
@@ -172,8 +172,8 @@ class Forward(player):
             
             base_pos = np.asarray(state["formation_pos"], dtype=float)
             shifted_target = base_pos + np.array([shift_x, shift_y])
-            shifted_target[0] = np.clip(shifted_target[0], 0.0, 70.0) #TODO: hardcoded bunlar dğeiştir
-            shifted_target[1] = np.clip(shifted_target[1], 0.0, 100.0)
+            shifted_target[0] = _clamp(shifted_target[0], 0.0, 70.0) #TODO: hardcoded bunlar dğeiştir
+            shifted_target[1] = _clamp(shifted_target[1], 0.0, 100.0)
             
             speed_mult = 0.7 if decision == "recover" else 0.4
             return {"type": "move", "target": shifted_target, "speed_mod": pace_ability(self.attributes.speed) * speed_mult}
@@ -357,7 +357,7 @@ class Forward(player):
             teammates = np.asarray(state.get("teammates", []))
             closer_teammates = 0
             if teammates.size > 0:
-                closer_teammates = int(np.sum(np.linalg.norm(teammates - landing_target, axis=1) < my_dist - 0.1))
+                closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
 
             if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
@@ -381,7 +381,7 @@ class Forward(player):
             t_hold *= 0.3
 
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-        ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
+        ball_pressure_count = _count_within(state["opponents"], state["ball_pos"], 3.0)
         own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
         dist_to_own_goal = abs(state["formation_pos"][1] - own_goal_y)
 
@@ -421,13 +421,13 @@ class Forward(player):
             teammates = np.asarray(state.get("teammates", []))
             closer_teammates = 0
             if teammates.size > 0:
-                closer_teammates = int(np.sum(np.linalg.norm(teammates - landing_target, axis=1) < my_dist - 0.1))
+                closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
 
             if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
             
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-        ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
+        ball_pressure_count = _count_within(state["opponents"], state["ball_pos"], 3.0)
 
         if dist_to_ball < 2.0:
             actions = ["tackle", "contain"]

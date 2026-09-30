@@ -9,17 +9,19 @@ Here it's this class instead, backed by the Admin SDK (a service account),
 so GameState's exact same persistence logic can run as the authoritative
 side behind the backend without being duplicated.
 
-Four things here are NOT part of that five-method protocol and exist only
+Five things here are NOT part of that five-method protocol and exist only
 for the backend: `query_top` (leaderboards), `query_ids` (everything a user
-owns, for account deletion), `delete_paths` (bulk deletion) and
-`run_transaction` (anything that moves a balance). GameState never calls
-any of them.
+owns, for account deletion), `sample_documents` (Quick Match opponents),
+`delete_paths` (bulk deletion) and `run_transaction` (anything that moves a
+balance). GameState never calls any of them.
 """
 
 from __future__ import annotations
 
 import asyncio
 import inspect
+import secrets
+import string
 from typing import Any, Callable
 
 from firebase_admin import firestore
@@ -30,6 +32,10 @@ from firebase_admin import firestore
 # which makes it the one that can't stop resolving because a firebase-admin
 # release changed what it re-exports.
 from google.cloud import firestore as google_firestore
+
+# Firebase uids and Firestore auto-ids are drawn from this, so a random string
+# of it is a uniformly random point in a collection's id order.
+_ID_ALPHABET = string.ascii_letters + string.digits
 
 
 class TransactionScope:
@@ -184,6 +190,23 @@ class AdminFirestoreClient:
         query = self._db.collection(collection).where(filter=google_firestore.FieldFilter(field, "==", value))
         docs = await asyncio.to_thread(lambda: list(query.select(["__name__"]).stream()))
         return [d.id for d in docs]
+
+    async def sample_documents(self, collection: str, count: int) -> list[dict]:
+        """Up to `count` docs read from a random point in `collection`'s id
+        order, wrapping round to the start -- `count` reads however big the
+        collection gets, where list_collection reads all of it."""
+        query = self._db.collection(collection).order_by("__name__")
+        start = "".join(secrets.choice(_ID_ALPHABET) for _ in range(28))
+
+        def _run():
+            docs = list(query.start_at({"__name__": start}).limit(count).stream())
+            if len(docs) < count:
+                seen = {d.id for d in docs}
+                docs += [d for d in query.limit(count - len(docs)).stream() if d.id not in seen]
+            return docs
+
+        docs = await asyncio.to_thread(_run)
+        return [{"id": d.id, **(d.to_dict() or {})} for d in docs]
 
     async def delete_paths(self, paths: list[str]) -> int:
         """Deletes every path, in write batches of at most 500 (Firestore's

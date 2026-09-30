@@ -1,6 +1,6 @@
 from game_config import pass_power, GOAL_WIDTH, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 from gameEngine import possession_radius
-from player.player import _norm2, player, ActionProfile
+from player.player import _clamp, _count_within, _equal2, _norm2, player, ActionProfile
 import numpy as np
 
 
@@ -66,11 +66,11 @@ class Goalkeeper(player):
     def _clamp_to_box(self, state: dict, point) -> np.ndarray:
         """Keeps a sweep target inside the keeper's own penalty area."""
         goal_y = self._own_goal_y(state)
-        x = float(np.clip(point[0], GOAL_CENTER_X - PENALTY_BOX_HALF_WIDTH, GOAL_CENTER_X + PENALTY_BOX_HALF_WIDTH))
+        x = float(_clamp(point[0], GOAL_CENTER_X - PENALTY_BOX_HALF_WIDTH, GOAL_CENTER_X + PENALTY_BOX_HALF_WIDTH))
         if goal_y == 0.0:
-            y = float(np.clip(point[1], 0.0, PENALTY_BOX_DEPTH))
+            y = float(_clamp(point[1], 0.0, PENALTY_BOX_DEPTH))
         else:
-            y = float(np.clip(point[1], PITCH_HEIGHT - PENALTY_BOX_DEPTH, PITCH_HEIGHT))
+            y = float(_clamp(point[1], PITCH_HEIGHT - PENALTY_BOX_DEPTH, PITCH_HEIGHT))
         return np.array([x, y], dtype=float)
 
     def _centre_back_target(self, state: dict) -> np.ndarray:
@@ -85,10 +85,10 @@ class Goalkeeper(player):
         goal_dir = 1.0 if state.get("a_direction", 1) == 1 else -1.0
         deep = [
             tm for tm in mates
-            if not np.array_equal(tm, my_pos)
+            if not _equal2(tm, my_pos)
             and (float(tm[1]) - float(my_pos[1])) * goal_dir < KEEPER_OUTBALL_MAX_DEPTH
         ]
-        pool = deep if deep else [tm for tm in mates if not np.array_equal(tm, my_pos)]
+        pool = deep if deep else [tm for tm in mates if not _equal2(tm, my_pos)]
         if not pool:
             return my_pos
         return min(pool, key=lambda tm: _norm2(np.asarray(tm) - my_pos))
@@ -97,7 +97,7 @@ class Goalkeeper(player):
         """How far from his own goal line his punt can land: PUNT_REACH of the
         pitch, from his power stat."""
         lo, hi = PUNT_POWER_RANGE
-        t = float(np.clip((float(self.attributes.power) - lo) / (hi - lo), 0.0, 1.0))
+        t = float(_clamp((float(self.attributes.power) - lo) / (hi - lo), 0.0, 1.0))
         return PITCH_HEIGHT * (PUNT_REACH[0] + (PUNT_REACH[1] - PUNT_REACH[0]) * t)
 
     def _punt_target(self, state: dict) -> np.ndarray:
@@ -113,13 +113,13 @@ class Goalkeeper(player):
             depth = (float(tm[1]) - own_goal_y) * forward
             if depth > reach or (float(tm[1]) - float(my_pos[1])) * forward < 15.0:
                 continue
-            if opponents.size and int(np.sum(np.linalg.norm(opponents - tm, axis=1) < PUNT_CROWD_RADIUS)) > 1:
+            if opponents.size and _count_within(opponents, tm, PUNT_CROWD_RADIUS) > 1:
                 continue
             if depth > best_depth:
                 best, best_depth = tm, depth
         if best is not None:
             return np.array(best, dtype=float)
-        side_x = float(np.clip(my_pos[0] + state["rng"].uniform(-12.0, 12.0), 8.0, PITCH_WIDTH - 8.0))
+        side_x = float(_clamp(my_pos[0] + state["rng"].uniform(-12.0, 12.0), 8.0, PITCH_WIDTH - 8.0))
         return np.array([side_x, own_goal_y + forward * reach * 0.9])
 
     def _build_action(self, decision: str, state: dict) -> dict | None:
@@ -153,7 +153,7 @@ class Goalkeeper(player):
             # Fuzziness: Lower vision creates larger positional misjudgments
             intercept_x += state["rng"].normal(0, max(0.0, (100 - self.attributes.vision) / 40.0))
 
-            target_x = np.clip(
+            target_x = _clamp(
                 intercept_x,
                 GOAL_CENTER_X - KEEPER_LINE_HALF_WIDTH,
                 GOAL_CENTER_X + KEEPER_LINE_HALF_WIDTH,
@@ -177,7 +177,7 @@ class Goalkeeper(player):
             # Shuffle across the mouth to cover the ball's angle. Y is pinned
             # to the resting line: this is the "get home and set" behaviour,
             # deliberately distinct from sweeping.
-            target_x = np.clip(
+            target_x = _clamp(
                 state["ball_pos"][0],
                 GOAL_CENTER_X - KEEPER_LINE_HALF_WIDTH,
                 GOAL_CENTER_X + KEEPER_LINE_HALF_WIDTH,
@@ -264,7 +264,7 @@ class Goalkeeper(player):
                 teammates = np.asarray(state.get("teammates", []))
                 closer = 0
                 if teammates.size > 0:
-                    closer = int(np.sum(np.linalg.norm(teammates - landing, axis=1) < my_dist - 0.1))
+                    closer = _count_within(teammates, landing, my_dist - 0.1)
                 # `teammates` includes the keeper itself, so its own distance
                 # is never strictly less than my_dist and doesn't count.
                 near_own_goal = abs(float(landing[1]) - own_goal_y) <= KEEPER_AUTHORITY_DEPTH

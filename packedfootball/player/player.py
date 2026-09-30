@@ -196,6 +196,35 @@ def _norm2(v) -> float:
     return math.hypot(float(v[0]), float(v[1]))
 
 
+def _clamp(x: float, lo: float, hi: float) -> float:
+    """np.clip for one float, bit for bit (lo on a tie, like numpy), minus its call overhead."""
+    x = x if x > lo else lo
+    return x if x < hi else hi
+
+
+def _clamp_to_pitch(x: float, y: float) -> np.ndarray:
+    return np.array([_clamp(float(x), 0.0, PITCH_WIDTH), _clamp(float(y), 0.0, PITCH_HEIGHT)])
+
+
+def _isclose2(a, b) -> bool:
+    """np.all(np.isclose(a, b)) for 2-vectors, same tolerances."""
+    return (
+        abs(float(a[0]) - float(b[0])) <= 1e-8 + 1e-5 * abs(float(b[0]))
+        and abs(float(a[1]) - float(b[1])) <= 1e-8 + 1e-5 * abs(float(b[1]))
+    )
+
+
+def _equal2(a, b) -> bool:
+    """np.array_equal for 2-vectors."""
+    return a[0] == b[0] and a[1] == b[1]
+
+
+def _count_within(points, centre, radius: float) -> int:
+    """How many rows of `points` lie closer than `radius` to `centre`."""
+    cx, cy = float(centre[0]), float(centre[1])
+    return sum(1 for x, y in np.asarray(points, dtype=float).tolist() if math.hypot(x - cx, y - cy) < radius)
+
+
 class ActionProfile:
     """Role template for tweening action sets and decision weights per position."""
     role_name = "generic"
@@ -284,34 +313,33 @@ def _lane_openness(start, end, opponents, opponent_vels, opponent_paces, ball_sp
     to react, ball is past him) from one near the END (a full second to step
     across).
     """
-    start = np.asarray(start, dtype=float)
-    end = np.asarray(end, dtype=float)
-    segment = end - start
-    seg_len_sq = float(np.dot(segment, segment))
+    sx, sy = float(start[0]), float(start[1])
+    dx, dy = float(end[0]) - sx, float(end[1]) - sy
+    seg_len_sq = dx * dx + dy * dy
     if seg_len_sq < 1e-8 or opponents is None:
         return 1.0
     opponents = np.asarray(opponents, dtype=float)
     if opponents.size == 0:
         return 1.0
     seg_len = math.sqrt(seg_len_sq)
+    vels = np.asarray(opponent_vels, dtype=float).tolist() if opponent_vels is not None else None
 
     worst = 1.0
-    for i, opp in enumerate(opponents):
-        opp = np.asarray(opp, dtype=float)
-        projection = float(np.dot(opp - start, segment)) / seg_len_sq
+    for i, (ox, oy) in enumerate(opponents.tolist()):
+        projection = ((ox - sx) * dx + (oy - sy) * dy) / seg_len_sq
         clamped = min(1.0, max(0.0, projection))
-        meet = start + clamped * segment
+        mx, my = sx + clamped * dx, sy + clamped * dy
 
         ball_t = _ball_time_to(ball_speed, clamped * seg_len)
         if ball_t is None:
             continue                      # ball dies before this point: no threat
 
         pace = float(opponent_paces[i]) if opponent_paces is not None else base_speed * 0.7
-        vel = np.asarray(opponent_vels[i], dtype=float) if opponent_vels is not None else np.zeros(2)
+        vx, vy = vels[i] if vels is not None else (0.0, 0.0)
         # Where he already is by the time the ball arrives, then how long the
         # rest of the trip takes him.
-        projected = opp + vel * ball_t
-        opp_t = ball_t + _norm2(meet - projected) / max(pace, 1e-3)
+        px, py = ox + vx * ball_t, oy + vy * ball_t
+        opp_t = ball_t + math.hypot(mx - px, my - py) / max(pace, 1e-3)
 
         margin = opp_t - ball_t
         worst = min(worst, max(0.0, margin) / LANE_SAFE_MARGIN_SECONDS)
@@ -460,9 +488,6 @@ class player(ABC):
         return round(primary_avg * weight + secondary_avg * (1.0 - weight))
 
     def _is_pass_safe(self, start: np.ndarray, end: np.ndarray, opponents: np.ndarray | None = None, line_width: float = 1.0) -> bool:
-        start = np.asarray(start, dtype=float)
-        end = np.asarray(end, dtype=float)
-
         if opponents is None:
             return True
 
@@ -470,35 +495,33 @@ class player(ABC):
         if opponents.size == 0:
             return True
 
-        segment = end - start
-        segment_length_sq = float(np.dot(segment, segment))
+        sx, sy = float(start[0]), float(start[1])
+        dx, dy = float(end[0]) - sx, float(end[1]) - sy
+        segment_length_sq = dx * dx + dy * dy
         if segment_length_sq < 1e-8:
             return True
 
-        for opp in opponents:
-            opp_vec = np.asarray(opp, dtype=float) - start
-            projection = float(np.dot(opp_vec, segment)) / segment_length_sq
-            clamped = np.clip(projection, 0.0, 1.0)
-            closest_point = start + clamped * segment
-            distance_to_line = _norm2(opp - closest_point)
-            if distance_to_line <= line_width:
+        for ox, oy in opponents.tolist():
+            projection = ((ox - sx) * dx + (oy - sy) * dy) / segment_length_sq
+            clamped = _clamp(projection, 0.0, 1.0)
+            if math.hypot(ox - (sx + clamped * dx), oy - (sy + clamped * dy)) <= line_width:
                 return False
         return True
 
     def _goal_lane_is_open(self, state: dict, lane_width: float = 2.5, lookahead: float = 10.0) -> bool:
-        my_pos = np.asarray(state["my_pos"], dtype=float)
-        goal_vec = np.asarray(state["enemy_goal"], dtype=float) - my_pos
-        goal_norm = _norm2(goal_vec)
+        mx, my = float(state["my_pos"][0]), float(state["my_pos"][1])
+        gx, gy = float(state["enemy_goal"][0]) - mx, float(state["enemy_goal"][1]) - my
+        goal_norm = math.hypot(gx, gy)
         if goal_norm < 1e-8:
             return True
-        goal_dir = goal_vec / goal_norm
+        ux, uy = gx / goal_norm, gy / goal_norm
 
-        for opp in np.asarray(state["opponents"], dtype=float):
-            rel = opp - my_pos
-            forward = float(np.dot(rel, goal_dir))
+        for ox, oy in np.asarray(state["opponents"], dtype=float).tolist():
+            rx, ry = ox - mx, oy - my
+            forward = rx * ux + ry * uy
             if forward <= 0.0:
                 continue
-            lateral = _norm2(rel - forward * goal_dir)
+            lateral = math.hypot(rx - forward * ux, ry - forward * uy)
             if forward <= lookahead and lateral <= lane_width:
                 return False
         return True
@@ -512,48 +535,47 @@ class player(ABC):
         )
 
     def _is_progressive_ball_move(self, state: dict) -> bool:
-        ball_vel = np.asarray(state.get("ball_velocity", np.zeros(2, dtype=float)), dtype=float)
-        ball_speed = float(_norm2(ball_vel))
-        if ball_speed <= 1e-6:
+        ball_vel = state.get("ball_velocity")
+        if ball_vel is None:
+            return False
+        vx, vy = float(ball_vel[0]), float(ball_vel[1])
+        if math.hypot(vx, vy) <= 1e-6:
             return False
 
         team_direction = 1.0 if state.get("a_direction", 1) == 1 else -1.0
-        forward_component = team_direction * ball_vel[1]
-        return forward_component > 0.0
+        return team_direction * vy > 0.0
 
     def _predict_ball_landing_target(self, state: dict) -> np.ndarray:
-        ball_pos = np.asarray(state["ball_pos"], dtype=float)
-        ball_vel = np.asarray(state.get("ball_velocity", np.zeros(2, dtype=float)), dtype=float)
+        bx, by = float(state["ball_pos"][0]), float(state["ball_pos"][1])
+        ball_vel = state.get("ball_velocity")
+        vx, vy = (float(ball_vel[0]), float(ball_vel[1])) if ball_vel is not None else (0.0, 0.0)
         ball_height = float(state.get("ball_height", 0.0))
-        ball_speed = float(_norm2(ball_vel))
+        ball_speed = math.hypot(vx, vy)
 
         fall_time = self._head_ball_drop_time(state)
         if fall_time is not None and ball_speed > 1e-6:
             decay = -math.log(BALL_AIR_FRICTION)
             drop_distance = (ball_speed / decay) * (1.0 - (BALL_AIR_FRICTION ** fall_time))
-            future = ball_pos + (ball_vel / ball_speed) * drop_distance
-            return np.clip(future, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])
+            return _clamp_to_pitch(bx + (vx / ball_speed) * drop_distance, by + (vy / ball_speed) * drop_distance)
 
         if not self._is_progressive_ball_move(state):
-            return ball_pos.copy()
+            return np.array([bx, by])
 
         player_speed_factor = max(0.4, min(1.5, pace_ability(self.attributes.speed)))
         slow_ball_cutoff = max(1.5, base_speed * 0.2 * player_speed_factor)
         flight_cutoff = max(0.25, 0.25 * player_speed_factor)
 
         if ball_speed <= slow_ball_cutoff:
-            return ball_pos.copy()
+            return np.array([bx, by])
         if ball_height <= flight_cutoff and ball_speed < base_speed * 0.6:
-            return ball_pos.copy()
+            return np.array([bx, by])
 
         predict_time_seconds = max(1.0, min(3.0, ball_speed / max(1.0, base_speed * 0.8)))
         decay_constant = 0.6931 
         friction_adjusted_distance = (ball_speed / decay_constant) * (1.0 - (0.5 ** predict_time_seconds))
         
-        unit_vel = ball_vel / max(1.0, ball_speed)
-        future = ball_pos + (unit_vel * friction_adjusted_distance)
-        
-        return np.clip(future, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])
+        unit = max(1.0, ball_speed)
+        return _clamp_to_pitch(bx + (vx / unit) * friction_adjusted_distance, by + (vy / unit) * friction_adjusted_distance)
 
     # --- Attacking shape ------------------------------------------------
     def _attack_shape_target(self, state: dict, anchor_x: float | None = None) -> np.ndarray:
@@ -563,11 +585,11 @@ class player(ABC):
         forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
         fx, fy = float(state["formation_pos"][0]), float(state["formation_pos"][1])
         bx, by = float(state["ball_pos"][0]), float(state["ball_pos"][1])
-        push = float(np.clip((by - fy) * forward - self.attack_push_trail, 0.0, self.attack_push_limit))
+        push = _clamp((by - fy) * forward - self.attack_push_trail, 0.0, self.attack_push_limit)
         ax = bx if anchor_x is None else float(anchor_x)
         return np.array([
-            float(np.clip(fx + (ax - fx) * self.attack_push_drift, 2.0, PITCH_WIDTH - 2.0)),
-            float(np.clip(fy + push * forward, 2.0, PITCH_HEIGHT - 2.0)),
+            _clamp(fx + (ax - fx) * self.attack_push_drift, 2.0, PITCH_WIDTH - 2.0),
+            _clamp(fy + push * forward, 2.0, PITCH_HEIGHT - 2.0),
         ])
 
     # --- Wingplay -------------------------------------------------------
@@ -592,11 +614,6 @@ class player(ABC):
     def _box_runners(self, state: dict) -> int:
         """Teammates a cross could actually find: bodies in the opposition
         box. state["teammates"] holds all eleven, so drop my own row."""
-        teammates = np.asarray(state.get("teammates", []), dtype=float)
-        if teammates.size == 0:
-            return 0
-        my_pos = np.asarray(state["my_pos"], dtype=float)
-        enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
         return len(self._cross_candidates(state))
 
     def _cross_candidates(self, state: dict, lofted: bool = False) -> list:
@@ -608,32 +625,36 @@ class player(ABC):
         if teammates.size == 0:
             return []
         vels = state.get("teammate_vel")
-        my_pos = np.asarray(state["my_pos"], dtype=float)
+        vels = np.asarray(vels, dtype=float).tolist() if vels is not None else None
+        my_pos = state["my_pos"]
+        mx, my = float(my_pos[0]), float(my_pos[1])
         enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
         out = []
-        for i, tm in enumerate(teammates):
-            if np.all(np.isclose(tm, my_pos)):
+        for i, tm in enumerate(teammates.tolist()):
+            if _isclose2(tm, my_pos):
                 continue
-            vel = np.asarray(vels[i], dtype=float) if vels is not None else np.zeros(2)
+            tx, ty = tm
+            vx, vy = vels[i] if vels is not None else (0.0, 0.0)
             # Where he is when THIS ball gets there, not a fixed second on: a
             # flat cross beat the runners in and found them still outside.
-            arrival = tm + vel * cross_flight(_norm2(tm - my_pos), lofted)
-            arrival = tm + vel * cross_flight(_norm2(arrival - my_pos), lofted)
+            t = cross_flight(math.hypot(tx - mx, ty - my), lofted)
+            ax, ay = tx + vx * t, ty + vy * t
+            t = cross_flight(math.hypot(ax - mx, ay - my), lofted)
+            ax, ay = tx + vx * t, ty + vy * t
             if (
-                BOX_X_MIN < arrival[0] < BOX_X_MAX
-                and abs(enemy_goal_y - arrival[1]) <= CROSS_TARGET_DEPTH
+                BOX_X_MIN < ax < BOX_X_MAX
+                and abs(enemy_goal_y - ay) <= CROSS_TARGET_DEPTH
             ):
-                out.append((arrival, vel))
+                out.append((np.array([ax, ay]), np.array([vx, vy])))
         return out
 
     def _runners_in_box_now(self, state: dict) -> int:
         """Teammates actually in the box now, not just on their way (_box_runners)."""
-        teammates = np.asarray(state.get("teammates", []), dtype=float)
-        my_pos = np.asarray(state["my_pos"], dtype=float)
+        my_pos = state["my_pos"]
         enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
         return sum(
-            1 for tm in teammates
-            if not np.all(np.isclose(tm, my_pos))
+            1 for tm in np.asarray(state.get("teammates", []), dtype=float).tolist()
+            if not _isclose2(tm, my_pos)
             and BOX_X_MIN < tm[0] < BOX_X_MAX
             and abs(enemy_goal_y - tm[1]) <= CROSS_TARGET_DEPTH
         )
@@ -674,7 +695,7 @@ class player(ABC):
             speed = max(1.0, stat_ability(self.attributes.dribbling) * 1.25)
             return {"type": "move", "target": target, "speed_mod": speed, "intent": "wingplay"}
         if decision == "wide_run":
-            ahead_y = float(np.clip(state["ball_pos"][1] + 12.0 * forward, 0.0, PITCH_HEIGHT))
+            ahead_y = float(_clamp(state["ball_pos"][1] + 12.0 * forward, 0.0, PITCH_HEIGHT))
             return {"type": "move", "target": np.array([touchline_x, ahead_y]), "speed_mod": pace_ability(self.attributes.speed) * 0.9}
         if decision == "attack_box":
             return self._timed_box_run(state)
@@ -688,7 +709,7 @@ class player(ABC):
         enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
         my_pos = np.asarray(state["my_pos"], dtype=float)
         ball_pos = np.asarray(state["ball_pos"], dtype=float)
-        side = float(np.clip((my_pos[0] - PITCH_WIDTH / 2.0) * 0.5, -8.0, 8.0))
+        side = float(_clamp((my_pos[0] - PITCH_WIDTH / 2.0) * 0.5, -8.0, 8.0))
 
         # Offside line: the second-deepest opponent, or the ball if it is deeper.
         depths = sorted((enemy_goal_y - float(y)) * forward for y in np.asarray(state["opponents"], dtype=float)[:, 1])
@@ -824,9 +845,9 @@ class player(ABC):
         role = state.get("my_role", "")
         home_x = float(state["formation_pos"][0])
         x = home_x + (ball_x - home_x) * RECOVERY_LANE_PULL.get(role, RECOVERY_LANE_PULL_DEFAULT)
-        x = float(np.clip(x, home_x - RECOVERY_LANE_MAX_SHIFT, home_x + RECOVERY_LANE_MAX_SHIFT))
+        x = float(_clamp(x, home_x - RECOVERY_LANE_MAX_SHIFT, home_x + RECOVERY_LANE_MAX_SHIFT))
         if role == "CB":
-            x = float(np.clip(x, PITCH_WIDTH / 2.0 - RECOVERY_CB_LANE, PITCH_WIDTH / 2.0 + RECOVERY_CB_LANE))
+            x = float(_clamp(x, PITCH_WIDTH / 2.0 - RECOVERY_CB_LANE, PITCH_WIDTH / 2.0 + RECOVERY_CB_LANE))
         return x
 
     def _recovery_run(self, state: dict) -> dict:
@@ -839,7 +860,7 @@ class player(ABC):
             target = carrier + to_goal / (_norm2(to_goal) + 1e-8) * min(RECOVERY_GOAL_SIDE, _norm2(to_goal))
         else:
             target = self._line_target(state)
-        target = np.clip(target, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])
+        target = _clamp_to_pitch(target[0], target[1])
         bonus = 1.0 + RECOVERY_DEFENDING_BONUS * stat_ability(getattr(self.attributes, "defending", 50))
         effort = RECOVERY_ROLE_EFFORT.get(state.get("my_role", ""), 1.0)
         return {"type": "move", "target": target, "speed_mod": pace_ability(self.attributes.speed) * RECOVERY_SPRINT * bonus * effort}
@@ -868,7 +889,7 @@ class player(ABC):
         best_score = -1e9
 
         for tm_i, tm in enumerate(teammates):
-            if np.array_equal(tm, my_pos): continue
+            if _equal2(tm, my_pos): continue
 
             vec_to_tm = tm - my_pos
             forward_progress = (tm[1] - my_pos[1]) * goal_dir + self._wide_credit(state, tm)
@@ -896,7 +917,7 @@ class player(ABC):
         nearby_teammates = sum(1 for tm in teammates if _norm2(tm - my_pos) < 4.5)
 
         for tm_i, tm in enumerate(teammates):
-            if np.array_equal(tm, my_pos): continue
+            if _equal2(tm, my_pos): continue
 
             dist_to_tm = _norm2(tm - my_pos)
             nearest_opp_dist = np.min(np.linalg.norm(opponents - tm, axis=1))
@@ -1017,7 +1038,7 @@ class player(ABC):
         else:
             heading = heading / _norm2(heading)
 
-        angle = math.acos(float(np.clip(np.dot(heading, want), -1.0, 1.0)))
+        angle = math.acos(float(_clamp(np.dot(heading, want), -1.0, 1.0)))
         if angle > CLEAR_MAX_TURN:
             turn = CLEAR_MAX_TURN * (1.0 if heading[0] * want[1] - heading[1] * want[0] > 0 else -1.0)
             c, sn = math.cos(turn), math.sin(turn)
@@ -1087,7 +1108,7 @@ class player(ABC):
             final_target[1] = min(final_target[1], PITCH_HEIGHT - 9.0)
         else:
             final_target[1] = max(final_target[1], 9.0)
-        return np.clip(final_target, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])
+        return _clamp_to_pitch(final_target[0], final_target[1])
 
     #statistic updaters
     def scored(self): self.statistics["goals"] += 1

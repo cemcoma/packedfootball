@@ -142,8 +142,9 @@ def test_a_goal_always_has_a_shoot_behind_it(replays):
     """predict_goal_crossing projects a straight line and ignores friction,
     so it reads some shots that go in as missing. The recording follows the
     ball (ReplayRecorder.retype_last_shot_as_on_target) -- otherwise a goal
-    would play with no trail on the shot that scored it."""
-    strikes = {int(ActionType.SHOOT), int(ActionType.SHOT_OFF_TARGET), int(ActionType.HEADER)}
+    would play with no trail on the shot that scored it. A spot kick's strike is
+    its PENALTY event (see test_penalty_shootout's one strike per kick)."""
+    strikes = {int(ActionType.SHOOT), int(ActionType.SHOT_OFF_TARGET), int(ActionType.HEADER), int(ActionType.PENALTY)}
     for seed, _g, d in replays:
         events = d["events"]
         for k, event in enumerate(events):

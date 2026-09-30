@@ -1,5 +1,5 @@
-from player.player import _norm2, player, ActionProfile
-from game_config import PRESS_FROM_DEFENDING, RECOVERY_CB_LANE, RECOVERY_PRESS_RANGE, RECOVERY_RANGE, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
+from player.player import _clamp, _count_within, _norm2, player, ActionProfile
+from game_config import PRESS_FROM_DEFENDING, RECOVERY_CB_LANE, RECOVERY_MIN_DEPTH, RECOVERY_PRESS_RANGE, RECOVERY_RANGE, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
 # Where a full-back stands in to cover the middle when no centre-back is
@@ -13,6 +13,18 @@ MARK_LEAD_SECONDS = 0.35
 COVER_DEPTH = 22.0
 COVER_HALF_GAP = 7.0
 COVER_ROLES = ("LB", "RB", "LWB", "RWB")
+
+# A full-back off the ball holds the back line (_back_line_target): level with the
+# centre-backs, tucking in toward the far post -- a third CB -- as the ball nears his goal.
+FB_ROLES = ("LB", "RB")
+FB_LINE_BALL_GAP = 10.0     # never closer than this goal-side of the ball
+FB_WIDTH_FAR = 19.0         # off the middle with the ball upfield...
+FB_WIDTH_NEAR = 11.0        # ...and fully tucked in with it near his goal
+FB_TUCK_FROM = 60.0         # ball depth where the tuck starts
+FB_TUCK_TO = 30.0           # ...and where it is complete
+FB_BALL_SHIFT = 0.35        # the line slides this much toward the ball's side
+FB_FLANK_X = 8.0            # the ball is on his flank past this, off the middle
+FB_ENGAGE_RANGE = 6.0       # off his flank, he only goes at a ball this close
 
 class CenterBackActionProfile(ActionProfile):
     role_name = "center_back"
@@ -102,7 +114,7 @@ class Defender(player):
             # straight dash and support's ball-landing intercept.
             touchline_x = 2.0 if state["formation_pos"][0] < PITCH_WIDTH / 2.0 else PITCH_WIDTH - 2.0
             lead = 10.0 if state.get("a_direction", 1) == 1 else -10.0
-            ahead_y = np.clip(state["ball_pos"][1] + lead, 0.0, PITCH_HEIGHT)
+            ahead_y = _clamp(state["ball_pos"][1] + lead, 0.0, PITCH_HEIGHT)
             overlap_target = np.array([touchline_x, ahead_y])
             return {"type": "move", "target": overlap_target, "speed_mod": pace_ability(self.attributes.speed) * 1.0}
 
@@ -176,8 +188,8 @@ class Defender(player):
             
             base_pos = np.asarray(state["formation_pos"], dtype=float)
             shifted_target = base_pos + np.array([shift_x, shift_y])
-            shifted_target[0] = np.clip(shifted_target[0], 0.0, 70.0) #TODO: hardcoded bunlar dğeiştir
-            shifted_target[1] = np.clip(shifted_target[1], 0.0, 100.0)
+            shifted_target[0] = _clamp(shifted_target[0], 0.0, 70.0) #TODO: hardcoded bunlar dğeiştir
+            shifted_target[1] = _clamp(shifted_target[1], 0.0, 100.0)
             
             speed_mult = 0.7 if decision == "recover" else 0.4
             return {"type": "move", "target": shifted_target, "speed_mod": pace_ability(self.attributes.speed) * speed_mult}
@@ -202,6 +214,9 @@ class Defender(player):
             my_depth = (float(state["my_pos"][1]) - own_goal_y) * forward
             target[1] = own_goal_y + forward * min(my_depth, (float(target[1]) - own_goal_y) * forward)
             return {"type": "move", "target": target, "speed_mod": pace_ability(self.attributes.speed) * 0.9}
+
+        elif decision == "back_line":
+            return {"type": "move", "target": self._back_line_target(state), "speed_mod": pace_ability(self.attributes.speed) * 0.8}
 
         return None
 
@@ -318,7 +333,7 @@ class Defender(player):
             teammates = np.asarray(state.get("teammates", []))
             closer_teammates = 0
             if teammates.size > 0:
-                closer_teammates = int(np.sum(np.linalg.norm(teammates - landing_target, axis=1) < my_dist - 0.1))
+                closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
 
             if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
@@ -355,7 +370,7 @@ class Defender(player):
             teammates = np.asarray(state.get("teammates", []))
             closer_teammates = 0
             if teammates.size > 0:
-                closer_teammates = int(np.sum(np.linalg.norm(teammates - landing_target, axis=1) < my_dist - 0.1))
+                closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
 
             if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
@@ -364,7 +379,7 @@ class Defender(player):
             return "recovery_run"
 
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-        ball_pressure_count = int(np.sum(np.linalg.norm(state.get("opponents", []) - state["ball_pos"], axis=1) < 3.0))
+        ball_pressure_count = _count_within(state.get("opponents", []), state["ball_pos"], 3.0)
 
         if self._holds_the_middle(state):
             return "hold_line"
@@ -386,14 +401,43 @@ class Defender(player):
             return state["rng"].choice(actions, p=probs)
 
         if dist_to_ball < 15.0:
+            if dist_to_ball >= FB_ENGAGE_RANGE and self._holds_back_line(state):
+                return "back_line"
             if ball_pressure_count >= 2: return "contain"
             return "press" if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING) else "contain"
 
-        actions = ["hold_defense", "man_mark"]
+        if self._holds_back_line(state):
+            return "back_line"
+        actions = ["back_line" if state.get("my_role") in FB_ROLES else "hold_defense", "man_mark"]
         t_hold = 50.0 * self.get_action_bias("hold_defense")
         t_mark = 50.0 * self.get_action_bias("man_mark")
         probs = [t_hold / (t_hold + t_mark), t_mark / (t_hold + t_mark)]
         return state["rng"].choice(actions, p=probs)
+
+    def _flank(self, state: dict) -> float:
+        return -1.0 if state["formation_pos"][0] < PITCH_WIDTH / 2.0 else 1.0
+
+    def _holds_back_line(self, state: dict) -> bool:
+        """A full-back leaves a ball in the middle or on the far flank to the centre-backs."""
+        if state.get("my_role") not in FB_ROLES:
+            return False
+        return (float(state["ball_pos"][0]) - PITCH_WIDTH / 2.0) * self._flank(state) <= FB_FLANK_X
+
+    def _back_line_target(self, state: dict) -> np.ndarray:
+        """Level with the centre-backs but FB_LINE_BALL_GAP goal-side of the ball at least,
+        narrowing from FB_WIDTH_FAR to FB_WIDTH_NEAR as the ball nears goal, sliding with it."""
+        own_goal_y = float(state["own_goal"][1])
+        forward = 1.0 if own_goal_y == 0.0 else -1.0
+        ball_x = float(state["ball_pos"][0])
+        ball_depth = (float(state["ball_pos"][1]) - own_goal_y) * forward
+        depth = ball_depth - FB_LINE_BALL_GAP
+        if state.get("cb_line") is not None:
+            depth = min(depth, (state["cb_line"] - own_goal_y) * forward)
+        depth = max(RECOVERY_MIN_DEPTH, depth)
+        tuck = _clamp((FB_TUCK_FROM - ball_depth) / (FB_TUCK_FROM - FB_TUCK_TO), 0.0, 1.0)
+        width = FB_WIDTH_FAR + (FB_WIDTH_NEAR - FB_WIDTH_FAR) * tuck
+        x = PITCH_WIDTH / 2.0 + self._flank(state) * width + (ball_x - PITCH_WIDTH / 2.0) * FB_BALL_SHIFT
+        return np.array([_clamp(x, 3.0, PITCH_WIDTH - 3.0), own_goal_y + forward * depth])
 
     def _cover_target(self, state: dict) -> np.ndarray:
         """The spot a covering full-back holds: COVER_DEPTH off its own goal

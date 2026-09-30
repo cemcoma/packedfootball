@@ -163,6 +163,11 @@ ENERGY_COST_PER_MATCH = 1
 # already-shipped endpoint without touching any code.
 QUICK_MATCH_ENERGY_COST = 1
 
+# How many random managers a Quick Match tries (then stored bots, if none can
+# play) before rolling a throwaway bot. Each is one read; only a playable
+# manager pays for their eleven player docs.
+QUICK_MATCH_CANDIDATES = 5
+
 # Catalog-shaped like CREDIT_EXCHANGE_RATES on purpose: the client renders it
 # with the existing CurrencyTileView ("pay 5 Cash, get 10 Energy") and needs
 # no new component. energy_amount None means "fill the bar".

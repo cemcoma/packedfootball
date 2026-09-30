@@ -40,6 +40,10 @@ from game_config import (  # noqa: F401
     PLAYER_BASE_SPEED,
     PLAYER_RADIUS,
     POSSESSION_RADIUS,
+    CORNER_DEFENDING_BASE_Y,
+    CORNER_DEFENDING_VAR_Y,
+    CORNER_ATTACKING_BASE_Y,
+    CORNER_ATTACKING_VAR_Y,
 )
 from formations import get_formation, is_similar_position
 
@@ -282,7 +286,11 @@ from formations import get_formation, is_similar_position
 #         on target ~50% at heading 70, 70% at 100, 85% at 130.
 #         Shooting: aim error shrinks inside 20 units of goal, and with an open
 #         run at the keeper from further than 12 out he carries it on instead.
-ENGINE_VERSION: Final[str] = "4.2.0"
+#   4.2.1 a save that counts the shot on target retypes its SHOT_OFF_TARGET to SHOOT,
+#         like a goal does. Replay only; the sim is unchanged.
+#   4.3.0 LB/RB hold the back line level with the CBs instead of a fixed spot by the
+#         corner, tucking in as a third CB when the ball is central or far side near goal.
+ENGINE_VERSION: Final[str] = "4.3.0"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -487,6 +495,16 @@ CORNER_REST_SPACING: Final[float] = 9.0
 def _norm2(v) -> float:
     """|v| for a 2-vector -- see player.py's _norm2."""
     return math.hypot(float(v[0]), float(v[1]))
+
+
+def _clamp(x: float, lo: float, hi: float) -> float:
+    """np.clip for one float -- see player.py's _clamp."""
+    x = x if x > lo else lo
+    return x if x < hi else hi
+
+
+# The i < j player pairs, so _resolve_player_collisions doesn't rebuild them every frame.
+_UPPER_PAIRS: Final = np.triu(np.ones((22, 22), dtype=bool), k=1)
 
 # --- pass execution error --------------------------------------------------
 #
@@ -720,7 +738,7 @@ class game:
         min_dist = self.player_radius
         delta_all = self.positions[:, None, :] - self.positions[None, :, :]
         dist_all = np.sqrt(np.einsum("ijk,ijk->ij", delta_all, delta_all))
-        candidates = np.argwhere(np.triu(dist_all < 2.0 * min_dist, k=1))
+        candidates = np.argwhere((dist_all < 2.0 * min_dist) & _UPPER_PAIRS)
         for i, j in candidates:
             delta = self.positions[i] - self.positions[j]
             dist = float(np.hypot(delta[0], delta[1]))
@@ -909,14 +927,14 @@ class game:
             return
 
         if restart_type == "corner":
-            attacking_y = 85.0 if team == 0 else 15.0
-            defending_y = 92.0 if team == 0 else 8.0
+            attacking_y = PITCH_HEIGHT-CORNER_ATTACKING_BASE_Y if team == 0 else CORNER_ATTACKING_BASE_Y
+            defending_y = PITCH_HEIGHT-CORNER_DEFENDING_BASE_Y if team == 0 else CORNER_DEFENDING_BASE_Y
             
             a_box = [2, 3, 6, 7, 9, 10] if team == 0 else [13, 14, 17, 18, 20, 21]
             d_box = [12, 13, 14, 15, 16, 17, 18, 19] if team == 0 else [1, 2, 3, 4, 5, 6, 7, 8]
 
             for p in a_box:
-                self.positions[p] = [35.0 + self.rng.uniform(-10, 10), attacking_y + self.rng.uniform(-4, 4)]
+                self.positions[p] = [35.0 + self.rng.uniform(-10, 10), attacking_y + self.rng.uniform(-CORNER_ATTACKING_VAR_Y, CORNER_ATTACKING_VAR_Y)]
 
             # Everyone else on the attacking side bar the keeper and the taker
             # -- the full-backs and the wide midfielder, in 4-4-2 -- forms a
@@ -933,7 +951,7 @@ class game:
                 self.positions[p] = [35.0 + (k - (len(rest) - 1) / 2.0) * CORNER_REST_SPACING, rest_y]
 
             for p in d_box:
-                self.positions[p] = [35.0 + self.rng.uniform(-12, 12), defending_y + self.rng.uniform(-3, 3)]
+                self.positions[p] = [35.0 + self.rng.uniform(-12, 12), defending_y + self.rng.uniform(-CORNER_DEFENDING_VAR_Y, CORNER_DEFENDING_VAR_Y)]
 
             self.ball[:] = [35.0, 50.0, 0.0, 0.0, 0.0, 0.0]
             self.ball_controller = -1
@@ -1050,7 +1068,7 @@ class game:
             self._set_must_pass_for_player(keeper)
         elif restart_type == "throw_in":
             throw_x = 0.0 if out_x < PITCH_WIDTH / 2.0 else PITCH_WIDTH
-            throw_y = float(np.clip(35.0 if out_y is None else out_y, 1.0, PITCH_HEIGHT - 1.0))
+            throw_y = float(_clamp(35.0 if out_y is None else out_y, 1.0, PITCH_HEIGHT - 1.0))
             throw_point = np.array([throw_x, throw_y], dtype=float)
 
             # Full-backs and wide players take throw-ins, nearest one first --
@@ -1311,7 +1329,7 @@ class game:
             # Conceding as an outfielder still stings, just far less.
             rating -= self.scores[1 - team] * 0.08
 
-        return float(np.clip(round(rating, 2), 0.0, 10.0))
+        return float(_clamp(round(rating, 2), 0.0, 10.0))
 
     def match_summary(self) -> list[dict]:
         """Per-player stats for the match just played, index-aligned with
@@ -1684,8 +1702,8 @@ class game:
             self._begin_restart(restart_type, restart_team, out_x, float(self.ball[1]))
             return
 
-        self.ball[0] = np.clip(self.ball[0], 0.0, PITCH_WIDTH)
-        self.ball[1] = np.clip(self.ball[1], 0.0, PITCH_HEIGHT)
+        self.ball[0] = _clamp(self.ball[0], 0.0, PITCH_WIDTH)
+        self.ball[1] = _clamp(self.ball[1], 0.0, PITCH_HEIGHT)
 
         # Goal detection already happened above, before the out-of-bounds
         # branch -- see _resolve_goal_frame.
@@ -1711,7 +1729,7 @@ class game:
         defending_bonus = stat_ability(player_attr.defending) * 0.20
 
         probability = base - speed_penalty - height_penalty + agility_bonus + control_bonus + defending_bonus + pass_bonus
-        return float(np.clip(probability, 0.05, 0.95))
+        return float(_clamp(probability, 0.05, 0.95))
 
     def _body_check(self, prev_xy) -> None:
         """A ball cannot travel through a player.
@@ -1833,7 +1851,7 @@ class game:
                 + stat_ability(self.all_players[index].attributes.ballcontrol) * 0.20
                 + max(0.0, 1.0 - rel_speed / comfort) * RECEIVE_STRIDE_WEIGHT
             )
-            controlled = self.rng.random() < float(np.clip(control_chance, 0.35, 0.99))
+            controlled = self.rng.random() < float(_clamp(control_chance, 0.35, 0.99))
             if not controlled and rel_speed > RECEIVE_STUN_SPEED and align < 0.2:
                 # A hard ball taken facing the wrong way knocks them off
                 # balance -- it does not sail through them untouched.
@@ -1878,12 +1896,12 @@ class game:
         if can_block and ((ball_speed >= block_threshold) or (ball_height >= 0.75)):
             deflection_bias = self._capture_success_probability(index, ball_speed, ball_height)
             pass_bias = 0.12 if self.ball_event in {"pass", "cross", "clearance", "throw_in"} else 0.04
-            block_chance = np.clip(0.22 + (ball_speed * 0.10) + (ball_height * 0.28) + (self.all_players[index].attributes.agility / 100.0) * 0.30 - deflection_bias * 0.20 + pass_bias, 0.15, 0.98)
+            block_chance = _clamp(0.22 + (ball_speed * 0.10) + (ball_height * 0.28) + (self.all_players[index].attributes.agility / 100.0) * 0.30 - deflection_bias * 0.20 + pass_bias, 0.15, 0.98)
             if self.rng.random() < block_chance:
                 return self._deflect_off(index, ball_speed, ball_height)
 
         success_chance = self._capture_success_probability(index, ball_speed, ball_height)
-        success_chance = float(np.clip(success_chance + 0.15, 0.2, 0.98))
+        success_chance = float(_clamp(success_chance + 0.15, 0.2, 0.98))
 
         if self.rng.random() < success_chance:
             # A teammate winning a pass through THIS path (a deflection, a
@@ -1979,7 +1997,7 @@ class game:
         ball_speed = float(_norm2(self.ball[2:4]))
         ball_height = max(0.0, float(self.ball[4]))
 
-        win_chance = float(np.clip(0.45 + 0.45 * skill - ball_speed / 100.0, 0.15, 0.95))
+        win_chance = float(_clamp(0.45 + 0.45 * skill - ball_speed / 100.0, 0.15, 0.95))
         if self.rng.random() >= win_chance:
             return self._deflect_off(index, ball_speed, ball_height)
 
@@ -2242,7 +2260,7 @@ class game:
         # Nudge the ball back inside along the pitch's long axis so the next
         # tick doesn't immediately re-detect the same crossing.
         inset = 0.35
-        self.ball[0] = float(np.clip(contact[0], 0.0, PITCH_WIDTH))
+        self.ball[0] = float(_clamp(contact[0], 0.0, PITCH_WIDTH))
         self.ball[1] = inset if plane_y <= 0.0 else PITCH_HEIGHT - inset
 
         self.post_hits += 1
@@ -2317,14 +2335,11 @@ class game:
         self.last_touch_player = -1
         self.assist_candidate = -1
 
-    def _turn_heading_toward(self, index: int, target_dir: np.ndarray) -> np.ndarray:
-        # Runs ~100K times a match on 2-vectors: plain floats and math.*
-        # here, not numpy -- np.linalg.norm/np.dot on a length-2 array cost
-        # more in call overhead than the arithmetic. Same maths as before.
-        tx, ty = float(target_dir[0]), float(target_dir[1])
+    def _turn_heading_toward(self, index: int, tx: float, ty: float) -> tuple[float, float]:
+        # ~100K calls a match: plain floats in and out, numpy overhead dwarfs the maths here.
         target_norm = math.hypot(tx, ty)
         if target_norm < 1e-8:
-            return self.heading[index]
+            return float(self.heading[index][0]), float(self.heading[index][1])
         tx, ty = tx / target_norm, ty / target_norm
 
         cx, cy = float(self.heading[index][0]), float(self.heading[index][1])
@@ -2341,14 +2356,14 @@ class game:
         max_turn = 0.18 + (agility / 100.0) * 0.9
 
         if angle <= max_turn:  # covers the old angle <= 1e-6 case too
-            return np.array([tx, ty], dtype=float)
+            return tx, ty
 
         cross = cx * ty - cy * tx
         theta = max_turn if cross >= 0.0 else -max_turn
         c, sn = math.cos(theta), math.sin(theta)
         rx, ry = c * cx - sn * cy, sn * cx + c * cy
         r = math.hypot(rx, ry)
-        return np.array([rx / r, ry / r], dtype=float)
+        return rx / r, ry / r
 
     def _release_ball(self, owner_index: int, direction: np.ndarray, launch_speed: float, aerial: bool = False, event_type: str = "neutral"):
         direction = np.asarray(direction, dtype=float)
@@ -2407,21 +2422,20 @@ class game:
         action_type = action["type"]
 
         if action_type == "move":
-            target = np.array(action["target"], dtype=float)
-            vec = target - self.positions[index]
-            dist = math.hypot(float(vec[0]), float(vec[1]))
+            target, pos = action["target"], self.positions[index]
+            vx, vy = float(target[0]) - float(pos[0]), float(target[1]) - float(pos[1])
+            dist = math.hypot(vx, vy)
 
             if dist > 0.1:
-                unit_vec = vec / dist
-                self.heading[index] = self._turn_heading_toward(index, unit_vec)
+                hx, hy = self._turn_heading_toward(index, vx / dist, vy / dist)
+                self.heading[index] = (hx, hy)
                 # A tired player is a slower player -- this is the only place
                 # fatigue actually bites, so stamina changes how a match ends
                 # rather than just being a number on a card.
-                self.velocity[index] = self.heading[index] * (
-                    base_speed * action["speed_mod"] * self._fatigue_factor(index)
-                )
+                speed = base_speed * action["speed_mod"] * self._fatigue_factor(index)
+                self.velocity[index] = (hx * speed, hy * speed)
             else:
-                self.velocity[index] = np.zeros(2, dtype=float)
+                self.velocity[index] = (0.0, 0.0)
 
         elif action_type == "pass":
             if self.ball_controller == index:
@@ -2588,7 +2602,7 @@ class game:
                 attacker_stat = self.all_players[holder_idx].attributes.ballcontrol
 
                 stat_diff = tackling - attacker_stat
-                steal_chance = float(np.clip(0.40 + (stat_diff / TACKLE_DUEL_SPREAD), 0.10, 0.90))
+                steal_chance = float(_clamp(0.40 + (stat_diff / TACKLE_DUEL_SPREAD), 0.10, 0.90))
 
                 self.match_stats[index]["tackles"] += 1
 
@@ -2729,7 +2743,7 @@ class game:
         push = 6.0 + chase * 4.0
         for i in others:
             y = float(self.positions[i][1]) + forward * push
-            self.positions[i][1] = float(np.clip(y, 2.0, PITCH_HEIGHT - 2.0))
+            self.positions[i][1] = float(_clamp(y, 2.0, PITCH_HEIGHT - 2.0))
 
         # The defending side drops into its own shape rather than pressing a
         # dead ball it cannot win.
@@ -3030,7 +3044,7 @@ class game:
             + max(0.0, -stat_diff / 100.0) * FOUL_OUTPACED_WEIGHT
             + max(0.0, from_behind) * FOUL_FROM_BEHIND_WEIGHT
         )
-        return self.rng.random() < float(np.clip(chance, 0.0, FOUL_MAX))
+        return self.rng.random() < float(_clamp(chance, 0.0, FOUL_MAX))
 
     def _award_foul(self, offender: int, victim: int):
         """Whistle. A foul in the offender's own box is a penalty, anything
@@ -3115,6 +3129,8 @@ class game:
         self.match_stats[index]["saves"] += 1
         if crossing["on_target"] and self.last_shot_player >= 0:
             self.match_stats[self.last_shot_player]["shots_on_target"] += 1
+            if self.replay and not self.last_shot_on_target:
+                self.replay.retype_last_shot_as_on_target(self.last_shot_player)
             self.last_shot_player = -1
 
         self.visual_action[index] = "save"
@@ -3123,7 +3139,7 @@ class game:
             self.replay.event(self.match_clock_frames, ActionType.SAVE, player_idx=index, team=defending_team)
 
         handling_stat = (gk_attrs.composure * 0.6) + (gk_attrs.ballcontrol * 0.4)
-        gather_chance = float(np.clip((handling_stat / 100.0) * 0.85 - (ball_speed / 40.0), 0.05, 0.85))
+        gather_chance = float(_clamp((handling_stat / 100.0) * 0.85 - (ball_speed / 40.0), 0.05, 0.85))
 
         if self.rng.random() < gather_chance:
             self._keeper_gather(index)
@@ -3200,7 +3216,7 @@ class game:
             SAVE_DIFFICULTY_SPEED_WEIGHT * speed_term + SAVE_DIFFICULTY_REACH_WEIGHT * reach_term
         )
 
-        return float(np.clip(quality * (1.0 - MAX_DIFFICULTY_PENALTY * difficulty), 0.02, 0.99))
+        return float(_clamp(quality * (1.0 - MAX_DIFFICULTY_PENALTY * difficulty), 0.02, 0.99))
 
     def _resolve_penalty(self, taker_index: int, keeper_index: int):
         """A penalty is a guessing game, not a shot.
@@ -3318,10 +3334,10 @@ class game:
             direction = np.array([0.0, forward])
         reach = radius + 0.5
         target = centre + direction / _norm2(direction) * reach
-        target[0] = float(np.clip(target[0], 0.5, PITCH_WIDTH - 0.5))
+        target[0] = float(_clamp(target[0], 0.5, PITCH_WIDTH - 0.5))
         across = float(target[0] - centre[0])
         target[1] = centre[1] + forward * math.sqrt(max(0.0, reach * reach - across * across))
-        target[1] = float(np.clip(target[1], 0.5, PITCH_HEIGHT - 0.5))
+        target[1] = float(_clamp(target[1], 0.5, PITCH_HEIGHT - 0.5))
         backed = dict(action) if is_move else {"type": "move"}
         backed.update(target=target, speed_mod=speed)
         return backed
@@ -3509,12 +3525,14 @@ class game:
         xs = self.positions[:, 0]
         past_halfspaces = np.where(np.arange(22) < 11, ys > 50.0, ys < 50.0)
         in_boxes = (14.0 < xs) & (xs < 56.0) & np.where(np.arange(22) < 11, ys > 82.0, ys < 18.0)
-        # Is a centre-back home for each side? See CB_HOME_DEPTH.
+        # Is a centre-back home for each side (see CB_HOME_DEPTH), and where is their line?
         cb_home = [False, False]
+        cb_line = [None, None]
         for team, (team_slice, goal_y) in enumerate(((slice(0, 11), 0.0), (slice(11, 22), PITCH_HEIGHT))):
             cbs = self._cb_mask[team_slice]
             if cbs.any():
                 pos = self.positions[team_slice][cbs]
+                cb_line[team] = float(pos[:, 1].mean())
                 cb_home[team] = bool(np.any(
                     (np.abs(pos[:, 1] - goal_y) < CB_HOME_DEPTH) & (np.abs(pos[:, 0] - PITCH_WIDTH / 2.0) < CB_HOME_HALF_WIDTH)
                 ))
@@ -3581,6 +3599,8 @@ class game:
                 # full-back reads this to decide between its flank and the
                 # centre -- see defender.py's "cover".
                 "cb_home": cb_home[0 if home else 1],
+                # Mean y of my centre-backs, or None -- the line a full-back holds (defender.py).
+                "cb_line": cb_line[0 if home else 1],
                 "team_possession": possesion if home else -possesion,
                 "past_halfspace": bool(past_halfspaces[i]),
                 "own_goal": self._own_goals[i],
@@ -3610,8 +3630,8 @@ class game:
             ):
                 fwd = 1.0 if i < 11 else -1.0
                 ahead = np.array([
-                    float(np.clip(self.positions[i][0] * 0.7 + (PITCH_WIDTH / 2.0) * 0.3, 2.0, PITCH_WIDTH - 2.0)),
-                    float(np.clip(self.positions[i][1] + fwd * PASS_AND_MOVE_PUSH, 2.0, PITCH_HEIGHT - 2.0)),
+                    float(_clamp(self.positions[i][0] * 0.7 + (PITCH_WIDTH / 2.0) * 0.3, 2.0, PITCH_WIDTH - 2.0)),
+                    float(_clamp(self.positions[i][1] + fwd * PASS_AND_MOVE_PUSH, 2.0, PITCH_HEIGHT - 2.0)),
                 ])
                 intended_action = {
                     "type": "move",

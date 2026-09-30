@@ -1,4 +1,4 @@
-from player.player import SHOT_PATIENCE, _norm2, player, ActionProfile
+from player.player import SHOT_PATIENCE, _clamp, _clamp_to_pitch, _count_within, _equal2, _norm2, player, ActionProfile
 from game_config import PRESS_FROM_DEFENDING, RECOVERY_ROLE_EFFORT, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
@@ -81,7 +81,7 @@ class Midfielder(player):
         best_runner = None
         best_progress = 2.0  # minimum forward progress to even consider a runner
         for tm in teammates:
-            if np.array_equal(tm, my_pos):
+            if _equal2(tm, my_pos):
                 continue
             forward_progress = (tm[1] - my_pos[1]) * goal_dir
             if forward_progress > best_progress:
@@ -94,7 +94,7 @@ class Midfielder(player):
         lead_distance = 4.0 + stat_ability(self.attributes.vision) * 8.0
         led_target = best_runner.copy()
         led_target[1] += lead_distance * goal_dir
-        led_target = np.clip(led_target, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])
+        led_target = _clamp_to_pitch(led_target[0], led_target[1])
 
         if not self._is_pass_safe(my_pos, led_target, opponents, line_width=1.3):
             return None
@@ -195,8 +195,8 @@ class Midfielder(player):
             
             base_pos = np.asarray(state["formation_pos"], dtype=float)
             shifted_target = base_pos + np.array([shift_x, shift_y])
-            shifted_target[0] = np.clip(shifted_target[0], 0.0, 70.0) #TODO: hardcoded bunlar dğeiştir
-            shifted_target[1] = np.clip(shifted_target[1], 0.0, 100.0)
+            shifted_target[0] = _clamp(shifted_target[0], 0.0, 70.0) #TODO: hardcoded bunlar dğeiştir
+            shifted_target[1] = _clamp(shifted_target[1], 0.0, 100.0)
             
             speed_mult = 0.7 if decision == "recover" else 0.4
             return {"type": "move", "target": shifted_target, "speed_mod": pace_ability(self.attributes.speed) * speed_mult}
@@ -374,7 +374,7 @@ class Midfielder(player):
             teammates = np.asarray(state.get("teammates", []))
             closer_teammates = 0
             if teammates.size > 0:
-                closer_teammates = int(np.sum(np.linalg.norm(teammates - landing_target, axis=1) < my_dist - 0.1))
+                closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
 
             if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
@@ -393,7 +393,7 @@ class Midfielder(player):
             t_hold *= 0.3
 
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-        ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
+        ball_pressure_count = _count_within(state["opponents"], state["ball_pos"], 3.0)
         own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
         dist_to_own_goal = abs(state["formation_pos"][1] - own_goal_y)
 
@@ -433,7 +433,7 @@ class Midfielder(player):
             teammates = np.asarray(state.get("teammates", []))
             closer_teammates = 0
             if teammates.size > 0:
-                closer_teammates = int(np.sum(np.linalg.norm(teammates - landing_target, axis=1) < my_dist - 0.1))
+                closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
 
             if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
@@ -443,7 +443,7 @@ class Midfielder(player):
             return "recovery_run" if RECOVERY_ROLE_EFFORT.get(state.get("my_role"), 1.0) > 0.0 else "hold_defense"
 
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-        ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
+        ball_pressure_count = _count_within(state["opponents"], state["ball_pos"], 3.0)
 
         if dist_to_ball < 2.0:
             actions = ["tackle", "contain"]

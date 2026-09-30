@@ -128,9 +128,9 @@ default covers only the frames before the first response.
 ### Play / Quick Match
 
 Calls `POST /match/quick`, which validates your saved roster, picks an
-opponent (a real account with a complete 11-player roster, or a
-freshly-rolled bot of random formation and random tier if none is
-available), simulates, rewards, and persists -- all before replying. A
+opponent (the first of 5 random accounts with a complete 11-player roster,
+or else a stored bot from a random tier's pool), simulates, rewards, and
+persists -- all before replying. A
 `LoadingPopup` covers the whole round trip.
 
 The result reaches the Match screen through the `MatchSession` autoload,

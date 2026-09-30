@@ -13,7 +13,7 @@ import secrets
 
 from fastapi import HTTPException
 
-from config import BOT_KIT
+from config import BOT_KIT, QUICK_MATCH_CANDIDATES, TOURNAMENT_TIERS
 from admin_firestore_client import AdminFirestoreClient
 from engine import (
     FORMATIONS,
@@ -28,6 +28,7 @@ from engine import (
     is_similar_position,
     player_to_fields,
 )
+from services.tournament import bot_pool_path
 
 # Stored bots (bots/{id}, see scripts/seed_bots.py) share the "bot_" uid
 # prefix with the throwaway ones _generate_bot_opponent rolls, so every
@@ -220,25 +221,54 @@ def _generate_bot_opponent(card_tier_rates: dict | None = None) -> tuple[str, di
 
 
 async def pick_opponent_profile(uid: str) -> tuple[str, dict]:
-    """Picks a random opponent for a Quick Match directly from users/{uid}
-    -- any account with a complete (11-player) saved roster is a candidate,
-    tried in random order, fetched fresh at match time (no separate
-    "opted in" collection to go stale or need republishing). Or, if none
-    exists at all (or every candidate's own saved data turns out stale/
-    invalid), a freshly-generated bot instead (see _generate_bot_opponent).
-    Quick Match should always find *someone* to play, even the very first
-    account ever on this deployment, or if every real candidate happens to
-    have bad data -- that's their problem to fix, not a reason to block
-    this caller's match.
+    """Quick Match's opponent: the first of QUICK_MATCH_CANDIDATES random
+    managers who can field a legal XI, else a stored bot from a random
+    tier's bot_pools/{tier} (else a freshly rolled one -- see
+    pick_opponent_from_candidates), so a match always happens.
 
-    Returns (opponent_uid, profile); opponent_uid is a "bot_..." sentinel
-    (never a real Firebase uid) when a bot was used.
+    Sampled rather than listed: the same handful of reads however many
+    accounts there are. Returns (opponent_uid, profile); a bot's uid is its
+    "bot_..." id.
     """
-    candidates = await AdminFirestoreClient(uid).list_collection("users")
-    candidate_uids = [
-        c["id"] for c in candidates if c["id"] != uid and len(c.get("roster_player_ids", [])) == 11
-    ]
-    return await pick_opponent_from_candidates(uid, candidate_uids)
+    client = AdminFirestoreClient(uid)
+    # One spare, in case the caller lands in their own sample.
+    docs = await client.sample_documents("users", QUICK_MATCH_CANDIDATES + 1)
+    docs = [d for d in docs if d["id"] != uid][:QUICK_MATCH_CANDIDATES]
+    random.shuffle(docs)
+    for doc in docs:
+        profile = await _playable_user_profile(doc["id"], doc)
+        if profile is not None:
+            return doc["id"], profile
+
+    pool = await client.get_document(bot_pool_path(random.choice(list(TOURNAMENT_TIERS))))
+    return await pick_opponent_from_candidates(
+        uid, list((pool or {}).get("uids") or []), max_attempts=QUICK_MATCH_CANDIDATES
+    )
+
+
+async def _playable_user_profile(candidate_uid: str, doc: dict | None) -> dict | None:
+    """users/{candidate_uid} as the profile run_match takes, given its
+    already-read doc, or None when it can't field a legal XI. The cheap
+    checks run on the doc alone; only a survivor pays for its eleven
+    player reads (see pick_opponent_from_candidates)."""
+    if doc is None:
+        return None
+    if len(doc.get("roster_player_ids") or []) != 11:
+        return None
+    if doc.get("formation") not in FORMATIONS:
+        return None
+
+    state = GameState(AdminFirestoreClient(candidate_uid), PLAYER_CLASS_MAP, Midfielder)
+    profile = await state.load_or_create_profile(
+        default_roster=[], default_display_name=doc.get("display_name", candidate_uid[:8])
+    )
+    if len(profile["roster"]) != 11:
+        return None  # roster_player_ids pointed at a players/{id} doc that's since been deleted
+    try:
+        validate_formation_positions(profile)
+    except HTTPException:
+        return None  # this candidate's own saved data is invalid -- try another, or fall back to a bot
+    return profile
 
 
 async def pick_opponent_from_candidates(
@@ -268,8 +298,7 @@ async def pick_opponent_from_candidates(
     load_or_create_profile, which would CREATE a profile for a uid that
     doesn't have one.
 
-    `max_attempts` bounds the worst case; None means "try them all", which is
-    what Quick Match wants since its candidate list is already filtered.
+    `max_attempts` bounds the worst case; None means "try them all".
     Falls back to a bot when nobody is playable, so a match always happens.
     """
     candidate_uids = [c for c in candidate_uids if c != uid]
@@ -292,26 +321,9 @@ async def pick_opponent_from_candidates(
                 continue
             return candidate_uid, bot_profile
 
-        # Stage one: one read, no roster.
-        doc = await client.get_document(f"users/{candidate_uid}")
-        if doc is None:
-            continue
-        if len(doc.get("roster_player_ids") or []) != 11:
-            continue
-        if doc.get("formation") not in FORMATIONS:
-            continue
-
-        # Stage two: now pay for the eleven player documents.
-        state = GameState(client, PLAYER_CLASS_MAP, Midfielder)
-        profile = await state.load_or_create_profile(
-            default_roster=[], default_display_name=doc.get("display_name", candidate_uid[:8])
-        )
-        if len(profile["roster"]) != 11:
-            continue  # roster_player_ids pointed at a players/{id} doc that's since been deleted
-        try:
-            validate_formation_positions(profile)
-        except HTTPException:
-            continue  # this candidate's own saved data is invalid -- try another, or fall back to a bot
-        return candidate_uid, profile
+        # Stage one reads the user doc; stage two (inside) the eleven players.
+        profile = await _playable_user_profile(candidate_uid, await client.get_document(f"users/{candidate_uid}"))
+        if profile is not None:
+            return candidate_uid, profile
 
     return _generate_bot_opponent(card_tier_rates)

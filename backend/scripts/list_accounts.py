@@ -1,8 +1,8 @@
 """Read-only diagnostic: lists every users/{uid} doc and its roster
 completeness -- run this to see the real current opponent pool for Quick
 Match (see mobile/README.md's "Quick Match" section), since
-`_pick_opponent_profile` in `main.py` picks candidates straight from
-`users/{uid}` (roster_player_ids length == 11), no other collection involved.
+`pick_opponent_profile` in `services/match.py` samples its candidates
+straight from `users/{uid}` (roster_player_ids length == 11).
 
 Never writes anything. Safe to run any time against production.
 
