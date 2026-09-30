@@ -355,6 +355,8 @@ func _on_socket_pressed() -> void:
 		return
 
 	_confirm_action = "equip"
+	_confirm_button.text = tr("Equip")
+	_cancel_button.text = tr("Cancel")
 	_confirm_label.text = tr("Socket %s into %s?\n\nThis cannot be undone.") % [
 		ItemData.label(pending), _card.full_name()
 	]
@@ -378,6 +380,8 @@ func _on_release_pressed() -> void:
 	if _releasing or _is_starting():
 		return
 	_confirm_action = "release"
+	_confirm_button.text = tr("Release")
+	_cancel_button.text = tr("Keep")
 	_confirm_footnote.text = tr("This card is gone for good.")
 	_confirm_label.text = tr("Release %s?\n\n%s %s, overall %d.\n\nYou get") % [
 		_card.full_name(), PlayerCard.tier_label(_card.tier), _card.position, _card.overall()

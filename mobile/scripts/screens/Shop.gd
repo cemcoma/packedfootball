@@ -76,7 +76,16 @@ var _sections: Array = []
 ## account data, and a type that no longer exists falls back to the first
 ## one on its own (see the find() below).
 static var _last_pack_type: String = ""
+## Set by open_energy(); one-shot, so a later plain visit opens on Packs again.
+static var _energy_back_to: String = ""
+var _return_scene: String = "res://scenes/Menu.tscn"
 var _busy: bool = false
+
+
+## Opens the Shop on Currency > Energy, with Back returning to `back_to`.
+static func open_energy(tree: SceneTree, back_to: String) -> void:
+	_energy_back_to = back_to
+	tree.change_scene_to_file("res://scenes/Shop.tscn")
 
 
 func _ready() -> void:
@@ -99,7 +108,23 @@ func _ready() -> void:
 	_restyle_chrome()
 
 	_refresh_inventory_label()
+	if _energy_back_to != "":
+		_return_scene = _energy_back_to
+		_energy_back_to = ""
+		show_energy()
 	await _refresh_and_load()
+
+
+## Switches to Currency > Energy in place -- also what the HUD's energy bar
+## calls when the Shop is already open.
+func show_energy() -> void:
+	# button_pressed only emits toggled, so the Currency handler's refresh
+	# doesn't race _refresh_and_load's.
+	_currency_tab_button.button_pressed = true
+	_packs_panel.visible = false
+	_currency_panel.visible = true
+	_restyle_chrome()
+	_currency_tabs.show_energy_tab()
 
 
 func _refresh_inventory_label() -> void:
@@ -198,7 +223,7 @@ func _refresh_and_load() -> void:
 
 
 func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file("res://scenes/Menu.tscn")
+	get_tree().change_scene_to_file(_return_scene)
 
 
 func _load_packs() -> void:

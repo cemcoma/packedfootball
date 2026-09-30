@@ -8,6 +8,9 @@ extends HBoxContainer
 ## Reads the GameProfile cache and never fetches: everything that moves a
 ## balance emits GameProfile.currencies_changed, which lands here.
 
+## A tap on the energy bar; CurrencyHud decides where it goes.
+signal energy_pressed
+
 @onready var _credits_chip: CurrencyChip = %CreditsChip
 @onready var _bucks_chip: CurrencyChip = %BucksChip
 @onready var _medals_chip: CurrencyChip = %MedalsChip
@@ -22,11 +25,25 @@ func _ready() -> void:
 		chip.set_compact(true)
 	_energy_bar.set_compact(true)
 
-	# Display only -- a tap has to reach the screen underneath the strip.
+	# Display only -- a tap has to reach the screen underneath the strip --
+	# except the energy bar, which opens the Shop's Energy tab.
 	_ignore_mouse(self)
+	_energy_bar.mouse_filter = Control.MOUSE_FILTER_STOP
+	_energy_bar.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_energy_bar.gui_input.connect(_on_energy_bar_input)
 
 	GameProfile.currencies_changed.connect(refresh)
 	refresh()
+
+
+## Fires on release inside the bar, like a Button, so a finger that slides
+## off cancels the tap.
+func _on_energy_bar_input(event: InputEvent) -> void:
+	var click := event as InputEventMouseButton
+	if click == null or click.button_index != MOUSE_BUTTON_LEFT or click.pressed:
+		return
+	if Rect2(Vector2.ZERO, _energy_bar.size).has_point(click.position):
+		energy_pressed.emit()
 
 
 func _ignore_mouse(node: Node) -> void:

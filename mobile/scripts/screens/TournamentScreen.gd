@@ -41,6 +41,7 @@ extends Control
 ## `required` in the payload says.
 
 const MATCH_SCENE := "res://scenes/Match.tscn"
+const Shop := preload("res://scripts/screens/Shop.gd")
 
 @onready var _tier_label: Label = %TierLabel
 @onready var _countdown_label: Label = %CountdownLabel
@@ -59,6 +60,7 @@ const MATCH_SCENE := "res://scenes/Match.tscn"
 @onready var _full_day_claim_button: Button = %FullDayClaimButton
 
 @onready var _join_button: Button = %JoinButton
+@onready var _energy_button: Button = %EnergyButton 
 @onready var _play_button: Button = %PlayButton
 @onready var _back_button: Button = %BackButton
 @onready var _busy_popup: Control = %BusyPopup
@@ -81,6 +83,7 @@ func _ready() -> void:
 	_join_button.pressed.connect(_on_join_pressed)
 	_play_button.pressed.connect(_on_play_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
+	_energy_button.pressed.connect(_on_energy_pressed)
 	_banner_button.pressed.connect(func() -> void: _banner.visible = false)
 	_full_day_claim_button.pressed.connect(_on_claim_full_day_pressed.bind({}))
 	_banner_claim_button.pressed.connect(_on_banner_claim_pressed)
@@ -273,6 +276,7 @@ func _refresh_buttons() -> void:
 
 	_join_button.visible = not joined
 	_play_button.visible = joined
+	_energy_button.visible = joined and not out_of_matches and out_of_energy
 
 	if not joined:
 		_join_button.disabled = _busy or closed
@@ -289,9 +293,10 @@ func _refresh_buttons() -> void:
 		_set_status(tr(TournamentSession.text("all_played")), false)
 	elif out_of_energy:
 		_play_button.text = tr("Out of energy")
-		_set_status(tr("No energy left -- it refills over time, or top up in the Shop."), true)
+		_set_status(tr("No energy left."), true)
 	else:
 		_play_button.text = tr("Play match %d of %d") % [played + 1, total]
+		_energy_button.visible = false
 
 
 func _show_pending_results(pending) -> void:
@@ -371,6 +376,7 @@ func _set_status(text: String, warn: bool) -> void:
 func _apply_theme_colors() -> void:
 	MenuTile.style_button(_join_button, ThemeManager.color("accent"))
 	MenuTile.style_button(_play_button, ThemeManager.color("accent"))
+	MenuTile.style_button(_energy_button, ThemeManager.color("accent"))
 	MenuTile.style_button(_back_button, ThemeManager.color("surface_border"))
 	var heading := ThemeManager.color("heading")
 
@@ -560,3 +566,7 @@ func _on_banner_claim_pressed() -> void:
 
 func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file(TournamentSession.HUB_SCENE)
+
+
+func _on_energy_pressed() -> void:
+	Shop.open_energy(get_tree(), TournamentSession.SCREEN_SCENE)

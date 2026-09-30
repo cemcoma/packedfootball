@@ -17,6 +17,14 @@ extends Node
 const REQUEST_TIMEOUT_SECONDS := 60.0
 
 
+## True while any request is in flight -- each one is an HTTPRequest child.
+func is_busy() -> bool:
+	for child in get_children():
+		if not child.is_queued_for_deletion():
+			return true
+	return false
+
+
 func _auth_headers() -> PackedStringArray:
 	return PackedStringArray(
 		["Authorization: Bearer %s" % FirebaseAuth.id_token, "Content-Type: application/json"]
