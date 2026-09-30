@@ -8,6 +8,8 @@ from typing import Final
 import free_kick
 from replay import ActionType, ReplayRecorder
 from game_config import (  # noqa: F401
+    CROSS_MAX_SPEED,
+    cross_flight_max,
     FK_FLIGHT_MAX_FRAMES,
     FK_KEEPER_OFF_LINE,
     WALL_DISTANCE,
@@ -23,6 +25,7 @@ from game_config import (  # noqa: F401
     PENALTY_SHOT_SPEED,
     PENALTY_SIDES,
     STAT_CEILING,
+    cross_flight,
     pace_ability,
     stat_ability,
     BALL_AIR_FRICTION,
@@ -255,7 +258,31 @@ from formations import get_formation, is_similar_position
 #         The strike records SHOOT and the save/block lands when the ball does.
 #         Shooting-range free kicks load the box and are sometimes played in
 #         (more when behind late), so the keeper stands off his line.
-ENGINE_VERSION: Final[str] = "4.1.0"
+#   4.2.0 a beaten defender, CDM or CM (at 0.9) sprints back to his lane on a
+#         line goal-side of the ball (recovery_run), faster with defending, and
+#         only goes at the carrier within RECOVERY_PRESS_RANGE; CAM/LM/RM hold
+#         position. A centre-back holds the middle rather than following a
+#         winger out. A keeper who picks the ball up in his box holds it in his
+#         hands while everyone backs off, then mostly punts it: landing 2/5
+#         (power 40) to 2/3 (power 90) up the pitch, his side going up for the
+#         header and the second ball (punt support).
+#         Crossing: a ball out to a wide outlet counts as progress; forwards
+#         always make a box run while a teammate carries it wide, timed to him
+#         and never offside; the winger crosses late unless runners are in or
+#         he is closed down, leading his man by the real flight. The crosser's
+#         side is kept off the aerial contest only for the team lock, not his
+#         whole cooldown -- attackers could not head any cross arriving <~0.7s.
+#         A cross is flat into a clear lane and lofted over anyone stood in it
+#         (set pieces always lofted), aimed only at a runner who is in the box
+#         when that ball lands, with half the old aim error. Nobody to find:
+#         no cross (full-backs included), he lays it off.
+#         Headers at goal are struck at 20-30 units/s (was 14-24): header goals
+#         2% of header shots -> 6%, on target 20% -> 29%, over 56 matches.
+#         Header aim scales with stat_ability to STAT_CEILING (HEADER_AIM_*):
+#         on target ~50% at heading 70, 70% at 100, 85% at 130.
+#         Shooting: aim error shrinks inside 20 units of goal, and with an open
+#         run at the keeper from further than 12 out he carries it on instead.
+ENGINE_VERSION: Final[str] = "4.2.0"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -350,6 +377,25 @@ SAVE_DIFFICULTY_SPEED_WEIGHT: Final = 0.5
 SAVE_DIFFICULTY_REACH_WEIGHT: Final = 0.5
 MAX_DIFFICULTY_PENALTY: Final = 0.5      # hardest shot halves the save chance
 KEEPER_BEATEN_FRAMES: Final = 90 # How long a beaten keeper is on the floor.
+# A keeper who picks the ball up in his box holds it this long, in his hands,
+# while opponents back off to the box edge and teammates give him room.
+KEEPER_HOLD_FRAMES: Final = 90
+KEEPER_HANDS_HEIGHT: Final = 1.1
+KEEPER_BACKOFF_OPPONENTS: Final = 18.0
+KEEPER_BACKOFF_TEAMMATES: Final = 8.0
+# A punt is flown to land on its target, hanging this long for its distance.
+PUNT_REF_SPEED: Final = 22.0
+PUNT_FLIGHT_MIN: Final = 1.8
+PUNT_FLIGHT_MAX: Final = 2.8
+# While a punt is up the keeper's side goes to meet it: the PUNT_CONTESTERS
+# nearest attack the drop, the next take the PUNT_RING second-ball spots around
+# it (across, and forward in their attacking direction), the rest push up
+# PUNT_PUSH_UP. Once it is touched the drop and ring go for the loose ball.
+PUNT_CONTESTERS: Final = 2
+PUNT_RING: Final = ((-6.0, 5.0), (6.0, 5.0), (0.0, -5.0))
+PUNT_PUSH_UP: Final = 15.0
+PUNT_SUPPORT_SPRINT: Final = 1.15
+PUNT_SUPPORT_STEPS: Final = 120   # given up if nobody has it by then
 SAVE_COMMIT_MARGIN: Final = 1.0
 # The keeper only commits once the ball is genuinely on them -- either this
 # close, or this near to reaching the line. Without it a save would resolve
@@ -403,26 +449,31 @@ BLOCK_FAST_RADIUS: Final = 1.5
 HEAD_MIN_HEIGHT: Final = 1.2
 HEAD_RADIUS: Final = 1.25             # lateral distance to be in a header contest
 HEAD_STANDING_BONUS: Final = 0.25    # standing reach above body height
-HEADER_SIGMA_FLOOR: Final = 0.3
+HEADER_SIGMA_FLOOR: Final = 0.2
+# A header at goal misses its corner by HEADER_AIM_AT_100 * exp(-HEADER_AIM_FALLOFF
+# * (stat_ability(heading) - stat_ability(100))): never zero, so every point to
+# STAT_CEILING still tells. Plus HEADER_PRESSURE_SIGMA per man on him, times
+# (HEADER_PRESSURE_REF - stat_ability(composure)). Tuned: on target ~50% at
+# heading 70, ~70% at 100 (tests/test_header_accuracy.py).
+HEADER_AIM_AT_100: Final = 1.1
+HEADER_AIM_FALLOFF: Final = 5.5
+HEADER_PRESSURE_SIGMA: Final = 2.0
+HEADER_PRESSURE_REF: Final = 1.1
 HEAD_JUMP_MAX: Final = 0.6           # extra reach at 100 heading/agility
 KEEPER_HAND_REACH: Final = 0.9       # arms up, on top of body height
-HEADER_SHOT_SPEED: Final = (14.0, 24.0)    # at heading 0 / 100
+HEADER_SHOT_SPEED: Final = (20.0, 30.0)    # at heading 0 / 100; slower was a routine save
 HEADER_CLEAR_SPEED: Final = (12.0, 20.0)
 HEADER_FLICK_SPEED: Final = 9.0
 HEADER_SHOT_RANGE: Final = 22.0      # units from the enemy goal to head at it
 HEADER_CLEAR_RANGE: Final = 30.0     # units from own goal to head it away
 
 # --- Crosses ---------------------------------------------------------------
-# A cross is flighted to arrive at HEAD_CONTACT_HEIGHT after a flight time
-# of distance / CROSS_FLIGHT_REF_SPEED seconds (clamped); the launch speed
-# is solved from the air friction, capped by the crosser's power.
-# While airborne these events fly on BALL_AIR_FRICTION, not ground friction.
+# A cross is flighted to arrive at HEAD_CONTACT_HEIGHT after game_config's
+# cross_flight(distance); the launch speed is solved from the air friction,
+# capped by the crosser's power. While airborne these events fly on
+# BALL_AIR_FRICTION, not ground friction.
 LOFTED_EVENTS: Final = frozenset({"cross", "clearance"})
 CROSS_ARRIVAL_HEIGHT: Final = HEAD_CONTACT_HEIGHT
-CROSS_FLIGHT_REF_SPEED: Final = 22.0
-CROSS_FLIGHT_MIN: Final = 0.8
-CROSS_FLIGHT_MAX: Final = 1.8
-CROSS_MAX_SPEED: Final = 32.0
 
 base_kick_pow:Final = 20
 
@@ -454,6 +505,7 @@ PASS_AIM_ERROR_DEGREES: Final[float] = 8.0
 # player._choose_cross_target), and a throw-in is short and two-handed.
 PASS_AIM_ERROR_BY_TYPE: Final[dict] = {
     "normal": 1.0, "through_ball": 1.0, "cross": 0.5, "clearance": 0.5, "throw_in": 0.25,
+    "punt": 0.5,
 }
 base_speed: Final = PLAYER_BASE_SPEED     # see game_config: shared with player.py
 possession_radius: Final = POSSESSION_RADIUS
@@ -598,6 +650,11 @@ class game:
        
         self.ball_controller = -1  # -1 indicates a loose ball. 0-21 corresponds to the player index currently in possession.
         self.ball_event = "neutral"
+        # A keeper with the ball in his hands (_start_keeper_hold), or -1.
+        self.keeper_holding = -1
+        self.keeper_hold_timer = 0
+        # A punt the keeper's side is going up for (_start_punt_support), or None.
+        self._punt = None
         
         self.possession_radius = possession_radius
         self.player_radius = PLAYER_RADIUS
@@ -900,6 +957,7 @@ class game:
         """
         self.out_of_play = True
         self._fk_flight = None
+        self._punt = None
         self.restart_type = restart_type
         self.restart_team = team if team is not None else (0 if self.last_touch_team is None else 1 - self.last_touch_team)
         self.restart_timer = 30
@@ -1543,6 +1601,11 @@ class game:
 
         if self._fk_flight is not None and self.ball_controller != -1:
             self._fk_flight = None
+        if self.keeper_holding >= 0:
+            if self.ball_controller != self.keeper_holding:
+                self.keeper_holding = -1
+            elif self.keeper_hold_timer > 0:
+                self.keeper_hold_timer -= 1
         in_fk_flight = self._fk_flight is not None
         if in_fk_flight:
             self._fk_flight_tick(dt)
@@ -1565,7 +1628,7 @@ class game:
         else:
             self.ball[0:2] = self.positions[self.ball_controller]
             self.ball[2:4] = self.velocity[self.ball_controller]
-            self.ball[4] = 0.0
+            self.ball[4] = KEEPER_HANDS_HEIGHT if self.ball_controller == self.keeper_holding else 0.0
             self.ball[5] = 0.0
 
         # Goal frame FIRST. A ball crossing the goal plane is a goal or a
@@ -1848,6 +1911,8 @@ class game:
             self.ball[5] = 0.0
             if ball_height > 0.5:
                 self.velocity[index] *= 0.65
+            if is_keeper:
+                self._start_keeper_hold(index)  # picked up, not a pass at his feet
             return True
 
         self.ball_capture_player = index
@@ -1926,25 +1991,7 @@ class game:
         opponents = self.positions[11:22] if team == 0 else self.positions[0:11]
 
         if _norm2(enemy_goal - my_pos) <= HEADER_SHOT_RANGE and abs(my_pos[0] - PITCH_WIDTH / 2.0) < 21.0:
-            # Header at goal: _calculate_shot's aim, spread from heading.
-            pressure = int(np.sum(np.linalg.norm(opponents - my_pos, axis=1) < 3.0))
-            composure = float(getattr(attrs, "composure", 50))
-            # Floor low enough that heading still tells up to 100; at 0.9 every
-            # header above 91 was identical.
-            sigma = max(HEADER_SIGMA_FLOOR, max(0.0, 100.0 - head_attr) / 10.0 + pressure * max(0.0, 100.0 - composure) / 20.0)
-            aim_x = (32.2 if self.rng.random() < 0.5 else 37.8) + self.rng.normal(0.0, sigma)
-            aim_z = max(0.0, self.rng.uniform(0.2, 1.8) + self.rng.normal(0.0, sigma * 0.3))
-            vec = np.array([aim_x, enemy_goal[1]]) - my_pos
-            dist = _norm2(vec)
-            unit = vec / max(dist, 1e-8)
-            speed = HEADER_SHOT_SPEED[0] + (HEADER_SHOT_SPEED[1] - HEADER_SHOT_SPEED[0]) * skill
-            self.match_stats[index]["shots"] += 1
-            self.last_shot_player = index
-            self._release_ball(index, unit, speed, aerial=True, event_type="shot")
-            self.ball[4] = ball_height
-            self.ball[5] = self._launch_vz(ball_height, aim_z, self._flight_time(dist, speed))
-            crossing = self.predict_goal_crossing(1 - team)
-            self.last_shot_on_target = bool(crossing and crossing["on_target"])
+            self._header_at_goal(index, ball_height)
         elif _norm2(own_goal - my_pos) <= HEADER_CLEAR_RANGE:
             # Defensive header: away from goal, toward the nearer touchline.
             away = my_pos - own_goal
@@ -1981,6 +2028,38 @@ class game:
         if self.replay:
             self.replay.event(self.match_clock_frames, ActionType.HEADER, player_idx=index, team=team)
         return False
+
+    def _header_at_goal(self, index: int, ball_height: float) -> None:
+        """A won header aimed at a corner. The spread narrows with heading all the
+        way to STAT_CEILING (HEADER_AIM_*), and widens under pressure unless he
+        is composed."""
+        attrs = self.all_players[index].attributes
+        team = 0 if index < 11 else 1
+        my_pos = np.array(self.positions[index], dtype=float)
+        enemy_goal = self._goal_targets[index]
+        opponents = self.positions[11:22] if team == 0 else self.positions[0:11]
+        pressure = int(np.sum(np.linalg.norm(opponents - my_pos, axis=1) < 3.0))
+        heading = stat_ability(float(getattr(attrs, "heading", 50)))
+        composure = stat_ability(float(getattr(attrs, "composure", 50)))
+        sigma = max(
+            HEADER_SIGMA_FLOOR,
+            HEADER_AIM_AT_100 * math.exp(-HEADER_AIM_FALLOFF * (heading - stat_ability(100.0)))
+            + pressure * HEADER_PRESSURE_SIGMA * max(0.0, HEADER_PRESSURE_REF - composure),
+        )
+        aim_x = (32.2 if self.rng.random() < 0.5 else 37.8) + self.rng.normal(0.0, sigma)
+        aim_z = max(0.0, self.rng.uniform(0.2, 1.8) + self.rng.normal(0.0, sigma * 0.3))
+        vec = np.array([aim_x, enemy_goal[1]]) - my_pos
+        dist = _norm2(vec)
+        unit = vec / max(dist, 1e-8)
+        skill = float(getattr(attrs, "heading", 50)) / 100.0
+        speed = HEADER_SHOT_SPEED[0] + (HEADER_SHOT_SPEED[1] - HEADER_SHOT_SPEED[0]) * skill
+        self.match_stats[index]["shots"] += 1
+        self.last_shot_player = index
+        self._release_ball(index, unit, speed, aerial=True, event_type="shot")
+        self.ball[4] = ball_height
+        self.ball[5] = self._launch_vz(ball_height, aim_z, self._flight_time(dist, speed))
+        crossing = self.predict_goal_crossing(1 - team)
+        self.last_shot_on_target = bool(crossing and crossing["on_target"])
 
     def display_clock_frames(self) -> int:
         """The clock a VIEWER should see, which is not the same thing as
@@ -2373,6 +2452,7 @@ class game:
 
                 unit_vec = vec / dist
                 pass_type = action.get("pass_type", "normal")
+                lofted = bool(action.get("loft", False))
 
                 # A throw-in is thrown, not kicked. The taker's own class has
                 # no idea it's taking one (nothing ever emitted
@@ -2388,6 +2468,7 @@ class game:
                     # A delivery, not a square ball: a crossable free kick, or a
                     # deep one hit long by a side chasing the game.
                     pass_type = "cross"
+                    lofted = True   # a set-piece delivery into a crowded box
                     target = self._choose_restart_delivery(index)
                     vec = target - self.positions[index]
                     dist = _norm2(vec)
@@ -2398,6 +2479,7 @@ class game:
                     px, py = self.positions[index]
                     if (px <= 5.0 or px >= PITCH_WIDTH - 5.0) and (py <= 5.0 or py >= PITCH_HEIGHT - 5.0):
                         pass_type = "cross"
+                        lofted = True
 
                 power = base_kick_pow * action["power"]
                 aerial = False
@@ -2407,18 +2489,26 @@ class game:
                     aerial = True
                     power *= 1.2
                     launch_vz = self._launch_vz(0.0, 0.0, 1.6)
+                elif pass_type == "punt":
+                    # A keeper's kick: hung up high and landed on its target. The
+                    # keeper class caps the distance by his power (_punt_reach).
+                    aerial = True
+                    event_type = "clearance"
+                    flight = min(PUNT_FLIGHT_MAX, max(PUNT_FLIGHT_MIN, dist / PUNT_REF_SPEED))
+                    power = dist * -math.log(BALL_AIR_FRICTION) / (1.0 - BALL_AIR_FRICTION ** flight)
+                    launch_vz = self._launch_vz(0.0, 0.0, flight)
                 elif pass_type == "cross":
                     # Flighted to drop to head height at the target: solve the
                     # launch speed from tick()'s friction for the wanted flight
                     # time, capped by the crosser's power (under-hit falls short).
                     aerial = True
                     event_type = "cross"
-                    flight = min(CROSS_FLIGHT_MAX, max(CROSS_FLIGHT_MIN, dist / CROSS_FLIGHT_REF_SPEED))
+                    flight = cross_flight(dist, lofted)
                     needed = dist * -math.log(BALL_AIR_FRICTION) / (1.0 - BALL_AIR_FRICTION ** flight)
                     max_power = base_kick_pow * float(self.all_players[index].attributes.power) / 40.0
                     power = min(needed, max_power, CROSS_MAX_SPEED)
                     if power < needed:  # under-hit: drops short rather than looping higher
-                        flight = min(CROSS_FLIGHT_MAX, self._flight_time(dist, power, BALL_AIR_FRICTION))
+                        flight = min(cross_flight_max(lofted), self._flight_time(dist, power, BALL_AIR_FRICTION))
                     launch_vz = self._launch_vz(0.0, CROSS_ARRIVAL_HEIGHT, flight)
                 elif pass_type == "throw_in":
                     aerial = False
@@ -2433,6 +2523,7 @@ class game:
                     pass_event = {
                         "normal": ActionType.PASS,
                         "clearance": ActionType.CLEARANCE,
+                        "punt": ActionType.CLEARANCE,
                         "cross": ActionType.CROSS,
                         # Not THROW_IN: that is the award, and the client
                         # banners it. This is the throw itself.
@@ -2443,6 +2534,8 @@ class game:
                 self._release_ball(index, unit_vec, power, aerial=aerial, event_type=event_type)
                 if launch_vz is not None:
                     self.ball[5] = launch_vz
+                if pass_type == "punt":
+                    self._start_punt_support(index, self.positions[index] + unit_vec * dist)
 
         elif action_type == "shoot":
             if self.ball_controller == index:
@@ -2484,6 +2577,8 @@ class game:
                 return
 
             holder_idx = self.ball_controller
+            if holder_idx == self.keeper_holding:
+                return  # it is in his hands
             dist = _norm2(self.positions[index] - self.positions[holder_idx])
             
             if dist <= 2.0:
@@ -3076,6 +3171,16 @@ class game:
 
         self.velocity[index] = np.zeros(2, dtype=float)
         self.player_stun_cooldown[index] = 6  # Faster recovery for catching safely
+        self._start_keeper_hold(index)
+
+    def _start_keeper_hold(self, index: int) -> None:
+        """Ball in his hands, if he is in his own box: nobody may challenge him
+        and he waits KEEPER_HOLD_FRAMES while the field backs off (_back_off)."""
+        if index not in self._keeper_indices or not self._in_own_box(index, self.positions[index]):
+            return
+        self.keeper_holding = index
+        self.keeper_hold_timer = KEEPER_HOLD_FRAMES
+        self.velocity[index] = np.zeros(2, dtype=float)
 
     def _save_chance(self, gk_attrs, ball_speed: float, lateral: float) -> float:
         """How likely this keeper is to stop THIS shot.
@@ -3130,6 +3235,96 @@ class game:
         on_target = self.rng.random() < placement
         read_it = dive == aim and self.rng.random() < save
         return (on_target and not read_it), aim, dive, on_target
+
+    def _start_punt_support(self, keeper: int, landing) -> None:
+        """His side goes up for the punt: groups picked once, by who is nearest the drop."""
+        team = 0 if keeper < 11 else 1
+        outfield = [i for i in (range(0, 11) if team == 0 else range(11, 22)) if i not in self._keeper_indices]
+        landing = np.asarray(landing, dtype=float)
+        outfield.sort(key=lambda i: _norm2(self.positions[i] - landing))
+        ring_end = PUNT_CONTESTERS + len(PUNT_RING)
+        self._punt = {
+            "keeper": keeper, "team": team, "landing": landing, "phase": "air", "steps": 0,
+            "contest": outfield[:PUNT_CONTESTERS], "ring": outfield[PUNT_CONTESTERS:ring_end],
+            "rest": outfield[ring_end:],
+        }
+
+    def _update_punt_support(self) -> None:
+        """Over once somebody has it; the second ball once it is touched or down."""
+        punt = self._punt
+        if punt is None:
+            return
+        punt["steps"] += 1
+        if self.ball_controller >= 0 or punt["steps"] > PUNT_SUPPORT_STEPS:
+            self._punt = None
+        elif punt["phase"] == "air" and (self.last_touch_player != punt["keeper"] or self.ball[4] <= 0.0):
+            punt["phase"] = "second"
+
+    def _punt_support(self, i: int, action):
+        """The keeper's side under its own punt; a capture or header is left alone."""
+        punt = self._punt
+        if action is not None and action.get("type") != "move":
+            return action
+        forward = 1.0 if punt["team"] == 0 else -1.0
+        pace = pace_ability(self.all_players[i].attributes.speed)
+        landing = punt["landing"]
+        speed = pace * PUNT_SUPPORT_SPRINT
+        if punt["phase"] == "second":
+            if i not in punt["contest"] and i not in punt["ring"]:
+                return action
+            target = np.array(self.ball[0:2]) + np.array(self.ball[2:4]) * 0.4
+        elif i in punt["contest"]:
+            target = landing.copy()
+        elif i in punt["ring"]:
+            across, ahead = PUNT_RING[punt["ring"].index(i)]
+            target = landing + np.array([across, forward * ahead])
+        elif i in punt["rest"]:
+            # Up behind the drop, not past it.
+            pos = self.positions[i]
+            y = min(float(pos[1]) * forward + PUNT_PUSH_UP, float(landing[1]) * forward - 8.0)
+            if y <= float(pos[1]) * forward:
+                return action
+            target = np.array([float(pos[0]), y * forward])
+            speed = pace * 0.8
+        else:
+            return action
+        target = np.clip(target, [0.5, 0.5], [PITCH_WIDTH - 0.5, PITCH_HEIGHT - 0.5])
+        return {"type": "move", "target": target, "speed_mod": speed}
+
+    def _back_off(self, i: int, action, holder: int):
+        """Keep off a keeper with the ball in his hands: opponents out to the
+        box edge, teammates out of his way. Nobody challenges him."""
+        pos = np.asarray(self.positions[i], dtype=float)
+        centre = np.asarray(self.positions[holder], dtype=float)
+        radius = KEEPER_BACKOFF_TEAMMATES if (i < 11) == (holder < 11) else KEEPER_BACKOFF_OPPONENTS
+        pace = pace_ability(self.all_players[i].attributes.speed)
+        is_move = action is not None and action.get("type") == "move"
+        inside = _norm2(pos - centre) < radius
+        if not is_move and not inside:
+            return None if action is not None and action.get("type") in ("tackle", "capture") else action
+        if inside:
+            direction = pos - centre
+            speed = max(float(action["speed_mod"]) if is_move else 0.0, pace * 0.9)
+        else:
+            direction = np.asarray(action["target"], dtype=float) - centre
+            if _norm2(direction) >= radius:
+                return action
+            speed = float(action["speed_mod"])
+        # Out toward the pitch, never back past him toward his own goal line.
+        forward = 1.0 if holder < 11 else -1.0
+        if direction[1] * forward < 0.0:
+            direction = np.array([direction[0], 0.0])
+        if _norm2(direction) < 1e-6:
+            direction = np.array([0.0, forward])
+        reach = radius + 0.5
+        target = centre + direction / _norm2(direction) * reach
+        target[0] = float(np.clip(target[0], 0.5, PITCH_WIDTH - 0.5))
+        across = float(target[0] - centre[0])
+        target[1] = centre[1] + forward * math.sqrt(max(0.0, reach * reach - across * across))
+        target[1] = float(np.clip(target[1], 0.5, PITCH_HEIGHT - 0.5))
+        backed = dict(action) if is_move else {"type": "move"}
+        backed.update(target=target, speed_mod=speed)
+        return backed
 
     def _players_deciding(self, dist_to_ball: np.ndarray) -> np.ndarray:
         """Boolean per player: does this round get a fresh decision from
@@ -3229,6 +3424,15 @@ class game:
 
         possesion: int = 0
         if self.ball_controller == -1:
+            # The aerial contest locks the kicker's side out only for the team
+            # cooldown, as _attempt_capture does -- the whole-cooldown mask below
+            # kept the crosser's team off every cross that arrived inside ~0.7s.
+            aerial_distances = distances.copy()
+            if self.ball_release_player >= 0:
+                aerial_distances[self.ball_release_player] = np.inf
+                if self.ball_release_team_cooldown > 0:
+                    kicking_side = slice(0, 11) if self.ball_release_player < 11 else slice(11, 22)
+                    aerial_distances[kicking_side] = np.inf
             if self.ball_release_player >= 0:
                 release_team = 0 if self.ball_release_player < 11 else 1
                 distances[self.ball_release_player] = np.inf
@@ -3244,10 +3448,10 @@ class game:
             ball_h = max(0.0, float(self.ball[4]))
             if ball_h >= HEAD_MIN_HEIGHT:
                 # Aerial: whoever can reach it contests it, best header wins.
-                near = np.flatnonzero((distances < HEAD_RADIUS) & (self._reach >= ball_h))
+                near = np.flatnonzero((aerial_distances < HEAD_RADIUS) & (self._reach >= ball_h))
                 if near.size:
                     gk_near = [int(i) for i in near if i in self._keeper_indices]
-                    if gk_near and distances[gk_near[0]] <= float(distances[near].min()):
+                    if gk_near and aerial_distances[gk_near[0]] <= float(aerial_distances[near].min()):
                         self._attempt_capture(gk_near[0])
                     else:
                         outfield = np.array([i for i in near if i not in self._keeper_indices])
@@ -3256,7 +3460,7 @@ class game:
                                 0.6 * getattr(self.all_players[i].attributes, "heading", 50)
                                 + 0.2 * self.all_players[i].attributes.agility
                                 + 0.5 * (getattr(self.all_players[i].attributes, "height", 180) - 170)
-                                - 6.0 * distances[i]
+                                - 6.0 * aerial_distances[i]
                                 for i in outfield
                             ]) + self.rng.normal(0.0, 8.0, size=outfield.size)
                             self._attempt_capture(int(outfield[int(np.argmax(score))]))
@@ -3322,10 +3526,15 @@ class game:
         )
 
         flight = self._fk_flight
+        self._update_punt_support()
+        holder = self.keeper_holding if self.keeper_holding == self.ball_controller else -1
         actions = []
         for i in range(22):
             if flight is not None and flight.controls(i, self.positions):
                 actions.append(None)  # the free kick's keeper and wall
+                continue
+            if i == holder and self.keeper_hold_timer > 0:
+                actions.append(None)  # waits, ball in hand
                 continue
             if i == self.ball_capture_player and self.ball_capture_cooldown > 0:
                 actions.append(None)
@@ -3423,6 +3632,11 @@ class game:
             self._last_actions[i] = intended_action
             self.intent[i] = intended_action.get("intent") if intended_action else None
             self._decisions_made += 1
+
+        if self._punt is not None:
+            actions = [self._punt_support(i, a) for i, a in enumerate(actions)]
+        if holder >= 0:
+            actions = [a if i == holder else self._back_off(i, a, holder) for i, a in enumerate(actions)]
 
         resolve_order = np.argsort(distances)
 

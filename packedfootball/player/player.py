@@ -9,7 +9,24 @@ from game_config import (  # noqa: F401 -- the appearance/career names are re-ex
     PITCH_WIDTH,
     PLAYER_BASE_SPEED,
     RATED_MATCHES_FOR_AVERAGE,
+    LINE_ROLES,
+    RECOVERY_BEATEN_MARGIN,
+    RECOVERY_CB_LANE,
+    RECOVERY_DEFENDING_BONUS,
+    RECOVERY_GOAL_SIDE,
+    RECOVERY_LANE_MAX_SHIFT,
+    RECOVERY_LANE_PULL,
+    RECOVERY_LANE_PULL_DEFAULT,
+    RECOVERY_LEAD_SECONDS,
+    RECOVERY_LINE_DEPTH,
+    RECOVERY_MIN_DEPTH,
+    RECOVERY_PRESS_RANGE,
+    RECOVERY_RANGE,
+    RECOVERY_ROLE_EFFORT,
+    RECOVERY_SPRINT,
     STAT_CEILING,
+    CROSS_LANE_WIDTH,
+    cross_flight,
     pace_ability,
     stat_ability,
     pass_power,
@@ -28,22 +45,41 @@ base_speed: Final = PLAYER_BASE_SPEED   # see game_config: shared with gameEngin
 # Minimum spread (in pitch units at the goal line) on any shot's aim -- see
 # _calculate_shot.
 SHOT_VARIANCE_FLOOR = 0.25
+# Aim error is units at the goal line, so it shrinks as he closes in: times
+# dist / SHOT_ACCURACY_RANGE inside that range, never below SHOT_CLOSE_ACCURACY.
+SHOT_ACCURACY_RANGE = 20.0
+SHOT_CLOSE_ACCURACY = 0.35
+# Nobody between him and the keeper and still further out than
+# SHOT_PATIENCE_RANGE: carry it on for a better one (shoot weight x SHOT_PATIENCE).
+SHOT_PATIENCE_RANGE = 10.0
+SHOT_PATIENCE = 0.5
+KEEPER_ZONE_DEPTH = 4.0     # the lane is checked up to this far off the goal line
 CROSS_ERROR_FLOOR = 0.4
+# Cross aim error per axis: (100 - crossing) / CROSS_ERROR_DIVISOR units. At 15 a
+# 70 crosser missed his spot by ~2 units, beyond a header's reach of his runner.
+CROSS_ERROR_DIVISOR = 30.0
 
 # A rolling ball loses this much speed per unit travelled (-ln of the ground
 # friction), and how far ahead of a runner a pass may be played.
 PASS_DECAY_PER_UNIT = 0.6931
 PASS_MAX_LEAD_SECONDS = 1.2
 
-# The opposition box, as gameEngine's in_boxes draws it, plus the depth a
-# cross is aimed into: a runner at the edge of the area counts, one further
-# out does not. See _box_runners.
+# The opposition box, as gameEngine's in_boxes draws it: a cross is aimed only
+# at a runner inside it when the ball arrives. See _cross_candidates.
 BOX_X_MIN: Final = 14.0
 BOX_X_MAX: Final = 56.0
-CROSS_TARGET_DEPTH: Final = 20.0
+CROSS_TARGET_DEPTH: Final = 18.0
 
-# Roughly how long a cross hangs, used to work out where a runner will be.
-CROSS_FLIGHT_SECONDS: Final = 1.0
+# The cross comes late: a winger in the zone carries on to CROSS_LATE_DEPTH off
+# the goal line unless CROSS_READY_RUNNERS are already in the box or he is being
+# closed down. A box run is timed to that: arrive at the spot (BOX_RUN_SPOT_DEPTH,
+# near or far post) as the carrier gets there, never past the offside line,
+# sprinting at most BOX_RUN_SPRINT.
+CROSS_LATE_DEPTH: Final = 10.0
+CROSS_READY_RUNNERS: Final = 2
+BOX_RUN_SPOT_DEPTH: Final = 10.0
+BOX_RUN_SPRINT: Final = 1.3
+OFFSIDE_MARGIN: Final = 0.5
 
 # How close to goal a wide player must be before an open lane inside is
 # worth leaving the touchline for. Below ~26 it never fires: that close from
@@ -212,6 +248,15 @@ LANE_SAFE_MARGIN_SECONDS: Final = 0.45
 # What a fully blocked lane costs a pass option. Big enough to lose to an open
 # one, small enough that a tight forward ball can still beat a safe square one.
 LANE_BLOCKED_PENALTY: Final = 400.0
+
+# A wide outlet -- a teammate out on the flank (WIDE_OUTLET_X off the middle)
+# in the attacking half, with the passer at least WIDE_OUTLET_INSIDE more
+# central -- scores as if WIDE_PROGRESS_CREDIT further forward: the ball out
+# wide is progress, since that is where the cross comes from.
+WIDE_OUTLET_X: Final = 15.0
+WIDE_OUTLET_INSIDE: Final = 8.0
+WIDE_OUTLET_DEPTH: Final = 50.0
+WIDE_PROGRESS_CREDIT: Final = 4.0
 
 
 def _ball_rolled(ball_speed: float, t: float) -> float:
@@ -458,6 +503,14 @@ class player(ABC):
                 return False
         return True
 
+    def _better_shot_ahead(self, state: dict) -> bool:
+        """An open run at the keeper from further out than SHOT_PATIENCE_RANGE:
+        worth carrying it closer rather than shooting now."""
+        dist = float(state.get("dist_to_goal", 99.0))
+        return dist > SHOT_PATIENCE_RANGE and self._goal_lane_is_open(
+            state, lane_width=2.5, lookahead=max(0.0, dist - KEEPER_ZONE_DEPTH)
+        )
+
     def _is_progressive_ball_move(self, state: dict) -> bool:
         ball_vel = np.asarray(state.get("ball_velocity", np.zeros(2, dtype=float)), dtype=float)
         ball_speed = float(_norm2(ball_vel))
@@ -546,7 +599,7 @@ class player(ABC):
         enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
         return len(self._cross_candidates(state))
 
-    def _cross_candidates(self, state: dict) -> list:
+    def _cross_candidates(self, state: dict, lofted: bool = False) -> list:
         """(arrival_pos, velocity) for teammates a cross could actually find --
         in the box now, or arriving there by the time the ball does. A man
         running in counts: crossing only to bodies already stood there meant
@@ -562,13 +615,28 @@ class player(ABC):
             if np.all(np.isclose(tm, my_pos)):
                 continue
             vel = np.asarray(vels[i], dtype=float) if vels is not None else np.zeros(2)
-            arrival = tm + vel * CROSS_FLIGHT_SECONDS
+            # Where he is when THIS ball gets there, not a fixed second on: a
+            # flat cross beat the runners in and found them still outside.
+            arrival = tm + vel * cross_flight(_norm2(tm - my_pos), lofted)
+            arrival = tm + vel * cross_flight(_norm2(arrival - my_pos), lofted)
             if (
                 BOX_X_MIN < arrival[0] < BOX_X_MAX
                 and abs(enemy_goal_y - arrival[1]) <= CROSS_TARGET_DEPTH
             ):
                 out.append((arrival, vel))
         return out
+
+    def _runners_in_box_now(self, state: dict) -> int:
+        """Teammates actually in the box now, not just on their way (_box_runners)."""
+        teammates = np.asarray(state.get("teammates", []), dtype=float)
+        my_pos = np.asarray(state["my_pos"], dtype=float)
+        enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
+        return sum(
+            1 for tm in teammates
+            if not np.all(np.isclose(tm, my_pos))
+            and BOX_X_MIN < tm[0] < BOX_X_MAX
+            and abs(enemy_goal_y - tm[1]) <= CROSS_TARGET_DEPTH
+        )
 
     def _box_needs_bodies(self, state: dict) -> bool:
         """Ball in the final third, nobody in the box, and I'm near enough to
@@ -609,15 +677,34 @@ class player(ABC):
             ahead_y = float(np.clip(state["ball_pos"][1] + 12.0 * forward, 0.0, PITCH_HEIGHT))
             return {"type": "move", "target": np.array([touchline_x, ahead_y]), "speed_mod": pace_ability(self.attributes.speed) * 0.9}
         if decision == "attack_box":
-            # Get on the end of a cross: near or far post side of the spot,
-            # by which side of the pitch I'm on.
-            enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
-            side = float(np.clip((state["my_pos"][0] - PITCH_WIDTH / 2.0) * 0.5, -8.0, 8.0))
-            target = np.array([PITCH_WIDTH / 2.0 + side, enemy_goal_y - 10.0 * forward])
-            # Faster than dribbling: an unburdened run has to beat the cross
-            # to the box, and a dribbler carries at ~1.0.
-            return {"type": "move", "target": target, "speed_mod": pace_ability(self.attributes.speed) * 1.3}
+            return self._timed_box_run(state)
         return None
+
+    def _timed_box_run(self, state: dict) -> dict:
+        """Get on the end of a cross: to the near or far post side of the spot
+        (by which side I'm on), timed to arrive as the carrier reaches the
+        crossing zone. Faster than him, I ease off; never past the offside line."""
+        forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
+        my_pos = np.asarray(state["my_pos"], dtype=float)
+        ball_pos = np.asarray(state["ball_pos"], dtype=float)
+        side = float(np.clip((my_pos[0] - PITCH_WIDTH / 2.0) * 0.5, -8.0, 8.0))
+
+        # Offside line: the second-deepest opponent, or the ball if it is deeper.
+        depths = sorted((enemy_goal_y - float(y)) * forward for y in np.asarray(state["opponents"], dtype=float)[:, 1])
+        line = min(depths[1] if len(depths) > 1 else 0.0, (enemy_goal_y - float(ball_pos[1])) * forward)
+        depth = max(BOX_RUN_SPOT_DEPTH, line + OFFSIDE_MARGIN)
+        target = np.array([PITCH_WIDTH / 2.0 + side, enemy_goal_y - depth * forward])
+
+        top = pace_ability(self.attributes.speed) * BOX_RUN_SPRINT
+        carrier_depth = (enemy_goal_y - float(ball_pos[1])) * forward
+        carrier_speed = float(np.asarray(state.get("ball_velocity", np.zeros(2)), dtype=float)[1]) * forward
+        to_zone = carrier_depth - CROSS_LATE_DEPTH
+        if to_zone <= 0.0 or carrier_speed <= 1.0:
+            speed = top if to_zone <= 0.0 else top * 0.6   # he is there, or holding it up
+        else:
+            speed = min(top, _norm2(target - my_pos) / (to_zone / carrier_speed) / base_speed)
+        return {"type": "move", "target": target, "speed_mod": max(speed, pace_ability(self.attributes.speed) * 0.4)}
 
     def _cross_incoming(self, state: dict) -> bool:
         """The ball is wide and coming up the flank, and I'm close enough to
@@ -643,6 +730,12 @@ class player(ABC):
         if self._in_crossing_zone(state):
             if self._box_runners(state) == 0:
                 return None  # nobody to cross to: go at the goal instead
+            # Late, not at the edge of the area: carry it on to the byline while
+            # the runners get in, unless they are in already or he is closed down.
+            enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
+            late = abs(enemy_goal_y - float(state["my_pos"][1])) <= CROSS_LATE_DEPTH
+            if not late and pressure < 2 and self._runners_in_box_now(state) < CROSS_READY_RUNNERS:
+                return "wing_run"
             t_cross = 70.0 + self.attributes.passing * 0.5
             t_pass = pressure * 18.0 if progressive else 0.0
             t_run = 10.0
@@ -700,6 +793,71 @@ class player(ABC):
         lead_dist = _ball_rolled(ball_speed, predict_time)
         return _clip_lead_to_pitch(ball_pos, ball_vel / ball_speed, lead_dist)
 
+    def _is_beaten(self, state: dict) -> bool:
+        """The man on the ball has got goal-side of me, and he is near enough
+        that chasing back is my job rather than holding shape."""
+        if state.get("team_possession") != -1 or state.get("is_loose", False):
+            return False
+        my_pos = np.asarray(state["my_pos"], dtype=float)
+        ball_pos = np.asarray(state["ball_pos"], dtype=float)
+        behind = (float(my_pos[1]) - float(ball_pos[1])) * state.get("a_direction", 1)
+        return behind > RECOVERY_BEATEN_MARGIN and _norm2(ball_pos - my_pos) < RECOVERY_RANGE
+
+    def _carrier_ahead(self, state: dict) -> np.ndarray:
+        """Where the man on the ball is going, RECOVERY_LEAD_SECONDS on."""
+        carrier = np.asarray(state["ball_pos"], dtype=float)
+        return carrier + np.asarray(state.get("ball_velocity", np.zeros(2)), dtype=float) * RECOVERY_LEAD_SECONDS
+
+    def _line_target(self, state: dict) -> np.ndarray:
+        """My spot in the shape goal-side of the ball: my lane (_line_lane_x) on
+        the defensive line, or level with the ball for a midfielder."""
+        carrier = self._carrier_ahead(state)
+        own_goal_y = float(state["own_goal"][1])
+        forward = 1.0 if own_goal_y == 0.0 else -1.0   # out of my goal, up the pitch
+        depth = RECOVERY_LINE_DEPTH if state.get("my_role") in LINE_ROLES else 0.0
+        line = max(RECOVERY_MIN_DEPTH, (float(carrier[1]) - own_goal_y) * forward - depth)
+        return np.array([self._line_lane_x(state, float(carrier[0])), own_goal_y + forward * line])
+
+    def _line_lane_x(self, state: dict, ball_x: float) -> float:
+        """My formation x drawn toward the ball by role: a centre-back stays in
+        the middle, a full-back takes his flank."""
+        role = state.get("my_role", "")
+        home_x = float(state["formation_pos"][0])
+        x = home_x + (ball_x - home_x) * RECOVERY_LANE_PULL.get(role, RECOVERY_LANE_PULL_DEFAULT)
+        x = float(np.clip(x, home_x - RECOVERY_LANE_MAX_SHIFT, home_x + RECOVERY_LANE_MAX_SHIFT))
+        if role == "CB":
+            x = float(np.clip(x, PITCH_WIDTH / 2.0 - RECOVERY_CB_LANE, PITCH_WIDTH / 2.0 + RECOVERY_CB_LANE))
+        return x
+
+    def _recovery_run(self, state: dict) -> dict:
+        """Flat out back into my place on the line goal-side of the ball; only
+        once the carrier is within RECOVERY_PRESS_RANGE, at him -- goal-side of
+        where he is going, to cut him off. Defending adds to the sprint."""
+        carrier = self._carrier_ahead(state)
+        if _norm2(carrier - np.asarray(state["my_pos"], dtype=float)) <= RECOVERY_PRESS_RANGE:
+            to_goal = np.asarray(state["own_goal"], dtype=float) - carrier
+            target = carrier + to_goal / (_norm2(to_goal) + 1e-8) * min(RECOVERY_GOAL_SIDE, _norm2(to_goal))
+        else:
+            target = self._line_target(state)
+        target = np.clip(target, [0.0, 0.0], [PITCH_WIDTH, PITCH_HEIGHT])
+        bonus = 1.0 + RECOVERY_DEFENDING_BONUS * stat_ability(getattr(self.attributes, "defending", 50))
+        effort = RECOVERY_ROLE_EFFORT.get(state.get("my_role", ""), 1.0)
+        return {"type": "move", "target": target, "speed_mod": pace_ability(self.attributes.speed) * RECOVERY_SPRINT * bonus * effort}
+
+    def _wide_credit(self, state: dict, tm) -> float:
+        """Progress credited to a pass out to a wide outlet (WIDE_OUTLET_*)."""
+        my_x = float(state["my_pos"][0])
+        tm_x, tm_y = float(tm[0]), float(tm[1])
+        wide = abs(tm_x - PITCH_WIDTH / 2.0)
+        enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
+        if (
+            wide >= WIDE_OUTLET_X
+            and abs(my_x - PITCH_WIDTH / 2.0) <= wide - WIDE_OUTLET_INSIDE
+            and abs(enemy_goal_y - tm_y) <= WIDE_OUTLET_DEPTH
+        ):
+            return WIDE_PROGRESS_CREDIT
+        return 0.0
+
     def _best_progressive_pass_target(self, state: dict) -> np.ndarray | None:
         teammates = np.asarray(state["teammates"], dtype=float)
         opponents = np.asarray(state["opponents"], dtype=float)
@@ -713,7 +871,7 @@ class player(ABC):
             if np.array_equal(tm, my_pos): continue
 
             vec_to_tm = tm - my_pos
-            forward_progress = (tm[1] - my_pos[1]) * goal_dir
+            forward_progress = (tm[1] - my_pos[1]) * goal_dir + self._wide_credit(state, tm)
             if forward_progress <= 0.0: continue
             if not self._is_pass_safe(my_pos, tm, opponents, line_width=1.2): continue
 
@@ -743,7 +901,8 @@ class player(ABC):
             dist_to_tm = _norm2(tm - my_pos)
             nearest_opp_dist = np.min(np.linalg.norm(opponents - tm, axis=1))
 
-            forward_progress = (tm[1] - my_pos[1]) * goal_dir
+            credit = self._wide_credit(state, tm)
+            forward_progress = (tm[1] - my_pos[1]) * goal_dir + credit
             # Score the lane we will ACTUALLY pass down. The ball is played
             # ahead of a moving receiver (_lead_pass), so judging the lane to
             # where he stands now rated a path the ball never takes -- and a
@@ -758,7 +917,8 @@ class player(ABC):
             # Safety used to outweigh progress 20:30, so the square or
             # backward ball to a free man beat the forward one. Progress now
             # leads, and going backwards is expensive.
-            raw_score = (nearest_opp_dist * 10.0) + max(0.0, forward_progress * 55.0) - max(0.0, -forward_progress * 110.0) - (abs(tm[0] - my_pos[0]) * 0.3) - (dist_to_tm * 0.7)
+            sideways = 0.0 if credit else abs(tm[0] - my_pos[0]) * 0.3   # out wide is the point
+            raw_score = (nearest_opp_dist * 10.0) + max(0.0, forward_progress * 55.0) - max(0.0, -forward_progress * 110.0) - sideways - (dist_to_tm * 0.7)
             if dist_to_tm < 4.5: raw_score -= 35.0
             if nearby_teammates > 3: raw_score -= 12.0
             raw_score -= (1.0 - openness) * LANE_BLOCKED_PENALTY
@@ -815,6 +975,7 @@ class player(ABC):
         heading_penalty = max(0.0, (0.8 - np.dot(state["my_heading"], unit_to_goal)) * 5.0) 
         strike = (self.attributes.power * 0.6) + (self.attributes.shooting * 0.4)
         total_variance = ((100.0 / 15.0) * (1.0 - stat_ability(self.attributes.shooting))) + pressure_penalty + heading_penalty
+        total_variance *= min(1.0, max(SHOT_CLOSE_ACCURACY, dist / SHOT_ACCURACY_RANGE))
         # A floor so even a perfect shooter isn't a laser, but low enough that
         # shooting still tells right up to 100 -- at 0.9 everything above 86 was
         # identical, so an icon shot like a gold.
@@ -863,7 +1024,23 @@ class player(ABC):
             want = np.array([heading[0] * c - heading[1] * sn, heading[0] * sn + heading[1] * c])
         return my_pos + want * CLEAR_DISTANCE
 
-    def _choose_cross_target(self, state: dict) -> np.ndarray:
+    def _cross_action(self, state: dict) -> dict:
+        """Flat and quick into a clear lane; lofted over anyone stood in it. With
+        nobody to find in the box, no cross: lay it off instead -- except at a
+        set piece (must_pass), which goes in whoever is there."""
+        if not self._cross_candidates(state) and not state.get("must_pass_next", False):
+            target = self._choose_pass_target(state)
+            power = pass_power(_norm2(target - state["my_pos"]), self.attributes.power, 1.0, 60.0)
+            return {"type": "pass", "target": target, "power": power}
+        target = self._choose_cross_target(state)
+        lofted = not self._is_pass_safe(state["my_pos"], target, state.get("opponents"), line_width=CROSS_LANE_WIDTH)
+        # Lofted leads him further; if that ball finds nobody, drive it flat.
+        lofted = lofted and bool(self._cross_candidates(state, lofted=True))
+        if lofted:
+            target = self._choose_cross_target(state, lofted=True)
+        return {"type": "pass", "target": target, "power": 1.0, "pass_type": "cross", "loft": lofted}
+
+    def _choose_cross_target(self, state: dict, lofted: bool = False) -> np.ndarray:
         teammates = np.asarray(state.get("teammates", []), dtype=float)
         opponents = np.asarray(state.get("opponents", []), dtype=float)
         my_pos = np.asarray(state["my_pos"], dtype=float)
@@ -875,7 +1052,7 @@ class player(ABC):
         # OUTSIDE the area rather than to the danger.
         best_target = None
         best_score = -999.0
-        for arrival, _vel in self._cross_candidates(state):
+        for arrival, _vel in self._cross_candidates(state, lofted):
             dist_to_goal = _norm2(np.array([35.0, enemy_goal_y]) - arrival)
             off_centre = abs(arrival[0] - 35.0)
             nearest_opp_dist = (
@@ -898,7 +1075,7 @@ class player(ABC):
         cross_stat = (self.attributes.passing * 0.6) + (self.attributes.vision * 0.4)
         # Floor low enough that crossing still separates up to 100 (was 1.0,
         # which made everything above 85 identical).
-        error_scale = max(CROSS_ERROR_FLOOR, (100.0 - cross_stat + pressure_penalty) / 15.0)
+        error_scale = max(CROSS_ERROR_FLOOR, (100.0 - cross_stat + pressure_penalty) / CROSS_ERROR_DIVISOR)
         
         rng = state["rng"]
         fuzz_x = rng.normal(0, error_scale)

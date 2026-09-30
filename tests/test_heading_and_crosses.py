@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from conftest import PITCH_HEIGHT, Team, launch_ball, quiesce
+from conftest import PITCH_HEIGHT, Team, freeze_players_away_from, launch_ball, quiesce
 from game_config import TIER_RANGES
 from gameEngine import (
     CROSS_ARRIVAL_HEIGHT,
@@ -22,7 +22,7 @@ from gameEngine import (
     HEADER_SHOT_RANGE,
     game,
 )
-from player.player import Attributes
+from player.player import BOX_RUN_SPOT_DEPTH, CROSS_LATE_DEPTH, OFFSIDE_MARGIN, Attributes
 from replay import ActionType
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -281,6 +281,28 @@ def test_chasers_run_to_where_a_high_ball_drops(match):
     assert abs(target[1] - 90.0) < 1e-6
 
 
+def _cross_arriving_at(g, runner, crosser, team_lock):
+    freeze_players_away_from(g, 35.0, 88.0, radius=20.0)
+    g.positions[runner] = [35.0, 88.0]
+    launch_ball(g, 35.2, 88.0, 0.0, 6.0, height=1.8, event="cross", toucher=crosser)
+    g.ball_release_player = crosser
+    g.ball_release_cooldown = 15          # the crosser himself is still locked out
+    g.ball_release_team_cooldown = team_lock
+    g.step()
+    return g
+
+
+def test_the_crossers_side_can_head_a_cross_once_the_team_lock_is_up(make_match):
+    """The whole-cooldown mask kept them off every cross arriving within ~0.7s."""
+    g = _cross_arriving_at(make_match(adaptive_decisions=False), runner=9, crosser=8, team_lock=0)
+    assert g.last_touch_player == 9
+
+
+def test_but_not_inside_the_team_lock(make_match):
+    g = _cross_arriving_at(make_match(adaptive_decisions=False), runner=9, crosser=8, team_lock=3)
+    assert g.last_touch_player == 8
+
+
 @pytest.mark.slow
 def test_headers_happen_in_real_matches(make_match):
     seen = 0
@@ -397,6 +419,37 @@ def test_latched_winger_crosses_from_the_zone(match):
     assert "dribble" not in decisions and "cut_inside" not in decisions
 
 
+ONE_IN_THE_BOX = np.array([[35.0, 90.0]] + [[30.0, 40.0]] * 10)
+
+
+def test_a_winger_carries_it_on_while_the_runners_get_in(match):
+    """At the edge of the area with one man in: not yet. The cross that came
+    from there found the runners still arriving."""
+    p = _wide_mid(match)
+    opponents = np.array([[35.0, 20.0]] * 11)
+    state = _winger_state(match, 5, 5.0, 84.0, opponents, intent="wingplay", teammates=ONE_IN_THE_BOX)
+    assert p._box_runners(state) == 1
+    assert p._decide_wingplay(state) == "wing_run"
+
+
+def test_at_the_byline_he_crosses(match):
+    p = _wide_mid(match)
+    opponents = np.array([[35.0, 20.0]] * 11)
+    state = _winger_state(match, 5, 5.0, PITCH_HEIGHT - CROSS_LATE_DEPTH + 1.0, opponents,
+                          intent="wingplay", teammates=ONE_IN_THE_BOX)
+    decisions = [p._decide_wingplay(state) for _ in range(200)]
+    assert decisions.count("cross") > 120, decisions.count("cross")
+
+
+def test_closed_down_he_gets_it_in_early(match):
+    p = _wide_mid(match)
+    opponents = np.array([[35.0, 20.0]] * 11)
+    state = _winger_state(match, 5, 5.0, 84.0, opponents, intent="wingplay",
+                          teammates=ONE_IN_THE_BOX, pressure=2)
+    decisions = [p._decide_wingplay(state) for _ in range(200)]
+    assert decisions.count("cross") > 100, decisions.count("cross")
+
+
 def test_winger_goes_at_goal_instead_of_crossing_to_nobody(match):
     """The zone is only a crossing position if someone is in the box."""
     g = match
@@ -418,6 +471,73 @@ def test_a_winger_in_the_box_is_not_its_own_cross_target(match):
     opponents = np.array([[35.0, 20.0]] * 11)
     me = np.array([[16.0, 88.0]] + [[30.0, 40.0]] * 10)
     assert p._box_runners(_winger_state(g, 5, 16.0, 88.0, opponents, teammates=me)) == 0
+
+
+def test_a_cross_is_only_for_someone_in_the_box_when_it_lands(match):
+    """Counted a second ahead and 20 deep, a man stood outside the area -- or
+    still running in when a flat cross landed -- was a target."""
+    p = _wide_mid(match)
+    opponents = np.array([[35.0, 20.0]] * 11)
+    mates = np.array([[35.0, 81.0], [30.0, 78.0], [40.0, 79.0]] + [[30.0, 40.0]] * 8)
+    vels = np.zeros((11, 2))
+    vels[1] = [0.0, 9.0]    # sprinting in: inside by the time it lands
+    vels[2] = [0.0, 1.0]    # jogging: still outside
+    state = _winger_state(match, 5, 5.0, 94.0, opponents, intent="wingplay", teammates=mates)
+    state["teammate_vel"] = vels
+    arrivals = [tuple(np.round(a, 3)) for a, _ in p._cross_candidates(state)]
+    assert len(arrivals) == 1 and arrivals[0][0] == 30.0, arrivals
+
+
+def test_a_clear_lane_gets_a_flat_cross_and_a_blocked_one_a_lofted_cross(match):
+    p = _wide_mid(match)
+    clear = np.array([[35.0, 20.0]] * 11)
+    state = _winger_state(match, 5, 5.0, 92.0, clear, intent="wingplay", teammates=BOX_RUNNERS)
+    assert p._cross_action(state)["loft"] is False
+    target = p._cross_action(state)["target"]
+    in_the_lane = np.array([[5.0 + (target[0] - 5.0) * 0.4, 92.0 + (target[1] - 92.0) * 0.4]] + [[35.0, 20.0]] * 10)
+    state = _winger_state(match, 5, 5.0, 92.0, in_the_lane, intent="wingplay", teammates=BOX_RUNNERS)
+    assert p._cross_action(state)["loft"] is True
+
+
+def test_a_lofted_cross_goes_up_more_than_a_flat_one(make_match):
+    def launch_vz(loft):
+        g = quiesce(make_match())
+        g.all_players[5].attributes.power = 90   # a weak boot under-hits a flat one into a loop anyway
+        g.positions[5] = [5.0, 92.0]
+        g.ball_controller = 5
+        g._resolve_action(5, {"type": "pass", "target": np.array([35.0, 90.0]), "power": 1.0,
+                              "pass_type": "cross", "loft": loft})
+        return float(g.ball[5])
+
+    assert launch_vz(True) > launch_vz(False) + 1.0
+
+
+def test_with_nobody_to_find_he_lays_it_off_instead_of_crossing(match):
+    p = _wide_mid(match)
+    state = _winger_state(match, 5, 5.0, 92.0, np.array([[35.0, 20.0]] * 11),
+                          intent="wingplay", teammates=EMPTY_BOX)
+    action = p._cross_action(state)
+    assert action["type"] == "pass" and action.get("pass_type") != "cross"
+
+
+def test_a_full_back_does_not_cross_into_an_empty_box(match):
+    from packEngine import generate_starter_roster
+
+    lb = generate_starter_roster("4-4-2", tier="gold", seed=3)[1]
+    assert lb.position == "LB"
+    state = _winger_state(match, 1, 5.0, 85.0, np.array([[35.0, 20.0]] * 11), teammates=EMPTY_BOX)
+    assert "cross" not in {lb._decide_on_ball_attack(state) for _ in range(300)}
+
+
+def test_a_cross_lands_within_heading_reach_of_its_man(match):
+    """Aim error per axis was (100 - crossing) / 15: ~2 units for a 70 crosser,
+    out of a 1.25-unit header's reach."""
+    p = _wide_mid(match)
+    state = _winger_state(match, 5, 5.0, 92.0, np.array([[35.0, 20.0]] * 11),
+                          intent="wingplay", teammates=BOX_RUNNERS)
+    runners = [arrival for arrival, _ in p._cross_candidates(state)]
+    misses = [min(np.linalg.norm(p._choose_cross_target(state) - r) for r in runners) for _ in range(300)]
+    assert np.median(misses) < 1.25, np.median(misses)
 
 
 def test_a_winger_who_beats_his_man_cuts_inside(match):
@@ -553,14 +673,19 @@ def test_a_central_midfielder_pushes_up_but_stops_short_of_the_striker(match):
 
 def test_an_empty_box_pulls_the_forwards_into_it(match):
     """The ball is in the final third with nobody in the box: go in, don't
-    hold a line thirty units out."""
+    hold a line thirty units out -- but stay onside. With every opponent
+    upfield the ball is the offside line, so he goes level with it, and all
+    the way to the spot once the ball is deep."""
     st = _roster("4-4-2")[9]
     state = _off_ball_state(match, st, (27.0, 47.0), (27.0, 70.0), (5.0, 80.0), EMPTY_BOX)
     assert st._box_needs_bodies(state)
     decisions = [st._decide_off_ball_attack(state) for _ in range(300)]
     assert decisions.count("attack_box") > 120, collections.Counter(decisions)
     _, y = st._build_action("attack_box", state)["target"]
-    assert y > 82.0
+    assert y == pytest.approx(80.0 - OFFSIDE_MARGIN)
+    state["ball_pos"] = np.array([5.0, 94.0])
+    _, y = st._build_action("attack_box", state)["target"]
+    assert y == pytest.approx(PITCH_HEIGHT - BOX_RUN_SPOT_DEPTH)
 
 
 def test_nobody_is_pulled_in_when_the_box_is_already_filled(match):

@@ -47,6 +47,28 @@ HEAD_CONTACT_HEIGHT: Final = 1.9
 BALL_GROUND_FRICTION: Final = 0.5
 BALL_AIR_FRICTION: Final = 0.85
 
+# A cross arrives at head height after cross_flight(distance) seconds: the
+# engine launches it on that, and the crosser leads his runner by it. Flat and
+# quick into a clear lane; lofted over a body in it, and for set pieces.
+CROSS_FLIGHT_REF_SPEED: Final = 30.0
+CROSS_FLIGHT_MIN: Final = 0.6
+CROSS_FLIGHT_MAX: Final = 1.4
+LOFTED_CROSS_REF_SPEED: Final = 22.0
+LOFTED_CROSS_MIN: Final = 0.8
+LOFTED_CROSS_MAX: Final = 1.8
+CROSS_MAX_SPEED: Final = 32.0
+CROSS_LANE_WIDTH: Final = 1.5   # an opponent this near the line lofts it
+
+
+def cross_flight_max(lofted: bool = False) -> float:
+    return LOFTED_CROSS_MAX if lofted else CROSS_FLIGHT_MAX
+
+
+def cross_flight(dist: float, lofted: bool = False) -> float:
+    if lofted:
+        return min(LOFTED_CROSS_MAX, max(LOFTED_CROSS_MIN, dist / LOFTED_CROSS_REF_SPEED))
+    return min(CROSS_FLIGHT_MAX, max(CROSS_FLIGHT_MIN, dist / CROSS_FLIGHT_REF_SPEED))
+
 
 # =============================================================================
 # Match feel
@@ -335,6 +357,32 @@ def pass_power(dist: float, power_stat: float, urgency: float = 1.0,
 # scale is what holds the rate where it was -- defending's mean is about double
 # aggression's, so a raw swap tripled it. Gives bronze 28% up to icon 42%.
 PRESS_FROM_DEFENDING: Final = 0.55
+
+# Recovery run: a defender or midfielder the carrier has got past sprints back
+# goal-side of him (player._recovery_run). Pace x RECOVERY_SPRINT, plus up to
+# RECOVERY_DEFENDING_BONUS more from the defending stat.
+RECOVERY_SPRINT: Final = 1.2
+RECOVERY_DEFENDING_BONUS: Final = 0.15
+RECOVERY_RANGE: Final = 25.0          # only this near the ball; further is shape
+RECOVERY_BEATEN_MARGIN: Final = 1.0   # the ball this far goal-side of him
+RECOVERY_LEAD_SECONDS: Final = 0.35   # run to where the carrier is going
+RECOVERY_GOAL_SIDE: Final = 2.0       # ...and this far inside him, toward goal
+# Until the carrier is within RECOVERY_PRESS_RANGE, a recovering player runs to
+# his LANE on a line goal-side of the ball, not at the ball: formation x pulled
+# toward the ball by RECOVERY_LANE_PULL (never more than RECOVERY_LANE_MAX_SHIFT),
+# centre-backs kept within RECOVERY_CB_LANE of the middle. Defenders hold the
+# line RECOVERY_LINE_DEPTH goal-side of the ball; midfielders level with it.
+RECOVERY_PRESS_RANGE: Final = 8.0
+RECOVERY_LINE_DEPTH: Final = 4.0
+RECOVERY_MIN_DEPTH: Final = 6.0       # the line never drops inside this
+RECOVERY_CB_LANE: Final = 10.0
+RECOVERY_LANE_MAX_SHIFT: Final = 15.0
+RECOVERY_LANE_PULL: Final = {"CB": 0.25, "LB": 0.65, "RB": 0.65, "LWB": 0.65, "RWB": 0.65}
+RECOVERY_LANE_PULL_DEFAULT: Final = 0.45
+LINE_ROLES: Final = frozenset({"CB", "LB", "RB", "LWB", "RWB"})
+# How hard a role tracks back, times the sprint. 0 = no recovery run: beaten,
+# he holds his position. Anyone unlisted (defenders, CDM) runs flat out.
+RECOVERY_ROLE_EFFORT: Final = {"CAM": 0.0, "LM": 0.0, "RM": 0.0, "CM": 0.9}
 
 
 # Pace only. Even a poor footballer is quick -- what they lack is technique --

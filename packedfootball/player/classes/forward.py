@@ -1,4 +1,4 @@
-from player.player import CUT_INSIDE_DONE_X, _norm2, player, ActionProfile
+from player.player import CUT_INSIDE_DONE_X, SHOT_PATIENCE, _norm2, player, ActionProfile
 from game_config import PRESS_FROM_DEFENDING, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
@@ -102,11 +102,7 @@ class Forward(player):
             return {"type": "pass", "target": best_target, "power": actual_power}
 
         elif decision == "cross":
-            cross_target = self._choose_cross_target(state)
-            dist = _norm2(cross_target - state["my_pos"])
-            required_power = pass_power(dist, self.attributes.power, 0.833, 60.0)
-            actual_power = required_power
-            return {"type": "pass", "target": cross_target, "power": actual_power, "pass_type": "cross"}
+            return self._cross_action(state)
             
         elif decision == "dribble":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
@@ -251,6 +247,9 @@ class Forward(player):
             t_shoot *= 0.1
         elif facing_goal > 0.8:
             t_shoot *= 1.5
+        patient = self._better_shot_ahead(state)
+        if patient:
+            t_shoot *= SHOT_PATIENCE
 
         if pressure > 1:
             t_dribble -= (pressure * 25)
@@ -267,8 +266,9 @@ class Forward(player):
             t_pass -= 18.0
             t_stop += 5.0
 
-        # In the box you shoot: the space bonuses above must not outweigh it.
-        if state.get("in_attacking_box"):
+        # In the box you shoot: the space bonuses above must not outweigh it --
+        # unless the way to the keeper is open and a closer shot is there.
+        if state.get("in_attacking_box") and not patient:
             t_dribble *= 0.4
 
         if pressure > 0 and not self._goal_lane_is_open(state, lane_width=3.0, lookahead=12.0):
@@ -361,7 +361,12 @@ class Forward(player):
 
             if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
-            
+
+        # A teammate is carrying it down the flank: always make the run, timed
+        # to his (_timed_box_run). Re-rolling it each round left the box empty.
+        if not state.get("is_loose", False) and self._cross_incoming(state):
+            return "attack_box"
+
         actions = ["forward_run", "support", "hold_attack", "wide_run", "attack_box"]
         t_forward = self.attributes.shoot_tendency + (self.attributes.speed * 0.5)
         t_support = self.attributes.pass_tendency + 20.0

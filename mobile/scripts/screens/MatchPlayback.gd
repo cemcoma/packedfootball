@@ -1134,20 +1134,20 @@ func _interpolated_state() -> Dictionary:
 	# Recorded all along (replay.py writes ball[4], ReplayReader decodes it)
 	# and simply never drawn until now. Straight lerp, not Hermite: the
 	# format stores no vertical velocity to use as a tangent.
-	var ball_height := 0.0
+	var b0: Dictionary = s0["ball"]
+	var b1: Dictionary = s1["ball"]
+	# At someone's feet the engine records 0; in a keeper's hands, their height.
+	var ball_height := lerpf(float(b0["height"]), float(b1["height"]), s)
 	var controller: int = s0["ball_controller"] if s < 0.5 else s1["ball_controller"]
 	if controller != -1:
 		# Glue the ball to the dribbler instead of interpolating it
 		# independently -- otherwise it visibly drifts away from whoever
-		# actually has it. A ball at someone's feet is on the ground.
+		# actually has it.
 		ball_pos = players[controller]
 	else:
-		var b0: Dictionary = s0["ball"]
-		var b1: Dictionary = s1["ball"]
 		ball_pos = _hermite(
 			Vector2(b0["x"], b0["y"]), Vector2(b0["vx"], b0["vy"]), Vector2(b1["x"], b1["y"]), Vector2(b1["vx"], b1["vy"]), dt, s
 		)
-		ball_height = lerpf(float(b0["height"]), float(b1["height"]), s)
 
 	return {
 		"players": players,

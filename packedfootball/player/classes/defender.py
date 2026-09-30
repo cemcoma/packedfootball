@@ -1,5 +1,5 @@
 from player.player import _norm2, player, ActionProfile
-from game_config import PRESS_FROM_DEFENDING, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
+from game_config import PRESS_FROM_DEFENDING, RECOVERY_CB_LANE, RECOVERY_PRESS_RANGE, RECOVERY_RANGE, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
 # Where a full-back stands in to cover the middle when no centre-back is
@@ -83,11 +83,7 @@ class Defender(player):
             return {"type": "pass", "target": target, "power": min(1.0, self.attributes.power / 50.0), "pass_type": "clearance"}
 
         elif decision == "cross":
-            cross_target = self._choose_cross_target(state)
-            dist = _norm2(cross_target - state["my_pos"])
-            required_power = pass_power(dist, self.attributes.power, 0.833, 60.0)
-            actual_power = required_power
-            return {"type": "pass", "target": cross_target, "power": actual_power, "pass_type": "cross"}
+            return self._cross_action(state)
             
         elif decision == "dribble":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
@@ -170,7 +166,7 @@ class Defender(player):
             vec_to_target = target - state["my_pos"]
             contain_weight = 0.5 + pace_ability(self.attributes.speed) * 0.2
             contain_target = state["my_pos"] + (vec_to_target * contain_weight)
-            return {"type": "move", "target": contain_target, "speed_mod": pace_ability(self.attributes.speed) * 0.5}
+            return {"type": "move", "target": contain_target, "speed_mod": pace_ability(self.attributes.speed) * 0.8}
             
         elif decision in {"recover", "recover_slow"}:
             ball_pos = state["ball_pos"]
@@ -195,6 +191,18 @@ class Defender(player):
         elif decision == "chase":
             return {"type": "move", "target": self._chase_target(state), "speed_mod": pace_ability(self.attributes.speed) * 1.0}
 
+        elif decision == "recovery_run":
+            return self._recovery_run(state)
+
+        elif decision == "hold_line":
+            # Into his lane, dropping to the line if it is deeper -- never stepping up to it.
+            target = self._line_target(state)
+            own_goal_y = float(state["own_goal"][1])
+            forward = 1.0 if own_goal_y == 0.0 else -1.0
+            my_depth = (float(state["my_pos"][1]) - own_goal_y) * forward
+            target[1] = own_goal_y + forward * min(my_depth, (float(target[1]) - own_goal_y) * forward)
+            return {"type": "move", "target": target, "speed_mod": pace_ability(self.attributes.speed) * 0.9}
+
         return None
 
     def _decide_on_ball_attack(self, state: dict) -> str:
@@ -211,7 +219,8 @@ class Defender(player):
         t_pass = self.attributes.pass_tendency * 0.4 * self.get_action_bias("pass")
         t_shoot = self.attributes.shoot_tendency * self.get_action_bias("shoot", 0.5)
         t_dribble = self.attributes.drible_tendency * self.get_action_bias("dribble")
-        t_cross = self.get_action_bias("cross") * 25.0
+        # Only with someone in the box to find (_box_runners), like any cross.
+        t_cross = self.get_action_bias("cross") * 25.0 if self._box_runners(state) > 0 else 0.0
         t_stop = 10.0
 
         if not progressive_pass: t_pass *= 0.08
@@ -285,6 +294,16 @@ class Defender(player):
         probs = [t_pass/total, t_dribble/total, t_stop/total, t_clear/total]
         return state["rng"].choice(actions, p=probs)
 
+    def _holds_the_middle(self, state: dict) -> bool:
+        """A centre-back does not follow a winger out: while the ball is wide of
+        his lane and not yet on him, he keeps his place in the line."""
+        if state.get("my_role") != "CB" or state.get("is_loose", False):
+            return False
+        ball_pos = np.asarray(state["ball_pos"], dtype=float)
+        wide = abs(float(ball_pos[0]) - PITCH_WIDTH / 2.0) > RECOVERY_CB_LANE
+        dist = _norm2(ball_pos - state["my_pos"])
+        return wide and RECOVERY_PRESS_RANGE < dist < RECOVERY_RANGE
+
     def _should_cover(self, state: dict) -> bool:
         """A full-back with no centre-back home holds the middle instead of
         its flank -- own corners, or both CBs caught upfield. Checked after
@@ -340,9 +359,15 @@ class Defender(player):
 
             if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
-            
+
+        if self._is_beaten(state):
+            return "recovery_run"
+
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
         ball_pressure_count = int(np.sum(np.linalg.norm(state.get("opponents", []) - state["ball_pos"], axis=1) < 3.0))
+
+        if self._holds_the_middle(state):
+            return "hold_line"
 
         # Close enough to matter, the ball wins; otherwise an uncovered
         # middle does.

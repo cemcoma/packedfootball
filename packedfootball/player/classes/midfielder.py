@@ -1,5 +1,5 @@
-from player.player import _norm2, player, ActionProfile
-from game_config import PRESS_FROM_DEFENDING, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
+from player.player import SHOT_PATIENCE, _norm2, player, ActionProfile
+from game_config import PRESS_FROM_DEFENDING, RECOVERY_ROLE_EFFORT, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
 class MidfielderActionProfile(ActionProfile):
@@ -129,11 +129,7 @@ class Midfielder(player):
             return {"type": "pass", "target": target, "power": min(1.0, self.attributes.power / 50.0), "pass_type": "clearance"}
 
         elif decision == "cross":
-            cross_target = self._choose_cross_target(state)
-            dist = _norm2(cross_target - state["my_pos"])
-            required_power = pass_power(dist, self.attributes.power, 0.833, 60.0)
-            actual_power = required_power
-            return {"type": "pass", "target": cross_target, "power": actual_power, "pass_type": "cross"}
+            return self._cross_action(state)
             
         elif decision == "dribble":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
@@ -215,6 +211,9 @@ class Midfielder(player):
         elif decision == "chase":
             return {"type": "move", "target": self._chase_target(state), "speed_mod": pace_ability(self.attributes.speed) * 1.0}
 
+        elif decision == "recovery_run":
+            return self._recovery_run(state)
+
         return self._build_wing_action(decision, state)
 
     def _decide_on_ball_attack(self, state: dict) -> str:
@@ -264,6 +263,8 @@ class Midfielder(player):
             t_shoot *= 0.1
         elif facing_goal > 0.8:
             t_shoot *= 1.5
+        if self._better_shot_ahead(state):
+            t_shoot *= SHOT_PATIENCE
 
         if pressure > 1:
             t_dribble -= (pressure * 25)
@@ -436,7 +437,11 @@ class Midfielder(player):
 
             if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
                 return "chase"
-            
+
+        if self._is_beaten(state):
+            # Attacking midfielders leave it to the others and hold their shape.
+            return "recovery_run" if RECOVERY_ROLE_EFFORT.get(state.get("my_role"), 1.0) > 0.0 else "hold_defense"
+
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
         ball_pressure_count = int(np.sum(np.linalg.norm(state["opponents"] - state["ball_pos"], axis=1) < 3.0))
 

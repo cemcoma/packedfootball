@@ -22,16 +22,21 @@ DIVE_COMMIT_DISTANCE = 6.0
 class GoalkeeperActionProfile(ActionProfile):
     role_name = "goalkeeper"
     allowed_actions = {
-        "stop", "pass", "clear", "hold_defense",
+        "stop", "pass", "punt", "hold_defense",
         "recover", "recover_slow", "contain", "capture", "dive", "save", "sweep"
     }
     action_biases = {
-        "pass": 0.2, "clear": 3.0, "hold_defense": 2.0,
+        "pass": 0.2, "punt": 3.0, "hold_defense": 2.0,
         "recover": 3.0, "contain": 1.2, "capture": 1.5, "dive": 2.0, "sweep": 1.0
     }
 
-KEEPER_CLEAR_SHARE = 0.5      # the other half goes to a centre-half
+KEEPER_PUNT_SHARE = 0.75      # the rest are rolled to a centre-half
 KEEPER_OUTBALL_MAX_DEPTH = 30.0
+# How far up the pitch his punt can land, as a share of it: at power 40 and at
+# power 90 (an icon), capped there.
+PUNT_REACH = (2.0 / 5.0, 2.0 / 3.0)
+PUNT_POWER_RANGE = (40.0, 90.0)
+PUNT_CROWD_RADIUS = 5.0       # opponents this close make a teammate a bad target
 
 
 class Goalkeeper(player):
@@ -88,6 +93,35 @@ class Goalkeeper(player):
             return my_pos
         return min(pool, key=lambda tm: _norm2(np.asarray(tm) - my_pos))
 
+    def _punt_reach(self) -> float:
+        """How far from his own goal line his punt can land: PUNT_REACH of the
+        pitch, from his power stat."""
+        lo, hi = PUNT_POWER_RANGE
+        t = float(np.clip((float(self.attributes.power) - lo) / (hi - lo), 0.0, 1.0))
+        return PITCH_HEIGHT * (PUNT_REACH[0] + (PUNT_REACH[1] - PUNT_REACH[0]) * t)
+
+    def _punt_target(self, state: dict) -> np.ndarray:
+        """The most advanced teammate he can reach who is not crowded out, else
+        down his own side at nearly full range."""
+        own_goal_y = self._own_goal_y(state)
+        forward = 1.0 if own_goal_y == 0.0 else -1.0
+        reach = self._punt_reach()
+        my_pos = np.asarray(state["my_pos"], dtype=float)
+        opponents = np.asarray(state.get("opponents", []), dtype=float)
+        best, best_depth = None, 0.0
+        for tm in np.asarray(state.get("teammates", []), dtype=float):
+            depth = (float(tm[1]) - own_goal_y) * forward
+            if depth > reach or (float(tm[1]) - float(my_pos[1])) * forward < 15.0:
+                continue
+            if opponents.size and int(np.sum(np.linalg.norm(opponents - tm, axis=1) < PUNT_CROWD_RADIUS)) > 1:
+                continue
+            if depth > best_depth:
+                best, best_depth = tm, depth
+        if best is not None:
+            return np.array(best, dtype=float)
+        side_x = float(np.clip(my_pos[0] + state["rng"].uniform(-12.0, 12.0), 8.0, PITCH_WIDTH - 8.0))
+        return np.array([side_x, own_goal_y + forward * reach * 0.9])
+
     def _build_action(self, decision: str, state: dict) -> dict | None:
         if decision == "stop":
             return None
@@ -99,11 +133,8 @@ class Goalkeeper(player):
             actual_power = required_power
             return {"type": "pass", "target": best_target, "power": actual_power}
 
-        elif decision == "clear":
-            forward_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
-            wide_x = state["rng"].choice([0.0, PITCH_WIDTH])
-            target = np.array([wide_x + state["rng"].uniform(-15, 15), forward_y])
-            return {"type": "pass", "target": target, "power": min(1.0, self.attributes.power / 40.0), "pass_type": "clearance"}
+        elif decision == "punt":
+            return {"type": "pass", "target": self._punt_target(state), "power": 1.0, "pass_type": "punt"}
 
         elif decision == "dive":
             # Close enough to actually reach it -- throw yourself at it. The
@@ -174,12 +205,12 @@ class Goalkeeper(player):
         # does, so a goal kick can take the same 50/50. Forcing "pass" there sent
         # every goal kick short, which is not what a keeper does.
 
-        # A keeper does one of two things: hoof it, or give it to a centre-half.
+        # A keeper does one of two things: punt it, or give it to a centre-half.
         # He does not look for a progressive pass like an outfielder -- that is
         # what had him trying to thread balls upfield from his own six-yard box.
         if state.get("pressure_count", 0) > 0:
-            return "clear"
-        return "clear" if state["rng"].random() < KEEPER_CLEAR_SHARE else "pass"
+            return "punt"
+        return "punt" if state["rng"].random() < KEEPER_PUNT_SHARE else "pass"
 
     def _decide_off_ball_attack(self, state: dict) -> str:
         # Own team has the ball upfield: hold the line, stay set.

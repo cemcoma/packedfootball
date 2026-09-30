@@ -53,6 +53,7 @@ DEFAULT_PAIRS = (
     ("bronze", "icon"),
     ("bronze", "bronze"),
     ("icon", "icon"),
+    ("platinum","special")
 )
 
 
