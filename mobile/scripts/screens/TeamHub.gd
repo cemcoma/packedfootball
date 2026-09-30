@@ -1,17 +1,19 @@
 extends Control
 
-## Team hub: Squad, Inventory or Items. Sits between Menu and the three
+## Team hub: Squad, Kit, Inventory or Items. Sits between Menu and the
 ## screens that actually do something, the same way Play.tscn sits in front of
 ## Quick Match/Tournament -- Menu's "Team" button used to go straight to the
 ## squad editor, and now lands here first.
 ##
 ## The split is what the screens are FOR, not just where they live: Squad is
-## the eleven you play with (formation, who starts, the kit), Inventory is
-## every card you own (browse, release, restyle), and Items is the equipment
-## waiting to be socketed into them. Only Inventory has a size limit, which is
-## why the counter belongs here and not on the squad screen.
+## the eleven you play with (formation, who starts), Kit is the shirt they
+## wear, Inventory is every card you own (browse, release, restyle), and Items
+## is the equipment waiting to be socketed into them. Only Inventory has a
+## size limit, which is why the counter belongs here and not on the squad
+## screen.
 
 @onready var _squad_button: MenuTile = %SquadTile
+@onready var _kit_button: MenuTile = %KitTile
 @onready var _inventory_button: MenuTile = %InventoryTile
 @onready var _items_button: MenuTile = %ItemsTile
 @onready var _back_button: Button = %BackButton
@@ -19,6 +21,7 @@ extends Control
 
 func _ready() -> void:
 	_squad_button.pressed.connect(_on_squad_pressed)
+	_kit_button.pressed.connect(_on_kit_pressed)
 	_inventory_button.pressed.connect(_on_inventory_pressed)
 	_items_button.pressed.connect(_on_items_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
@@ -48,7 +51,8 @@ func _apply_theme_colors() -> void:
 func _refresh_hints() -> void:
 	var count := GameProfile.inventory_count()
 	var owned: int = GameProfile.all_cards.size()
-	_squad_button.subtitle_text = tr("Pick your formation, choose who starts, and design your kit.")
+	_squad_button.subtitle_text = tr("Pick your formation and choose who starts.")
+	_kit_button.subtitle_text = tr("Design your club's shirt: pattern and colours.")
 	if count >= GameProfile.inventory_cap:
 		_inventory_button.subtitle_text = (
 			tr("Full: %d / %d. Release players here to open packs again. %d owned in total.")
@@ -71,6 +75,10 @@ func _refresh_hints() -> void:
 
 func _on_squad_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/Team.tscn")
+
+
+func _on_kit_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/CustomizeKit.tscn")
 
 
 func _on_inventory_pressed() -> void:

@@ -95,6 +95,7 @@ var _figure_appearance: Dictionary = {}
 var _figure_recipe: Dictionary = {}
 var _figure_build: Vector2 = Vector2.ONE
 var _figure_kit: KitDesign = null
+var _figure_keeper: bool = false
 var _figure_pose: String = PlayerFigure.POSE_IDLE
 var _figure_t: float = 0.0
 var _figure_grow: float = 0.0  # 0 = far back in the light, 1 = arrived
@@ -208,7 +209,8 @@ func player_walkout(card: PlayerCard) -> void:
 	_figure_appearance = card.resolved_appearance()
 	_figure_recipe = PlayerAppearance.celebration(int(_figure_appearance.get("celebration", 0)))
 	_figure_build = PlayerFigure.build_from(card.attributes)
-	_figure_kit = GameProfile.kit_design()
+	_figure_kit = GameProfile.kit_design().for_position(card.position)
+	_figure_keeper = card.position == "GK"
 	_figure_pose = PlayerFigure.POSE_RUN
 	_figure_t = 0.0
 	_figure_grow = 0.0
@@ -381,7 +383,7 @@ func _on_figure_draw() -> void:
 		0,
 		Color(0, 0, 0, 0),
 		null,
-		false,
+		_figure_keeper,
 		_figure_build
 	)
 

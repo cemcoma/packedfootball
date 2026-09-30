@@ -1,10 +1,14 @@
 extends Control
 
-## Shirt designer, reached from the Team screen's "Customize Kit" button.
+## Shirt designer, reached from the Team hub's Kit tile.
 ##
 ## Pick a pattern and two colors (the same color twice is allowed -- that's
 ## a plain one-color shirt) and Save writes it to users/{uid}.kit as one
 ## string. See KitDesign.gd for the format and how it stays extendable.
+##
+## Two shirts, outfield and goalkeeper, side by side; the button under each
+## picks which one the pickers edit. An untouched keeper shirt stays derived
+## (KitDesign.keeper()) so it keeps contrasting as the outfield one changes.
 ##
 ## Every button here is built at RUNTIME from KitDesign.PATTERNS and
 ## KitDesign.AVAILABLE_COLORS rather than authored in CustomizeKit.tscn, so
@@ -23,6 +27,9 @@ const UNSELECTED_BORDER := 1
 @onready var _title_label: Label = %TitleLabel
 @onready var _headings: Array[Label] = [%PatternHeading, %PrimaryHeading, %SecondaryHeading]
 @onready var _preview: KitPreview = %KitPreview
+@onready var _keeper_preview: KitPreview = %KeeperPreview
+@onready var _outfield_button: Button = %OutfieldButton
+@onready var _keeper_button: Button = %KeeperButton
 @onready var _preview_panel: PanelContainer = %PreviewPanel
 @onready var _options_panel: PanelContainer = %OptionsPanel
 @onready var _pattern_row: HBoxContainer = %PatternRow
@@ -37,6 +44,8 @@ const UNSELECTED_BORDER := 1
 # saved one untouched.
 var _design: KitDesign = KitDesign.new()
 var _saving: bool = false
+## Whether the pickers are editing the keeper's shirt rather than the outfield one.
+var _editing_keeper: bool = false
 
 
 func _ready() -> void:
@@ -44,6 +53,8 @@ func _ready() -> void:
 
 	_save_button.pressed.connect(_on_save_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
+	_outfield_button.pressed.connect(_on_side_pressed.bind(false))
+	_keeper_button.pressed.connect(_on_side_pressed.bind(true))
 
 	# _refresh (not just _apply_theme_colors) because the swatch borders are
 	# painted from the palette too, not only the labels.
@@ -97,16 +108,31 @@ func _style_swatch(button: Button, hex: String, selected: bool) -> void:
 
 # -- state -> UI --------------------------------------------------------------
 
+## The shirt the pickers are editing right now.
+func _shown() -> KitDesign:
+	return _design.keeper() if _editing_keeper else _design
+
+
 func _refresh() -> void:
+	var shown := _shown()
+	var keeper := _design.keeper()
 	_preview.set_design(_design)
+	_keeper_preview.set_design(keeper)
+	# The shirt not being edited stays visible for comparison, darkened. Not
+	# alpha: the figure's overlapping parts would show through each other.
+	var dim := Color(0.45, 0.45, 0.45)
+	_preview.modulate = dim if _editing_keeper else Color.WHITE
+	_keeper_preview.modulate = Color.WHITE if _editing_keeper else dim
 	_refresh_pattern_buttons()
-	_refresh_color_grid(_primary_grid, _design.primary)
-	_refresh_color_grid(_secondary_grid, _design.secondary)
+	_refresh_color_grid(_primary_grid, shown.primary)
+	_refresh_color_grid(_secondary_grid, shown.secondary)
 	_summary_label.text = tr("%s  ·  %s and %s") % [
-		_design.pattern_name(),
-		KitDesign.color_name(_design.primary),
-		KitDesign.color_name(_design.secondary),
+		shown.pattern_name(),
+		KitDesign.color_name(shown.primary),
+		KitDesign.color_name(shown.secondary),
 	]
+	if KitDesign.clashes(keeper.primary_color(), _design.primary_color()):
+		_summary_label.text += "\n" + tr("Too close to the outfield shirt -- in matches the keeper changes colour.")
 	_apply_theme_colors()
 
 
@@ -115,7 +141,7 @@ func _refresh_pattern_buttons() -> void:
 	var children := _pattern_row.get_children()
 	for i in range(mini(children.size(), patterns.size())):
 		var button: Button = children[i]
-		var chosen: bool = patterns[i] == _design.pattern
+		var chosen: bool = patterns[i] == _shown().pattern
 		button.button_pressed = chosen
 		# toggle_mode alone can't show the choice any more: the frame is ours,
 		# so the lit state has to be painted here.
@@ -140,7 +166,10 @@ func _refresh_color_grid(grid: GridContainer, chosen_hex: String) -> void:
 func _apply_theme_colors() -> void:
 	_style_chrome()
 	_title_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
-	_summary_label.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+	var clash := KitDesign.clashes(_design.keeper().primary_color(), _design.primary_color())
+	_summary_label.add_theme_color_override(
+		"font_color", ThemeManager.color("warning") if clash else MenuTile.SUBTITLE_COLOR
+	)
 	_status_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 	for heading in _headings:
 		(heading as Label).add_theme_color_override("font_color", ThemeManager.color("heading"))
@@ -156,21 +185,37 @@ func _style_chrome() -> void:
 		)
 	MenuTile.style_button(_save_button, ThemeManager.color("accent"))
 	MenuTile.style_button(_back_button, muted)
+	var accent := ThemeManager.color("accent")
+	MenuTile.style_button(_outfield_button, muted if _editing_keeper else accent, not _editing_keeper)
+	MenuTile.style_button(_keeper_button, accent if _editing_keeper else muted, _editing_keeper)
 
 
 # -- input handlers -----------------------------------------------------------
 
-func _on_pattern_pressed(pattern: String) -> void:
-	_design = KitDesign.create(pattern, _design.primary, _design.secondary)
-	_set_status("")
+func _on_side_pressed(keeper: bool) -> void:
+	_editing_keeper = keeper
 	_refresh()
 
 
+func _on_pattern_pressed(pattern: String) -> void:
+	var shown := _shown()
+	_edit(pattern, shown.primary, shown.secondary)
+
+
 func _on_color_pressed(hex: String, is_primary: bool) -> void:
+	var shown := _shown()
 	if is_primary:
-		_design = KitDesign.create(_design.pattern, hex, _design.secondary)
+		_edit(shown.pattern, hex, shown.secondary)
 	else:
-		_design = KitDesign.create(_design.pattern, _design.primary, hex)
+		_edit(shown.pattern, shown.primary, hex)
+
+
+## Writes a pick into whichever shirt is being edited.
+func _edit(pattern: String, primary: String, secondary: String) -> void:
+	if _editing_keeper:
+		_design = _design.with_keeper(KitDesign.create(pattern, primary, secondary))
+	else:
+		_design = _design.with_outfield(pattern, primary, secondary)
 	_set_status("")
 	_refresh()
 
@@ -190,10 +235,7 @@ func _on_save_pressed() -> void:
 
 
 func _on_back_pressed() -> void:
-	# Straight back to Team. The unsaved lineup (formation/slot_assignment)
-	# lives on the GameProfile autoload, not on the Team scene, so a trip
-	# through here doesn't lose it.
-	get_tree().change_scene_to_file("res://scenes/Team.tscn")
+	get_tree().change_scene_to_file("res://scenes/TeamHub.tscn")
 
 
 func _set_status(text: String) -> void:

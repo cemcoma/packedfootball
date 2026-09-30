@@ -87,10 +87,10 @@ var status_text: String = ""
 @onready var _stats_page_label: Label = %StatsPageLabel
 @onready var _stats_page_button: Button = %StatsPageButton
 @onready var _replace_button: Button = %ReplaceButton
+@onready var _equip_button: Button = %EquipButton
 @onready var _clear_button: Button = %ClearButton
 @onready var _close_button: Button = %CloseButton
 @onready var _status_label: Label = %StatusLabel
-@onready var _kit_button: Button = %KitButton
 @onready var _save_button: Button = %SaveButton
 @onready var _back_button: Button = %BackButton
 @onready var _discard_overlay: Control = %DiscardConfirmOverlay
@@ -114,7 +114,7 @@ func _ready() -> void:
 	_clear_button.pressed.connect(_on_clear_pressed)
 	_close_button.pressed.connect(_on_close_stats_pressed)
 	_stats_page_button.pressed.connect(_on_stats_page_pressed)
-	_kit_button.pressed.connect(_on_kit_pressed)
+	_equip_button.pressed.connect(_on_equip_pressed)
 	_save_button.pressed.connect(_on_save_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 	_discard_save_button.pressed.connect(_on_discard_save_pressed)
@@ -166,11 +166,11 @@ func _style_controls() -> void:
 	var muted := ThemeManager.color("surface_border")
 	MenuTile.style_button(_formation_option, accent)
 	MenuTile.style_popup(_formation_option, accent)
-	for button in [_auto_button, _replace_button, _save_button]:
+	for button in [_auto_button, _replace_button, _equip_button, _save_button]:
 		MenuTile.style_button(button, accent)
 	for button in [
 		_cancel_button, _clear_button, _stats_page_button, _close_button,
-		_back_button, _kit_button, _discard_cancel_button,
+		_back_button, _discard_cancel_button,
 	]:
 		MenuTile.style_button(button, muted)
 	MenuTile.style_button(_discard_save_button, ThemeManager.color("positive"))
@@ -568,6 +568,15 @@ func _on_card_view_pressed(player_id: String) -> void:
 	_refresh_all()
 
 
+## A popup rather than a trip to PlayerDetail, so the slot stays selected
+## underneath.
+func _on_equip_pressed() -> void:
+	if selected_slot == -1 or GameProfile.slot_assignment[selected_slot] == "":
+		return
+	var card: PlayerCard = GameProfile.all_cards[GameProfile.slot_assignment[selected_slot]]
+	EquipPopup.open(self, card).equipped.connect(func(_id: String) -> void: _refresh_all())
+
+
 func _lineup_is_complete() -> bool:
 	for player_id in GameProfile.slot_assignment:
 		if player_id == "":
@@ -587,14 +596,6 @@ func _on_save_pressed() -> void:
 	var ok: bool = await GameProfile.save_team()
 	status_text = tr("Saved!") if ok else tr("Save failed -- try again.")
 	_refresh_all()
-
-
-## Deliberately does NOT discard unsaved lineup changes the way Back does:
-## formation/slot_assignment live on the GameProfile autoload, not on this
-## scene, so they survive the trip to CustomizeKit and back and the manager
-## picks up exactly where they left off.
-func _on_kit_pressed() -> void:
-	get_tree().change_scene_to_file("res://scenes/CustomizeKit.tscn")
 
 
 ## Back with unsaved lineup changes asks first -- the "Unsaved changes" line

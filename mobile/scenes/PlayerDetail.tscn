@@ -210,6 +210,11 @@ visible = false
 layout_mode = 2
 text = "Socket"
 
+[node name="EquipButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1970000063]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Equip"
+
 [node name="CustomizeButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1970000027]
 unique_name_in_owner = true
 layout_mode = 2

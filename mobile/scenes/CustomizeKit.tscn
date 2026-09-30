@@ -57,15 +57,46 @@ layout_mode = 2
 theme_override_constants/separation = 8
 alignment = 1
 
-[node name="KitPreview" type="Control" parent="Margin/RootVBox/Body/PreviewPanel/PreviewColumn" unique_id=1940000008]
+[node name="PreviewRow" type="HBoxContainer" parent="Margin/RootVBox/Body/PreviewPanel/PreviewColumn" unique_id=1940000102]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="OutfieldColumn" type="VBoxContainer" parent="Margin/RootVBox/Body/PreviewPanel/PreviewColumn/PreviewRow" unique_id=1940000103]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="KitPreview" type="Control" parent="Margin/RootVBox/Body/PreviewPanel/PreviewColumn/PreviewRow/OutfieldColumn" unique_id=1940000008]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(156, 172)
+custom_minimum_size = Vector2(130, 172)
 layout_mode = 2
 script = ExtResource("4")
 
+[node name="OutfieldButton" type="Button" parent="Margin/RootVBox/Body/PreviewPanel/PreviewColumn/PreviewRow/OutfieldColumn" unique_id=1940000104]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(130, 36)
+layout_mode = 2
+text = "Outfield"
+
+[node name="KeeperColumn" type="VBoxContainer" parent="Margin/RootVBox/Body/PreviewPanel/PreviewColumn/PreviewRow" unique_id=1940000105]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="KeeperPreview" type="Control" parent="Margin/RootVBox/Body/PreviewPanel/PreviewColumn/PreviewRow/KeeperColumn" unique_id=1940000106]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(130, 172)
+layout_mode = 2
+script = ExtResource("4")
+keeper = true
+
+[node name="KeeperButton" type="Button" parent="Margin/RootVBox/Body/PreviewPanel/PreviewColumn/PreviewRow/KeeperColumn" unique_id=1940000107]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(130, 36)
+layout_mode = 2
+text = "Goalkeeper"
+
 [node name="SummaryLabel" type="Label" parent="Margin/RootVBox/Body/PreviewPanel/PreviewColumn" unique_id=1940000009]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(156, 0)
+custom_minimum_size = Vector2(272, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 text = "Solid"
@@ -138,4 +169,4 @@ text = "Save Kit"
 [node name="BackButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1940000020]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Back to Team"
+text = "Back"

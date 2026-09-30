@@ -679,7 +679,9 @@ static func draw_into(
 
 	var kick_lift := maxf(0.0, kick) * float(motion.get("leg", LIFT_KICK))
 	var lunge_lift := lunge * float(motion.get("leg", LIFT_LUNGE_FRONT))
-	_draw_legs(canvas, body, w, h, boots, trim, pose, swing, lean, legs, kick_lift, lunge_lift, drop)
+	# Shorts and sleeves are the primary too: the secondary is only the
+	# details (stripes, quarters, collar, number).
+	_draw_legs(canvas, body, w, h, boots, shirt, pose, swing, lean, legs, kick_lift, lunge_lift, drop)
 	# Kneeling folds the legs under, so everything above them sits lower.
 	if legs == LEGS_KNEEL:
 		body.y += h * CELEBRATE_KNEEL_DROP
@@ -689,9 +691,9 @@ static func draw_into(
 	var arm_lift := (kick + lunge) * float(motion.get("arm", 0.0))
 	if arms in ["shush", "head"]:
 		_draw_head(canvas, body, w, h, skin, hair, appearance, facing, lean, detail)
-		_draw_arms(canvas, body, w, h, trim, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
+		_draw_arms(canvas, body, w, h, shirt, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
 	else:
-		_draw_arms(canvas, body, w, h, trim, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
+		_draw_arms(canvas, body, w, h, shirt, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
 		_draw_head(canvas, body, w, h, skin, hair, appearance, facing, lean, detail)
 
 	if detail == DETAIL_FULL and number > 0 and faces_away(facing) and font != null:
@@ -790,9 +792,7 @@ static func _draw_torso(
 		)
 
 
-## Arms, and the hands on the end of them. A keeper's hands are gloves, which
-## at this size is the whole of "that one is the goalkeeper" -- there is no
-## separate keeper shirt, so without it the two are indistinguishable.
+## Arms, and the hands on the end of them. A keeper's hands are gloves.
 static func _draw_arms(
 	canvas: CanvasItem, feet: Vector2, w: float, h: float,
 	sleeve: Color, skin: Color, pose: String, swing: float, lean: float,
@@ -983,15 +983,15 @@ static func _draw_profile(
 		boots.lerp(far, PROFILE_FAR_SHADE), sock.lerp(far, PROFILE_FAR_SHADE))
 	var gesture := arms if (pose == POSE_CELEBRATE or arms == "up") else "hang"
 	_profile_arm(canvas, body, w, h, side, -side * arm_swing * w - arm_w / 2.0, arm_w, gesture,
-		trim.lerp(far, PROFILE_FAR_SHADE), hand.lerp(far, PROFILE_FAR_SHADE), phase, false)
+		shirt.lerp(far, PROFILE_FAR_SHADE), hand.lerp(far, PROFILE_FAR_SHADE), phase, false)
 
 	_profile_leg(canvas, body, w, h, side, near_fwd, near_lift, leg_w, leg_h, toe, boots, sock)
-	_rect(canvas, body, w, h, -w * PROFILE_SHORTS_W / 2.0, shorts_y, w * PROFILE_SHORTS_W, h * SHORTS_H, trim)
+	_rect(canvas, body, w, h, -w * PROFILE_SHORTS_W / 2.0, shorts_y, w * PROFILE_SHORTS_W, h * SHORTS_H, shirt)
 	body.y += h * fold
 
 	_draw_torso(canvas, body, w, h, shirt, trim, pattern, lunge * TORSO_LUNGE_TILT, 0.0, detail, PROFILE_TORSO_W)
 	_profile_arm(canvas, body, w, h, side, side * arm_swing * w - arm_w / 2.0, arm_w, gesture,
-		trim, hand, phase, true)
+		shirt, hand, phase, true)
 	_profile_head(canvas, body, w, h, side, skin, hair, appearance, detail)
 
 

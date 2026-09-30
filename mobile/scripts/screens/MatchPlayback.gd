@@ -85,8 +85,6 @@ const BALL_NET_DROP_UNITS_PER_SECOND := 5.0
 # backend older than kits).
 const DEFAULT_TEAM_COLORS := [Color(0.2, 0.5, 1.0), Color(1.0, 0.35, 0.35)]
 
-# How different two shirts must be before the away side changes kit.
-const TEAM_COLOR_MIN_DISTANCE := 0.42
 # Last resorts when even the away kit's second colour clashes: between
 # near-white and near-black, nothing can clash with both.
 const CHANGE_KIT_FALLBACKS := [Color(0.95, 0.95, 0.96), Color(0.12, 0.12, 0.14)]
@@ -287,6 +285,8 @@ var _pending_result_transition: bool = false
 
 
 var _team_kits: Array = []
+## [home, away] keeper shirts, already changed if they clashed -- see _resolve_team_colors.
+var _keeper_kits: Array = []
 var _team_colors: Array = DEFAULT_TEAM_COLORS.duplicate()
 
 # Goal celebration, entirely a playback concern 
@@ -516,13 +516,26 @@ func _resolve_team_colors() -> void:
 			if not _too_similar(home_kit.primary_color(), candidate):
 				# Keep their pattern and second colour, swap the primary --
 				# a change kit is the same shirt in different colours.
-				away_kit = KitDesign.create(
+				away_kit = away_kit.with_outfield(
 					away_kit.pattern, candidate.to_html(false), away_kit.secondary
 				)
 				break
 
-	_team_kits = [home_kit, away_kit]
+	# Each keeper must stand apart from both sides and from the other keeper;
+	# one that wouldn't changes colour, home keeper first.
+	var shirts := [home_kit.primary_color(), away_kit.primary_color()]
+	var home_keeper := home_kit.keeper().avoiding(shirts)
+	var away_keeper := away_kit.keeper().avoiding(shirts + [home_keeper.primary_color()])
+	_keeper_kits = [home_keeper, away_keeper]
+	# Carried on the team kit too, so a keeper's goal card shows the same shirt.
+	_team_kits = [home_kit.with_keeper(home_keeper), away_kit.with_keeper(away_keeper)]
 	_team_colors = [home_kit.primary_color(), away_kit.primary_color()]
+
+
+func _player_kit(team: int, is_keeper: bool) -> KitDesign:
+	if _team_kits.size() != 2:
+		return null
+	return _keeper_kits[team] if is_keeper else _team_kits[team]
 
 
 ## A plain one-colour kit, for the paths that have a Color but no kit string.
@@ -531,7 +544,7 @@ func _kit_from_color(color: Color) -> KitDesign:
 
 
 func _too_similar(a: Color, b: Color) -> bool:
-	return Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length() < TEAM_COLOR_MIN_DISTANCE
+	return KitDesign.clashes(a, b)
 
 
 func _team_color(team_index: int) -> Color:
@@ -1476,6 +1489,10 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 	for i in order:
 		var feet: Vector2 = _pitch_to_screen(players[i], cam)
 		var team: int = 0 if i < 11 else 1
+		# Index 0 / 11 are the keepers by formation contract -- the same
+		# assumption gameEngine._award_goal makes when it charges a goal
+		# to the conceding keeper.
+		var is_keeper: bool = i == 0 or i == 11
 		var velocity: Vector2 = velocities[i]
 
 		player_facings[i] = PlayerFigure.facing_from_velocity(
@@ -1526,7 +1543,7 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 			feet,
 			height_px,
 			appearance,
-			_team_kits[team] if _team_kits.size() == 2 else null,
+			_player_kit(team, is_keeper),
 			int(player_facings[i]),
 			pose,
 			detail,
@@ -1534,10 +1551,7 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 			i % 11 + 1,  # squad number: no real one exists in the data model
 			flash,
 			font,
-			# Index 0 / 11 are the keepers by formation contract -- the same
-			# assumption gameEngine._award_goal makes when it charges a goal
-			# to the conceding keeper.
-			i == 0 or i == 11,
+			is_keeper,
 			# Taller/wider from this card's own height and power, so 22
 			# figures aren't 22 identical blocks.
 			PlayerFigure.build_from(_attributes_for(i)),
