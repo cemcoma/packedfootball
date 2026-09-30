@@ -104,6 +104,23 @@ const ARM_INSET := 0.0
 # stripes and STRIPE_MIN_PX drops them.
 const STRIPE_COUNT := 3
 const STRIPE_MIN_PX := 1.0        # below this a stripe is mush; draw solid
+const PINSTRIPE_COUNT := 5
+const HOOP_COUNT := 3
+const CHECKER_CELLS := 4          # per side
+## Band thickness as a fraction of the torso: sash/chevron across, the rest down.
+const SASH_W := 0.3
+const CHEVRON_H := 0.2
+const BAND_W := 0.34
+const CHEST_BAND_Y := 0.3
+const CHEST_BAND_H := 0.24
+const SHOULDERS_H := 0.28
+## Patterns drawn without a collar: it would vanish into the trim at the top
+## edge, or run into a stripe/band and read as part of it.
+const NO_COLLAR := [
+	KitDesign.PATTERN_QUARTERS, KitDesign.PATTERN_SHOULDERS, KitDesign.PATTERN_CHECKERS,
+	KitDesign.PATTERN_HALVES, KitDesign.PATTERN_DIAGONAL, KitDesign.PATTERN_STRIPES,
+	KitDesign.PATTERN_BAND, KitDesign.PATTERN_SASH,
+]
 const COLLAR_X := 0.30            # fraction across the torso where it starts
 const COLLAR_W := 0.40            # fraction of the torso's width
 const COLLAR_H := 0.035
@@ -689,11 +706,12 @@ static func draw_into(
 	_draw_torso(canvas, body, w, h, shirt, trim, pattern, lunge * TORSO_LUNGE_TILT, lean, detail)
 	# Arms under the head, except when the hand is ON the face.
 	var arm_lift := (kick + lunge) * float(motion.get("arm", 0.0))
+	var sleeve := sleeve_color(pattern, shirt, trim)
 	if arms in ["shush", "head"]:
 		_draw_head(canvas, body, w, h, skin, hair, appearance, facing, lean, detail)
-		_draw_arms(canvas, body, w, h, shirt, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
+		_draw_arms(canvas, body, w, h, sleeve, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
 	else:
-		_draw_arms(canvas, body, w, h, shirt, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
+		_draw_arms(canvas, body, w, h, sleeve, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
 		_draw_head(canvas, body, w, h, skin, hair, appearance, facing, lean, detail)
 
 	if detail == DETAIL_FULL and number > 0 and faces_away(facing) and font != null:
@@ -759,37 +777,92 @@ static func _draw_torso(
 	var x := -torso_w / 2.0 + lean
 	var base_y := TORSO_Y + tilt
 
-	# The shirt is always painted solid first and the stripes go ON it. That
-	# is what makes the layout symmetric: the torso is divided into
-	# STRIPE_COUNT stripes and STRIPE_COUNT + 1 gaps, so a stripe can never
-	# sit flush against one edge with a gap at the other. It also means no
-	# rounding gap can ever show grass through the shirt, which the old
-	# alternating-bars version needed a special case for.
-	#
-	#   STRIPE_COUNT = 3   |  gap  |###|  gap  |###|  gap  |###|  gap  |
-	#                      ^ both edges are the primary colour ^
-	_rect(canvas, feet, w, h, x, base_y, torso_w, torso_h, shirt)
-
-	if pattern == KitDesign.PATTERN_STRIPES and detail == DETAIL_FULL:
-		var band_w := torso_w / float(STRIPE_COUNT * 2 + 1)
-		if band_w >= STRIPE_MIN_PX:
-			for i in range(STRIPE_COUNT):
-				# Odd bands are the stripes, even ones the gaps either side.
-				_rect(canvas, feet, w, h, x + band_w * (i * 2 + 1), base_y, band_w, torso_h, trim)
-	elif pattern == KitDesign.PATTERN_QUARTERS and detail == DETAIL_FULL and h > 0.0:
-		var rect_w := torso_w / 2.0
-		var rect_h := torso_h / 2.0
-		_rect(canvas, feet, w, h, x, base_y, rect_w, rect_h, trim)
-		_rect(canvas, feet, w, h, x + rect_w, base_y + rect_h / h, rect_w, rect_h, trim)
+	# Patterns only at full detail: on the full-pitch camera they're mush.
+	var rect := Rect2(feet.x + x, feet.y - base_y * h - torso_h, torso_w, torso_h)
+	paint_shirt(canvas, rect, pattern if detail == DETAIL_FULL else KitDesign.PATTERN_SOLID, shirt, trim)
 
 	# Collar, sitting just inside the top of the torso -- it is what makes a
 	# SOLID kit still read as two colours rather than one flat block.
-	if detail == DETAIL_FULL and pattern != KitDesign.PATTERN_QUARTERS:
+	if detail == DETAIL_FULL and not (pattern in NO_COLLAR):
 		_rect(
 			canvas, feet, w, h,
 			x + torso_w * COLLAR_X, base_y + TORSO_H - COLLAR_H,
 			torso_w * COLLAR_W, h * COLLAR_H, trim
 		)
+
+
+## A shirt's body painted into `rect` (canvas pixels): the primary first, the
+## pattern on top in the trim. Shared with KitSwatch so the two always agree.
+## An unknown pattern paints as solid.
+static func paint_shirt(canvas: CanvasItem, rect: Rect2, pattern: String, shirt: Color, trim: Color) -> void:
+	canvas.draw_rect(rect, shirt)
+	var p := rect.position
+	var s := rect.size
+	match pattern:
+		KitDesign.PATTERN_STRIPES:
+			_paint_bands(canvas, rect, STRIPE_COUNT, true, trim)
+		KitDesign.PATTERN_PINSTRIPES:
+			_paint_bands(canvas, rect, PINSTRIPE_COUNT, true, trim)
+		KitDesign.PATTERN_HOOPS:
+			_paint_bands(canvas, rect, HOOP_COUNT, false, trim)
+		KitDesign.PATTERN_QUARTERS:
+			canvas.draw_rect(Rect2(p, s * 0.5), trim)
+			canvas.draw_rect(Rect2(p + s * 0.5, s * 0.5), trim)
+		KitDesign.PATTERN_HALVES:
+			canvas.draw_rect(Rect2(p.x + s.x * 0.5, p.y, s.x * 0.5, s.y), trim)
+		KitDesign.PATTERN_BAND:
+			canvas.draw_rect(Rect2(p.x + s.x * (1.0 - BAND_W) / 2.0, p.y, s.x * BAND_W, s.y), trim)
+		KitDesign.PATTERN_CHEST_BAND:
+			canvas.draw_rect(Rect2(p.x, p.y + s.y * CHEST_BAND_Y, s.x, s.y * CHEST_BAND_H), trim)
+		KitDesign.PATTERN_SHOULDERS:
+			canvas.draw_rect(Rect2(p.x, p.y, s.x, s.y * SHOULDERS_H), trim)
+		KitDesign.PATTERN_DIAGONAL:
+			canvas.draw_colored_polygon(PackedVector2Array([
+				p + Vector2(s.x, 0.0), p + s, p + Vector2(0.0, s.y),
+			]), trim)
+		KitDesign.PATTERN_SASH:
+			# Shoulder to opposite hip.
+			var band := s.x * SASH_W
+			canvas.draw_colored_polygon(PackedVector2Array([
+				p, p + Vector2(band, 0.0), p + s, p + Vector2(s.x - band, s.y),
+			]), trim)
+		KitDesign.PATTERN_CHEVRON:
+			var th := s.y * CHEVRON_H
+			var top := p.y + s.y * 0.12
+			var apex := Vector2(p.x + s.x / 2.0, p.y + s.y * 0.62)
+			for edge in [p.x, p.x + s.x]:
+				canvas.draw_colored_polygon(PackedVector2Array([
+					Vector2(edge, top), apex, apex + Vector2(0.0, th), Vector2(edge, top + th),
+				]), trim)
+		KitDesign.PATTERN_CHECKERS:
+			var cell := s / float(CHECKER_CELLS)
+			if minf(cell.x, cell.y) >= STRIPE_MIN_PX:
+				for row in range(CHECKER_CELLS):
+					for col in range(CHECKER_CELLS):
+						if (row + col) % 2 == 1:
+							canvas.draw_rect(Rect2(p + cell * Vector2(col, row), cell), trim)
+		# SLEEVES is the arms' colour, not the body's -- see sleeve_color().
+
+
+## `count` trim bands with primary between them and at both edges, so the
+## layout is symmetric: count * 2 + 1 bands, odd ones the trim. Dropped when
+## a band would be under STRIPE_MIN_PX.
+static func _paint_bands(canvas: CanvasItem, rect: Rect2, count: int, vertical: bool, trim: Color) -> void:
+	var span := rect.size.x if vertical else rect.size.y
+	var band := span / float(count * 2 + 1)
+	if band < STRIPE_MIN_PX:
+		return
+	for i in range(count):
+		var offset := band * (i * 2 + 1)
+		if vertical:
+			canvas.draw_rect(Rect2(rect.position.x + offset, rect.position.y, band, rect.size.y), trim)
+		else:
+			canvas.draw_rect(Rect2(rect.position.x, rect.position.y + offset, rect.size.x, band), trim)
+
+
+## The sleeves: the shirt colour, except on a SLEEVES kit.
+static func sleeve_color(pattern: String, shirt: Color, trim: Color) -> Color:
+	return trim if pattern == KitDesign.PATTERN_SLEEVES else shirt
 
 
 ## Arms, and the hands on the end of them. A keeper's hands are gloves.
@@ -939,6 +1012,7 @@ static func _draw_profile(
 	var hand := GLOVE_COLOR if is_keeper else skin
 	var sock := boots.lerp(Color.BLACK, SOCK_DARKEN)
 	var far := Color.BLACK
+	var sleeve := sleeve_color(pattern, shirt, trim)
 
 	# Stride -1..1: the run cycle's vertical swing becomes fore/aft travel,
 	# the near leg forward at +1 and the arms swinging against the legs.
@@ -983,7 +1057,7 @@ static func _draw_profile(
 		boots.lerp(far, PROFILE_FAR_SHADE), sock.lerp(far, PROFILE_FAR_SHADE))
 	var gesture := arms if (pose == POSE_CELEBRATE or arms == "up") else "hang"
 	_profile_arm(canvas, body, w, h, side, -side * arm_swing * w - arm_w / 2.0, arm_w, gesture,
-		shirt.lerp(far, PROFILE_FAR_SHADE), hand.lerp(far, PROFILE_FAR_SHADE), phase, false)
+		sleeve.lerp(far, PROFILE_FAR_SHADE), hand.lerp(far, PROFILE_FAR_SHADE), phase, false)
 
 	_profile_leg(canvas, body, w, h, side, near_fwd, near_lift, leg_w, leg_h, toe, boots, sock)
 	_rect(canvas, body, w, h, -w * PROFILE_SHORTS_W / 2.0, shorts_y, w * PROFILE_SHORTS_W, h * SHORTS_H, shirt)
@@ -991,7 +1065,7 @@ static func _draw_profile(
 
 	_draw_torso(canvas, body, w, h, shirt, trim, pattern, lunge * TORSO_LUNGE_TILT, 0.0, detail, PROFILE_TORSO_W)
 	_profile_arm(canvas, body, w, h, side, side * arm_swing * w - arm_w / 2.0, arm_w, gesture,
-		shirt, hand, phase, true)
+		sleeve, hand, phase, true)
 	_profile_head(canvas, body, w, h, side, skin, hair, appearance, detail)
 
 

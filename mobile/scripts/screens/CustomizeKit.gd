@@ -19,7 +19,7 @@ extends Control
 ## the same way Team's own Back button discards an unsaved lineup -- there's
 ## nothing here worth a confirmation dialog.
 
-const SWATCH_SIZE := Vector2(46.0, 46.0)
+const SWATCH_SIZE := Vector2(38.0, 38.0)
 const SWATCH_CORNER := 6
 const SELECTED_BORDER := 3
 const UNSELECTED_BORDER := 1
@@ -32,7 +32,7 @@ const UNSELECTED_BORDER := 1
 @onready var _keeper_button: Button = %KeeperButton
 @onready var _preview_panel: PanelContainer = %PreviewPanel
 @onready var _options_panel: PanelContainer = %OptionsPanel
-@onready var _pattern_row: HBoxContainer = %PatternRow
+@onready var _pattern_grid: GridContainer = %PatternGrid
 @onready var _primary_grid: GridContainer = %PrimaryGrid
 @onready var _secondary_grid: GridContainer = %SecondaryGrid
 @onready var _summary_label: Label = %SummaryLabel
@@ -68,14 +68,21 @@ func _ready() -> void:
 
 # -- building the pickers -----------------------------------------------------
 
+## One thumbnail per pattern, painted in the colours being edited so each
+## previews as it would look. The chosen one's name is in the summary.
 func _build_pattern_buttons() -> void:
 	for pattern in KitDesign.PATTERNS:
 		var button := Button.new()
-		button.text = KitDesign.PATTERN_NAMES.get(pattern, String(pattern).capitalize())
-		button.toggle_mode = true
-		button.custom_minimum_size = Vector2(110.0, 40.0)
+		button.custom_minimum_size = SWATCH_SIZE
+		button.tooltip_text = tr(KitDesign.PATTERN_NAMES.get(pattern, String(pattern).capitalize()))
 		button.pressed.connect(_on_pattern_pressed.bind(pattern))
-		_pattern_row.add_child(button)
+		var swatch := KitSwatch.new()
+		swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		swatch.set_border(Color(0, 0, 0, 0))
+		button.add_child(swatch)
+		# Inset by the ring's width, so the selection ring shows around it.
+		swatch.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, SELECTED_BORDER)
+		_pattern_grid.add_child(button)
 
 
 ## One tappable swatch per palette entry. A Button rather than a ColorRect
@@ -91,11 +98,11 @@ func _build_color_grid(grid: GridContainer, is_primary: bool) -> void:
 		grid.add_child(button)
 
 
-func _style_swatch(button: Button, hex: String, selected: bool) -> void:
+func _style_swatch(button: Button, fill: Color, selected: bool) -> void:
 	var style := StyleBoxFlat.new()
 	style.anti_aliasing = false
 	style.set_corner_radius_all(0)
-	style.bg_color = KitDesign.color_from_hex(hex)
+	style.bg_color = fill
 	style.set_border_width_all(SELECTED_BORDER if selected else UNSELECTED_BORDER)
 	# The selected swatch is marked with the theme's accent, which is legible
 	# against every color in the palette in both themes -- a plain white ring
@@ -137,27 +144,21 @@ func _refresh() -> void:
 
 
 func _refresh_pattern_buttons() -> void:
+	var shown := _shown()
 	var patterns: Array = KitDesign.PATTERNS
-	var children := _pattern_row.get_children()
+	var children := _pattern_grid.get_children()
 	for i in range(mini(children.size(), patterns.size())):
 		var button: Button = children[i]
-		var chosen: bool = patterns[i] == _shown().pattern
-		button.button_pressed = chosen
-		# toggle_mode alone can't show the choice any more: the frame is ours,
-		# so the lit state has to be painted here.
-		MenuTile.style_button(
-			button,
-			ThemeManager.color("accent") if chosen else ThemeManager.color("surface_border"),
-			chosen,
-			Vector2(10, 4)
-		)
+		var swatch: KitSwatch = button.get_child(0)
+		swatch.set_design(KitDesign.create(patterns[i], shown.primary, shown.secondary))
+		_style_swatch(button, Color(0, 0, 0, 0), patterns[i] == shown.pattern)
 
 
 func _refresh_color_grid(grid: GridContainer, chosen_hex: String) -> void:
 	var children := grid.get_children()
 	for i in range(mini(children.size(), KitDesign.AVAILABLE_COLORS.size())):
 		var hex: String = KitDesign.AVAILABLE_COLORS[i]["hex"]
-		_style_swatch(children[i], hex, hex == chosen_hex)
+		_style_swatch(children[i], KitDesign.color_from_hex(hex), hex == chosen_hex)
 
 
 ## The labels on this screen sit straight on the screen background with no

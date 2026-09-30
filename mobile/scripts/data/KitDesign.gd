@@ -38,14 +38,40 @@ const VERSION := "v1"
 const PATTERN_SOLID := "solid"
 const PATTERN_STRIPES := "stripes"
 const PATTERN_QUARTERS := "quarters"
+const PATTERN_HOOPS := "hoops"
+const PATTERN_HALVES := "halves"
+const PATTERN_SASH := "sash"
+const PATTERN_DIAGONAL := "diagonal"
+const PATTERN_BAND := "band"
+const PATTERN_PINSTRIPES := "pinstripes"
+const PATTERN_CHECKERS := "checkers"
+const PATTERN_CHEVRON := "chevron"
+const PATTERN_SLEEVES := "sleeves"
+const PATTERN_SHOULDERS := "shoulders"
+const PATTERN_CHEST_BAND := "chestband"
 
-## Add to this and PATTERN_NAMES to ship a new pattern; the Customize Kit
-## screen builds its buttons from these, so nothing else needs touching.
-const PATTERNS := [PATTERN_SOLID, PATTERN_STRIPES,PATTERN_QUARTERS]
+## Add to this and PATTERN_NAMES to ship a new pattern, and paint it in
+## PlayerFigure.paint_shirt; the Customize Kit screen builds from these.
+const PATTERNS := [
+	PATTERN_SOLID, PATTERN_STRIPES, PATTERN_QUARTERS, PATTERN_HOOPS, PATTERN_HALVES,
+	PATTERN_SASH, PATTERN_DIAGONAL, PATTERN_BAND, PATTERN_PINSTRIPES, PATTERN_CHECKERS,
+	PATTERN_CHEVRON, PATTERN_SLEEVES, PATTERN_SHOULDERS, PATTERN_CHEST_BAND,
+]
 const PATTERN_NAMES := {
 	PATTERN_SOLID: "Solid",
 	PATTERN_STRIPES: "Stripes",
-	PATTERN_QUARTERS : "Quarters"
+	PATTERN_QUARTERS: "Quarters",
+	PATTERN_HOOPS: "Hoops",
+	PATTERN_HALVES: "Halves",
+	PATTERN_SASH: "Sash",
+	PATTERN_DIAGONAL: "Diagonal",
+	PATTERN_BAND: "Centre Band",
+	PATTERN_PINSTRIPES: "Pinstripes",
+	PATTERN_CHECKERS: "Checkers",
+	PATTERN_CHEVRON: "Chevron",
+	PATTERN_SLEEVES: "Sleeves",
+	PATTERN_SHOULDERS: "Shoulders",
+	PATTERN_CHEST_BAND: "Chest Band",
 }
 
 const DEFAULT_PATTERN := PATTERN_SOLID
