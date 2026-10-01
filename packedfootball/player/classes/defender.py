@@ -1,4 +1,4 @@
-from player.player import _clamp, _count_within, _norm2, player, ActionProfile
+from player.player import _clamp, _count_within, _norm2, player, ActionProfile, OFFSIDE_MARGIN, GOAL_SIDE_PRESS, GOAL_SIDE_CONTAIN
 from game_config import PRESS_FROM_DEFENDING, RECOVERY_CB_LANE, RECOVERY_MIN_DEPTH, RECOVERY_PRESS_RANGE, RECOVERY_RANGE, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
@@ -17,7 +17,7 @@ COVER_ROLES = ("LB", "RB", "LWB", "RWB")
 # A full-back off the ball holds the back line (_back_line_target): level with the
 # centre-backs, tucking in toward the far post -- a third CB -- as the ball nears his goal.
 FB_ROLES = ("LB", "RB")
-FB_LINE_BALL_GAP = 10.0     # never closer than this goal-side of the ball
+FB_LINE_BALL_GAP = 10.0     # with no centre-backs to hold a line with, this far goal-side of the ball
 FB_WIDTH_FAR = 19.0         # off the middle with the ball upfield...
 FB_WIDTH_NEAR = 11.0        # ...and fully tucked in with it near his goal
 FB_TUCK_FROM = 60.0         # ball depth where the tuck starts
@@ -25,6 +25,29 @@ FB_TUCK_TO = 30.0           # ...and where it is complete
 FB_BALL_SHIFT = 0.35        # the line slides this much toward the ball's side
 FB_FLANK_X = 8.0            # the ball is on his flank past this, off the middle
 FB_ENGAGE_RANGE = 6.0       # off his flank, he only goes at a ball this close
+
+# The ball-side full-back overlaps once a teammate has it on his flank OVERLAP_FROM off our
+# goal: OVERLAP_LEAD ahead of the ball, outside the carrier -- or inside him (the underlap)
+# when the carrier is on the line. The far full-back stays home.
+OVERLAP_FROM = 40.0
+OVERLAP_LEAD = 8.0
+OVERLAP_ROOM = 8.0          # carrier closer than this to the touchline: go inside him
+OVERLAP_INSIDE_X = 12.0     # the underlap channel, this far in from the touchline
+OVERLAP_CHANCE = 0.15       # per decision while it is on; latched once he goes
+OVERLAP_SPRINT = 1.3        # it is a sprint: he has to get past the ball
+FB_ATTACK_TRAIL = 12.0      # with the ball on his side he holds this far behind it...
+FB_ATTACK_LIMIT = 35.0      # ...up to this far up from his slot
+
+# Off the ball, the back line holds at DEF_LINE_SHARE of the ball's depth, not on its formation
+# slot (half a pitch behind play with the ball upfield) -- never past DEF_LINE_MAX, beyond which
+# a centre-back no longer counts as home (gameEngine.CB_HOME_DEPTH) and the full-backs tuck in.
+DEF_LINE_SHARE = 0.5
+DEF_LINE_MAX = 38.0
+
+# A centre-back on the man with the ball holds at the edge of his box, CB_STAND_DEPTH off goal:
+# he does not back off into it, and steps out of it to meet a man still outside -- a foul there
+# is a free kick, not a penalty. Beaten, the recovery run takes over.
+CB_STAND_DEPTH = 22.0
 
 class CenterBackActionProfile(ActionProfile):
     role_name = "center_back"
@@ -108,12 +131,23 @@ class Defender(player):
         elif decision == "dribble":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
             dribble_speed = max(1.0, stat_ability(self.attributes.dribbling) * 1.25)
-            return {"type": "move", "target": np.array([35.0, enemy_goal_y]), "speed_mod": dribble_speed}
+            # A full-back carries it up his flank, not across the middle.
+            x = _clamp(float(state["my_pos"][0]), 5.0, PITCH_WIDTH - 5.0) if state.get("my_role") in FB_ROLES else 35.0
+            return {"type": "move", "target": np.array([x, enemy_goal_y]), "speed_mod": dribble_speed}
+
+        elif decision in ("wing_run", "wide_run", "attack_box", "take_on", "carry_across"):
+            return self._build_wing_action(decision, state)
             
         elif decision == "forward_run":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
-            run_target = np.array([state["my_pos"][0], enemy_goal_y])
+            # A centre-back steps into midfield, never past halfway; a full-back goes all the way.
+            run_y = PITCH_HEIGHT / 2.0 if state.get("my_role") == "CB" else enemy_goal_y
+            run_target = np.array([state["my_pos"][0], run_y])
             return {"type": "move", "target": run_target, "speed_mod": pace_ability(self.attributes.speed) * 0.9}
+
+        elif decision == "overlap" and state.get("my_role") in FB_ROLES:
+            return {"type": "move", "target": self._overlap_target(state),
+                    "speed_mod": pace_ability(self.attributes.speed) * OVERLAP_SPRINT, "intent": "overlap"}
 
         elif decision == "overlap":
             # Hugs whichever touchline this wingback's own formation slot sits
@@ -134,10 +168,15 @@ class Defender(player):
             return {"type": "move", "target": support_target, "speed_mod": pace_ability(self.attributes.speed) * 0.7}
             
         elif decision == "hold_attack":
-            push = 15.0 - self._tactic(state).line_depth
-            forward_shift = push if state.get("a_direction", 1) == 1 else -push
-            tactical_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + forward_shift])
-            return {"type": "move", "target": tactical_pos, "speed_mod": pace_ability(self.attributes.speed) * 0.5}
+            forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+            push, pace = 15.0, 0.5
+            if state.get("my_role") in FB_ROLES and not self._ball_far_side(state):
+                # The ball-side full-back keeps up with the play, FB_ATTACK_TRAIL behind it.
+                ball_ahead = (float(state["ball_pos"][1]) - float(state["formation_pos"][1])) * forward
+                push, pace = _clamp(ball_ahead - FB_ATTACK_TRAIL, push, FB_ATTACK_LIMIT), 0.7
+            push -= self._tactic(state).line_depth
+            tactical_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + push * forward])
+            return {"type": "move", "target": tactical_pos, "speed_mod": pace_ability(self.attributes.speed) * pace}
             
         elif decision == "cover" or (decision in {"hold_defense", "hold_attack", "recover", "recover_slow"} and self._should_cover(state)):
             return {"type": "move", "target": self._cover_target(state), "speed_mod": pace_ability(self.attributes.speed) * 0.8}
@@ -146,8 +185,8 @@ class Defender(player):
             # A high line (line_depth < 0) holds up the pitch; a deep one is home already.
             drop = 10.0 + min(0.0, self._tactic(state).line_depth)
             backward_shift = -drop if state.get("a_direction", 1) == 1 else drop
-            defensive_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + backward_shift])
-            return {"type": "move", "target": defensive_pos, "speed_mod": pace_ability(self.attributes.speed) * 0.6}
+            target = np.array([state["formation_pos"][0], self._hold_line_y(state, state["formation_pos"][1] + backward_shift)])
+            return {"type": "move", "target": target, "speed_mod": pace_ability(self.attributes.speed) * 0.6}
             
         elif decision == "man_mark":
             opponents = np.asarray(state.get("opponents", []))
@@ -178,32 +217,30 @@ class Defender(player):
             return {"type": "move", "target": mark_pos, "speed_mod": pace_ability(self.attributes.speed) * 1.0}
 
         elif decision == "press":
-            target = self._predict_ball_landing_target(state)
-            vec_to_target = target - state["my_pos"]
-            press_weight = 0.7 + pace_ability(self.attributes.speed) * 0.25
-            press_target = state["my_pos"] + (vec_to_target * press_weight)
+            if self._carrier_to_stop(state):
+                press_target = self._stand_ground(state, self._goal_side_target(state, GOAL_SIDE_PRESS))
+            else:
+                target = self._predict_ball_landing_target(state)
+                vec_to_target = target - state["my_pos"]
+                press_weight = 0.7 + pace_ability(self.attributes.speed) * 0.25
+                press_target = state["my_pos"] + (vec_to_target * press_weight)
             return {"type": "move", "target": press_target, "speed_mod": pace_ability(self.attributes.speed) * 0.9}
 
         elif decision == "contain":
-            target = self._predict_ball_landing_target(state)
-            vec_to_target = target - state["my_pos"]
-            contain_weight = 0.5 + pace_ability(self.attributes.speed) * 0.2
-            contain_target = state["my_pos"] + (vec_to_target * contain_weight)
+            if self._carrier_to_stop(state):
+                contain_target = self._stand_ground(state, self._goal_side_target(state, GOAL_SIDE_CONTAIN))
+            else:
+                target = self._predict_ball_landing_target(state)
+                vec_to_target = target - state["my_pos"]
+                contain_weight = 0.5 + pace_ability(self.attributes.speed) * 0.2
+                contain_target = state["my_pos"] + (vec_to_target * contain_weight)
             return {"type": "move", "target": contain_target, "speed_mod": pace_ability(self.attributes.speed) * 0.8}
             
         elif decision in {"recover", "recover_slow"}:
-            ball_pos = state["ball_pos"]
-            
-            shift_x = (ball_pos[0] - 35.0) * 0.35  
-            shift_y = (ball_pos[1] - 50.0) * 0.10
-            
-            base_pos = np.asarray(state["formation_pos"], dtype=float)
-            shifted_target = base_pos + np.array([shift_x, shift_y])
-            shifted_target[0] = _clamp(shifted_target[0], 0.0, 70.0) #TODO: hardcoded bunlar dğeiştir
-            shifted_target[1] = _clamp(shifted_target[1], 0.0, 100.0)
-            
+            x = _clamp(float(state["formation_pos"][0]) + (float(state["ball_pos"][0]) - 35.0) * 0.35, 0.0, PITCH_WIDTH)
+            slot_y = _clamp(float(state["formation_pos"][1]) + (float(state["ball_pos"][1]) - 50.0) * 0.10, 0.0, PITCH_HEIGHT)
             speed_mult = 0.7 if decision == "recover" else 0.4
-            return {"type": "move", "target": shifted_target, "speed_mod": pace_ability(self.attributes.speed) * speed_mult}
+            return {"type": "move", "target": np.array([x, self._hold_line_y(state, slot_y)]), "speed_mod": pace_ability(self.attributes.speed) * speed_mult}
             
         elif decision == "tackle":
             return {"type": "tackle", "stat": self.attributes.tackling}
@@ -238,7 +275,17 @@ class Defender(player):
                 return "cross"
             return "pass"
 
-        actions = ["pass", "shoot", "dribble", "cross", "stop"]
+        latched_move = self._latched_attack_move(state)
+        if latched_move is not None:
+            return latched_move
+
+        fullback = state.get("my_role") in FB_ROLES
+        if fullback:
+            latched = self._decide_wingplay(state)
+            if latched is not None:
+                return latched
+
+        actions = ["pass", "shoot", "dribble", "cross", "stop", "wing_run"]
         progressive_pass = self._best_progressive_pass_target(state) is not None
         pressure = state.get("pressure_count", 0)
 
@@ -248,6 +295,12 @@ class Defender(player):
         # Only with someone in the box to find (_box_runners), like any cross.
         t_cross = self.get_action_bias("cross") * 25.0 if self._box_runners(state) > 0 else 0.0
         t_stop = 10.0
+        # A full-back up the flank runs the line to the crossing zone, as a winger does.
+        t_wing = 0.0
+        if fullback and self._is_wide(state) and not self._in_crossing_zone(state) and not self._beat_marker(state):
+            t_wing = (self.attributes.speed + self.attributes.dribbling) * 0.5 + (60.0 if pressure == 0 else 0.0)
+            t_dribble *= 0.3
+            t_cross = 0.0
 
         if not progressive_pass: t_pass *= 0.08
         elif pressure > 0: t_pass *= 1.35
@@ -264,11 +317,14 @@ class Defender(player):
             t_stop = 0
             t_cross *= 0.5
 
+        moves, t_dribble = self._carve_attack_moves(state, t_dribble)
+
         tac = self._tactic(state)
         t_pass += self._wall_pass_pull(state)
         t_pass *= tac.pass_bias
         t_dribble *= tac.dribble_bias
         t_cross *= tac.cross_bias
+        t_wing *= tac.cross_bias
 
         t_pass = max(0.0, t_pass)
         t_shoot = max(0.0, t_shoot)
@@ -276,10 +332,11 @@ class Defender(player):
         t_cross = max(0.0, t_cross)
         t_stop = max(0.0, t_stop)
 
-        total = t_pass + t_shoot + t_dribble + t_cross + t_stop
+        total = t_pass + t_shoot + t_dribble + t_cross + t_stop + t_wing + sum(moves.values())
         if total <= 0: return "dribble"
         
-        probs = [t_pass/total, t_shoot/total, t_dribble/total, t_cross/total, t_stop/total]
+        probs = [t_pass/total, t_shoot/total, t_dribble/total, t_cross/total, t_stop/total, t_wing/total] + [weight / total for weight in moves.values()]
+        actions = actions + list(moves)
         return state["rng"].choice(actions, p=probs)
 
     def _decide_on_ball_defense(self, state: dict) -> str:
@@ -365,6 +422,10 @@ class Defender(player):
 
         if self._should_cover(state):
             return "cover"
+
+        if self._overlap_on(state):
+            if state.get("intent") == "overlap" or state["rng"].random() < OVERLAP_CHANCE * self._tactic(state).defender_push:
+                return "overlap"
         
         actions = ["forward_run", "support", "hold_attack", "overlap"]
         t_forward = (self.attributes.shoot_tendency + (self.attributes.speed * 0.5)) * self.get_action_bias("forward_run")
@@ -453,17 +514,72 @@ class Defender(player):
             return False
         return (float(state["ball_pos"][0]) - PITCH_WIDTH / 2.0) * self._flank(state) <= FB_FLANK_X
 
+    def _hold_line_y(self, state: dict, drop_y: float) -> float:
+        """The back line's y: DEF_LINE_SHARE of the ball's depth, moved by the tactic's line_depth,
+        never deeper than `drop_y` (the old target) -- and `drop_y` itself for a loose ball coming
+        at our goal, which the line turns and drops for."""
+        own_goal_y = float(state["own_goal"][1])
+        forward = 1.0 if own_goal_y == 0.0 else -1.0
+        drop_depth = (float(drop_y) - own_goal_y) * forward
+        if self._ball_coming(state):
+            return float(drop_y)
+        ball_depth = (float(state["ball_pos"][1]) - own_goal_y) * forward
+        depth = _clamp(ball_depth * DEF_LINE_SHARE - self._tactic(state).line_depth, RECOVERY_MIN_DEPTH, DEF_LINE_MAX)
+        return own_goal_y + forward * max(depth, drop_depth)
+
+    def _stand_ground(self, state: dict, target: np.ndarray) -> np.ndarray:
+        """A centre-back's goal-side `target`, but no deeper than CB_STAND_DEPTH while the man is
+        still outside it: on his line to goal, at the edge of the box."""
+        if state.get("my_role") != "CB":
+            return target
+        own_goal = np.asarray(state["own_goal"], dtype=float)
+        forward = 1.0 if own_goal[1] == 0.0 else -1.0
+        carrier = np.asarray(state["ball_pos"], dtype=float)
+        carrier_depth = (carrier[1] - own_goal[1]) * forward
+        if carrier_depth <= CB_STAND_DEPTH + GOAL_SIDE_PRESS or (target[1] - own_goal[1]) * forward >= CB_STAND_DEPTH:
+            return target
+        to_goal = (own_goal - carrier) / (_norm2(own_goal - carrier) + 1e-8)
+        along = (CB_STAND_DEPTH - carrier_depth) / min(to_goal[1] * forward, -1e-3)
+        return carrier + to_goal * along
+
+    def _ball_far_side(self, state: dict) -> bool:
+        return (float(state["ball_pos"][0]) - PITCH_WIDTH / 2.0) * self._flank(state) < -FB_FLANK_X
+
+    def _overlap_on(self, state: dict) -> bool:
+        """A teammate has it on my flank past OVERLAP_FROM, with a centre-back home behind me."""
+        if state.get("my_role") not in FB_ROLES or state.get("is_loose", False) or not state.get("cb_home", True):
+            return False
+        own_goal_y = float(state["own_goal"][1])
+        ball_x, ball_y = float(state["ball_pos"][0]), float(state["ball_pos"][1])
+        return (
+            (ball_x - PITCH_WIDTH / 2.0) * self._flank(state) > FB_FLANK_X
+            and abs(ball_y - own_goal_y) >= OVERLAP_FROM
+        )
+
+    def _overlap_target(self, state: dict) -> np.ndarray:
+        """OVERLAP_LEAD ahead of the ball, never offside: outside the carrier, or inside a
+        carrier who is on the touchline."""
+        touch = self._touchline_x(state)
+        ball_x, ball_y = float(state["ball_pos"][0]), float(state["ball_pos"][1])
+        x = touch if abs(ball_x - touch) > OVERLAP_ROOM else touch - self._flank(state) * OVERLAP_INSIDE_X
+        forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
+        depth = max((enemy_goal_y - ball_y) * forward - OVERLAP_LEAD, self._offside_line(state) + OFFSIDE_MARGIN)
+        return np.array([x, enemy_goal_y - depth * forward])
+
     def _back_line_target(self, state: dict) -> np.ndarray:
-        """Level with the centre-backs but FB_LINE_BALL_GAP goal-side of the ball at least,
-        narrowing from FB_WIDTH_FAR to FB_WIDTH_NEAR as the ball nears goal, sliding with it."""
+        """Level with the centre-backs -- whose line already carries the tactic's depth -- so he
+        never plays a man onside behind them; level with the ball once it is past them. Narrows
+        from FB_WIDTH_FAR to FB_WIDTH_NEAR as the ball nears goal, sliding with it."""
         own_goal_y = float(state["own_goal"][1])
         forward = 1.0 if own_goal_y == 0.0 else -1.0
         ball_x = float(state["ball_pos"][0])
         ball_depth = (float(state["ball_pos"][1]) - own_goal_y) * forward
-        depth = ball_depth - FB_LINE_BALL_GAP
         if state.get("cb_line") is not None:
-            depth = min(depth, (state["cb_line"] - own_goal_y) * forward)
-        depth = max(RECOVERY_MIN_DEPTH, depth - self._tactic(state).line_depth)
+            depth = min((state["cb_line"] - own_goal_y) * forward, ball_depth)
+        else:
+            depth = ball_depth - FB_LINE_BALL_GAP - self._tactic(state).line_depth
+        depth = max(RECOVERY_MIN_DEPTH, depth)
         tuck = _clamp((FB_TUCK_FROM - ball_depth) / (FB_TUCK_FROM - FB_TUCK_TO), 0.0, 1.0)
         width = FB_WIDTH_FAR + (FB_WIDTH_NEAR - FB_WIDTH_FAR) * tuck
         x = PITCH_WIDTH / 2.0 + self._flank(state) * width + (ball_x - PITCH_WIDTH / 2.0) * FB_BALL_SHIFT

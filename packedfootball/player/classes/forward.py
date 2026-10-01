@@ -1,4 +1,4 @@
-from player.player import CUT_INSIDE_DONE_X, SHOT_PATIENCE, TARGET_MAN_ROLES, TARGET_MAN_WEIGHT, _clamp, _count_within, _norm2, player, ActionProfile
+from player.player import CUT_INSIDE_DONE_X, SHOT_PATIENCE, TARGET_MAN_ROLES, TARGET_MAN_WEIGHT, _clamp, _count_within, _norm2, player, ActionProfile, EDGE_SHOT_PENALTY, EDGE_SHOT_RANGE
 from game_config import PRESS_FROM_DEFENDING, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
@@ -144,13 +144,13 @@ class Forward(player):
             
         elif decision == "hold_attack":
             # Hold the ball's line, coming inside toward goal.
-            target = self._attack_shape_target(state, anchor_x=PITCH_WIDTH / 2.0)
+            target = self._ahead_of_back_line(state, self._attack_shape_target(state, anchor_x=PITCH_WIDTH / 2.0))
             return {"type": "move", "target": target, "speed_mod": pace_ability(self.attributes.speed) * 0.8}
             
         # --- Defensive & Loose Ball Movement ---
         elif decision == "hold_defense":
             backward_shift = -10.0 if state.get("a_direction", 1) == 1 else 10.0
-            defensive_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + backward_shift])
+            defensive_pos = self._ahead_of_back_line(state, [state["formation_pos"][0], state["formation_pos"][1] + backward_shift])
             return {"type": "move", "target": defensive_pos, "speed_mod": pace_ability(self.attributes.speed) * 0.6}
             
         elif decision == "press":
@@ -177,6 +177,7 @@ class Forward(player):
             shifted_target = base_pos + np.array([shift_x, shift_y])
             shifted_target[0] = _clamp(shifted_target[0], 0.0, 70.0) #TODO: hardcoded bunlar dğeiştir
             shifted_target[1] = _clamp(shifted_target[1], 0.0, 100.0)
+            shifted_target = self._ahead_of_back_line(state, shifted_target)
             
             speed_mult = 0.7 if decision == "recover" else 0.4
             return {"type": "move", "target": shifted_target, "speed_mod": pace_ability(self.attributes.speed) * speed_mult}
@@ -199,6 +200,10 @@ class Forward(player):
             if (px <= 5.0 or px >=PITCH_WIDTH ) and (py <= 5.0 or py >=PITCH_HEIGHT):
                 return "cross"
             return "pass"
+
+        latched_move = self._latched_attack_move(state)
+        if latched_move is not None:
+            return latched_move
 
         # Once he commits to cutting in, he keeps going until he is central or
         # in the box. Without this he cut inside for a single decision, the
@@ -243,6 +248,8 @@ class Forward(player):
 
         if state.get("in_attacking_box"):
             t_shoot *= 2.5
+        elif dist_to_goal <= EDGE_SHOT_RANGE and self._shot_lane_open(state, state["my_pos"]):
+            t_shoot -= dist_to_goal * EDGE_SHOT_PENALTY   # from the edge, with the shot on
         else:
             t_shoot -= (dist_to_goal * 20.0)
 
@@ -284,6 +291,7 @@ class Forward(player):
             t_dribble *= 0.3
         if t_wing > 0.0 and pressure == 0:
             t_wing += 60.0
+        moves, t_dribble = self._carve_attack_moves(state, t_dribble)
 
         tac = self._tactic(state)
         t_pass += self._wall_pass_pull(state)
@@ -300,10 +308,11 @@ class Forward(player):
         t_wing = max(0.0, t_wing)
         t_cross = max(0.0, t_cross)
 
-        total = t_pass + t_shoot + t_dribble + t_stop + t_cut_inside + t_wing + t_cross
+        total = t_pass + t_shoot + t_dribble + t_stop + t_cut_inside + t_wing + t_cross + sum(moves.values())
         if total <= 0:
             return "dribble"
-        probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total, t_cut_inside / total, t_wing / total, t_cross / total]
+        probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total, t_cut_inside / total, t_wing / total, t_cross / total] + [weight / total for weight in moves.values()]
+        actions = actions + list(moves)
         return state["rng"].choice(actions, p=probs)
 
     def _decide_on_ball_defense(self, state: dict) -> str:

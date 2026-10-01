@@ -154,13 +154,13 @@ class Midfielder(player):
             
         elif decision == "hold_attack":
             # Follow the ball up the pitch so the attack has support.
-            target = self._attack_shape_target(state)
+            target = self._ahead_of_back_line(state, self._attack_shape_target(state))
             return {"type": "move", "target": target, "speed_mod": pace_ability(self.attributes.speed) * 0.75}
             
         # --- Defensive & Loose Ball Movement ---
         elif decision == "hold_defense":
             backward_shift = -10.0 if state.get("a_direction", 1) == 1 else 10.0
-            defensive_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + backward_shift])
+            defensive_pos = self._ahead_of_back_line(state, [state["formation_pos"][0], state["formation_pos"][1] + backward_shift])
             return {"type": "move", "target": defensive_pos, "speed_mod": pace_ability(self.attributes.speed) * 0.6}
 
         elif decision == "screen":
@@ -173,7 +173,7 @@ class Midfielder(player):
             vec_to_goal = own_goal - ball_pos
             dist = _norm2(vec_to_goal)
             shield_distance = min(14.0, dist * 0.4)
-            screen_target = ball_pos + (vec_to_goal / (dist + 1e-5)) * shield_distance
+            screen_target = self._ahead_of_back_line(state, ball_pos + (vec_to_goal / (dist + 1e-5)) * shield_distance)
             return {"type": "move", "target": screen_target, "speed_mod": pace_ability(self.attributes.speed) * 0.7}
 
         elif decision == "press":
@@ -200,6 +200,7 @@ class Midfielder(player):
             shifted_target = base_pos + np.array([shift_x, shift_y])
             shifted_target[0] = _clamp(shifted_target[0], 0.0, 70.0) #TODO: hardcoded bunlar dğeiştir
             shifted_target[1] = _clamp(shifted_target[1], 0.0, 100.0)
+            shifted_target = self._ahead_of_back_line(state, shifted_target)
             
             speed_mult = 0.7 if decision == "recover" else 0.4
             return {"type": "move", "target": shifted_target, "speed_mod": pace_ability(self.attributes.speed) * speed_mult}
@@ -225,6 +226,10 @@ class Midfielder(player):
             if (px <= 5.0 or px >=PITCH_WIDTH ) and (py <= 5.0 or py >=PITCH_HEIGHT):
                 return "cross"
             return "pass"
+
+        latched_move = self._latched_attack_move(state)
+        if latched_move is not None:
+            return latched_move
 
         latched = self._decide_wingplay(state)
         if latched is not None:
@@ -297,6 +302,7 @@ class Midfielder(player):
             t_dribble *= 0.3
         if t_wing > 0.0 and pressure == 0:
             t_wing += 60.0
+        moves, t_dribble = self._carve_attack_moves(state, t_dribble)
 
         tac = self._tactic(state)
         t_pass += self._wall_pass_pull(state)
@@ -313,10 +319,11 @@ class Midfielder(player):
         t_wing = max(0.0, t_wing)
         t_cross = max(0.0, t_cross)
 
-        total = t_pass + t_shoot + t_dribble + t_stop + t_through + t_wing + t_cross
+        total = t_pass + t_shoot + t_dribble + t_stop + t_through + t_wing + t_cross + sum(moves.values())
         if total <= 0:
             return "dribble"
-        probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total, t_through / total, t_wing / total, t_cross / total]
+        probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total, t_through / total, t_wing / total, t_cross / total] + [weight / total for weight in moves.values()]
+        actions = actions + list(moves)
         return state["rng"].choice(actions, p=probs)
 
     def _decide_on_ball_defense(self, state: dict) -> str:

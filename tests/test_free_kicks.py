@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 import free_kick
-from conftest import freeze_players_away_from, launch_ball
+from conftest import freeze_players_away_from, launch_ball, quiesce
 from gameEngine import FK_PASS_CHANCE, FK_PASS_CHANCE_MAX, FK_PASS_DESPERATION
 from game_config import FK_KEEPER_OFF_LINE, GOAL_WIDTH, PITCH_HEIGHT, PITCH_WIDTH
 from replay import ActionType
@@ -265,6 +265,22 @@ def test_played_in_when_the_roll_says_so(make_match, monkeypatch):
     assert g.positions[keeper][1] == pytest.approx(PITCH_HEIGHT - FK_KEEPER_OFF_LINE[1])
 
 
+def test_a_played_in_one_is_crossed_by_its_taker(make_match, monkeypatch):
+    """He was left at the strike's run-up, out of capture reach, and never played it."""
+    g = quiesce(make_match(record_replay=True))
+    monkeypatch.setattr(g, "_fk_pass_chance", lambda team: 1.0)
+    g._begin_restart("free_kick", 0, out_x=SPOT[0], out_y=SPOT[1])
+    taker = g.restart_player
+    first = len(g.replay._events)
+    for _ in range(120):
+        if g.match_clock_frames % g.decision_interval == 0:
+            g.step()
+        g.tick(1 / 60)
+    played = [(ActionType(kind), idx) for _, kind, idx, _ in g.replay._events[first:]
+              if kind in (ActionType.CROSS, ActionType.PASS, ActionType.CLEARANCE)]
+    assert played and played[0] == (ActionType.CROSS, taker)
+
+
 def test_desperation_plays_more_of_them_in(match):
     assert match._fk_pass_chance(0) == pytest.approx(FK_PASS_CHANCE)
     match.scores[1] = 1
@@ -290,3 +306,13 @@ def test_nobody_but_the_wall_stands_in_the_shooting_lane(make_match, monkeypatch
         along = float(rel @ unit)
         if 0.0 < along <= length:
             assert abs(float(rel @ across)) >= GOAL_WIDTH / 2.0 * along / length, f"{i} is in the lane"
+
+
+def test_a_free_kick_is_not_cancelled_by_an_unplayed_kickoff(make_match):
+    """A fresh match is mid-kickoff: its pending obligation used to wipe the free kick's
+    must_pass the moment the taker picked the ball up."""
+    g = make_match()
+    assert g.kickoff_pass_required
+    g.kickoff_timer = 0
+    g._begin_restart("free_kick", 0, out_x=SPOT[0], out_y=SPOT[1])
+    assert not g.kickoff_pass_required

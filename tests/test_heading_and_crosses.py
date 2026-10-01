@@ -313,39 +313,31 @@ def test_headers_happen_in_real_matches(make_match):
     assert seen >= 3, f"only {seen} headers in three matches"
 
 
-@pytest.mark.slow
-def test_header_goal_is_credited_to_the_header(rosters):
-    """Header at goal -> goal: the scorer is the player who headed it."""
-    home, away = rosters
-    found = False
-    # A header that actually goes in is roughly a 1-in-60 seed here, so a
-    # 39-seed window passed on luck: any engine change that shifts
-    # trajectories moved the hit out of range while the rate was unchanged.
-    for seed in range(1, 140):
-        g = game(Team("H", copy.deepcopy(home)), Team("A", copy.deepcopy(away)), seed=seed, record_replay=True)
-        g.run_match(max_steps=4000, render=False)
-        events = g.replay._events
-        for k, e in enumerate(events):
-            if e[1] != ActionType.GOAL or k == 0:
-                continue
-            # An own goal credits the player who put it in, on the far side
-            # from the team that scored (see ENGINE_VERSION 2.2.1) -- a header
-            # that missed and went in off a defender is one, so it is not the
-            # attribution this test is about.
-            if (e[2] < 11) != (e[3] == 0):
-                continue
-            # The header has to be the event IMMEDIATELY before the goal, i.e.
-            # it went straight in. Scanning back for the last HEADER/SHOOT
-            # instead matched a header from the previous half -- a passage with
-            # no shot in it leaves a stale one on top of that filter, and the
-            # tap-in that followed is correctly credited to the finisher.
-            prev = events[k - 1]
-            if prev[1] == ActionType.HEADER and (prev[2] < 11) == (e[3] == 0):
-                assert e[2] == prev[2]
-                found = True
-        if found:
-            break
-    assert found, "no header goal in 139 short matches -- corners aren't producing headers at goal"
+def test_header_goal_is_credited_to_the_header(make_match):
+    """Header at goal -> goal: the scorer is the player who headed it.
+
+    Staged, not searched for. A header straight in is ~1 short match in 60, so a seed window
+    passed or failed on luck -- every engine change moved the winning ticket out of it."""
+    header, keeper = 9, 11
+    scored = 0
+    for seed in range(30):
+        g = make_match(seed=seed, record_replay=True)
+        quiesce(g)
+        freeze_players_away_from(g, 35.0, 92.0, radius=20.0)
+        g.positions[header] = [35.0, 92.0]
+        g.positions[keeper] = [6.0, 98.0]   # nowhere near it
+        launch_ball(g, 35.0, 92.0, 0.0, 2.0, height=1.9, event="cross", toucher=8)
+        g._attempt_capture(header)
+        first = len(g.replay._events)
+        for _ in range(180):
+            g.tick(1 / 60)
+            if g.goal_pause_timer > 0:
+                break
+        goals = [e for e in g.replay._events[first:] if e[1] == ActionType.GOAL]
+        if goals:
+            assert goals[0][2] == header and g._match_goals[header] == 1
+            scored += 1
+    assert scored >= 3, f"only {scored} of 30 free headers went in"
 
 
 # --------------------------------------------------------------- wingplay
@@ -710,3 +702,42 @@ def test_engine_version_bumped():
 
     major, minor, _ = (int(v) for v in ENGINE_VERSION.split("."))
     assert (major, minor) >= (2, 3)
+
+
+# ------------------------------------------ a teammate's kick on its way up
+
+
+def _kicked_by(g, kicker, vz):
+    """A ball in the air just off `kicker`'s boot, rising (vz > 0) or dropping."""
+    quiesce(g)
+    g._register_touch(kicker)
+    g.ball[0:2] = [35.0, 60.0]
+    g.ball[2:4] = [0.0, 8.0]
+    g.ball[4] = 1.5
+    g.ball[5] = vz
+    g.ball_event = "clearance"
+
+
+def test_teammates_leave_a_rising_kick_alone(match):
+    _kicked_by(match, 2, vz=4.0)
+    assert match._leaves_it(6), "his own man jumped for it on the way up"
+    assert not match._leaves_it(13), "an opponent goes for anything"
+    assert not match._leaves_it(2)
+
+
+def test_coming_down_it_is_anyone_s(match):
+    _kicked_by(match, 2, vz=-4.0)
+    assert not match._leaves_it(6), "a flick-on on the way down is fine"
+
+
+def test_a_teammate_does_not_head_it_on_the_way_up(match):
+    _kicked_by(match, 2, vz=4.0)
+    match.positions[6] = match.ball[0:2]
+    assert match._attempt_capture(6) is False
+    assert match.last_touch_player == 2, "it went on past him untouched"
+
+
+def test_a_cross_is_anyone_s_even_rising(match):
+    _kicked_by(match, 2, vz=4.0)
+    match.ball_event = "cross"
+    assert not match._leaves_it(6)

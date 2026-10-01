@@ -30,6 +30,7 @@ from game_config import (  # noqa: F401 -- the appearance/career names are re-ex
     pace_ability,
     stat_ability,
     pass_power,
+    take_on_skill,
     BASE_KICK_POW,
     DEFAULT_TACTIC,
     TACTICS,
@@ -237,6 +238,49 @@ OFFSIDE_PASS_PENALTY: Final = 200.0
 GIVE_AND_GO_BONUS: Final = 120.0
 GIVE_AND_GO_PASS_WEIGHT: Final = 60.0   # ...and how much more I lean towards passing at all
 GIVE_AND_GO_FREE: Final = 3.0            # he's free if nobody is this close to him
+# A full-back overlapping me (state["overlap"]): his pull in my pass choice, and once a man is
+# within OVERLAP_ENGAGED of me, the lean to passing -- or, on a wing run, the chance I release him.
+OVERLAP_BONUS: Final = 120.0
+OVERLAP_PASS_WEIGHT: Final = 60.0
+OVERLAP_ENGAGED: Final = 5.0
+OVERLAP_RELEASE: Final = 0.5
+
+# Pressing or containing the man on the ball: between him and my goal, GOAL_SIDE_PRESS (in
+# tackling range) or GOAL_SIDE_CONTAIN (jockeying) off where he will be when I get there -- at
+# most GOAL_SIDE_LEAD seconds on. Running at where he WAS, a quicker man was simply gone.
+GOAL_SIDE_PRESS: Final = 1.0
+GOAL_SIDE_CONTAIN: Final = 3.0
+GOAL_SIDE_LEAD: Final = 1.0
+# A midfielder's or forward's own spot is never closer than this to his centre-backs' line:
+# nobody but the back line stands behind it -- unless a loose ball is coming at our goal faster
+# than BALL_COMING_SPEED, when everybody gets back as before (the back line too, defender._hold_line_y).
+BACK_LINE_GAP: Final = 6.0
+BALL_COMING_SPEED: Final = 2.0
+
+# Going round the man (take_on): the nearest opponent goal-side within TAKE_ON_RANGE, with nobody
+# covering goal-side of him within TAKE_ON_COVER, is beaten on the clearer side -- TAKE_ON_WIDTH to
+# that side and TAKE_ON_BEYOND past him, a spot at least TAKE_ON_SPACE from anyone else.
+TAKE_ON_RANGE: Final = 5.0
+TAKE_ON_COVER: Final = 6.0
+TAKE_ON_WIDTH: Final = 3.0
+TAKE_ON_BEYOND: Final = 2.0
+TAKE_ON_SPACE: Final = 2.5
+TAKE_ON_WEIGHT: Final = 3.0         # per point of (take_on_skill + drible_tendency) / 2
+WING_RUN_WEIGHT: Final = 100.0      # a latched wing run's weight against a take-on
+
+# Carrying it across (carry_across): with the shot shut from here, the man on the ball carries it
+# ACROSS_DIST sideways at the same depth, inside the box's width, to a spot the shot is on from.
+# A shot's lane is SHOT_LANE_WIDTH wide, checked up to KEEPER_ZONE_DEPTH short of goal. From the
+# edge -- outside the box, within EDGE_SHOT_RANGE -- a forward shoots only with that lane open.
+ACROSS_DIST: Final = 8.0
+ACROSS_WEIGHT: Final = 2.0          # per point of (shoot_tendency + vision) / 2
+ACROSS_PACE: Final = 0.8            # of his dribbling pace: carrying it, not running with it
+SHOT_LANE_WIDTH: Final = 1.5
+EDGE_SHOT_RANGE: Final = 26.0
+EDGE_SHOT_PENALTY: Final = 2.0      # per unit out, against the 20 a forward takes off with the lane shut
+# Any move against a set defender leaves this much of the straight run at him.
+MOVE_DRIBBLE_KEEP: Final = 0.3
+
 
 # Showing for the ball (Tactic.show_in_space): the most open spot SUPPORT_SPACE_RADIUS
 # from the man on it, onside and clear of teammates -- not at the ball, which drags a
@@ -563,7 +607,15 @@ class player(ABC):
         return True
 
     def _goal_lane_is_open(self, state: dict, lane_width: float = 2.5, lookahead: float = 10.0) -> bool:
-        mx, my = float(state["my_pos"][0]), float(state["my_pos"][1])
+        return self._lane_open_from(state, state["my_pos"], lane_width, lookahead)
+
+    def _shot_lane_open(self, state: dict, point) -> bool:
+        """Nobody in the way of a shot from `point`, short of the keeper's own ground."""
+        dist = _norm2(np.asarray(state["enemy_goal"], dtype=float) - np.asarray(point, dtype=float))
+        return self._lane_open_from(state, point, SHOT_LANE_WIDTH, max(0.0, dist - KEEPER_ZONE_DEPTH))
+
+    def _lane_open_from(self, state: dict, point, lane_width: float, lookahead: float) -> bool:
+        mx, my = float(point[0]), float(point[1])
         gx, gy = float(state["enemy_goal"][0]) - mx, float(state["enemy_goal"][1]) - my
         goal_norm = math.hypot(gx, gy)
         if goal_norm < 1e-8:
@@ -753,7 +805,7 @@ class player(ABC):
             return {"type": "move", "target": np.array([touchline_x, ahead_y]), "speed_mod": pace_ability(self.attributes.speed) * 0.9}
         if decision == "attack_box":
             return self._timed_box_run(state)
-        return None
+        return self._build_attack_move(decision, state)
 
     def _timed_box_run(self, state: dict) -> dict:
         """Get on the end of a cross: to the near or far post side of the spot
@@ -815,6 +867,8 @@ class player(ABC):
             t_run = 10.0
             total = t_cross + t_pass + t_run
             return rng.choice(["cross", "pass", "wing_run"], p=[t_cross / total, t_pass / total, t_run / total])
+        if self._overlap_release(state) and rng.random() < OVERLAP_RELEASE:
+            return "pass"
         if self._beat_marker(state):
             return None
         if pressure >= 2 and progressive:
@@ -827,6 +881,9 @@ class player(ABC):
             and self._goal_lane_is_open(state, lane_width=5.0, lookahead=14.0)
         ):
             return None
+        take_on = self._take_on_weight(state)
+        if take_on > 0.0 and rng.random() < take_on / (take_on + WING_RUN_WEIGHT):
+            return "take_on"
         return "wing_run"
 
     def _head_ball_drop_time(self, state: dict) -> float | None:
@@ -876,6 +933,143 @@ class player(ABC):
         ball_pos = np.asarray(state["ball_pos"], dtype=float)
         behind = (float(my_pos[1]) - float(ball_pos[1])) * state.get("a_direction", 1)
         return behind > RECOVERY_BEATEN_MARGIN and _norm2(ball_pos - my_pos) < RECOVERY_RANGE
+
+    def _ahead_of_back_line(self, state: dict, target) -> np.ndarray:
+        """`target`, moved up if need be to BACK_LINE_GAP in front of my centre-backs' line."""
+        target = np.asarray(target, dtype=float)
+        if state.get("cb_line") is None or self._ball_coming(state):
+            return target
+        own_goal_y = float(state["own_goal"][1])
+        forward = 1.0 if own_goal_y == 0.0 else -1.0
+        floor = (float(state["cb_line"]) - own_goal_y) * forward + BACK_LINE_GAP
+        if (float(target[1]) - own_goal_y) * forward >= floor:
+            return target
+        return np.array([float(target[0]), own_goal_y + forward * min(floor, PITCH_HEIGHT)])
+
+    def _ball_coming(self, state: dict) -> bool:
+        """A loose ball running at my goal faster than BALL_COMING_SPEED."""
+        forward = 1.0 if float(state["own_goal"][1]) == 0.0 else -1.0
+        coming = -float(np.asarray(state.get("ball_velocity", (0.0, 0.0)))[1]) * forward
+        return state.get("is_loose", False) and coming > BALL_COMING_SPEED
+
+    def _take_on_route(self, state: dict):
+        """The way round the man in front of me: (spot past his shoulder, side), or None -- nobody
+        there, he is covered, or no side is clear. A side already taken (my intent) is kept."""
+        me = np.asarray(state["my_pos"], dtype=float)
+        to_goal = np.asarray(state["enemy_goal"], dtype=float) - me
+        dist_goal = _norm2(to_goal)
+        if dist_goal < 1e-6:
+            return None
+        u = to_goal / dist_goal
+        opps = np.asarray(state["opponents"], dtype=float)
+        rel = opps - me
+        ahead = rel @ u
+        dist = np.sqrt(np.einsum("ij,ij->i", rel, rel))
+        near = [k for k in range(1, len(opps)) if ahead[k] > 0.0 and dist[k] < TAKE_ON_RANGE]   # 0: their keeper
+        if not near:
+            return None
+        man = min(near, key=lambda k: dist[k])
+        if any(k != man and ahead[k] > ahead[man] and _norm2(opps[k] - opps[man]) < TAKE_ON_COVER
+               for k in range(1, len(opps))):
+            return None
+        intent = state.get("intent") or ""
+        kept = int(intent[len("take_on"):]) if intent.startswith("take_on") else 0
+        perp = np.array([-u[1], u[0]])
+        best = None
+        for side in ((kept,) if kept else (-1, 1)):
+            spot = opps[man] + perp * side * TAKE_ON_WIDTH + u * TAKE_ON_BEYOND
+            if not (2.0 <= spot[0] <= PITCH_WIDTH - 2.0 and 2.0 <= spot[1] <= PITCH_HEIGHT - 2.0):
+                continue
+            space = min(_norm2(opps[k] - spot) for k in range(len(opps)) if k != man)
+            if space >= TAKE_ON_SPACE and (best is None or space > best[0]):
+                best = (space, spot, side)
+        return (best[1], best[2]) if best else None
+
+    def _take_on_weight(self, state: dict) -> float:
+        if self._take_on_route(state) is None:
+            return 0.0
+        skill = take_on_skill(self.attributes)
+        return (skill + self.attributes.drible_tendency) * 0.5 * TAKE_ON_WEIGHT * self._tactic(state).dribble_bias
+
+    def _across_route(self, state: dict):
+        """Where to carry it across to open the shot: (spot, side), or None -- the shot is on from
+        here already, I am too far out for it, or no spot ACROSS_DIST either side has it."""
+        me = np.asarray(state["my_pos"], dtype=float)
+        goal = np.asarray(state["enemy_goal"], dtype=float)
+        if _norm2(goal - me) > EDGE_SHOT_RANGE + ACROSS_DIST or self._shot_lane_open(state, me):
+            return None
+        intent = state.get("intent") or ""
+        kept = int(intent[len("across"):]) if intent.startswith("across") else 0
+        opps = np.asarray(state["opponents"], dtype=float)
+        best = None
+        for side in ((kept,) if kept else (-1, 1)):
+            spot = np.array([_clamp(me[0] + side * ACROSS_DIST, BOX_X_MIN, BOX_X_MAX), me[1]])
+            if abs(spot[0] - me[0]) < ACROSS_DIST * 0.5 or _norm2(goal - spot) > EDGE_SHOT_RANGE:
+                continue
+            if not self._shot_lane_open(state, spot):
+                continue
+            space = float(np.min(np.linalg.norm(opps - spot, axis=1)))
+            if best is None or space > best[0]:
+                best = (space, spot, side)
+        return (best[1], best[2]) if best else None
+
+    def _across_weight(self, state: dict) -> float:
+        if self._across_route(state) is None:
+            return 0.0
+        return (self.attributes.shoot_tendency + self.attributes.vision) * 0.5 * ACROSS_WEIGHT
+
+    def _carve_attack_moves(self, state: dict, t_dribble: float) -> tuple[dict, float]:
+        """The moves against a set defender and their weights, and the straight dribble left over:
+        with a better way, not straight at him."""
+        moves = {"take_on": self._take_on_weight(state), "carry_across": self._across_weight(state)}
+        if any(weight > 0.0 for weight in moves.values()):
+            t_dribble *= MOVE_DRIBBLE_KEEP
+        return moves, t_dribble
+
+    def _latched_attack_move(self, state: dict) -> str | None:
+        """The move I am latched onto, while it still applies."""
+        intent = state.get("intent") or ""
+        if intent.startswith("take_on") and self._take_on_route(state) is not None:
+            return "take_on"
+        if intent.startswith("across"):
+            if self._across_route(state) is not None:
+                return "carry_across"
+            me = np.asarray(state["my_pos"], dtype=float)
+            if _norm2(np.asarray(state["enemy_goal"], dtype=float) - me) <= EDGE_SHOT_RANGE and self._shot_lane_open(state, me):
+                return "shoot"   # what it was for
+        return None
+
+    def _build_attack_move(self, decision: str, state: dict) -> dict | None:
+        if decision == "take_on":
+            speed = max(1.0, stat_ability(self.attributes.dribbling) * 1.25)
+            route = self._take_on_route(state)
+            if route is None:   # nobody left to go round: on at goal
+                return {"type": "move", "target": np.asarray(state["enemy_goal"], dtype=float), "speed_mod": speed}
+            spot, side = route
+            return {"type": "move", "target": spot, "speed_mod": speed, "intent": f"take_on{side:+d}"}
+        if decision == "carry_across":
+            speed = max(1.0, stat_ability(self.attributes.dribbling) * 1.25) * ACROSS_PACE
+            route = self._across_route(state)
+            if route is None:   # the shot is on now, or gone: on at goal
+                return {"type": "move", "target": np.asarray(state["enemy_goal"], dtype=float), "speed_mod": speed}
+            spot, side = route
+            return {"type": "move", "target": spot, "speed_mod": speed, "intent": f"across{side:+d}"}
+        return None
+
+    def _carrier_to_stop(self, state: dict) -> bool:
+        """An opponent has the ball at his feet (not a pass or a loose ball, which I go for)."""
+        return state.get("team_possession") == -1 and not state.get("is_loose", False)
+
+    def _goal_side_target(self, state: dict, gap: float) -> np.ndarray:
+        """`gap` goal-side of where the man on the ball will be by the time I can get there."""
+        carrier = np.asarray(state["ball_pos"], dtype=float)
+        my_speed = max(1.0, pace_ability(self.attributes.speed) * base_speed)
+        lead = min(_norm2(carrier - np.asarray(state["my_pos"], dtype=float)) / my_speed, GOAL_SIDE_LEAD)
+        ahead = carrier + np.asarray(state.get("ball_velocity", np.zeros(2)), dtype=float) * lead
+        to_goal = np.asarray(state["own_goal"], dtype=float) - ahead
+        dist = _norm2(to_goal)
+        target = ahead + to_goal / (dist + 1e-8) * min(gap, dist)
+        return _clamp_to_pitch(target[0], target[1])
 
     def _carrier_ahead(self, state: dict) -> np.ndarray:
         """Where the man on the ball is going, RECOVERY_LEAD_SECONDS on."""
@@ -1015,6 +1209,8 @@ class player(ABC):
                 raw_score -= OFFSIDE_PASS_PENALTY
             elif tm_i == state.get("give_and_go", -1):
                 raw_score += GIVE_AND_GO_BONUS
+            elif tm_i == state.get("overlap", -1):
+                raw_score += OVERLAP_BONUS
 
             pressure_penalty = state["pressure_count"] * max(0.0, 100 - self.attributes.composure) / 10.0
             effective_vision = max(1.0, self.attributes.vision - pressure_penalty)
@@ -1037,17 +1233,28 @@ class player(ABC):
         return min(depths[1] if len(depths) > 1 else 0.0, (enemy_goal_y - float(state["ball_pos"][1])) * forward)
 
     def _wall_pass_pull(self, state: dict) -> float:
-        """GIVE_AND_GO_PASS_WEIGHT when the man who just gave it to me is ahead, onside and free."""
-        runner_i = state.get("give_and_go", -1)
+        """The lean to passing for a runner off me: GIVE_AND_GO_PASS_WEIGHT for the man who
+        just gave it to me, OVERLAP_PASS_WEIGHT for an overlapping full-back once I'm closed down."""
+        if self._runner_free(state, "give_and_go"):
+            return GIVE_AND_GO_PASS_WEIGHT
+        if self._overlap_release(state):
+            return OVERLAP_PASS_WEIGHT
+        return 0.0
+
+    def _runner_free(self, state: dict, key: str) -> bool:
+        """The teammate at state[key] is ahead of me, onside and free."""
+        runner_i = state.get(key, -1)
         if runner_i < 0:
-            return 0.0
+            return False
         runner = state["teammates"][runner_i]
         goal_dir = 1.0 if state.get("a_direction", 1) == 1 else -1.0
         if (float(runner[1]) - float(state["my_pos"][1])) * goal_dir <= 0.0 or self._is_offside(state, runner):
-            return 0.0
-        if _count_within(state["opponents"], runner, GIVE_AND_GO_FREE) > 0:
-            return 0.0
-        return GIVE_AND_GO_PASS_WEIGHT
+            return False
+        return _count_within(state["opponents"], runner, GIVE_AND_GO_FREE) == 0
+
+    def _overlap_release(self, state: dict) -> bool:
+        """The overlapping full-back is free ahead of me and a man is on me: play him in."""
+        return self._runner_free(state, "overlap") and _count_within(state["opponents"], state["my_pos"], OVERLAP_ENGAGED) > 0
 
     def _is_offside(self, state: dict, tm) -> bool:
         """Is teammate `tm` in an offside position right now (gameEngine._offside_snapshot's rule)?"""

@@ -273,7 +273,8 @@ def test_possession_holds_a_high_line_and_long_ball_a_deep_one():
     fb = {"role": "LB", "slot": (12.0, 20.0)}
     assert _target_y(cb, "hold_attack", "possession") > _target_y(cb, "hold_attack", "balanced") > _target_y(cb, "hold_attack", "long_ball")
     assert _target_y(cb, "hold_defense", "possession") > _target_y(cb, "hold_defense", "balanced")
-    assert _target_y(lb, "back_line", "possession", **fb) > _target_y(lb, "back_line", "balanced", **fb) > _target_y(lb, "back_line", "long_ball", **fb)
+    # The full-back holds the line with his centre-backs, whose depth carries the tactic.
+    assert {_target_y(lb, "back_line", style, **fb) for style in ("possession", "balanced", "long_ball")} == {20.0}
 
 
 # ------------------------------------------------------------- the wide pass

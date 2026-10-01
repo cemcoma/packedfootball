@@ -405,6 +405,16 @@ SPEED_COMPRESS: Final = 0.60
 SPEED_PIVOT: Final = 0.72
 
 
+# Going round a man (player take_on): the tackle duel reads this blend of the carrier's stats
+# instead of ballcontrol alone, so dribbling counts where it should.
+TAKE_ON_DUEL: Final = {"dribbling": 0.45, "ballcontrol": 0.40, "agility": 0.15}
+
+
+def take_on_skill(attrs) -> float:
+    return sum(float(getattr(attrs, stat, 50)) * weight for stat, weight in TAKE_ON_DUEL.items())
+
+
+
 def pace_ability(stat: float, compress: float | None = None) -> float:
     a = stat_ability(stat)
     c = SPEED_COMPRESS if compress is None else compress

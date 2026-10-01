@@ -29,6 +29,7 @@ from game_config import (  # noqa: F401
     cross_flight,
     pace_ability,
     stat_ability,
+    take_on_skill,
     BALL_AIR_FRICTION,
     BALL_GRAVITY,
     BALL_GROUND_FRICTION,
@@ -306,7 +307,20 @@ from formations import get_formation, is_similar_position
 #         receiver leans towards the wall pass.
 #   4.6.1 ratings credit defending: interceptions (their pass, in his own half), clearances and
 #         blocked shots up, fouls down. A clearance is no longer a pass attempt. Sim unchanged.
-ENGINE_VERSION: Final[str] = "4.6.1"
+#   5.0.0 real defending, and attacking moves to beat it. Goals 2.65/match, tactics 46-52%.
+#         - Defenders press/contain goal-side of where the carrier is heading (player._goal_side_target);
+#           CBs hold at the edge of the box (defender.CB_STAND_DEPTH). Midfield and forwards still close in.
+#         - The back line holds at half the ball's depth (defender._hold_line_y), full-backs level with
+#           their CBs; midfield and forwards stay BACK_LINE_GAP in front of it. Everyone drops for a ball
+#           coming at goal. A CB's open-play run stops at halfway.
+#         - Full-backs: the ball-side one keeps up with play and overlaps (state["overlap"]); the far one stays.
+#         - The man on the ball goes round an uncovered defender (player._take_on_route; the duel reads
+#           game_config.TAKE_ON_DUEL), or carries it across the box to an open shot (player._across_route);
+#           forwards shoot from the edge (EDGE_SHOT_RANGE) only with the lane open. scripts/attack_report.py.
+#         - Nobody touches a teammate's kick while it is still rising (crosses exempt).
+#         - Fixes: a played-in free kick is taken (its taker was out of capture reach); a stale must_pass no
+#           longer cancels a free kick's; a tackle is never made on a teammate (it gave the fouling side a penalty).
+ENGINE_VERSION: Final[str] = "5.0.0"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -915,6 +929,15 @@ class game:
         self.last_touch_player = player_index
         self.last_touch_team = curr_team
 
+    def _leaves_it(self, index: int) -> bool:
+        """A teammate's kick still on its way up: he lets it go. Coming down it is anyone's, and a
+        cross is for whoever attacks it -- a short one is still rising at the near post."""
+        kicker = self.last_touch_player
+        return (
+            float(self.ball[5]) > 0.0 and self.ball_event != "cross"
+            and kicker >= 0 and kicker != index and (kicker < 11) == (index < 11)
+        )
+
     def _credit_defending(self, index: int, won: bool) -> None:
         """Rating stats for breaking up the other side: an outfielder blocking their
         shot (once a shot), or `won` -- taking their pass in flight in his own half.
@@ -1041,6 +1064,7 @@ class game:
         self._fk_flight = None
         self._punt = None
         self._offside_snap = None
+        self._clear_must_pass()   # an unplayed restart's obligation would cancel this one's
         self.restart_type = restart_type
         self.restart_team = team if team is not None else (0 if self.last_touch_team is None else 1 - self.last_touch_team)
         self.restart_timer = 30
@@ -1835,6 +1859,8 @@ class game:
                 continue  # he just kicked it; it is leaving his own boot
             if float(np.dot(self.positions[i] - np.asarray(prev_xy, dtype=float), seg)) <= 0.0:
                 continue  # he is behind the ball: it is leaving him, not hitting him
+            if self._leaves_it(i):
+                continue  # not his ball: he lets it by
             if self._attempt_capture(i):
                 return
             # He could not take it cleanly -- but it hit him, so it stops dead
@@ -1850,6 +1876,8 @@ class game:
     def _attempt_capture(self, index: int) -> bool:
         if self.ball_controller == index:
             return True
+        if self._leaves_it(index):
+            return False
 
         # A beaten keeper is on the floor and can't quietly rescue the shot
         # they just missed via a block roll. Time-based, so a ball that clips
@@ -2696,7 +2724,8 @@ class game:
                     )
 
         elif action_type == "tackle":
-            if self.ball_controller == -1 or self.ball_controller == index:
+            # Decided against them, but a teammate may have won it earlier this step: never tackle your own man.
+            if self.ball_controller == -1 or (self.ball_controller < 11) == (index < 11):
                 return
 
             holder_idx = self.ball_controller
@@ -2708,7 +2737,9 @@ class game:
                 # tackling decides the duel; aggression already decided whether
                 # to challenge at all, and defending does the positional work.
                 tackling = action["stat"]
-                attacker_stat = self.all_players[holder_idx].attributes.ballcontrol
+                holder_attrs = self.all_players[holder_idx].attributes
+                going_round = (self.intent[holder_idx] or "").startswith("take_on")
+                attacker_stat = take_on_skill(holder_attrs) if going_round else holder_attrs.ballcontrol
 
                 stat_diff = tackling - attacker_stat
                 steal_chance = float(_clamp(0.40 + (stat_diff / TACKLE_DUEL_SPREAD), 0.10, 0.90))
@@ -2930,6 +2961,9 @@ class game:
         if self.rng.random() < pass_chance:
             self.free_kick_kind = "played_in"
             self._arm_restart_pass("cross", taker)
+            # He has to take it now, not strike it: on the ball, like any other free kick's taker.
+            # Left at the run-up's 2.0 he was out of capture reach and never played it.
+            self.positions[taker] = np.asarray(spot, dtype=float) - np.array([0.0, forward * 1.5])
         return taker
 
     def _clear_shooting_lane(self, spot, team: int, exclude) -> None:
@@ -3628,7 +3662,8 @@ class game:
             ball_h = max(0.0, float(self.ball[4]))
             if ball_h >= HEAD_MIN_HEIGHT:
                 # Aerial: whoever can reach it contests it, best header wins.
-                near = np.flatnonzero((aerial_distances < HEAD_RADIUS) & (self._reach >= ball_h))
+                near = np.array([i for i in np.flatnonzero((aerial_distances < HEAD_RADIUS) & (self._reach >= ball_h))
+                                 if not self._leaves_it(int(i))], dtype=int)
                 if near.size:
                     gk_near = [int(i) for i in near if i in self._keeper_indices]
                     if gk_near and aerial_distances[gk_near[0]] <= float(aerial_distances[near].min()):
@@ -3712,6 +3747,8 @@ class game:
         flight = self._fk_flight
         self._update_punt_support()
         holder = self.keeper_holding if self.keeper_holding == self.ball_controller else -1
+        # Each side's full-back on an overlap (player intent "overlap"), or -1.
+        overlaps = [next((j for j in side if self.intent[j] == "overlap"), -1) for side in (range(11), range(11, 22))]
         actions = []
         for i in range(22):
             if flight is not None and flight.controls(i, self.positions):
@@ -3734,6 +3771,7 @@ class game:
 
             home = i < 11
             enemy_goal = self._goal_targets[i]
+            overlap = overlaps[0 if home else 1]
 
             state = {
                 "has_ball": (self.ball_controller == i),
@@ -3791,6 +3829,8 @@ class game:
                     if self.pass_and_move_timer > 0 and self.pass_and_move != i and (self.pass_and_move < 11) == home
                     else -1
                 ),
+                # A teammate full-back overlapping me (index into "teammates"), or -1.
+                "overlap": overlap - (0 if home else 11) if overlap >= 0 and overlap != i else -1,
                 "rng": self.rng,
             }
             intended_action = self.all_players[i].step(state)
