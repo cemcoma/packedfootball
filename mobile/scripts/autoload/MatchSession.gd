@@ -221,7 +221,7 @@ func team_summary(team: int) -> Dictionary:
 	var totals := {
 		"goals": 0, "assists": 0, "shots": 0, "shots_on_target": 0,
 		"passes": 0, "passes_completed": 0, "tackles": 0, "tackles_won": 0,
-		"saves": 0,
+		"saves": 0, "fouls": 0,
 	}
 	var rating_sum := 0.0
 	var rated := 0

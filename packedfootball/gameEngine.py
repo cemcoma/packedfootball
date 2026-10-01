@@ -304,7 +304,9 @@ from formations import get_formation, is_similar_position
 #         striker is a target man: up on their line as the out-ball, long balls over the top to him.
 #         Give and go: the runner stops onside, his run restarts when the pass is taken, and the
 #         receiver leans towards the wall pass.
-ENGINE_VERSION: Final[str] = "4.6.0"
+#   4.6.1 ratings credit defending: interceptions (their pass, in his own half), clearances and
+#         blocked shots up, fouls down. A clearance is no longer a pass attempt. Sim unchanged.
+ENGINE_VERSION: Final[str] = "4.6.1"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -685,6 +687,7 @@ class game:
         self.last_shot_player = -1
         self.last_shot_on_target = False
         self.last_pass_player = -1
+        self._clearance_in_flight = False  # last_pass_player's ball is a clearance: nobody completes or intercepts it
         self.pass_receiver = -1
         self.pass_and_move = -1
         self.pass_and_move_timer = 0
@@ -692,6 +695,7 @@ class game:
         # one save attempt at it. -1 means no live shot.
         self.active_shot_id = -1
         self._shot_counter = 0
+        self._blocked_shot_id = -1    # a shot is credited as blocked once
         self._release_count = 0       # one per ball kicked, so a duel is rolled once per flight
         self._aerial_duel_ball = -1
         self._offside_snap = None     # (passing team, who was offside) for the pass in flight
@@ -911,10 +915,34 @@ class game:
         self.last_touch_player = player_index
         self.last_touch_team = curr_team
 
+    def _credit_defending(self, index: int, won: bool) -> None:
+        """Rating stats for breaking up the other side: an outfielder blocking their
+        shot (once a shot), or `won` -- taking their pass in flight in his own half.
+        Call before the touch registers."""
+        team = 0 if index < 11 else 1
+        if self.ball_event == "shot":
+            shooter = self.last_shot_player
+            if (
+                shooter >= 0 and (shooter < 11) != (team == 0)
+                and index not in self._keeper_indices
+                and self.last_touch_team != team
+                and self.active_shot_id != self._blocked_shot_id
+            ):
+                self._blocked_shot_id = self.active_shot_id
+                self.match_stats[index]["blocks"] += 1
+        elif (
+            won and self.ball_event in ("pass", "cross", "throw_in") and not self._clearance_in_flight
+            and self.last_pass_player >= 0 and (self.last_pass_player < 11) != (team == 0)
+        ):
+            y = float(self.positions[index][1])
+            if (y if team == 0 else PITCH_HEIGHT - y) < PITCH_HEIGHT / 2.0:
+                self.match_stats[index]["interceptions"] += 1
+
     def _trigger_goal_popup(self, team_label: str):
         self.goal_popup = {"text": f"GOAL {team_label}", "timer": 90, "team": team_label}
 
     def reset_positions(self, restart_type: str | None = None, team: int | None = None):
+        self.last_pass_player = -1  # a dead ball: the restart taker neither completes nor intercepts it
         if restart_type == "free_kick":
             # Deliberately NO formation reset. Snapping all 22 back on every
             # foul would wipe the attacking shape that won the free kick --
@@ -1359,6 +1387,11 @@ class game:
             rating += stats["shots_on_target"] * 0.25
             rating += stats["tackles_won"] * 0.2
             rating -= (stats["tackles"] - stats["tackles_won"]) * 0.1
+            # Defending that never shows on the stats page (see _credit_defending).
+            rating += stats["interceptions"] * 0.15
+            rating += stats["clearances"] * 0.1
+            rating += stats["blocks"] * 0.25
+            rating -= stats["fouls"] * 0.1
             passes = stats["passes"]
             if passes >= 5:
                 accuracy = stats["passes_completed"] / passes
@@ -1808,6 +1841,7 @@ class game:
             # at his feet instead of either ricocheting away or carrying on
             # through him. A heavy touch, which is what a miscontrol looks
             # like, and it leaves the ball there to be won.
+            self._credit_defending(i, won=False)
             self.ball[2:4] = self.ball[2:4] * BODY_TOUCH_KEEP + self.rng.normal(0.0, 0.8, size=2)
             self.ball_capture_player = i
             self.ball_capture_cooldown = CAPTURE_RETRY_FRAMES
@@ -1906,9 +1940,11 @@ class game:
                 self.ball_capture_player = index
                 self.ball_capture_cooldown = CAPTURE_RETRY_FRAMES
             if controlled:
+                self._credit_defending(index, won=True)  # their pass, off one of ours
                 passer = self.last_pass_player
                 if passer >= 0 and passer != index and (passer < 11) == (index < 11):
-                    self.match_stats[passer]["passes_completed"] += 1
+                    if not self._clearance_in_flight:
+                        self.match_stats[passer]["passes_completed"] += 1
                     if passer == self.pass_and_move:
                         self.pass_and_move_timer = PASS_AND_MOVE_FRAMES   # his run is on for the return
                 self.last_pass_player = -1
@@ -1948,6 +1984,7 @@ class game:
         success_chance = float(_clamp(success_chance + 0.15, 0.2, 0.98))
 
         if self.rng.random() < success_chance:
+            self._credit_defending(index, won=True)
             # A teammate winning a pass through THIS path (a deflection, a
             # scrappy second ball) still completed it. Only the clean-control
             # branch above credited it, so passes_completed read ~15 points
@@ -1959,7 +1996,8 @@ class game:
                 and passer != index
                 and (passer < 11) == (index < 11)
             ):
-                self.match_stats[passer]["passes_completed"] += 1
+                if not self._clearance_in_flight:
+                    self.match_stats[passer]["passes_completed"] += 1
                 self.last_pass_player = -1
 
             self.ball_controller = index
@@ -2005,6 +2043,7 @@ class game:
         deflection = normal * side_bias + ball_dir * self.rng.uniform(0.35, 0.8)
         deflection = deflection / _norm2(deflection)
 
+        self._credit_defending(index, won=False)
         self.ball_controller = -1
         self._register_touch(index)
         self.ball_capture_player = index
@@ -2018,6 +2057,7 @@ class game:
         self.velocity[index] *= 0.4
 
         if _norm2(self.ball[2:4]) <= max(2.0, self.all_players[index].attributes.speed * 0.12):
+            self._credit_defending(index, won=True)
             self.ball_controller = index
             self.ball_capture_player = index
             self.ball_event = "neutral"
@@ -2056,6 +2096,8 @@ class game:
             self._header_at_goal(index, ball_height)
         elif _norm2(own_goal - my_pos) <= HEADER_CLEAR_RANGE:
             # Defensive header: away from goal, toward the nearer touchline.
+            self._credit_defending(index, won=False)
+            self.match_stats[index]["clearances"] += 1
             away = my_pos - own_goal
             unit = away / _norm2(away) if _norm2(away) > 1e-8 else np.array([0.0, forward])
             side = -1.0 if my_pos[0] < PITCH_WIDTH / 2.0 else 1.0
@@ -2070,6 +2112,7 @@ class game:
             self.ball[5] = self._launch_vz(ball_height, 0.0, 1.0 + 0.4 * skill)
         else:
             # Flick-on to the nearest teammate ahead, else straight on.
+            self._credit_defending(index, won=True)
             teammates = self.positions[0:11] if team == 0 else self.positions[11:22]
             rel = teammates - my_pos
             ahead = rel[:, 1] * forward > 1.0
@@ -2435,6 +2478,7 @@ class game:
         self.ball_release_player = owner_index
         self.intent[owner_index] = None
         self.last_pass_player = owner_index if event_type in ("pass", "cross", "throw_in") else -1
+        self._clearance_in_flight = False
 
         # A new shot is a new save opportunity. Anything else ends the current
         # one, so a parried or cleared ball can't be "saved" a second time.
@@ -2591,7 +2635,8 @@ class game:
                     power *= THROW_IN_POWER_FACTOR
                     event_type = "throw_in"
 
-                self.match_stats[index]["passes"] += 1
+                # A clearance is not a pass: no attempt, and nobody completes it.
+                self.match_stats[index]["clearances" if pass_type == "clearance" else "passes"] += 1
 
                 self.visual_action[index] = pass_type
                 self.visual_action_timer[index] = 15
@@ -2609,6 +2654,7 @@ class game:
                     self.replay.event(self.match_clock_frames, pass_event, player_idx=index, team=0 if index < 11 else 1)
                 unit_vec = self._fuzz_pass_direction(index, unit_vec, pass_type)
                 self._release_ball(index, unit_vec, power, aerial=aerial, event_type=event_type)
+                self._clearance_in_flight = pass_type == "clearance"
                 if launch_vz is not None:
                     self.ball[5] = launch_vz
                 if pass_type in ("punt", "long"):
@@ -2985,6 +3031,7 @@ class game:
         team = 0 if i < 11 else 1
         if kind in ("wall", "body"):
             self._fk_flight = None
+            self._credit_defending(i, won=False)
             self._register_touch(i)
             self.ball_capture_player = i
             self.ball_capture_cooldown = 12

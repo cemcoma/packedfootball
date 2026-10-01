@@ -36,7 +36,7 @@ const STAT_ROWS := [
 	["Matches", "matches_played"], ["Goals", "goals"], ["Assists", "assists"],
 	["Shots", "shots"], ["On target", "shots_on_target"],
 	["Passes", "passes"], ["Completed", "passes_completed"], ["Pass acc.", "_pass_accuracy"],
-	["Tackles", "tackles"], ["Tackles won", "tackles_won"],
+	["Tackles", "tackles"], ["Tackles won", "tackles_won"], ["Fouls", "fouls"],
 ]
 
 const KEEPER_STAT_ROWS := [

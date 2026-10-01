@@ -49,6 +49,7 @@ const STAT_ROWS := [
 	["Completed", "passes_completed"],
 	["Pass acc.", "_pass_accuracy"],
 	["Tackles won", "tackles_won"],
+	["Fouls", "fouls"],
 ]
 
 const KEEPER_STAT_ROWS := [

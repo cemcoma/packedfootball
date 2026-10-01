@@ -6,8 +6,10 @@ the replay stream but nothing ever counted them, and there was no rating
 concept anywhere in the repo.
 """
 
+import numpy as np
 import pytest
 
+from conftest import quiesce
 from player.player import DEFAULT_STATISTICS, MATCH_STAT_FIELDS
 
 REGULATION_FRAMES = 10800
@@ -204,3 +206,84 @@ def test_average_rating_is_stored_only_once_enough_matches_are_rated():
         assert "avg_rating" not in p.statistics
     p.record_match(nothing, 6.0)
     assert p.statistics["avg_rating"] == p.average_rating()
+
+
+# ------------------------------------------------- defending, for the rating
+
+
+def _win_ball(g, index, at):
+    """Puts a dead-still ball at `at` with `index` on it and lets him take it."""
+    g.positions[index] = np.array(at, dtype=float)
+    g.ball[0:2] = g.positions[index]
+    g.ball[2:6] = 0.0
+    g._offside_snap = None
+    for _ in range(50):
+        g.ball_release_cooldown = g.ball_release_team_cooldown = g.ball_capture_cooldown = 0
+        if g._attempt_capture(index):
+            return
+    raise AssertionError(f"{index} never took the ball")
+
+
+def _pass(g, passer, target, pass_type="normal"):
+    quiesce(g)
+    g.ball_controller = passer
+    g.ball[0:2] = g.positions[passer]
+    g._register_touch(passer)
+    g._resolve_action(passer, {"type": "pass", "target": target, "power": 0.5, "pass_type": pass_type})
+
+
+def test_defending_lifts_an_outfield_rating(match):
+    plain = match._match_rating(2)
+    match.match_stats[2].update(interceptions=2, clearances=3, blocks=1)
+    assert match._match_rating(2) > plain
+
+
+def test_fouls_cost_rating(match):
+    plain = match._match_rating(2)
+    match.match_stats[2]["fouls"] = 3
+    assert match._match_rating(2) < plain
+
+
+def test_a_clearance_is_not_a_pass(match):
+    _pass(match, 2, [35.0, 40.0], pass_type="clearance")
+    assert match.match_stats[2]["clearances"] == 1
+    assert match.match_stats[2]["passes"] == 0
+    _win_ball(match, 6, [30.0, 30.0])
+    assert match.match_stats[2]["passes_completed"] == 0
+
+
+def test_winning_their_pass_in_your_own_half_is_an_interception(match):
+    _pass(match, 6, [35.0, 70.0])
+    _win_ball(match, 13, [35.0, 70.0])   # away CB, defending y=100
+    assert match.match_stats[13]["interceptions"] == 1
+
+
+def test_winning_their_pass_up_the_pitch_is_not(match):
+    _pass(match, 2, [35.0, 30.0])
+    _win_ball(match, 20, [35.0, 30.0])   # away forward, in the home half
+    assert match.match_stats[20]["interceptions"] == 0
+
+
+def test_their_clearance_is_not_an_interception(match):
+    _pass(match, 2, [35.0, 60.0], pass_type="clearance")
+    _win_ball(match, 13, [35.0, 60.0])
+    assert match.match_stats[13]["interceptions"] == 0
+
+
+def test_a_restart_taker_does_not_intercept_the_dead_ball(match):
+    _pass(match, 6, [35.0, 70.0])
+    match._begin_restart("throw_in", team=1, out_x=0.0, out_y=70.0)
+    quiesce(match)
+    _win_ball(match, 13, [1.0, 70.0])
+    assert match.match_stats[13]["interceptions"] == 0
+
+
+def test_a_blocked_shot_counts_once_and_never_for_the_keeper(match):
+    quiesce(match)
+    match._register_touch(9)
+    match.ball_event = "shot"
+    match.last_shot_player = 9
+    match.active_shot_id = 5
+    for i in (11, 13, 14):
+        match._credit_defending(i, won=False)
+    assert [match.match_stats[i]["blocks"] for i in (11, 13, 14)] == [0, 1, 0]

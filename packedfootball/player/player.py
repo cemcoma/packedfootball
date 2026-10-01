@@ -161,6 +161,9 @@ DEFAULT_STATISTICS = {
     "clean_sheets": 0,
     "goals_conceded": 0,
     "fouls": 0,
+    "interceptions": 0,
+    "clearances": 0,
+    "blocks": 0,
     "rating_sum": 0.0,
     "rating_count": 0,
 }
@@ -179,6 +182,9 @@ MATCH_STAT_FIELDS = (
     "goals_conceded",
     "clean_sheets",
     "fouls",
+    "interceptions",
+    "clearances",
+    "blocks",
 )
 
 # APPEARANCE_SLOTS / APPEARANCE_OPTION_COUNTS / DEFAULT_APPEARANCE: see

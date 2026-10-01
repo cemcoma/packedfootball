@@ -33,14 +33,15 @@ const REPORT_CATEGORIES := [
 	["other", "Something else"],
 ]
 
-## [label, stat key, format]. "int" renders a plain total, "pct" a
-## percentage, "rating" one decimal place.
+## [label, stat key, format]. "int" renders a plain total, "fewer" one where
+## the lower side is ahead, "pct" a percentage, "rating" one decimal place.
 const SUMMARY_ROWS := [
 	["Shots", "shots", "int"],
 	["On target", "shots_on_target", "int"],
 	["Passes", "passes", "int"],
 	["Pass accuracy", "pass_accuracy", "pct"],
 	["Tackles won", "tackles_won", "int"],
+	["Fouls", "fouls", "fewer"],
 	["Saves", "saves", "int"],
 	["Avg rating", "avg_rating", "rating"],
 ]
@@ -174,10 +175,11 @@ func _populate_summary() -> void:
 		var kind: String = row[2]
 		var home_text := _format_stat(home.get(key, 0), kind)
 		var away_text := _format_stat(away.get(key, 0), kind)
+		var flip := -1 if kind == "fewer" else 1
 
-		_stats_grid.add_child(_value_label(home_text, _compare(home.get(key, 0), away.get(key, 0)), HORIZONTAL_ALIGNMENT_RIGHT))
+		_stats_grid.add_child(_value_label(home_text, flip * _compare(home.get(key, 0), away.get(key, 0)), HORIZONTAL_ALIGNMENT_RIGHT))
 		_stats_grid.add_child(_name_label(label))
-		_stats_grid.add_child(_value_label(away_text, _compare(away.get(key, 0), home.get(key, 0)), HORIZONTAL_ALIGNMENT_LEFT))
+		_stats_grid.add_child(_value_label(away_text, flip * _compare(away.get(key, 0), home.get(key, 0)), HORIZONTAL_ALIGNMENT_LEFT))
 
 
 func _format_stat(value, kind: String) -> String:

@@ -30,6 +30,7 @@ const MATCH_ROWS := [
 	["Pass accuracy", "_pass_accuracy", "pct"],
 	["Tackles", "tackles", "int"],
 	["Tackles won", "tackles_won", "int"],
+	["Fouls", "fouls", "int"],
 ]
 
 ## Only shown for a goalkeeper -- an outfielder's zeroes here are noise.
@@ -48,6 +49,7 @@ const CAREER_ROWS := [
 	["Passes", "passes", "int"],
 	["Completed", "passes_completed", "int"],
 	["Tackles won", "tackles_won", "int"],
+	["Fouls", "fouls", "int"],
 	["Saves", "saves", "int"],
 	["Clean sheets", "clean_sheets", "int"],
 ]
