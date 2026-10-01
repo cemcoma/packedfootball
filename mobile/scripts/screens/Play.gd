@@ -359,6 +359,9 @@ func _on_check_load_pressed() -> void:
 	if game_id == "":
 		_check_status.text = "Enter a game id first."
 		return
+	if game_id.ends_with(".json"):
+		_load_match_file(game_id)
+		return
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(LOCAL_MATCH_DIR))
 	_check_out_path = ProjectSettings.globalize_path(LOCAL_MATCH_DIR + "/check.json")
 	if FileAccess.file_exists(_check_out_path):
@@ -376,6 +379,36 @@ func _on_check_load_pressed() -> void:
 	_check_started_msec = Time.get_ticks_msec()
 	_check_load_button.disabled = true
 	_check_status.text = "Fetching games/%s and re-simulating..." % game_id
+
+
+## A match JSON written by local_match.py (e.g. with --home-tactic / --away-tactic):
+## an absolute path, ~/..., or relative to mobile/ or the repo root.
+func _load_match_file(entered: String) -> void:
+	var path := entered
+	if path.begins_with("~/"):
+		path = OS.get_environment("HOME") + path.substr(1)
+	elif not path.begins_with("/"):
+		for base in ["res://", "res://../"]:
+			var candidate := ProjectSettings.globalize_path(base + path)
+			if FileAccess.file_exists(candidate):
+				path = candidate
+				break
+	if not FileAccess.file_exists(path):
+		_check_status.text = "No such file: %s" % entered
+		return
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not (parsed is Dictionary) or parsed.has("error"):
+		_check_status.text = "Not a match file: %s" % (parsed.get("error", entered) if parsed is Dictionary else entered)
+		return
+	print("[load match] %s  score %s  tactics %s  engine %s" % [path, parsed.get("score"), parsed.get("tactics"), parsed.get("engine_version")])
+	MatchSession.clear()
+	MatchSession.set_from_match_response(parsed)
+	if not MatchSession.has_pending():
+		_check_status.text = "Loaded, but the replay couldn't be decoded."
+		return
+	MatchSession.is_local = true
+	MatchSession.return_scene = "res://scenes/Play.tscn"
+	get_tree().change_scene_to_file("res://scenes/Match.tscn")
 
 
 func _on_check_finished() -> void:

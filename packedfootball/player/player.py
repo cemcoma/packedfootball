@@ -31,6 +31,8 @@ from game_config import (  # noqa: F401 -- the appearance/career names are re-ex
     stat_ability,
     pass_power,
     BASE_KICK_POW,
+    DEFAULT_TACTIC,
+    TACTICS,
 )
 from dataclasses import dataclass, asdict
 from typing import Final
@@ -194,6 +196,48 @@ def _norm2(v) -> float:
     on the arithmetic at this size, and the decision code calls this
     hundreds of thousands of times a match."""
     return math.hypot(float(v[0]), float(v[1]))
+
+
+_BALANCED = TACTICS[DEFAULT_TACTIC]
+
+# A long ball (Tactic.long_ball) goes to the furthest man forward, if he is at
+# least LONG_BALL_MIN_GAIN ahead, as far as the kicker's power reaches.
+LONG_BALL_MIN_GAIN: Final = 20.0
+LONG_BALL_REACH: Final = (35.0, 55.0)   # units at power 40 / 90
+# Against a line at least LONG_BALL_ROOM off its goal it goes over the top instead,
+# LONG_BALL_BEHIND past the line in his lane -- a race a quick striker wins.
+LONG_BALL_ROOM: Final = 20.0
+LONG_BALL_BEHIND: Final = 8.0
+
+# Runs in behind: a forward holds the shoulder of the line, onside by IN_BEHIND_ONSIDE,
+# when there is room behind it and he has the legs; passers look for him and play it
+# IN_BEHIND_LEAD past the line in his lane (_in_behind_target).
+IN_BEHIND_KEEPER_ZONE: Final = 12.0   # room behind the line counts from here -- the keeper's
+IN_BEHIND_ROOM_FULL: Final = 20.0     # this much room makes the run fully worth making
+IN_BEHIND_PACE_GAIN: Final = 15.0     # per point of pace_ability over the defender beside him
+IN_BEHIND_WEIGHT: Final = 60.0
+IN_BEHIND_ONSIDE: Final = 1.5         # the line moves between his decisions
+IN_BEHIND_CHANNEL: Final = 3.0        # stood this far beside the defender, not behind him
+IN_BEHIND_SHOULDER: Final = 4.0       # a teammate within this of the line, onside, is on it
+IN_BEHIND_LEAD: Final = 10.0
+IN_BEHIND_REACH: Final = 45.0
+IN_BEHIND_PASS_BIAS: Final = 1.2      # any midfielder looks for the run, not only a CAM
+TARGET_MAN_WEIGHT: Final = 150.0      # a Tactic.target_man striker's pull to stay on their line
+TARGET_MAN_ROLES: Final = ("ST", "CF")
+# A pass to a man stood offside: how much it costs in the passer's choice. The vision
+# noise on that choice still lets a poor reader play it now and then.
+OFFSIDE_PASS_PENALTY: Final = 200.0
+# The wall pass: the man who just gave it to me and is running on (state["give_and_go"]).
+GIVE_AND_GO_BONUS: Final = 120.0
+GIVE_AND_GO_PASS_WEIGHT: Final = 60.0   # ...and how much more I lean towards passing at all
+GIVE_AND_GO_FREE: Final = 3.0            # he's free if nobody is this close to him
+
+# Showing for the ball (Tactic.show_in_space): the most open spot SUPPORT_SPACE_RADIUS
+# from the man on it, onside and clear of teammates -- not at the ball, which drags a
+# marker into the lane with him.
+SUPPORT_SPACE_RADIUS: Final = 9.0
+SUPPORT_SPACE_ANGLES: Final = tuple(math.radians(a) for a in (-150, -110, -70, -35, 0, 35, 70, 110, 150))
+SUPPORT_SPACE_CROWD: Final = 5.0      # a teammate nearer than this to the spot has it already
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:
@@ -458,6 +502,10 @@ class player(ABC):
         self.allowed_actions.add(name)
         self.action_biases[name] = bias
 
+    def _tactic(self, state: dict):
+        """This side's Tactic (game_config.TACTICS); Balanced when a state has none."""
+        return state.get("tactic") or _BALANCED
+
     def get_action_bias(self, action_name: str, default: float = 1.0) -> float:
         return float(self.action_biases.get(action_name, default))
 
@@ -711,9 +759,7 @@ class player(ABC):
         ball_pos = np.asarray(state["ball_pos"], dtype=float)
         side = float(_clamp((my_pos[0] - PITCH_WIDTH / 2.0) * 0.5, -8.0, 8.0))
 
-        # Offside line: the second-deepest opponent, or the ball if it is deeper.
-        depths = sorted((enemy_goal_y - float(y)) * forward for y in np.asarray(state["opponents"], dtype=float)[:, 1])
-        line = min(depths[1] if len(depths) > 1 else 0.0, (enemy_goal_y - float(ball_pos[1])) * forward)
+        line = self._offside_line(state)
         depth = max(BOX_RUN_SPOT_DEPTH, line + OFFSIDE_MARGIN)
         target = np.array([PITCH_WIDTH / 2.0 + side, enemy_goal_y - depth * forward])
 
@@ -755,10 +801,11 @@ class player(ABC):
             # the runners get in, unless they are in already or he is closed down.
             enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
             late = abs(enemy_goal_y - float(state["my_pos"][1])) <= CROSS_LATE_DEPTH
-            if not late and pressure < 2 and self._runners_in_box_now(state) < CROSS_READY_RUNNERS:
+            if not late and pressure < 2 and self._runners_in_box_now(state) < CROSS_READY_RUNNERS and not self._tactic(state).early_cross:
                 return "wing_run"
-            t_cross = 70.0 + self.attributes.passing * 0.5
-            t_pass = pressure * 18.0 if progressive else 0.0
+            tac = self._tactic(state)
+            t_cross = (70.0 + self.attributes.passing * 0.5) * tac.cross_bias
+            t_pass = (pressure * 18.0 if progressive else 0.0) * tac.pass_bias
             t_run = 10.0
             total = t_cross + t_pass + t_run
             return rng.choice(["cross", "pass", "wing_run"], p=[t_cross / total, t_pass / total, t_run / total])
@@ -876,7 +923,7 @@ class player(ABC):
             and abs(my_x - PITCH_WIDTH / 2.0) <= wide - WIDE_OUTLET_INSIDE
             and abs(enemy_goal_y - tm_y) <= WIDE_OUTLET_DEPTH
         ):
-            return WIDE_PROGRESS_CREDIT
+            return WIDE_PROGRESS_CREDIT * self._tactic(state).wide_credit_scale
         return 0.0
 
     def _best_progressive_pass_target(self, state: dict) -> np.ndarray | None:
@@ -894,6 +941,7 @@ class player(ABC):
             vec_to_tm = tm - my_pos
             forward_progress = (tm[1] - my_pos[1]) * goal_dir + self._wide_credit(state, tm)
             if forward_progress <= 0.0: continue
+            if self._is_offside(state, tm): continue
             if not self._is_pass_safe(my_pos, tm, opponents, line_width=1.2): continue
 
             nearby_opp_distance = np.min(np.linalg.norm(opponents - tm, axis=1)) if opponents.size else 999.0
@@ -914,6 +962,15 @@ class player(ABC):
         goal_dir = 1.0 if state.get("a_direction", 1) == 1 else -1.0
 
         pass_options = []
+        tac = self._tactic(state)
+        # Recycling it backwards is a build-up thing: only in my own half. Picking the free
+        # man over the forward one holds until the final third, where a side attacks.
+        own_depth = float(my_pos[1]) if goal_dir > 0 else PITCH_HEIGHT - float(my_pos[1])
+        back_scale = tac.backward_scale if own_depth < PITCH_HEIGHT / 2.0 else 1.0
+        build_up = own_depth < PITCH_HEIGHT * 2.0 / 3.0
+        safety_scale = tac.safety_scale if build_up else 1.0
+        progress_scale = tac.progress_scale if build_up else 1.0
+        lane_scale = tac.lane_scale if build_up else 1.0
         nearby_teammates = sum(1 for tm in teammates if _norm2(tm - my_pos) < 4.5)
 
         for tm_i, tm in enumerate(teammates):
@@ -939,15 +996,19 @@ class player(ABC):
             # backward ball to a free man beat the forward one. Progress now
             # leads, and going backwards is expensive.
             sideways = 0.0 if credit else abs(tm[0] - my_pos[0]) * 0.3   # out wide is the point
-            raw_score = (nearest_opp_dist * 10.0) + max(0.0, forward_progress * 55.0) - max(0.0, -forward_progress * 110.0) - sideways - (dist_to_tm * 0.7)
+            raw_score = (nearest_opp_dist * (10.0 * safety_scale)) + max(0.0, forward_progress * (55.0 * progress_scale)) - max(0.0, -forward_progress * (110.0 * back_scale)) - sideways - (dist_to_tm * 0.7)
             if dist_to_tm < 4.5: raw_score -= 35.0
             if nearby_teammates > 3: raw_score -= 12.0
-            raw_score -= (1.0 - openness) * LANE_BLOCKED_PENALTY
+            raw_score -= (1.0 - openness) * (LANE_BLOCKED_PENALTY * lane_scale)
 
             if _norm2(state["enemy_goal"] - tm) < _norm2(state["enemy_goal"] - my_pos):
                 raw_score += 18.0
             if forward_progress < 0.0:
-                raw_score -= 80.0
+                raw_score -= 80.0 * back_scale
+            if self._is_offside(state, tm):
+                raw_score -= OFFSIDE_PASS_PENALTY
+            elif tm_i == state.get("give_and_go", -1):
+                raw_score += GIVE_AND_GO_BONUS
 
             pressure_penalty = state["pressure_count"] * max(0.0, 100 - self.attributes.composure) / 10.0
             effective_vision = max(1.0, self.attributes.vision - pressure_penalty)
@@ -960,6 +1021,144 @@ class player(ABC):
         pass_options.sort(key=lambda x: x[0], reverse=True)
         # Already the led point -- scored that way above.
         return pass_options[0][1]
+
+    def _offside_line(self, state: dict) -> float:
+        """Their offside line as distance from their goal line: the second-deepest
+        opponent, or the ball if it is deeper."""
+        forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
+        depths = sorted((enemy_goal_y - float(y)) * forward for y in np.asarray(state["opponents"], dtype=float)[:, 1])
+        return min(depths[1] if len(depths) > 1 else 0.0, (enemy_goal_y - float(state["ball_pos"][1])) * forward)
+
+    def _wall_pass_pull(self, state: dict) -> float:
+        """GIVE_AND_GO_PASS_WEIGHT when the man who just gave it to me is ahead, onside and free."""
+        runner_i = state.get("give_and_go", -1)
+        if runner_i < 0:
+            return 0.0
+        runner = state["teammates"][runner_i]
+        goal_dir = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        if (float(runner[1]) - float(state["my_pos"][1])) * goal_dir <= 0.0 or self._is_offside(state, runner):
+            return 0.0
+        if _count_within(state["opponents"], runner, GIVE_AND_GO_FREE) > 0:
+            return 0.0
+        return GIVE_AND_GO_PASS_WEIGHT
+
+    def _is_offside(self, state: dict, tm) -> bool:
+        """Is teammate `tm` in an offside position right now (gameEngine._offside_snapshot's rule)?"""
+        forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        depth = ((PITCH_HEIGHT if forward > 0 else 0.0) - float(tm[1])) * forward
+        return depth < min(self._offside_line(state) - 0.3, PITCH_HEIGHT / 2.0)
+
+    def _support_target(self, state: dict, default: np.ndarray) -> np.ndarray:
+        """With show_in_space and a teammate on the ball: the most open spot around him to
+        offer the pass; otherwise `default`."""
+        if not self._tactic(state).show_in_space or state.get("is_loose", False) or state.get("team_possession") != 1:
+            return default
+        forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        bx, by = float(state["ball_pos"][0]), float(state["ball_pos"][1])
+        mx, my = float(state["my_pos"][0]), float(state["my_pos"][1])
+        opponents = np.asarray(state["opponents"], dtype=float).tolist()
+        mates = [tm for tm in np.asarray(state["teammates"], dtype=float).tolist() if not (tm[0] == mx and tm[1] == my)]
+        best, best_score = default, -1e9
+        for angle in SUPPORT_SPACE_ANGLES:
+            x = _clamp(bx + SUPPORT_SPACE_RADIUS * math.sin(angle), 2.0, PITCH_WIDTH - 2.0)
+            y = _clamp(by + forward * SUPPORT_SPACE_RADIUS * math.cos(angle), 2.0, PITCH_HEIGHT - 2.0)
+            if self._is_offside(state, (x, y)):
+                continue
+            if any(math.hypot(x - tx, y - ty) < SUPPORT_SPACE_CROWD for tx, ty in mates):
+                continue
+            free = min(math.hypot(x - ox, y - oy) for ox, oy in opponents)
+            score = free - 0.3 * math.hypot(x - mx, y - my)
+            if score > best_score:
+                best, best_score = np.array([x, y]), score
+        return best
+
+    def _line_man_beside_me(self, state: dict) -> int:
+        """The defender in their back line (the four deepest bar the keeper) nearest me across the pitch."""
+        forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
+        opponents = np.asarray(state["opponents"], dtype=float)
+        deepest = sorted(range(len(opponents)), key=lambda i: (enemy_goal_y - float(opponents[i][1])) * forward)
+        my_x = float(state["my_pos"][0])
+        return min(deepest[1:5], key=lambda i: abs(float(opponents[i][0]) - my_x))
+
+    def _in_behind_weight(self, state: dict) -> float:
+        """What a run in behind is worth now: room behind their line x my pace edge on the man beside me."""
+        line = self._offside_line(state)
+        room = _clamp((line - IN_BEHIND_KEEPER_ZONE) / IN_BEHIND_ROOM_FULL, 0.0, 1.0)
+        forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        ball_depth = ((PITCH_HEIGHT if forward > 0 else 0.0) - float(state["ball_pos"][1])) * forward
+        reach = LONG_BALL_REACH[1] if self._tactic(state).long_ball else IN_BEHIND_REACH
+        if room <= 0.0 or ball_depth - line > reach - IN_BEHIND_LEAD:
+            return 0.0   # no room, or nobody on the ball who could find it
+        paces = state.get("opponent_pace")
+        theirs = float(paces[self._line_man_beside_me(state)]) / base_speed if paces is not None else pace_ability(50)
+        edge = pace_ability(self.attributes.speed) - theirs
+        return IN_BEHIND_WEIGHT * room * _clamp(1.0 + edge * IN_BEHIND_PACE_GAIN, 0.0, 2.0)
+
+    def _in_behind_run(self, state: dict) -> dict:
+        """On the shoulder: in the channel beside the nearest defender in the line, onside."""
+        forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
+        beside_x = float(np.asarray(state["opponents"], dtype=float)[self._line_man_beside_me(state)][0])
+        side = 1.0 if float(state["my_pos"][0]) >= beside_x else -1.0
+        x = _clamp(beside_x + side * IN_BEHIND_CHANNEL, 8.0, PITCH_WIDTH - 8.0)
+        depth = self._offside_line(state) + IN_BEHIND_ONSIDE
+        return {"type": "move", "target": np.array([x, enemy_goal_y - depth * forward]),
+                "speed_mod": pace_ability(self.attributes.speed) * 0.8}
+
+    def _in_behind_target(self, state: dict, lofted: bool = False) -> np.ndarray | None:
+        """For a teammate on the shoulder with room behind: IN_BEHIND_LEAD past the line in his
+        lane, if it is ahead of me, in reach and (on the ground) the lane is clear -- else None."""
+        forward = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        enemy_goal_y = PITCH_HEIGHT if forward > 0 else 0.0
+        line = self._offside_line(state)
+        if line - IN_BEHIND_KEEPER_ZONE < IN_BEHIND_LEAD * 0.5:
+            return None
+        my_pos = state["my_pos"]
+        my_depth = (enemy_goal_y - float(my_pos[1])) * forward
+        runner = None
+        for tm in state["teammates"]:
+            depth = (enemy_goal_y - float(tm[1])) * forward
+            if _equal2(tm, my_pos) or not (line <= depth <= line + IN_BEHIND_SHOULDER) or depth >= my_depth:
+                continue
+            if runner is None or depth < runner[1]:
+                runner = (float(tm[0]), depth)
+        if runner is None:
+            return None
+        depth = max(IN_BEHIND_KEEPER_ZONE, line - IN_BEHIND_LEAD)
+        target = _clamp_to_pitch(runner[0], enemy_goal_y - depth * forward)
+        if _norm2(target - my_pos) > (LONG_BALL_REACH[1] if lofted else IN_BEHIND_REACH):
+            return None
+        if not lofted and not self._is_pass_safe(my_pos, target, state.get("opponents"), line_width=1.3):
+            return None
+        return target
+
+    def _long_ball_target(self, state: dict) -> np.ndarray | None:
+        """For the furthest man forward: over the top of a high line, else led into his run.
+        Cut to the kicker's reach; None when nobody is far enough ahead."""
+        on_the_shoulder = self._in_behind_target(state, lofted=True)
+        if on_the_shoulder is not None:
+            return on_the_shoulder
+        goal_dir = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        teammates, my_pos = state["teammates"], state["my_pos"]
+        best = max(range(len(teammates)), key=lambda i: float(teammates[i][1]) * goal_dir)
+        if (float(teammates[best][1]) - float(my_pos[1])) * goal_dir < LONG_BALL_MIN_GAIN:
+            return None
+        enemy_goal_y = PITCH_HEIGHT if goal_dir > 0 else 0.0
+        depths = sorted((enemy_goal_y - float(y)) * goal_dir for y in np.asarray(state["opponents"], dtype=float)[:, 1])
+        line = depths[1]   # the deepest is the keeper
+        if line >= LONG_BALL_ROOM:
+            aim = np.array([float(teammates[best][0]), enemy_goal_y - goal_dir * (line - LONG_BALL_BEHIND)])
+        else:
+            aim = self._lead_pass(teammates[best], my_pos, state.get("teammate_vel"), best)
+        lo, hi = LONG_BALL_REACH
+        reach = lo + (hi - lo) * _clamp((float(self.attributes.power) - 40.0) / 50.0, 0.0, 1.0)
+        vec = aim - my_pos
+        dist = _norm2(vec)
+        if dist > reach:
+            aim = my_pos + vec * (reach / dist)
+        return _clamp_to_pitch(aim[0], aim[1])
 
     def _lead_pass(self, target, my_pos, teammate_vel, tm_i):
         """Pass into the runner's path. The ball takes real time to arrive, so

@@ -46,6 +46,7 @@ async def manager_profile(manager_uid: str, uid: str = Depends(verify_id_token))
         "losses": profile["losses"],
         "formation": profile["formation"],
         "kit": profile.get("kit", ""),
+        "tactics": profile["tactics"],
         "tier": tier,
         "tier_name": tournament_service.tier_name(tier, tournament_service.DAILY),
         # The two leagues rank independently, so a card that showed only one

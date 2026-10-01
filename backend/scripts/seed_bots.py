@@ -49,6 +49,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "packedfo
 import gameEngine  
 import config 
 from formations import FORMATIONS 
+from game_config import TACTICS  # noqa: E402
 from game_state import player_to_fields 
 from packEngine import COUNTRIES, generate_starter_roster  # noqa: E402
 from services.account import DisplayNameError, display_name_key, validate_display_name  # noqa: E402
@@ -119,6 +120,7 @@ def make_bot(rng: random.Random, rates: dict, display_name: str, extra: dict) ->
         "formation": formation,
         "kit": f"v1;pattern={pattern};primary={primary};secondary={secondary}",
         "players": [player_to_fields(p) for p in roster],
+        "tactics": {"style": rng.choice(list(TACTICS))},
         "wins": 0,
         "draws": 0,
         "losses": 0,

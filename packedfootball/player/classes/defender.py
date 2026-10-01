@@ -84,6 +84,10 @@ class Defender(player):
             return self._calculate_shot(state)
             
         elif decision == "pass":
+            if self._tactic(state).long_ball and not state.get("past_halfspace"):
+                long_target = self._long_ball_target(state)
+                if long_target is not None:
+                    return {"type": "pass", "target": long_target, "power": 1.0, "pass_type": "long"}
             best_target = self._choose_pass_target(state)
             dist = _norm2(best_target - state["my_pos"])
             required_power = pass_power(dist, self.attributes.power, 1.0, 60.0)
@@ -91,6 +95,10 @@ class Defender(player):
             return {"type": "pass", "target": best_target, "power": actual_power}
             
         elif decision == "clear":
+            if self._tactic(state).long_ball and not state.get("past_halfspace"):
+                long_target = self._long_ball_target(state)
+                if long_target is not None:
+                    return {"type": "pass", "target": long_target, "power": 1.0, "pass_type": "long"}
             target = self._clearance_target(state)
             return {"type": "pass", "target": target, "power": min(1.0, self.attributes.power / 50.0), "pass_type": "clearance"}
 
@@ -122,11 +130,12 @@ class Defender(player):
             target = self._predict_ball_landing_target(state)
             vec_to_target = target - state["my_pos"]
             intercept_weight = 0.55 + pace_ability(self.attributes.speed) * 0.35
-            support_target = state["my_pos"] + (vec_to_target * intercept_weight)
+            support_target = self._support_target(state, state["my_pos"] + (vec_to_target * intercept_weight))
             return {"type": "move", "target": support_target, "speed_mod": pace_ability(self.attributes.speed) * 0.7}
             
         elif decision == "hold_attack":
-            forward_shift = 15.0 if state.get("a_direction", 1) == 1 else -15.0
+            push = 15.0 - self._tactic(state).line_depth
+            forward_shift = push if state.get("a_direction", 1) == 1 else -push
             tactical_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + forward_shift])
             return {"type": "move", "target": tactical_pos, "speed_mod": pace_ability(self.attributes.speed) * 0.5}
             
@@ -134,7 +143,9 @@ class Defender(player):
             return {"type": "move", "target": self._cover_target(state), "speed_mod": pace_ability(self.attributes.speed) * 0.8}
 
         elif decision == "hold_defense":
-            backward_shift = -10.0 if state.get("a_direction", 1) == 1 else 10.0
+            # A high line (line_depth < 0) holds up the pitch; a deep one is home already.
+            drop = 10.0 + min(0.0, self._tactic(state).line_depth)
+            backward_shift = -drop if state.get("a_direction", 1) == 1 else drop
             defensive_pos = np.array([state["formation_pos"][0], state["formation_pos"][1] + backward_shift])
             return {"type": "move", "target": defensive_pos, "speed_mod": pace_ability(self.attributes.speed) * 0.6}
             
@@ -253,6 +264,12 @@ class Defender(player):
             t_stop = 0
             t_cross *= 0.5
 
+        tac = self._tactic(state)
+        t_pass += self._wall_pass_pull(state)
+        t_pass *= tac.pass_bias
+        t_dribble *= tac.dribble_bias
+        t_cross *= tac.cross_bias
+
         t_pass = max(0.0, t_pass)
         t_shoot = max(0.0, t_shoot)
         t_dribble = max(1.0, t_dribble)
@@ -275,7 +292,9 @@ class Defender(player):
         t_clear = self.attributes.clear_tendency * self.get_action_bias("clear")
         t_stop = 15.0
 
-        if not progressive_pass: t_pass *= 0.1
+        # A long-ball side always has a pass on: the front man.
+        long_ready = self._tactic(state).long_ball and self._long_ball_target(state) is not None
+        if not progressive_pass and not long_ready: t_pass *= 0.1 * self._tactic(state).recycle_bias
         elif pressure > 0: t_pass *= 1.3
 
         own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
@@ -297,6 +316,12 @@ class Defender(player):
             # progressive-pass starve above must not apply either.
             t_clear = 0.0
             t_pass = self.attributes.pass_tendency * 0.45 * self.get_action_bias("pass")
+
+        tac = self._tactic(state)
+        t_pass += self._wall_pass_pull(state)
+        t_pass *= tac.pass_bias
+        t_dribble *= tac.dribble_bias
+        t_clear *= tac.clear_bias
 
         t_pass = max(0.0, t_pass)
         t_dribble = max(1.0, t_dribble)
@@ -353,6 +378,11 @@ class Defender(player):
             t_hold *= 2.5
             t_overlap *= 0.5
 
+        tac = self._tactic(state)
+        t_forward *= tac.defender_push
+        t_overlap *= tac.defender_push
+        t_support *= tac.support_bias
+
         t_forward = max(0.0, t_forward)
         t_support = max(0.0, t_support)
         t_hold = max(1.0, t_hold)
@@ -404,7 +434,7 @@ class Defender(player):
             if dist_to_ball >= FB_ENGAGE_RANGE and self._holds_back_line(state):
                 return "back_line"
             if ball_pressure_count >= 2: return "contain"
-            return "press" if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING) else "contain"
+            return "press" if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING * self._tactic(state).press_bias) else "contain"
 
         if self._holds_back_line(state):
             return "back_line"
@@ -433,7 +463,7 @@ class Defender(player):
         depth = ball_depth - FB_LINE_BALL_GAP
         if state.get("cb_line") is not None:
             depth = min(depth, (state["cb_line"] - own_goal_y) * forward)
-        depth = max(RECOVERY_MIN_DEPTH, depth)
+        depth = max(RECOVERY_MIN_DEPTH, depth - self._tactic(state).line_depth)
         tuck = _clamp((FB_TUCK_FROM - ball_depth) / (FB_TUCK_FROM - FB_TUCK_TO), 0.0, 1.0)
         width = FB_WIDTH_FAR + (FB_WIDTH_NEAR - FB_WIDTH_FAR) * tuck
         x = PITCH_WIDTH / 2.0 + self._flank(state) * width + (ball_x - PITCH_WIDTH / 2.0) * FB_BALL_SHIFT

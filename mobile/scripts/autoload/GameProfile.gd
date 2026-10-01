@@ -61,6 +61,10 @@ var draws: int = 0
 # it with kit_design() when you need to draw it.
 var kit: String = ""
 
+## How the side plays -- users/{uid}.tactics (see Tactics.gd). Saved the moment
+## a style is picked, so unlike the lineup it is never dirty.
+var tactics: Dictionary = {"style": Tactics.DEFAULT_STYLE}
+
 # Squad state -- the live, possibly-unsaved lineup.
 var formation: String = DEFAULT_FORMATION
 var slot_assignment: Array = []  # player_ids, "" where empty, index == formation slot index
@@ -216,6 +220,7 @@ func _apply_profile_fields(doc: Dictionary) -> void:
 	draws = _int(doc, "draws")
 	formation = _str(doc, "formation", DEFAULT_FORMATION)
 	kit = _str(doc, "kit", "")
+	tactics = Tactics.sanitize(doc.get("tactics"))
 	var counters = doc.get("ad_counters")
 	ad_counters = counters if counters is Dictionary else {}
 	all_items = ItemData.sanitize(doc.get("item_pool"))
@@ -445,6 +450,20 @@ static func display_name_problem(reason: String) -> String:
 func kit_design() -> KitDesign:
 	return KitDesign.parse(kit)
 
+func tactic_style() -> String:
+	return tactics.get("style", Tactics.DEFAULT_STYLE)
+
+
+## Writes the whole map back, so keys this build doesn't know survive.
+func set_tactic_style(style: String) -> bool:
+	var updated := tactics.duplicate()
+	updated["style"] = style
+	var ok := await Firestore.set_document(_user_doc_path(), {"tactics": updated}, true)
+	if ok:
+		tactics = updated
+	return ok
+
+
 func set_kit(design: KitDesign) -> bool:
 	var encoded := design.serialize()
 	var ok := await Firestore.set_document(_user_doc_path(), {"kit": encoded}, true)
@@ -467,6 +486,7 @@ func reset() -> void:
 	losses = 0
 	draws = 0
 	kit = ""
+	tactics = {"style": Tactics.DEFAULT_STYLE}
 	inventory_cap = DEFAULT_INVENTORY_CAP
 	energy = {}
 	formation = DEFAULT_FORMATION

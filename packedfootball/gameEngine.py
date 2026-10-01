@@ -7,6 +7,7 @@ from typing import Final
 
 import free_kick
 from replay import ActionType, ReplayRecorder
+from tactics import tactic_for
 from game_config import (  # noqa: F401
     CROSS_MAX_SPEED,
     cross_flight_max,
@@ -290,7 +291,20 @@ from formations import get_formation, is_similar_position
 #         like a goal does. Replay only; the sim is unchanged.
 #   4.3.0 LB/RB hold the back line level with the CBs instead of a fixed spot by the
 #         corner, tucking in as a third CB when the ball is central or far side near goal.
-ENGINE_VERSION: Final[str] = "4.3.0"
+#   4.4.0 tactics (game_config.TACTICS; Balanced changes nothing on its own), long balls that
+#         land like punts and go over a high line, and aerial duels that can end in a foul.
+#         A scored penalty counts one shot on target, not two.
+#   4.5.0 momentum off the ball (PLAYER_ACCEL): turning round costs speed that has to be
+#         rebuilt, so a striker already running beats a defender who has to turn.
+#   4.6.0 offside is enforced (a free kick where the offender stood; restarts exempt) and
+#         passers avoid an offside man; forwards run in behind, onside, when there is room
+#         and they have the legs, and midfielders look for them (_in_behind_target).
+#         Possession builds up through the free man (safety/progress/lane scales short
+#         of the final third) and its players show for the ball in space. Long Ball's
+#         striker is a target man: up on their line as the out-ball, long balls over the top to him.
+#         Give and go: the runner stops onside, his run restarts when the pass is taken, and the
+#         receiver leans towards the wall pass.
+ENGINE_VERSION: Final[str] = "4.6.0"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -346,6 +360,14 @@ FOUL_AGGRESSION_WEIGHT: Final = 0.12
 FOUL_OUTPACED_WEIGHT: Final = 0.165
 FOUL_FROM_BEHIND_WEIGHT: Final = 0.08
 FOUL_MAX: Final = 0.36
+# Aerial duels: once per ball in the air, the best of the side beaten to it may
+# take the man -- a free kick where the winner stood. Rarely given in his own box.
+AERIAL_FOUL_BASE: Final = 0.04
+AERIAL_FOUL_AGGRESSION_WEIGHT: Final = 0.06
+AERIAL_FOUL_BOX_SCALE: Final = 0.3
+# Offside: past the second-last defender and the ball, in their half, when a pass is
+# played -- level (within this much) is onside. Flagged when he goes to play it.
+OFFSIDE_TOLERANCE: Final = 0.3
 
 # Free kicks: how far off the ball the wall stands, and how many are in it.
 # The ENGINE barely pauses for a set piece -- just long enough to register the
@@ -427,6 +449,7 @@ TEAMMATE_RELEASE_BLOCK_FRAMES = 4
 # Give and go: how long the passer keeps running, and how far ahead he aims.
 PASS_AND_MOVE_FRAMES: Final = 45
 PASS_AND_MOVE_PUSH: Final = 12.0
+PASS_AND_MOVE_ONSIDE: Final = 1.5   # the run stops this far short of the offside line
 
 RECEIVE_BASE: Final = 0.55
 RECEIVE_STRIDE_WEIGHT: Final = 0.30
@@ -523,9 +546,14 @@ PASS_AIM_ERROR_DEGREES: Final[float] = 8.0
 # player._choose_cross_target), and a throw-in is short and two-handed.
 PASS_AIM_ERROR_BY_TYPE: Final[dict] = {
     "normal": 1.0, "through_ball": 1.0, "cross": 0.5, "clearance": 0.5, "throw_in": 0.25,
-    "punt": 0.5,
+    "punt": 0.5, "long": 0.5,   # hit to an area the side contests, not to feet
 }
 base_speed: Final = PLAYER_BASE_SPEED     # see game_config: shared with player.py
+# Momentum off the ball: turning keeps only the speed already going the new way, and the
+# rest is rebuilt at PLAYER_ACCEL x stat_ability(agility) units/s^2 -- a defender who has
+# to turn round loses a moment to a man already running (_accelerate). 18 starved the low
+# tiers of goals when it applied to the man on the ball too; 21 keeps every tier in band.
+PLAYER_ACCEL: Final = 21.0
 possession_radius: Final = POSSESSION_RADIUS
 final_whistle_delay: Final = 600
 OUT_OF_POSITION_PENALTY: Final = 0.9
@@ -575,7 +603,7 @@ def _combine_formations(formation_home: str, formation_away: str) -> dict:
 
 
 class game:
-    def __init__(self, teamA, teamB, seed=None, record_replay=False, formation_home="4-4-2", formation_away="4-4-2", decision_interval=2, adaptive_decisions=True):
+    def __init__(self, teamA, teamB, seed=None, record_replay=False, formation_home="4-4-2", formation_away="4-4-2", decision_interval=2, adaptive_decisions=True, tactics_home=None, tactics_away=None):
 
         self.teamA = teamA # name, short_name, players
         self.teamB = teamB
@@ -588,10 +616,13 @@ class game:
         self._prev_phase = None
         self.rng = np.random.default_rng(seed)
         self.replay = ReplayRecorder() if record_replay else None
+        self._dt = 1.0 / 60.0   # run_match's tick length; _accelerate needs a step's duration
 
         self.formation_home = formation_home
         self.formation_away = formation_away
         self.formation = _combine_formations(formation_home, formation_away)
+        # Each side's Tactic (tactics.py); None plays Balanced.
+        self._tactics = [tactic_for(tactics_home), tactic_for(tactics_away)]
         self._keeper_indices = [i for i in range(22) if self.formation[i]["role"] == "GK"]
         self._cb_mask = np.array([self.formation[i]["role"] == "CB" for i in range(22)])
         # Each player's target goal and own goal, fixed for the match -- the
@@ -661,6 +692,10 @@ class game:
         # one save attempt at it. -1 means no live shot.
         self.active_shot_id = -1
         self._shot_counter = 0
+        self._release_count = 0       # one per ball kicked, so a duel is rolled once per flight
+        self._aerial_duel_ball = -1
+        self._offside_snap = None     # (passing team, who was offside) for the pass in flight
+        self._offside_exempt = False  # the kick that restarts a corner / goal kick / throw-in
         self.save_attempted_shot = [-1] * 22
         self._match_goals = [0] * 22
         self._match_assists = [0] * 22
@@ -860,6 +895,7 @@ class game:
                 self.ball_release_team_cooldown = 0
 
     def _register_touch(self, player_index: int):
+        self._offside_snap = None   # somebody played it: the pass's offside is settled
         if self.last_touch_player == player_index:
             return
             
@@ -976,6 +1012,7 @@ class game:
         self.out_of_play = True
         self._fk_flight = None
         self._punt = None
+        self._offside_snap = None
         self.restart_type = restart_type
         self.restart_team = team if team is not None else (0 if self.last_touch_team is None else 1 - self.last_touch_team)
         self.restart_timer = 30
@@ -1425,6 +1462,7 @@ class game:
         counting iterations meant the pause ate 1:30 of football.
         """
         dt = 1.0 / fps
+        self._dt = dt
 
         if render:
             try:
@@ -1600,6 +1638,7 @@ class game:
                     self.ball, self.ball_controller,
                 )
             if self.restart_timer == 0:
+                self._offside_exempt = self.restart_type in ("corner", "goal_kick", "throw_in")
                 if self.restart_type == "penalty":
                     self._take_penalty()
                 elif self.restart_type == "free_kick" and self.free_kick_kind == "shooting":
@@ -1804,6 +1843,9 @@ class game:
         dist_to_ball = _norm2(self.ball[0:2] - self.positions[index])
         if dist_to_ball > self.possession_radius + 0.5:
             return False
+        if self._offside_snap is not None and index in self._offside_snap:
+            self._call_offside(index)
+            return False
 
         ball_speed = float(_norm2(self.ball[2:4]))
         ball_height = max(0.0, float(self.ball[4]))
@@ -1867,6 +1909,8 @@ class game:
                 passer = self.last_pass_player
                 if passer >= 0 and passer != index and (passer < 11) == (index < 11):
                     self.match_stats[passer]["passes_completed"] += 1
+                    if passer == self.pass_and_move:
+                        self.pass_and_move_timer = PASS_AND_MOVE_FRAMES   # his run is on for the return
                 self.last_pass_player = -1
                 self.pass_receiver = -1
 
@@ -2335,6 +2379,18 @@ class game:
         self.last_touch_player = -1
         self.assist_candidate = -1
 
+    def _accelerate(self, index: int, hx: float, hy: float, top: float) -> float:
+        """This step's speed along the new heading: what was already going that way,
+        plus a step of acceleration, up to `top`. Slowing down is instant."""
+        if index == self.ball_controller:
+            return top   # turning with the ball is the dribble's own business
+        vx, vy = float(self.velocity[index][0]), float(self.velocity[index][1])
+        carried = max(0.0, vx * hx + vy * hy)
+        if top <= carried:
+            return top
+        accel = PLAYER_ACCEL * stat_ability(float(self.all_players[index].attributes.agility))
+        return min(top, carried + accel * self.decision_interval * self._dt)
+
     def _turn_heading_toward(self, index: int, tx: float, ty: float) -> tuple[float, float]:
         # ~100K calls a match: plain floats in and out, numpy overhead dwarfs the maths here.
         target_norm = math.hypot(tx, ty)
@@ -2375,6 +2431,7 @@ class game:
 
         self.ball_event = event_type
         self.ball_controller = -1
+        self._release_count += 1
         self.ball_release_player = owner_index
         self.intent[owner_index] = None
         self.last_pass_player = owner_index if event_type in ("pass", "cross", "throw_in") else -1
@@ -2406,6 +2463,10 @@ class game:
         self.ball[0:2] = self.positions[owner_index]
         self.ball[2:4] = direction * launch_speed
 
+        passing = event_type in ("pass", "cross", "clearance") and not self._offside_exempt
+        self._offside_snap = self._offside_snapshot(owner_index) if passing else None
+        self._offside_exempt = False
+
     def _resolve_action(self, index: int, action: dict):
         if not action:
             return
@@ -2432,7 +2493,8 @@ class game:
                 # A tired player is a slower player -- this is the only place
                 # fatigue actually bites, so stamina changes how a match ends
                 # rather than just being a number on a card.
-                speed = base_speed * action["speed_mod"] * self._fatigue_factor(index)
+                top = base_speed * action["speed_mod"] * self._fatigue_factor(index)
+                speed = self._accelerate(index, hx, hy, top)
                 self.velocity[index] = (hx * speed, hy * speed)
             else:
                 self.velocity[index] = (0.0, 0.0)
@@ -2503,9 +2565,9 @@ class game:
                     aerial = True
                     power *= 1.2
                     launch_vz = self._launch_vz(0.0, 0.0, 1.6)
-                elif pass_type == "punt":
-                    # A keeper's kick: hung up high and landed on its target. The
-                    # keeper class caps the distance by his power (_punt_reach).
+                elif pass_type in ("punt", "long"):
+                    # A keeper's kick, or a long ball: hung up high and landed on its
+                    # target. The player class caps the distance by his power.
                     aerial = True
                     event_type = "clearance"
                     flight = min(PUNT_FLIGHT_MAX, max(PUNT_FLIGHT_MIN, dist / PUNT_REF_SPEED))
@@ -2538,6 +2600,7 @@ class game:
                         "normal": ActionType.PASS,
                         "clearance": ActionType.CLEARANCE,
                         "punt": ActionType.CLEARANCE,
+                        "long": ActionType.PASS,
                         "cross": ActionType.CROSS,
                         # Not THROW_IN: that is the award, and the client
                         # banners it. This is the throw itself.
@@ -2548,7 +2611,7 @@ class game:
                 self._release_ball(index, unit_vec, power, aerial=aerial, event_type=event_type)
                 if launch_vz is not None:
                     self.ball[5] = launch_vz
-                if pass_type == "punt":
+                if pass_type in ("punt", "long"):
                     self._start_punt_support(index, self.positions[index] + unit_vec * dist)
 
         elif action_type == "shoot":
@@ -2986,8 +3049,7 @@ class game:
         vec = np.array([target_x, goal_y]) - self.positions[taker]
         unit = vec / max(_norm2(vec), 1e-6)
         self._release_ball(taker, unit, PENALTY_SHOT_SPEED, aerial=False, event_type="shot")
-        if on_target:
-            self.match_stats[taker]["shots_on_target"] += 1
+        # On target is credited by the outcome, as in open play: the save below, or _award_goal.
 
         # THE GUESS WAS HIS ATTEMPT. _release_ball has just opened a new shot
         # id, and without claiming it the open-play machinery hands a keeper who
@@ -3011,6 +3073,8 @@ class game:
         if not scored and on_target:
             # He read it: the ball dies at his hands rather than crossing.
             self.match_stats[keeper]["saves"] += 1
+            self.match_stats[taker]["shots_on_target"] += 1
+            self.last_shot_player = -1
             self.ball[0:2] = self.positions[keeper]
             self.ball[2:4] = np.zeros(2)
             self.ball_controller = keeper
@@ -3045,6 +3109,59 @@ class game:
             + max(0.0, from_behind) * FOUL_FROM_BEHIND_WEIGHT
         )
         return self.rng.random() < float(_clamp(chance, 0.0, FOUL_MAX))
+
+    def _offside_snapshot(self, passer: int) -> frozenset | None:
+        """The passer's teammates in an offside position as he plays it, or None if nobody is."""
+        team = 0 if passer < 11 else 1
+        goal_y = PITCH_HEIGHT if team == 0 else 0.0
+        forward = 1.0 if team == 0 else -1.0
+        defenders = self.positions[11:22, 1] if team == 0 else self.positions[0:11, 1]
+        depths = np.sort((goal_y - defenders) * forward)
+        line = min(float(depths[1]), (goal_y - float(self.ball[1])) * forward) - OFFSIDE_TOLERANCE
+        mates = range(0, 11) if team == 0 else range(11, 22)
+        offside = frozenset(
+            i for i in mates
+            if i != passer and (goal_y - float(self.positions[i][1])) * forward < min(line, PITCH_HEIGHT / 2.0)
+        )
+        return offside or None
+
+    def _onside_y(self, index: int, y: float) -> float:
+        """`y` pulled back to PASS_AND_MOVE_ONSIDE short of index's offside line, in their half."""
+        team = 0 if index < 11 else 1
+        goal_y = PITCH_HEIGHT if team == 0 else 0.0
+        forward = 1.0 if team == 0 else -1.0
+        defenders = self.positions[11:22, 1] if team == 0 else self.positions[0:11, 1]
+        depths = np.sort((goal_y - defenders) * forward)
+        line = min(float(depths[1]), (goal_y - float(self.ball[1])) * forward) + PASS_AND_MOVE_ONSIDE
+        if line >= PITCH_HEIGHT / 2.0:
+            return y   # their line is in my half: nobody can be offside
+        return min(y, goal_y - line) if team == 0 else max(y, goal_y + line)
+
+    def _call_offside(self, offender: int) -> None:
+        """Flagged as he goes to play it: a free kick to the defenders where he stood."""
+        spot = self.positions[offender]
+        if self.replay:
+            self.replay.event(
+                self.match_clock_frames, ActionType.OFFSIDE,
+                player_idx=offender, team=0 if offender < 11 else 1,
+            )
+        self._begin_restart("free_kick", 1 if offender < 11 else 0, float(spot[0]), float(spot[1]))
+
+    def _aerial_foul(self, contestants, scores, winner: int) -> bool:
+        """The best of the other side, beaten in the air, takes the man -- rolled once per flight."""
+        rivals = [(float(sc), int(i)) for i, sc in zip(contestants, scores) if (i < 11) != (winner < 11)]
+        if not rivals or self._aerial_duel_ball == self._release_count:
+            return False
+        self._aerial_duel_ball = self._release_count
+        loser = max(rivals)[1]
+        aggression = getattr(self.all_players[loser].attributes, "aggression", 40)
+        chance = AERIAL_FOUL_BASE + stat_ability(aggression) * AERIAL_FOUL_AGGRESSION_WEIGHT
+        if self._in_own_box(loser, self.positions[winner]):
+            chance *= AERIAL_FOUL_BOX_SCALE
+        if chance <= 0.0 or self.rng.random() >= chance:
+            return False
+        self._award_foul(loser, winner)
+        return True
 
     def _award_foul(self, offender: int, victim: int):
         """Whistle. A foul in the offender's own box is a penalty, anything
@@ -3252,15 +3369,15 @@ class game:
         read_it = dive == aim and self.rng.random() < save
         return (on_target and not read_it), aim, dive, on_target
 
-    def _start_punt_support(self, keeper: int, landing) -> None:
-        """His side goes up for the punt: groups picked once, by who is nearest the drop."""
-        team = 0 if keeper < 11 else 1
+    def _start_punt_support(self, kicker: int, landing) -> None:
+        """His side goes up for the punt or long ball: groups picked once, by who is nearest the drop."""
+        team = 0 if kicker < 11 else 1
         outfield = [i for i in (range(0, 11) if team == 0 else range(11, 22)) if i not in self._keeper_indices]
         landing = np.asarray(landing, dtype=float)
         outfield.sort(key=lambda i: _norm2(self.positions[i] - landing))
         ring_end = PUNT_CONTESTERS + len(PUNT_RING)
         self._punt = {
-            "keeper": keeper, "team": team, "landing": landing, "phase": "air", "steps": 0,
+            "kicker": kicker, "team": team, "landing": landing, "phase": "air", "steps": 0,
             "contest": outfield[:PUNT_CONTESTERS], "ring": outfield[PUNT_CONTESTERS:ring_end],
             "rest": outfield[ring_end:],
         }
@@ -3273,7 +3390,7 @@ class game:
         punt["steps"] += 1
         if self.ball_controller >= 0 or punt["steps"] > PUNT_SUPPORT_STEPS:
             self._punt = None
-        elif punt["phase"] == "air" and (self.last_touch_player != punt["keeper"] or self.ball[4] <= 0.0):
+        elif punt["phase"] == "air" and (self.last_touch_player != punt["kicker"] or self.ball[4] <= 0.0):
             punt["phase"] = "second"
 
     def _punt_support(self, i: int, action):
@@ -3479,7 +3596,9 @@ class game:
                                 - 6.0 * aerial_distances[i]
                                 for i in outfield
                             ]) + self.rng.normal(0.0, 8.0, size=outfield.size)
-                            self._attempt_capture(int(outfield[int(np.argmax(score))]))
+                            winner = int(outfield[int(np.argmax(score))])
+                            if not self._aerial_foul(outfield, score, winner):
+                                self._attempt_capture(winner)
             else:
                 # Offer it down the queue, not just to the nearest man. He may
                 # be inside his own capture lockout from a touch he just missed,
@@ -3493,8 +3612,8 @@ class game:
                         break
                     if self.ball_capture_player == cand and self.ball_capture_cooldown > 0:
                         continue
-                    if self._attempt_capture(cand):
-                        break
+                    if self._attempt_capture(cand) or self.restart_type is not None:
+                        break   # his, or flagged offside and dead
 
             if self.ball_event in {"pass", "cross", "shot", "throw_in"}:
                 possesion = 1 if self.last_touch_team == 0 else -1
@@ -3601,6 +3720,7 @@ class game:
                 "cb_home": cb_home[0 if home else 1],
                 # Mean y of my centre-backs, or None -- the line a full-back holds (defender.py).
                 "cb_line": cb_line[0 if home else 1],
+                "tactic": self._tactics[0 if home else 1],
                 "team_possession": possesion if home else -possesion,
                 "past_halfspace": bool(past_halfspaces[i]),
                 "own_goal": self._own_goals[i],
@@ -3618,6 +3738,12 @@ class game:
                 # The plan this player latched onto last round ("wingplay")
                 # or None; a decision keeps it by returning it on its action.
                 "intent": self.intent[i],
+                # The teammate who just passed to me and is running on (index into "teammates"), or -1.
+                "give_and_go": (
+                    self.pass_and_move - (0 if home else 11)
+                    if self.pass_and_move_timer > 0 and self.pass_and_move != i and (self.pass_and_move < 11) == home
+                    else -1
+                ),
                 "rng": self.rng,
             }
             intended_action = self.all_players[i].step(state)
@@ -3633,6 +3759,7 @@ class game:
                     float(_clamp(self.positions[i][0] * 0.7 + (PITCH_WIDTH / 2.0) * 0.3, 2.0, PITCH_WIDTH - 2.0)),
                     float(_clamp(self.positions[i][1] + fwd * PASS_AND_MOVE_PUSH, 2.0, PITCH_HEIGHT - 2.0)),
                 ])
+                ahead[1] = self._onside_y(i, float(ahead[1]))
                 intended_action = {
                     "type": "move",
                     "target": ahead,
@@ -3668,8 +3795,8 @@ class game:
         self._drain_stamina()
 
 
-def run_match(teamA, teamB, max_steps: int = 10800, fps: int = 60, render: bool = False, window_size=(1280, 800), title: str = "Packed Football", formation_home="4-4-2", formation_away="4-4-2"):
-    match = game(teamA, teamB, formation_home=formation_home, formation_away=formation_away)
+def run_match(teamA, teamB, max_steps: int = 10800, fps: int = 60, render: bool = False, window_size=(1280, 800), title: str = "Packed Football", formation_home="4-4-2", formation_away="4-4-2", tactics_home=None, tactics_away=None):
+    match = game(teamA, teamB, formation_home=formation_home, formation_away=formation_away, tactics_home=tactics_home, tactics_away=tactics_away)
     return match.run_match(max_steps=max_steps, fps=fps, render=render, window_size=window_size, title=title)
 
 

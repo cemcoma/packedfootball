@@ -68,6 +68,7 @@ class ActionType(IntEnum):
     FREE_KICK_SHOT = 21
     THROW_TAKEN = 22
     BLOCK = 23          # a free kick meeting a body (gameEngine._fk_flight_tick)
+    OFFSIDE = 24        # flagged: player_idx is the man caught offside (gameEngine._call_offside)
 
 
 def _q(value: float) -> int:

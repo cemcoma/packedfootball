@@ -19,6 +19,7 @@
 #   make tiers                  goals/match at every tier, bronze -> icon
 #   make tiers SEEDS=16         a bigger sample
 #   make ladder                 how often the WORSE side wins, tier vs tier
+#   make tactics                each tactic v balanced, same XI both sides
 #   make items         what a kit is worth; does the ladder survive it
 #   make fk-report     what a direct free kick turns into, taker v keeper tier
 #   make godot-check   load every script/scene items touched, headless
@@ -63,7 +64,7 @@ SEED    ?= 1
 KICKS   ?= 200
 
 .PHONY: test test-fast test-slow test-gap test-tiers test-one test-k sim tiers \
-        ladder items fk-report godot-check web serve-web deploy-web deploy-ads clean-web
+        tactics ladder items fk-report godot-check web serve-web deploy-web deploy-ads clean-web
 
 ## Everything. Config (testpaths, sys.path) comes from pytest.ini.
 test:
@@ -103,6 +104,10 @@ sim:
 ## tunable than test-tiers, and it prints passing/throw-ins too.
 tiers:
 	$(PYTHON) packedfootball/scripts/tier_report.py --seeds $(SEEDS)
+
+## Each tactic v balanced with the same eleven both sides: W-D-L and how each plays.
+tactics:
+	$(PYTHON) packedfootball/scripts/tactic_report.py --seeds $(SEEDS)
 
 ## How often the WORSE side takes something off the better one, tier vs tier.
 ## tiers/test-tiers only play a tier against itself; this is the GAP harness.

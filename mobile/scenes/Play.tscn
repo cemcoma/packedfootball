@@ -170,7 +170,7 @@ theme_override_constants/separation = 10
 unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 0)
 layout_mode = 2
-placeholder_text = "game id from a report (list_match_reports.py)"
+placeholder_text = "game id from a report, or a match .json (local_match.py)"
 
 [node name="CheckLoadButton" type="Button" parent="Margin/RootVBox/TestingPanel/CheckRow" unique_id=1950000126]
 unique_name_in_owner = true

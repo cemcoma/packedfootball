@@ -21,8 +21,10 @@ Mirrored on the client -- change both ends together:
   tier_family                 mobile/scripts/data/PlayerCard.gd
   APPEARANCE_*                mobile/scripts/data/PlayerAppearance.gd
   RATED_MATCHES_FOR_AVERAGE   mobile/scripts/data/PlayerCard.gd
+  TACTICS (the style ids)     mobile/scripts/data/Tactics.gd
 """
 
+from dataclasses import dataclass
 from typing import Final
 
 # =============================================================================
@@ -536,3 +538,58 @@ DEFAULT_STARTING_MEDALS = 0
 # load_or_create_profile's docstring for why this end deliberately doesn't
 # spell out a default shirt.
 DEFAULT_KIT = ""
+
+
+# =============================================================================
+# Tactics
+# =============================================================================
+
+@dataclass(frozen=True)
+class Tactic:
+    """How a side plays. Every default is the engine as it was, so Balanced changes nothing."""
+    # On the ball: multipliers on the decision weights.
+    pass_bias: float = 1.0
+    dribble_bias: float = 1.0
+    cross_bias: float = 1.0          # the cross, and the wide run that sets it up
+    clear_bias: float = 1.0
+    # Choosing the pass (player._choose_pass_target).
+    safety_scale: float = 1.0        # how much a free man counts   } outside the final
+    progress_scale: float = 1.0      # how much going forward counts } third: build-up
+    lane_scale: float = 1.0          # how much a coverable lane costs }
+    backward_scale: float = 1.0      # how much going backwards costs, in my own half
+    recycle_bias: float = 1.0        # passing at all in my own half when nothing is on going forward
+    wide_credit_scale: float = 1.0   # how enticing the wide outlet is
+    # Off the ball, attacking.
+    support_bias: float = 1.0
+    show_in_space: bool = False      # support runs go to open space by the ball, not at it
+    forward_run_bias: float = 1.0
+    wide_run_bias: float = 1.0
+    box_bias: float = 1.0
+    defender_push: float = 1.0       # defenders joining the attack: forward runs, overlaps
+    # Defending and distribution.
+    line_depth: float = 0.0          # the back line this much deeper (+) or higher (-)
+    press_bias: float = 1.0          # going at the ball rather than containing
+    punt_share: float | None = None  # None: the keeper's own share
+    long_ball: bool = False          # go long to the front men, the side pushes up under it
+    target_man: bool = False         # the striker stays up on their last line as the out-ball
+    early_cross: bool = False        # cross from the zone, not carried on to the byline
+
+
+TACTICS: Final = {
+    "balanced": Tactic(),
+    "long_ball": Tactic(
+        clear_bias=1.5, support_bias=0.6, forward_run_bias=1.3, defender_push=0.4, line_depth=8.0,
+        punt_share=0.9, long_ball=True, target_man=True,
+    ),
+    "possession": Tactic(
+        pass_bias=1.4, cross_bias=0.8, clear_bias=0.3, safety_scale=2.0,
+        backward_scale=0.4, recycle_bias=4.0, support_bias=1.4, forward_run_bias=0.8, line_depth=-8.0,
+        press_bias=1.3, punt_share=0.15, progress_scale=0.35, lane_scale=4.0, show_in_space=True,
+    ),
+    "wing_play": Tactic(
+        dribble_bias=1.1, cross_bias=1.6, wide_credit_scale=4.0, wide_run_bias=1.6,
+        box_bias=1.6, defender_push=1.4, early_cross=True,
+    ),
+}
+DEFAULT_TACTIC: Final = "balanced"
+

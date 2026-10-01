@@ -14,6 +14,7 @@ extends Control
 @onready var _squad_button: MenuTile = %SquadTile
 @onready var _inventory_button: MenuTile = %InventoryTile
 @onready var _items_button: MenuTile = %ItemsTile
+@onready var _tactics_button: MenuTile = %TacticsTile
 @onready var _back_button: Button = %BackButton
 
 
@@ -21,6 +22,7 @@ func _ready() -> void:
 	_squad_button.pressed.connect(_on_squad_pressed)
 	_inventory_button.pressed.connect(_on_inventory_pressed)
 	_items_button.pressed.connect(_on_items_pressed)
+	_tactics_button.pressed.connect(_on_tactics_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
@@ -66,7 +68,12 @@ func _refresh_hints() -> void:
 		_items_button.subtitle_text = (
 			tr("%d spare items waiting for a card. Socketing one is permanent.") % spare
 		)
+	_tactics_button.subtitle_text = tr("Playing %s. Choose how your side plays.") % Tactics.display_name(GameProfile.tactic_style())
 	_apply_theme_colors()
+
+
+func _on_tactics_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/Tactics.tscn")
 
 
 func _on_squad_pressed() -> void:

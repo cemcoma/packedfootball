@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from config import INVENTORY_CAP, STARTER_FORMATION, STARTER_TIER
 from deps import admin_client, game_state_for, verify_id_token
-from engine import generate_starter_roster, player_to_fields
+from engine import generate_starter_roster, player_to_fields, sanitize_tactics
 from services import account as account_service
 from services import ads as ads_service
 from services import energy as energy_service
@@ -31,7 +31,7 @@ async def health():
 # tournament seat) never leaks into the reply by accident.
 PROFILE_FIELDS = (
     "display_name", "credits", "bucks", "medals", "wins", "draws", "losses",
-    "formation", "kit", "roster_player_ids",
+    "formation", "kit", "roster_player_ids", "tactics",
     # Unequipped items. Equipped ones ride along on each card, inside
     # _card_payload -- neither costs a read of its own (see items.py).
     "item_pool",
@@ -84,6 +84,7 @@ async def bootstrap_account(uid: str = Depends(verify_id_token)):
             "energy": energy_service.describe(current, anchor),
             "profile": {
                 **{k: existing[k] for k in PROFILE_FIELDS if k in existing},
+                "tactics": sanitize_tactics(existing.get("tactics")),  # client-written: never passed on raw
                 "ad_counters": ads_service.counters(existing),
             },
             "roster": [_card_payload(c) for c in roster],

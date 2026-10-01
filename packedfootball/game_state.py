@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import items as item_rules
+from tactics import sanitize_tactics
 from player.player import Attributes, DEFAULT_STATISTICS
 
 # What a brand-new profile starts with -- game_config.py's, re-exported.
@@ -220,6 +221,7 @@ class GameState:
                 "formation": default_formation,
                 "kit": DEFAULT_KIT,
                 "item_pool": [],
+                "tactics": sanitize_tactics(None),
             }
         return {
             "credits": doc.get("credits", DEFAULT_STARTING_CREDITS),
@@ -236,6 +238,8 @@ class GameState:
             # Unequipped items. Absent on every account older than items,
             # which sanitize_pool reads as an empty bag.
             "item_pool": item_rules.sanitize_pool(doc.get("item_pool")),
+            # How the side plays (tactics.py); absent on every account older than tactics.
+            "tactics": sanitize_tactics(doc.get("tactics")),
         }
 
     async def update_profile_fields(self, fields: dict) -> None:

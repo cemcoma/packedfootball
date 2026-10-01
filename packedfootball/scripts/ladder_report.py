@@ -11,6 +11,7 @@ Usage:
     make ladder                                      # 6 seeds a pair
     make ladder SEEDS=12
     python3 packedfootball/scripts/ladder_report.py --pairs bronze:diamond
+    python3 packedfootball/scripts/ladder_report.py --high-tactic possession --low-tactic long_ball
 
 Runtime is about 1.5s per match: pairs x seeds x 2 x 1.5s.
 
@@ -63,7 +64,7 @@ class _Team:
         self.players = players
 
 
-def play_pair(low: str, high: str, seeds: range, formation: str) -> dict:
+def play_pair(low: str, high: str, seeds: range, formation: str, low_tactic: str = "balanced", high_tactic: str = "balanced") -> dict:
     """The two XIs are rolled once and reused, so every seed is the same two
     squads meeting again rather than a fresh roll that could flatter either."""
     low_xi = generate_starter_roster(formation, low, seed=1)
@@ -82,6 +83,8 @@ def play_pair(low: str, high: str, seeds: range, formation: str) -> dict:
                 seed=seed,
                 formation_home=formation,
                 formation_away=formation,
+                tactics_home={"style": low_tactic if low_at_home else high_tactic},
+                tactics_away={"style": high_tactic if low_at_home else low_tactic},
             )
             match.run_match(max_steps=REGULATION_FRAMES, render=False)
 
@@ -130,6 +133,8 @@ def main() -> None:
     parser.add_argument("--formation", default="4-4-2")
     parser.add_argument("--start-seed", type=int, default=11)
     parser.add_argument("--scorelines", action="store_true", help="print every scoreline too")
+    parser.add_argument("--low-tactic", default="balanced", help="the worse side's style (game_config.TACTICS)")
+    parser.add_argument("--high-tactic", default="balanced", help="the better side's style")
     args = parser.parse_args()
 
     seeds = range(args.start_seed, args.start_seed + args.seeds)
@@ -139,7 +144,8 @@ def main() -> None:
     print(
         f"\n  TIER GAPS -- {args.seeds * 2} matches per pair ({args.seeds} seeds both ways), {args.formation}"
         f"\n  gamma {STAT_CURVE_GAMMA}  compress {STAT_CURVE_COMPRESS}  pivot {STAT_CURVE_PIVOT}"
-        f"  speed_compress {SPEED_COMPRESS}\n"
+        f"  speed_compress {SPEED_COMPRESS}"
+        f"\n  tactics: worse side {args.low_tactic}, better side {args.high_tactic}\n"
     )
     header = (
         f"  {'matchup':>22}{'W-D-L':>10}{'win%':>7}{'unb%':>7}"
@@ -149,7 +155,7 @@ def main() -> None:
     print("  " + "-" * (len(header) - 2))
 
     for low, high in args.pairs:
-        row = play_pair(low, high, seeds, args.formation)
+        row = play_pair(low, high, seeds, args.formation, args.low_tactic, args.high_tactic)
         wdl = f"{row['wins']}-{row['draws']}-{row['losses']}"
         goals = f"{row['low_goals']:.1f}-{row['high_goals']:.1f}"
         print(

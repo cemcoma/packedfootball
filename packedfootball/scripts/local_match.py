@@ -24,6 +24,15 @@ Usage:
     python3 packedfootball/scripts/local_match.py --out /tmp/match.json \\
         [--decision-interval 2] [--opponent-tier gold] [--home-roster squad.json] [--seed N]
 
+Tactics without the backend: pick each side's style and load the file from the
+TESTING panel's Load box (it takes a .json path as well as a game id):
+    python3 packedfootball/scripts/local_match.py --home-tactic possession \\
+        --away-tactic long_ball --home-tier gold --opponent-tier gold
+writes mobile/test_data/local_match.json -- type test_data/local_match.json there.
+A bronze side with one platinum striker going long at a Possession high line:
+    ... --home-tier bronze --home-striker-tier platinum --home-tactic long_ball \\
+        --opponent-tier gold --away-tactic possession
+
 Any failure is written to --out as {"error": "..."} rather than left to a
 stack trace, since the caller (Godot) can't see this process's stderr.
 """
@@ -50,6 +59,9 @@ from game_state import fields_to_player, player_to_fields  # noqa: E402
 from packEngine import PLAYER_CLASS_MAP, TIER_RANGES, generate_starter_roster  # noqa: E402
 from player.classes.midfielder import Midfielder  # noqa: E402
 from replay import FORMAT_VERSION as REPLAY_FORMAT_VERSION  # noqa: E402
+from game_config import TACTICS  # noqa: E402
+
+DEFAULT_OUT = Path(__file__).resolve().parent.parent.parent / "mobile" / "test_data" / "local_match.json"
 
 # Same shirt the backend gives every bot (config.BOT_KIT) -- not imported
 # from there because backend/config.py drags in Firebase settings.
@@ -63,8 +75,8 @@ class _Team:
         self.players = players
 
 
-def _bot_profile(tier: str, rng: random.Random) -> dict:
-    formation = rng.choice(list(FORMATIONS.keys()))
+def _bot_profile(tier: str, rng: random.Random, formation: str | None = None) -> dict:
+    formation = formation or rng.choice(list(FORMATIONS.keys()))
     return {
         "display_name": f"{tier.capitalize()} Bot",
         "formation": formation,
@@ -75,9 +87,13 @@ def _bot_profile(tier: str, rng: random.Random) -> dict:
 
 def _home_profile(args, rng: random.Random) -> dict:
     if args.home_roster is None:
-        profile = _bot_profile(args.home_tier, rng)
+        profile = _bot_profile(args.home_tier, rng, args.home_formation)
         profile["display_name"] = "You (generated)"
         profile["kit"] = DEFAULT_HOME_KIT
+        if args.home_striker_tier:
+            slots = FORMATIONS[profile["formation"]]
+            slot = next(i for i in range(11) if slots[i]["role"] in ("ST", "CF"))
+            profile["roster"][slot] = generate_starter_roster(profile["formation"], args.home_striker_tier, seed=rng.getrandbits(63))[slot]
         return profile
 
     data = json.loads(Path(args.home_roster).read_text())
@@ -99,7 +115,8 @@ def run(args) -> dict:
     adaptive = args.decision_interval == "adaptive"
     rng = random.Random(args.seed)
     home = _home_profile(args, rng)
-    away = _bot_profile(args.opponent_tier, rng)
+    away = _bot_profile(args.opponent_tier, rng, args.opponent_formation)
+    tactics = [{"style": args.home_tactic}, {"style": args.away_tactic}]
 
     match = game(
         _Team(home["display_name"], home["roster"]),
@@ -110,6 +127,8 @@ def run(args) -> dict:
         formation_away=away["formation"],
         decision_interval=2 if adaptive else int(args.decision_interval),
         adaptive_decisions=adaptive,
+        tactics_home=tactics[0],
+        tactics_away=tactics[1],
     )
     cpu_start, wall_start = time.process_time(), time.perf_counter()
     match.run_match(max_steps=10800, render=False)
@@ -131,6 +150,7 @@ def run(args) -> dict:
         "added_time": [frames // 2 for frames in match.added_time_frames],
         "kits": [home["kit"], away["kit"]],
         "formations": [home["formation"], away["formation"]],
+        "tactics": tactics,
         # Local-only extras, ignored by MatchSession and shown by Play.gd.
         "decision_interval": args.decision_interval,
         "decisions": match._decisions_made,
@@ -142,12 +162,17 @@ def run(args) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", type=Path, required=True, help="Where to write the match JSON")
+    parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Where to write the match JSON (default mobile/test_data/local_match.json)")
     parser.add_argument("--decision-interval", default="adaptive", help="'adaptive' (production) or a fixed frame count for everyone (2 = old production)")
     parser.add_argument("--opponent-tier", choices=list(TIER_RANGES.keys()), default="gold")
     parser.add_argument("--home-tier", choices=list(TIER_RANGES.keys()), default="gold", help="Only used without --home-roster")
     parser.add_argument("--home-roster", type=Path, default=None, help="JSON: {formation, players: [player fields...], display_name, kit}")
     parser.add_argument("--seed", type=int, default=None, help="Match seed (random if omitted)")
+    parser.add_argument("--home-tactic", choices=list(TACTICS), default="balanced")
+    parser.add_argument("--away-tactic", choices=list(TACTICS), default="balanced")
+    parser.add_argument("--opponent-formation", choices=list(FORMATIONS), default=None, help="Random if omitted")
+    parser.add_argument("--home-formation", choices=list(FORMATIONS), default=None, help="Generated home side only; random if omitted")
+    parser.add_argument("--home-striker-tier", choices=list(TIER_RANGES.keys()), default=None, help="Generated home side only: its striker from this tier")
     args = parser.parse_args()
     if args.seed is None:
         args.seed = secrets.randbits(63)
@@ -162,7 +187,7 @@ def main() -> int:
 
     args.out.write_text(json.dumps(result))
     print(
-        f"Score {result['score'][0]}-{result['score'][1]}  interval={args.decision_interval}  "
+        f"Score {result['score'][0]}-{result['score'][1]}  {args.home_tactic} v {args.away_tactic}  interval={args.decision_interval}  "
         f"decisions={result['decisions']}  cpu={result['sim_seconds']}s wall={result['wall_seconds']}s  -> {args.out}"
     )
     return 0

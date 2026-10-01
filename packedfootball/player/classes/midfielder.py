@@ -1,4 +1,4 @@
-from player.player import SHOT_PATIENCE, _clamp, _clamp_to_pitch, _count_within, _equal2, _norm2, player, ActionProfile
+from player.player import IN_BEHIND_PASS_BIAS, SHOT_PATIENCE, _clamp, _clamp_to_pitch, _count_within, _equal2, _norm2, player, ActionProfile
 from game_config import PRESS_FROM_DEFENDING, RECOVERY_ROLE_EFFORT, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
@@ -73,6 +73,9 @@ class Midfielder(player):
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
 
     def _choose_through_ball_target(self, state: dict):
+        in_behind = self._in_behind_target(state)
+        if in_behind is not None:
+            return in_behind
         teammates = np.asarray(state.get("teammates", []), dtype=float)
         opponents = np.asarray(state.get("opponents", []), dtype=float)
         my_pos = np.asarray(state["my_pos"], dtype=float)
@@ -81,7 +84,7 @@ class Midfielder(player):
         best_runner = None
         best_progress = 2.0  # minimum forward progress to even consider a runner
         for tm in teammates:
-            if _equal2(tm, my_pos):
+            if _equal2(tm, my_pos) or self._is_offside(state, tm):
                 continue
             forward_progress = (tm[1] - my_pos[1]) * goal_dir
             if forward_progress > best_progress:
@@ -146,7 +149,7 @@ class Midfielder(player):
             target = self._predict_ball_landing_target(state)
             vec_to_target = target - state["my_pos"]
             intercept_weight = 0.55 + pace_ability(self.attributes.speed) * 0.35
-            support_target = state["my_pos"] + (vec_to_target * intercept_weight)
+            support_target = self._support_target(state, state["my_pos"] + (vec_to_target * intercept_weight))
             return {"type": "move", "target": support_target, "speed_mod": pace_ability(self.attributes.speed) * 0.7}
             
         elif decision == "hold_attack":
@@ -236,7 +239,10 @@ class Midfielder(player):
         t_dribble = self.attributes.drible_tendency
         t_stop = 10.0
         through_ball_target = self._choose_through_ball_target(state)
-        t_through = (self.attributes.vision + self.attributes.passing) * 0.5 * self.get_action_bias("through_ball", 0.0) if through_ball_target is not None else 0.0
+        through_bias = self.get_action_bias("through_ball", 0.0)
+        if self._in_behind_target(state) is not None:
+            through_bias = max(through_bias, IN_BEHIND_PASS_BIAS)
+        t_through = (self.attributes.vision + self.attributes.passing) * 0.5 * through_bias if through_ball_target is not None else 0.0
         # Wide mids only (WideMidActionProfile): run the line, cross from the zone.
         winger = self.get_action_bias("wing_run", 0.0) > 0.0
         is_wide = self._is_wide(state)
@@ -292,6 +298,13 @@ class Midfielder(player):
         if t_wing > 0.0 and pressure == 0:
             t_wing += 60.0
 
+        tac = self._tactic(state)
+        t_pass += self._wall_pass_pull(state)
+        t_pass *= tac.pass_bias
+        t_dribble *= tac.dribble_bias
+        t_cross *= tac.cross_bias
+        t_wing *= tac.cross_bias
+
         t_pass = max(0.0, t_pass)
         t_shoot = max(0.0, t_shoot)
         t_dribble = max(1.0, t_dribble)
@@ -311,9 +324,11 @@ class Midfielder(player):
         if latched is not None:
             return latched
 
-        actions = ["pass", "dribble", "stop", "clear", "wing_run"]
+        actions = ["pass", "dribble", "stop", "clear", "wing_run", "through_ball"]
         progressive_pass = self._best_progressive_pass_target(state) is not None
         pressure = state.get("pressure_count", 0)
+        # From my own half too: a runner on the shoulder is worth the ball over the line.
+        t_through = (self.attributes.vision + self.attributes.passing) * 0.5 * IN_BEHIND_PASS_BIAS if self._in_behind_target(state) is not None else 0.0
 
         t_pass = self.attributes.pass_tendency * 0.45
         t_dribble = self.attributes.drible_tendency
@@ -322,7 +337,7 @@ class Midfielder(player):
         t_wing = (self.attributes.speed + self.attributes.dribbling) * 0.5 * self.get_action_bias("wing_run", 0.0) if self._is_wide(state) else 0.0
 
         if not progressive_pass:
-            t_pass *= 0.1
+            t_pass *= 0.1 * self._tactic(state).recycle_bias
         elif pressure > 0:
             t_pass *= 1.3
 
@@ -354,16 +369,23 @@ class Midfielder(player):
             if pressure == 0:
                 t_wing += 60.0
 
+        tac = self._tactic(state)
+        t_pass += self._wall_pass_pull(state)
+        t_pass *= tac.pass_bias
+        t_dribble *= tac.dribble_bias
+        t_clear *= tac.clear_bias
+        t_wing *= tac.cross_bias
+
         t_pass = max(0.0, t_pass)
         t_dribble = max(1.0, t_dribble)
         t_clear = max(0.0, t_clear)
         t_stop = max(0.0, t_stop)
         t_wing = max(0.0, t_wing)
 
-        total = t_pass + t_dribble + t_clear + t_stop + t_wing
+        total = t_pass + t_dribble + t_clear + t_stop + t_wing + t_through
         if total <= 0:
             return "dribble"
-        probs = [t_pass / total, t_dribble / total, t_stop / total, t_clear / total, t_wing / total]
+        probs = [t_pass / total, t_dribble / total, t_stop / total, t_clear / total, t_wing / total, t_through / total]
         return state["rng"].choice(actions, p=probs)
 
     def _decide_off_ball_attack(self, state: dict) -> str:
@@ -415,6 +437,12 @@ class Midfielder(player):
             t_hold *= 5.0
             t_forward *= 0.1
 
+        tac = self._tactic(state)
+        t_forward *= tac.forward_run_bias
+        t_support *= tac.support_bias
+        t_wide *= tac.wide_run_bias
+        t_box *= tac.box_bias
+
         t_forward = max(0.0, t_forward)
         t_support = max(0.0, t_support)
         t_hold = max(1.0, t_hold)
@@ -459,7 +487,7 @@ class Midfielder(player):
         if dist_to_ball < 15.0:
             if ball_pressure_count >= 2:
                 return "contain"
-            if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING):
+            if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING * self._tactic(state).press_bias):
                 return "press"
             else:
                 return "contain"

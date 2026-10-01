@@ -74,19 +74,20 @@ def test_tired_players_move_slower(match):
 
 
 def test_fatigue_actually_reduces_velocity(match):
-    """_fatigue_factor has to be wired into the move action, not just exist."""
+    """_fatigue_factor has to be wired into the move action, not just exist. Measured at
+    top speed from a standing start each time -- momentum (PLAYER_ACCEL) means one step
+    from rest is capped by acceleration, not by fatigue."""
     target = match.positions[6] + np.array([0.0, 20.0])
     action = {"type": "move", "target": target, "speed_mod": 1.0}
 
-    match.stamina[6] = STAMINA_MAX
-    match._resolve_action(6, action)
-    fresh_speed = float(np.linalg.norm(match.velocity[6]))
+    def top_speed(stamina):
+        match.stamina[6] = stamina
+        match.velocity[6] = 0.0
+        for _ in range(60):
+            match._resolve_action(6, action)
+        return float(np.linalg.norm(match.velocity[6]))
 
-    match.stamina[6] = 0.0
-    match._resolve_action(6, action)
-    tired_speed = float(np.linalg.norm(match.velocity[6]))
-
-    assert tired_speed < fresh_speed
+    assert top_speed(0.0) < top_speed(STAMINA_MAX)
 
 
 def test_stamina_is_exposed_to_player_ai(match):

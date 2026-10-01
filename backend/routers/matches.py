@@ -142,6 +142,7 @@ async def quick_match(uid: str = Depends(verify_id_token)):
         "player_match_stats": result["player_match_stats"],
         "kits": result["kits"],
         "formations": result["formations"],
+        "tactics": result["tactics"],
     }
 
 

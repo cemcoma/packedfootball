@@ -210,7 +210,8 @@ class Goalkeeper(player):
         # what had him trying to thread balls upfield from his own six-yard box.
         if state.get("pressure_count", 0) > 0:
             return "punt"
-        return "punt" if state["rng"].random() < KEEPER_PUNT_SHARE else "pass"
+        share = self._tactic(state).punt_share
+        return "punt" if state["rng"].random() < (KEEPER_PUNT_SHARE if share is None else share) else "pass"
 
     def _decide_off_ball_attack(self, state: dict) -> str:
         # Own team has the ball upfield: hold the line, stay set.

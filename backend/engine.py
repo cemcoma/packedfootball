@@ -43,6 +43,8 @@ from replay import FORMAT_VERSION as REPLAY_FORMAT_VERSION
 from packEngine import PLAYER_CLASS_MAP, POSITION_CATEGORIES, TIER_RANGES, PackManager, generate_starter_roster, tier_family
 from player.classes.midfielder import Midfielder
 from player.player import APPEARANCE_OPTION_COUNTS, APPEARANCE_SLOTS, DEFAULT_APPEARANCE
+from game_config import TACTICS
+from tactics import sanitize_tactics
 from minigames import MINIGAMES_ENGINE_VERSION, PenaltyShootout, best_taker_order, penalty_score, run_shootout
 
 __all__ = [
@@ -66,6 +68,8 @@ __all__ = [
     "item_rules",
     "is_similar_position",
     "player_to_fields",
+    "sanitize_tactics",
+    "TACTICS",
     "MINIGAMES_ENGINE_VERSION",
     "PenaltyShootout",
     "best_taker_order",

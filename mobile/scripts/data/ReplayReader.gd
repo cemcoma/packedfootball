@@ -30,6 +30,7 @@ enum ActionType {
 	FREE_KICK_SHOT = 21,
 	THROW_TAKEN = 22,
 	BLOCK = 23,
+	OFFSIDE = 24,
 }
 
 const POSITION_SCALE := 100.0

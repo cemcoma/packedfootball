@@ -45,6 +45,8 @@ const SCRIPTS := [
 	"res://scripts/autoload/MatchSession.gd",
 	"res://scripts/screens/MatchResult.gd",
 	"res://scripts/screens/MatchStats.gd",
+	"res://scripts/data/Tactics.gd",
+	"res://scripts/screens/Tactics.gd",
 ]
 
 const SCENES := [
@@ -52,6 +54,7 @@ const SCENES := [
 	"res://scenes/components/PackInfoPopup.tscn",
 	"res://scenes/Items.tscn",
 	"res://scenes/TeamHub.tscn",
+	"res://scenes/Tactics.tscn",
 	"res://scenes/PlayerDetail.tscn",
 	"res://scenes/PackReveal.tscn",
 	"res://scenes/Inventory.tscn",

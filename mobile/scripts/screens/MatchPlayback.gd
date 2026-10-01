@@ -219,6 +219,7 @@ const STOPPAGE_EVENTS := {
 	ReplayReader.ActionType.FREE_KICK: "FREE KICK",
 	ReplayReader.ActionType.FREE_KICK_SHOT: "FREE KICK",
 	ReplayReader.ActionType.PENALTY: "PENALTY",
+	ReplayReader.ActionType.OFFSIDE: "OFFSIDE",
 }
 
 # The scorer's card in the lower-third panel: the shared card template,

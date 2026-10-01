@@ -27,6 +27,8 @@ from engine import (
     get_formation,
     is_similar_position,
     player_to_fields,
+    sanitize_tactics,
+    TACTICS,
 )
 from services.tournament import bot_pool_path
 
@@ -55,6 +57,7 @@ def bot_profile_from_doc(bot_id: str, doc: dict) -> dict | None:
         "formation": doc["formation"],
         "roster": roster,
         "kit": doc.get("kit") or BOT_KIT,
+        "tactics": sanitize_tactics(doc.get("tactics")),
         "wins": doc.get("wins", 0),
         "draws": doc.get("draws", 0),
         "losses": doc.get("losses", 0),
@@ -103,6 +106,8 @@ def run_match(caller_profile: dict, opponent_profile: dict, seed: int) -> dict:
         record_replay=True,
         formation_home=caller_profile["formation"],
         formation_away=opponent_profile["formation"],
+        tactics_home=caller_profile.get("tactics"),
+        tactics_away=opponent_profile.get("tactics"),
     )
     # 10800 frames is REGULATION (90:00); run_match plays stoppage time on
     # top of that, so a real match finishes a few minutes later.
@@ -131,6 +136,8 @@ def run_match(caller_profile: dict, opponent_profile: dict, seed: int) -> dict:
         # lets it lay their 11 out on a pitch (roster indices 11-21 are in
         # that formation's slot order -- see gameEngine._combine_formations).
         "formations": [caller_profile["formation"], opponent_profile["formation"]],
+        # Both sides' tactics maps, same order -- View Opponent and the result screen show the style.
+        "tactics": [sanitize_tactics(caller_profile.get("tactics")), sanitize_tactics(opponent_profile.get("tactics"))],
     }
 
 
@@ -153,6 +160,7 @@ def teams_snapshot(uid: str, caller_profile: dict, opponent_uid: str, opponent_p
             # whatever shirt they happen to own today, not the one in the
             # screenshot attached to the bug report.
             "kit": caller_profile.get("kit", ""),
+            "tactics": sanitize_tactics(caller_profile.get("tactics")),
             "players": [player_to_fields(p) for p in caller_profile["roster"]],
         },
         "opponent": {
@@ -160,6 +168,7 @@ def teams_snapshot(uid: str, caller_profile: dict, opponent_uid: str, opponent_p
             "display_name": opponent_profile["display_name"],
             "formation": opponent_profile["formation"],
             "kit": opponent_profile.get("kit", ""),
+            "tactics": sanitize_tactics(opponent_profile.get("tactics")),
             "players": [player_to_fields(p) for p in opponent_profile["roster"]],
         },
     }
@@ -216,6 +225,7 @@ def _generate_bot_opponent(card_tier_rates: dict | None = None) -> tuple[str, di
         "formation": formation,
         "roster": roster,
         "kit": BOT_KIT,
+        "tactics": {"style": random.choice(list(TACTICS))},
     }
     return bot_uid, profile
 

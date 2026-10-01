@@ -400,6 +400,7 @@ async def _match(uid: str, mode: Mode) -> dict:
         "player_match_stats": result["player_match_stats"],
         "kits": result["kits"],
         "formations": result["formations"],
+        "tactics": result["tactics"],
         # Extra block on top of the /match/quick shape. MatchSession reads
         # only the keys it knows and ignores the rest, so playback and the
         # result screen work with no autoload change.

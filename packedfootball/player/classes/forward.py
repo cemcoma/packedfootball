@@ -1,4 +1,4 @@
-from player.player import CUT_INSIDE_DONE_X, SHOT_PATIENCE, _clamp, _count_within, _norm2, player, ActionProfile
+from player.player import CUT_INSIDE_DONE_X, SHOT_PATIENCE, TARGET_MAN_ROLES, TARGET_MAN_WEIGHT, _clamp, _count_within, _norm2, player, ActionProfile
 from game_config import PRESS_FROM_DEFENDING, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
@@ -127,6 +127,9 @@ class Forward(player):
             }
 
         # --- Off-Ball Attacking Movement ---
+        elif decision in ("in_behind", "stay_up"):
+            return self._in_behind_run(state)
+
         elif decision == "forward_run":
             enemy_goal_y = 100.0 if state.get("a_direction", 1) == 1 else 0.0
             run_target = np.array([state["my_pos"][0], enemy_goal_y])
@@ -136,7 +139,7 @@ class Forward(player):
             target = self._predict_ball_landing_target(state)
             vec_to_target = target - state["my_pos"]
             intercept_weight = 0.55 + pace_ability(self.attributes.speed) * 0.35
-            support_target = state["my_pos"] + (vec_to_target * intercept_weight)
+            support_target = self._support_target(state, state["my_pos"] + (vec_to_target * intercept_weight))
             return {"type": "move", "target": support_target, "speed_mod": pace_ability(self.attributes.speed) * 0.7}
             
         elif decision == "hold_attack":
@@ -282,6 +285,13 @@ class Forward(player):
         if t_wing > 0.0 and pressure == 0:
             t_wing += 60.0
 
+        tac = self._tactic(state)
+        t_pass += self._wall_pass_pull(state)
+        t_pass *= tac.pass_bias
+        t_dribble *= tac.dribble_bias
+        t_cross *= tac.cross_bias
+        t_wing *= tac.cross_bias
+
         t_pass = max(0.0, t_pass)
         t_shoot = max(0.0, t_shoot)
         t_dribble = max(1.0, t_dribble)
@@ -311,7 +321,7 @@ class Forward(player):
         t_wing = (self.attributes.speed + self.attributes.dribbling) * 0.5 * self.get_action_bias("wing_run", 0.0) if self._is_wide(state) else 0.0
 
         if not progressive_pass:
-            t_pass *= 0.1
+            t_pass *= 0.1 * self._tactic(state).recycle_bias
         elif pressure > 0:
             t_pass *= 1.3
 
@@ -337,6 +347,12 @@ class Forward(player):
             t_dribble *= 0.3
             if pressure == 0:
                 t_wing += 60.0
+
+        tac = self._tactic(state)
+        t_pass += self._wall_pass_pull(state)
+        t_pass *= tac.pass_bias
+        t_dribble *= tac.dribble_bias
+        t_wing *= tac.cross_bias
 
         t_pass = max(0.0, t_pass)
         t_dribble = max(10.0, t_dribble)
@@ -367,8 +383,16 @@ class Forward(player):
         if not state.get("is_loose", False) and self._cross_incoming(state):
             return "attack_box"
 
-        actions = ["forward_run", "support", "hold_attack", "wide_run", "attack_box"]
+        actions = ["forward_run", "support", "hold_attack", "wide_run", "attack_box", "in_behind"]
         t_forward = self.attributes.shoot_tendency + (self.attributes.speed * 0.5)
+        # On the shoulder, while the ball is still behind me to be played through.
+        goal_dir = 1.0 if state.get("a_direction", 1) == 1 else -1.0
+        ball_behind = (float(state["ball_pos"][1]) - float(state["my_pos"][1])) * goal_dir < -5.0
+        t_behind = self._in_behind_weight(state) if ball_behind and not state.get("is_loose", False) else 0.0
+        # A target man stays up there whether or not there is room to run into.
+        target_man = self._tactic(state).target_man and state.get("my_role") in TARGET_MAN_ROLES
+        if target_man and ball_behind:
+            t_behind = max(2.0 * t_behind, TARGET_MAN_WEIGHT)
         t_support = self.attributes.pass_tendency + 20.0
         t_hold = self.attributes.defending + 30.0
         t_wide = (self.attributes.speed + 20.0) * self.get_action_bias("wide_run", 0.0)
@@ -403,14 +427,21 @@ class Forward(player):
             t_hold *= 5.0
             t_forward *= 0.1
 
+        tac = self._tactic(state)
+        t_forward *= tac.forward_run_bias
+        t_support *= tac.support_bias
+        t_wide *= tac.wide_run_bias
+        t_box *= tac.box_bias
+        t_behind *= tac.forward_run_bias
+
         t_forward = max(0.0, t_forward)
         t_support = max(0.0, t_support)
         t_hold = max(1.0, t_hold)
         t_wide = max(0.0, t_wide)
         t_box = max(0.0, t_box)
 
-        total = t_forward + t_support + t_hold + t_wide + t_box
-        probs = [t_forward / total, t_support / total, t_hold / total, t_wide / total, t_box / total]
+        total = t_forward + t_support + t_hold + t_wide + t_box + t_behind
+        probs = [t_forward / total, t_support / total, t_hold / total, t_wide / total, t_box / total, t_behind / total]
         return state["rng"].choice(actions, p=probs)
 
     def _decide_off_ball_defense(self, state: dict) -> str:
@@ -429,6 +460,10 @@ class Forward(player):
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
         ball_pressure_count = _count_within(state["opponents"], state["ball_pos"], 3.0)
 
+        # The out-ball: a target man leaves the defending to the rest and waits on their line.
+        if dist_to_ball >= 15.0 and self._tactic(state).target_man and state.get("my_role") in TARGET_MAN_ROLES:
+            return "stay_up"
+
         if dist_to_ball < 2.0:
             actions = ["tackle", "contain"]
             # Aggression alone, so the better side gets better challenges and
@@ -443,7 +478,7 @@ class Forward(player):
         if dist_to_ball < 15.0:
             if ball_pressure_count >= 2:
                 return "contain"
-            if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING):
+            if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING * self._tactic(state).press_bias):
                 return "press"
             else:
                 return "contain"
