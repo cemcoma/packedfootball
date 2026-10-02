@@ -8,13 +8,14 @@ extends Node
 ## Two ways onto that screen:
 ##   - a leaderboard row: `uid` is set and the screen fetches
 ##     GET /manager/{uid};
-##   - "View Opponent" before a match: `uid` is "" and the screen reads
-##     the away side straight out of MatchSession, which already holds the
-##     opponent's roster, name and record from the match response.
+##   - "View Team" on PreMatch.tscn: `uid` is "" and the screen reads
+##     `match_team`'s side straight out of MatchSession, which already holds
+##     both rosters, names and records from the match response.
 
 const DEFAULT_RETURN_SCENE := "res://scenes/Leaderboard.tscn"
 
 var uid: String = ""
+var match_team: int = 0  # MatchSession.TEAM_*, read when uid is ""
 var return_scene: String = DEFAULT_RETURN_SCENE
 
 
@@ -25,11 +26,13 @@ func open(manager_uid: String, back_to: String) -> void:
 	get_tree().change_scene_to_file("res://scenes/ManagerView.tscn")
 
 
-## Show the current match's opponent instead (no fetch), coming back to `back_to`.
-func open_match_opponent(back_to: String) -> void:
+## Show one side of the current match instead (no fetch), coming back to `back_to`.
+func open_match_team(team: int, back_to: String) -> void:
+	match_team = team
 	open("", back_to)
 
 
 func clear() -> void:
 	uid = ""
+	match_team = 0
 	return_scene = DEFAULT_RETURN_SCENE

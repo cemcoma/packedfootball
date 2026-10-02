@@ -1,0 +1,243 @@
+[gd_scene format=3 uid="uid://cdp4rr5w03mbn"]
+
+[ext_resource type="Script" uid="uid://dkv5364qwtsiy" path="res://scripts/screens/PreMatch.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
+[ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3"]
+[ext_resource type="FontFile" uid="uid://bsf55571avq3d" path="res://theme/fonts/Monocraft.ttf" id="4"]
+[ext_resource type="Script" uid="uid://bf8idjr6c3861" path="res://scripts/components/KitSwatch.gd" id="5"]
+
+[sub_resource type="FontVariation" id="FontVariation_vs"]
+base_font = ExtResource("4")
+variation_embolden = 1.2
+
+[node name="PreMatch" type="Control" unique_id=1952000001]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" parent="." unique_id=1952000002 instance=ExtResource("2")]
+layout_mode = 1
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=1952000003]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+script = ExtResource("3")
+
+[node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1952000004]
+layout_mode = 2
+theme_override_constants/separation = 28
+alignment = 1
+
+[node name="SidesRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1952000005]
+layout_mode = 2
+theme_override_constants/separation = 28
+alignment = 1
+
+[node name="HomePanel" type="PanelContainer" parent="Margin/RootVBox/SidesRow" unique_id=1952000006]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+
+[node name="Box" type="VBoxContainer" parent="Margin/RootVBox/SidesRow/HomePanel" unique_id=1952000007]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="NameKitContainer" type="HBoxContainer" parent="Margin/RootVBox/SidesRow/HomePanel/Box" unique_id=783582085]
+layout_mode = 2
+
+[node name="spacer" type="Control" parent="Margin/RootVBox/SidesRow/HomePanel/Box/NameKitContainer" unique_id=1229520528]
+custom_minimum_size = Vector2(40, 46)
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+
+[node name="NameLabel" type="Label" parent="Margin/RootVBox/SidesRow/HomePanel/Box/NameKitContainer" unique_id=1952000008]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
+text = "Home"
+horizontal_alignment = 1
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="KitSwatch" type="Control" parent="Margin/RootVBox/SidesRow/HomePanel/Box/NameKitContainer" unique_id=1952000041]
+custom_minimum_size = Vector2(40, 46)
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+script = ExtResource("5")
+
+[node name="InfoBox" type="VBoxContainer" parent="Margin/RootVBox/SidesRow/HomePanel/Box" unique_id=1952000051]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/separation = 6
+
+[node name="RecordRow" type="HBoxContainer" parent="Margin/RootVBox/SidesRow/HomePanel/Box/InfoBox" unique_id=1952000052]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Value" type="Label" parent="Margin/RootVBox/SidesRow/HomePanel/Box/InfoBox/RecordRow" unique_id=1952000011]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "0 W  0 D  0 L"
+horizontal_alignment = 2
+
+[node name="FormationRow" type="HBoxContainer" parent="Margin/RootVBox/SidesRow/HomePanel/Box/InfoBox" unique_id=1952000053]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Caption" type="Label" parent="Margin/RootVBox/SidesRow/HomePanel/Box/InfoBox/FormationRow" unique_id=1952000012]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Formation"
+
+[node name="Value" type="Label" parent="Margin/RootVBox/SidesRow/HomePanel/Box/InfoBox/FormationRow" unique_id=1952000013]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "4-4-2"
+horizontal_alignment = 2
+
+[node name="OverallRow" type="HBoxContainer" parent="Margin/RootVBox/SidesRow/HomePanel/Box/InfoBox" unique_id=1952000054]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Caption" type="Label" parent="Margin/RootVBox/SidesRow/HomePanel/Box/InfoBox/OverallRow" unique_id=1952000014]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Overall"
+
+[node name="Value" type="Label" parent="Margin/RootVBox/SidesRow/HomePanel/Box/InfoBox/OverallRow" unique_id=1952000015]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "--"
+horizontal_alignment = 2
+
+[node name="ViewTeamButton" type="Button" parent="Margin/RootVBox/SidesRow/HomePanel/Box" unique_id=1952000016]
+custom_minimum_size = Vector2(180, 40)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 15
+text = "View Team"
+
+[node name="VsLabel" type="Label" parent="Margin/RootVBox/SidesRow" unique_id=1952000017]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 12
+theme_override_fonts/font = SubResource("FontVariation_vs")
+theme_override_font_sizes/font_size = 64
+text = "VS"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="AwayPanel" type="PanelContainer" parent="Margin/RootVBox/SidesRow" unique_id=1952000018]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+
+[node name="Box" type="VBoxContainer" parent="Margin/RootVBox/SidesRow/AwayPanel" unique_id=1952000019]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="NameKitContainer" type="HBoxContainer" parent="Margin/RootVBox/SidesRow/AwayPanel/Box" unique_id=691923101]
+layout_mode = 2
+
+[node name="spacer" type="Control" parent="Margin/RootVBox/SidesRow/AwayPanel/Box/NameKitContainer" unique_id=1426971835]
+custom_minimum_size = Vector2(40, 46)
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+
+[node name="NameLabel" type="Label" parent="Margin/RootVBox/SidesRow/AwayPanel/Box/NameKitContainer" unique_id=78170895]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
+text = "Away"
+horizontal_alignment = 1
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="KitSwatch" type="Control" parent="Margin/RootVBox/SidesRow/AwayPanel/Box/NameKitContainer" unique_id=1657648144]
+custom_minimum_size = Vector2(40, 46)
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+script = ExtResource("5")
+
+[node name="InfoBox" type="VBoxContainer" parent="Margin/RootVBox/SidesRow/AwayPanel/Box" unique_id=1952000061]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/separation = 6
+
+[node name="RecordRow" type="HBoxContainer" parent="Margin/RootVBox/SidesRow/AwayPanel/Box/InfoBox" unique_id=1952000062]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Value" type="Label" parent="Margin/RootVBox/SidesRow/AwayPanel/Box/InfoBox/RecordRow" unique_id=1952000023]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "0 W  0 D  0 L"
+horizontal_alignment = 2
+
+[node name="FormationRow" type="HBoxContainer" parent="Margin/RootVBox/SidesRow/AwayPanel/Box/InfoBox" unique_id=1952000063]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Caption" type="Label" parent="Margin/RootVBox/SidesRow/AwayPanel/Box/InfoBox/FormationRow" unique_id=1952000024]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Formation"
+
+[node name="Value" type="Label" parent="Margin/RootVBox/SidesRow/AwayPanel/Box/InfoBox/FormationRow" unique_id=1952000025]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "4-4-2"
+horizontal_alignment = 2
+
+[node name="OverallRow" type="HBoxContainer" parent="Margin/RootVBox/SidesRow/AwayPanel/Box/InfoBox" unique_id=1952000064]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Caption" type="Label" parent="Margin/RootVBox/SidesRow/AwayPanel/Box/InfoBox/OverallRow" unique_id=1952000026]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Overall"
+
+[node name="Value" type="Label" parent="Margin/RootVBox/SidesRow/AwayPanel/Box/InfoBox/OverallRow" unique_id=1952000027]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "--"
+horizontal_alignment = 2
+
+[node name="ViewTeamButton" type="Button" parent="Margin/RootVBox/SidesRow/AwayPanel/Box" unique_id=1952000028]
+custom_minimum_size = Vector2(180, 40)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 15
+text = "View Team"
+
+[node name="StartButton" type="Button" parent="Margin/RootVBox" unique_id=1952000029]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 56)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 18
+text = "Start Match"

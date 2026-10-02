@@ -23,7 +23,7 @@ extends Control
 ## halfway line used to draw in full instead of just the visible sliver).
 ##
 ## The rest of the screen (scoreboard, timer, pause/camera buttons, the
-## pre-match blackout and pause overlay) are real Control nodes, siblings
+## pause overlay) are real Control nodes, siblings
 ## of PitchCanvas under Match.tscn's root -- reached below via the usual
 ## %-prefixed unique-name lookups despite this script living on a non-root
 ## node (unique names are scoped to the whole edited scene, not to the
@@ -278,7 +278,6 @@ var _out_ball_vz: float = 0.0
 var _out_ball_until_tick: float = -1.0
 const HALFTIME_PAUSE_SECONDS := 3.0  # matches gameEngine.py's halftime_pause_timer=180 ticks @ 60/sec
 
-var has_started: bool = false
 var is_paused: bool = false
 var _halftime_tick: float = -1.0
 var _pending_result_transition: bool = false
@@ -347,11 +346,6 @@ var _is_real_match: bool = false #for local testing demo replays
 @onready var _camera_toggle_button: Button = %CameraToggleButton
 @onready var _speed_button: Button = %SpeedButton
 
-@onready var _pre_match_overlay: Control = %PreMatchOverlay
-@onready var _pre_match_teams_label: Label = %PreMatchTeamsLabel
-@onready var _view_opponent_button: Button = %ViewOpponentButton
-@onready var _start_button: Button = %StartButton
-
 @onready var _pause_overlay: Control = %PauseOverlay
 @onready var _legend_grid: GridContainer = %LegendGrid
 @onready var _skip_halftime_button: Button = %SkipHalftimeButton
@@ -403,17 +397,10 @@ func _ready() -> void:
 	# has to rebuild them.
 	ThemeManager.theme_changed.connect(_style_scoreboard)
 	_build_legend()
-	_pre_match_teams_label.text = tr("%s vs %s") % [roster.get("home_name", tr("Home")), roster.get("away_name", tr("Away"))]
-	# Only a real match has a roster worth opening -- the bundled demo's
-	# sidecar carries names only (see _attributes_for), so there'd be
-	# nothing to show but a grid of blanks.
-	_view_opponent_button.visible = _is_real_match
 	_update_camera_button_label()
 	_update_speed_button_label()
 	_update_pitch_canvas_size()
 
-	_view_opponent_button.pressed.connect(_on_view_opponent_pressed)
-	_start_button.pressed.connect(_on_start_match_pressed)
 	_pause_button.pressed.connect(_on_pause_pressed)
 	_camera_toggle_button.pressed.connect(_on_camera_toggle_pressed)
 	_speed_button.pressed.connect(_on_speed_pressed)
@@ -423,8 +410,9 @@ func _ready() -> void:
 
 
 
+	# PreMatch.tscn was the wait for Start, so playback runs from the first frame.
 	set_process(true)
-	queue_redraw()  # draw the static kickoff frame (hidden behind the pre-match blackout for now)
+	queue_redraw()
 
 
 func _setup_scoreboard() -> void:
@@ -625,23 +613,6 @@ func _reset_state() -> void:
 	_update_score_label()
 
 
-## A look at the other side before kicking off. A plain scene change, not
-## an overlay: MatchSession keeps the match, so coming back re-runs
-## _ready() from the same data and lands on this same popup, with nothing
-## having started in between. Not offered once the match is under way.
-func _on_view_opponent_pressed() -> void:
-	# The Manager screen reads the away side out of MatchSession and comes
-	# back here; this scene rebuilds from the same session on return.
-	ManagerSession.open_match_opponent("res://scenes/Match.tscn")
-
-
-func _on_start_match_pressed() -> void:
-	_pre_match_overlay.visible = false
-	_reset_state()
-	playback_tick = 0.0
-	has_started = true
-
-
 func _on_pause_pressed() -> void:
 	is_paused = not is_paused
 	_pause_overlay.visible = is_paused
@@ -719,7 +690,6 @@ func _jump_to_event(action_type: int) -> void:
 			_pending_stoppage = {}
 			_out_ball_latched = false
 			_out_ball_until_tick = -1.0
-			has_started = true
 			return
 
 
@@ -731,7 +701,7 @@ func _process(delta: float) -> void:
 	if samples.is_empty():
 		return
 
-	if not has_started or is_paused:
+	if is_paused:
 		queue_redraw()
 		return
 

@@ -19,7 +19,7 @@ const LAYER := 64
 
 ## Screens with no balances to show: no profile loaded yet, or a live match --
 ## a shootout counts, it is a match played a kick at a time.
-const HIDDEN_SCENES := ["Splash", "Auth", "Match", "Shootout"]
+const HIDDEN_SCENES := ["Splash", "Auth", "PreMatch", "Match", "Shootout"]
 
 ## One-shot screens a tap on the energy bar won't leave: coming back to them
 ## replays what they were showing.

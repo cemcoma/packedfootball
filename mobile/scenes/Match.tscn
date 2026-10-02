@@ -292,61 +292,6 @@ offset_bottom = 52.0
 grow_horizontal = 0
 text = "Pause"
 
-[node name="PreMatchOverlay" type="Control" parent="." unique_id=87841212]
-unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-
-[node name="Scrim" type="ColorRect" parent="PreMatchOverlay" unique_id=537398396]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0, 0, 0, 1)
-
-[node name="Center" type="CenterContainer" parent="PreMatchOverlay" unique_id=1603823087]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-
-[node name="VBoxContainer" type="VBoxContainer" parent="PreMatchOverlay/Center" unique_id=1647133026]
-layout_mode = 2
-theme_override_constants/separation = 20
-
-[node name="PreMatchTeamsLabel" type="Label" parent="PreMatchOverlay/Center/VBoxContainer" unique_id=1550734794]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 22
-text = "Home vs Away"
-horizontal_alignment = 1
-
-[node name="ViewOpponentButton" type="Button" parent="PreMatchOverlay/Center/VBoxContainer" unique_id=1930000100]
-unique_name_in_owner = true
-visible = false
-custom_minimum_size = Vector2(220, 44)
-layout_mode = 2
-size_flags_horizontal = 4
-theme_override_font_sizes/font_size = 15
-text = "View Opponent Squad"
-
-[node name="StartButton" type="Button" parent="PreMatchOverlay/Center/VBoxContainer" unique_id=38405616]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(220, 56)
-layout_mode = 2
-size_flags_horizontal = 4
-theme_override_font_sizes/font_size = 18
-text = "Start Match"
-
 [node name="LoadingPopup" parent="." unique_id=244858371 instance=ExtResource("3")]
 unique_name_in_owner = true
 layout_mode = 1

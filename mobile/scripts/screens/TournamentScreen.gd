@@ -40,7 +40,7 @@ extends Control
 ## the only one. They serve both formats; the period they cover is whatever
 ## `required` in the payload says.
 
-const MATCH_SCENE := "res://scenes/Match.tscn"
+const PRE_MATCH_SCENE := "res://scenes/PreMatch.tscn"
 const Shop := preload("res://scripts/screens/Shop.gd")
 const CURRENCY_AMOUNT := preload("res://scenes/components/CurrencyAmount.tscn")
 
@@ -502,7 +502,7 @@ func _on_play_pressed() -> void:
 
 	_busy_popup.set_status(tr("Kick off!"))
 	await get_tree().create_timer(0.3).timeout
-	get_tree().change_scene_to_file(MATCH_SCENE)
+	get_tree().change_scene_to_file(PRE_MATCH_SCENE)
 
 
 ## POST /claim for the play-everything reward. `target` is {} for the

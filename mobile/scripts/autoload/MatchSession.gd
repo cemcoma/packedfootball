@@ -37,10 +37,12 @@ var opponent_display_name: String = ""
 var opponent_is_bot: bool = false
 
 ## The opponent's account-level record {wins, draws, losses}, {} for a bot
-## or a backend older than the field -- the Manager screen's header when
-## "View Opponent" is tapped. opponent_uid is "" for a bot.
+## or a backend older than the field -- shown on PreMatch.tscn and the
+## Manager screen. opponent_uid is "" for a bot.
 var opponent_record: Dictionary = {}
 var opponent_uid: String = ""
+## Your own record going INTO this match, for the pre-match screen.
+var home_record: Dictionary = {}
 var credits_earned: int = 0
 
 ## THIS match's per-player numbers, 22 entries, same index order as the
@@ -141,6 +143,19 @@ func set_from_match_response(data: Dictionary) -> void:
 	var score_raw = data.get("score")
 	score = score_raw if score_raw is Array and score_raw.size() == 2 else [0, 0]
 
+	# The response's totals already count this match, so its outcome comes back
+	# off; a local match sends none and never touched the profile.
+	if typeof(data.get("wins")) in [TYPE_INT, TYPE_FLOAT]:
+		var mine: int = int(score[0])
+		var theirs: int = int(score[1])
+		home_record = {
+			"wins": int(data.get("wins", 0)) - int(mine > theirs),
+			"draws": int(data.get("draws", 0)) - int(mine == theirs),
+			"losses": int(data.get("losses", 0)) - int(mine < theirs),
+		}
+	else:
+		home_record = {"wins": GameProfile.wins, "draws": GameProfile.draws, "losses": GameProfile.losses}
+
 	opponent_is_bot = bool(data.get("opponent_is_bot"))
 	var record_raw = data.get("opponent_record")
 	opponent_record = record_raw if record_raw is Dictionary and not opponent_is_bot else {}
@@ -168,11 +183,40 @@ static func _formation_or_default(formations: Array, side: int) -> String:
 
 # ------------------------------------------------------------- lookups
 
-## The opponent's formation name (see set_from_match_response), or the
-## default when this session isn't carrying a match at all.
-func away_formation() -> String:
-	var name = _roster.get("away_formation")
+## One side's formation name (see set_from_match_response), or the default
+## when this session isn't carrying a match at all.
+func formation(team: int) -> String:
+	var name = _roster.get("home_formation" if team == TEAM_HOME else "away_formation")
 	return name if name is String and name != "" else Formations.FORMATION_NAMES[0]
+
+
+func team_name(team: int) -> String:
+	if team == TEAM_HOME:
+		return str(_roster.get("home_name", tr("Home")))
+	return str(_roster.get("away_name", tr("Opponent")))
+
+
+## The raw kit string, "" when none was sent.
+func team_kit(team: int) -> String:
+	return str(_roster.get("home_kit" if team == TEAM_HOME else "away_kit", ""))
+
+
+## {wins, draws, losses} before this match, {} when unknown (a bot).
+func record(team: int) -> Dictionary:
+	return home_record if team == TEAM_HOME else opponent_record
+
+
+## The same penalty-aware squad overall Team.tscn shows, 0 with no roster.
+func team_overall(team: int) -> int:
+	var slot_ids: Array = []
+	var cards: Dictionary = {}
+	for index in team_indices(team):
+		var fields := player_fields(index)
+		var id := "" if fields.is_empty() else "slot_%d" % slot_ids.size()
+		if id != "":
+			cards[id] = PlayerCard.from_fields(fields, id)
+		slot_ids.append(id)
+	return SquadOptimizer.squad_overall(formation(team), slot_ids, cards)
 
 
 ## Roster field dictionary for a global player index (0-21), or {}.
@@ -305,6 +349,7 @@ func clear() -> void:
 	opponent_is_bot = false
 	opponent_record = {}
 	opponent_uid = ""
+	home_record = {}
 	credits_earned = 0
 	player_match_stats = []
 	tournament = {}
