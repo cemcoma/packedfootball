@@ -22,6 +22,11 @@ extends Control
 ## save-status message.
 
 const PLAYER_CARD_SCENE := preload("res://scenes/components/PlayerCardView.tscn")
+const ITEM_VIEW_SCENE := preload("res://scenes/components/ItemView.tscn")
+
+## Smaller than ItemView.COMPACT_SIZE so two rows fit above the buttons. Three
+## across is 146px: the card column's min width in Team.tscn.
+const ITEM_TILE_SIZE := Vector2(46, 60)
 
 ## How many name/value pairs sit side by side in the stats grid. The list is
 ## long enough to run out of vertical room well before horizontal.
@@ -82,6 +87,7 @@ var status_text: String = ""
 @onready var _out_of_position_label: Label = %OutOfPositionLabel
 @onready var _stats_card_view: PlayerCardView = %StatsCard
 @onready var _stats_extra_country: Label = %StatsExtraCountry
+@onready var _stats_items_grid: GridContainer = %StatsItemsGrid
 @onready var _stats_extra_gam: Label = %StatsExtraGam #goals assists matches
 @onready var _stats_attr_grid: GridContainer = %StatsAttrGrid
 @onready var _stats_page_label: Label = %StatsPageLabel
@@ -324,6 +330,10 @@ func _populate_stats_panel() -> void:
 	_stats_extra_country.text = "%s\n%s" % [
 		card.hometown, card.country
 	]
+	_populate_items(card)
+	# Items buff attributes, so they share that page; the rating belongs to statistics.
+	_stats_items_grid.visible = stats_page == StatsPage.ATTRIBUTES
+	_stats_extra_gam.visible = stats_page == StatsPage.STATISTICS
 
 	if stats_page == StatsPage.STATISTICS:
 		_populate_statistics_page(card)
@@ -332,22 +342,41 @@ func _populate_stats_panel() -> void:
 	_update_stats_page_button()
 
 
+## Every socket, filled or not, so free slots read at a glance. Display only:
+## the Equip button is the way to change them.
+func _populate_items(card: PlayerCard) -> void:
+	for child in _stats_items_grid.get_children():
+		_stats_items_grid.remove_child(child)
+		child.queue_free()
+	for i in range(card.item_capacity()):
+		var view: ItemView = ITEM_VIEW_SCENE.instantiate()
+		_stats_items_grid.add_child(view)
+		view.set_compact(true, ITEM_TILE_SIZE)
+		view.set_tappable(false)
+		if i < card.items.size():
+			view.set_item(card.items[i])
+		else:
+			view.set_empty()
+
+
+## Values include item buffs (base 80 + 11 shows 91); a buffed value is tinted.
 func _populate_attributes_page(card: PlayerCard) -> void:
 	_stats_page_label.text = tr("Attributes")
 	var entries: Array = []
 	var primary := card.primary_stats()
+	var effective := card.effective_attributes()
 	for row in ATTR_ROWS:
 		var key: String = row[1]
-		var value: int = card.attributes.get(key, 0)
+		var value: int = effective.get(key, 0)
 		# Height is centimetres, not a 0-100 skill (see player.py's
 		# PHYSICAL_FIELDS -- it's excluded from the overall for that reason).
 		entries.append([
 			tr(row[0]),
 			"%d cm" % value if key == "height" else str(value),
 			key in primary,
+			value != int(card.attributes.get(key, 0)),
 		])
 	_fill_stat_grid(entries)
-	_stats_extra_gam.text = ""
 
 
 func _populate_statistics_page(card: PlayerCard) -> void:
@@ -389,15 +418,20 @@ func _fill_stat_grid(entries: Array) -> void:
 			var i := c * rows + r
 			if i < entries.size():
 				var entry: Array = entries[i]
-				_add_stat_row(entry[0], entry[1], entry.size() > 2 and bool(entry[2]))
+				_add_stat_row(
+					entry[0], entry[1],
+					entry.size() > 2 and bool(entry[2]), entry.size() > 3 and bool(entry[3])
+				)
 			else:
 				# Keeps the grid rectangular so the filled columns stay aligned.
 				_stats_attr_grid.add_child(Control.new())
 
 
 ## `highlight` marks a primary stat, in the accent -- same rule and same
-## colour as PlayerDetail._add_row.
-func _add_stat_row(label_text: String, value_text: String, highlight: bool = false) -> void:
+## colour as PlayerDetail._add_row. `buffed` tints the value: items raised it.
+func _add_stat_row(
+	label_text: String, value_text: String, highlight: bool = false, buffed: bool = false
+) -> void:
 	var accent := ThemeManager.color("accent")
 
 	# Create a container for the pair that expands to fill its half of the grid
@@ -415,7 +449,9 @@ func _add_stat_row(label_text: String, value_text: String, highlight: bool = fal
 	var value_label := Label.new()
 	value_label.text = value_text
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	if highlight:
+	if buffed:
+		value_label.add_theme_color_override("font_color", ThemeManager.color("positive"))
+	elif highlight:
 		value_label.add_theme_color_override("font_color", accent)
 	pair_box.add_child(value_label)
 

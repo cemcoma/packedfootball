@@ -89,11 +89,12 @@ func set_empty() -> void:
 
 
 ## Small enough for a row of sockets. Safe to call before or after set_item.
-func set_compact(compact: bool) -> void:
+## `tile_size` lets a tighter screen shrink the compact tile further.
+func set_compact(compact: bool, tile_size: Vector2 = COMPACT_SIZE) -> void:
 	_compact = compact
 	if not is_node_ready():
 		await ready
-	custom_minimum_size = COMPACT_SIZE if compact else CARD_SIZE
+	custom_minimum_size = tile_size if compact else CARD_SIZE
 	size = custom_minimum_size
 	_kind_label.visible = not compact
 	_rarity_label.visible = not compact
