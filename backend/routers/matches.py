@@ -26,6 +26,7 @@ from services import energy as energy_service
 from services.match import (
     persist_player_stats,
     pick_opponent_profile,
+    record_bot_result,
     run_match,
     teams_snapshot,
     validate_formation_positions,
@@ -96,6 +97,7 @@ async def quick_match(uid: str = Depends(verify_id_token)):
     )
 
     await persist_player_stats(caller_state, caller_profile)
+    await record_bot_result(opponent_uid, opponent_profile, opp_score, my_score)
 
     credits_earned = 0
 
@@ -122,7 +124,7 @@ async def quick_match(uid: str = Depends(verify_id_token)):
         "opponent_is_bot": is_bot,
 
         # For the Manager screen's header when "View Opponent" is tapped: a
-        # bot has no record and no uid worth showing.
+        # bot has no uid worth showing.
         "opponent_uid": "" if is_bot else opponent_uid,
         "opponent_record": {
             "wins": opponent_profile.get("wins", 0),

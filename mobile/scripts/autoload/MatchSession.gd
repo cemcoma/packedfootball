@@ -36,8 +36,8 @@ var score: Array = [0, 0]
 var opponent_display_name: String = ""
 var opponent_is_bot: bool = false
 
-## The opponent's account-level record {wins, draws, losses}, {} for a bot
-## or a backend older than the field -- shown on PreMatch.tscn and the
+## The opponent's account-level record {wins, draws, losses}, {} for a
+## backend older than the field -- shown on PreMatch.tscn and the
 ## Manager screen. opponent_uid is "" for a bot.
 var opponent_record: Dictionary = {}
 var opponent_uid: String = ""
@@ -158,7 +158,7 @@ func set_from_match_response(data: Dictionary) -> void:
 
 	opponent_is_bot = bool(data.get("opponent_is_bot"))
 	var record_raw = data.get("opponent_record")
-	opponent_record = record_raw if record_raw is Dictionary and not opponent_is_bot else {}
+	opponent_record = record_raw if record_raw is Dictionary else {}
 	var opponent_uid_raw = data.get("opponent_uid")
 	opponent_uid = opponent_uid_raw if opponent_uid_raw is String else ""
 
@@ -201,7 +201,7 @@ func team_kit(team: int) -> String:
 	return str(_roster.get("home_kit" if team == TEAM_HOME else "away_kit", ""))
 
 
-## {wins, draws, losses} before this match, {} when unknown (a bot).
+## {wins, draws, losses} before this match, {} when unknown.
 func record(team: int) -> Dictionary:
 	return home_record if team == TEAM_HOME else opponent_record
 

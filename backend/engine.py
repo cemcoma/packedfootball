@@ -36,6 +36,7 @@ if str(_PACKEDFOOTBALL_DIR) not in sys.path:
 #
 # ruff: noqa: E402 -- these cannot move above the sys.path lines above.
 import items as item_rules
+from game_config import RATED_MATCHES_FOR_AVERAGE
 from game_state import GameState, fields_to_player, player_to_fields
 from gameEngine import ENGINE_VERSION, game
 from formations import FORMATIONS, get_formation, is_similar_position
@@ -56,6 +57,7 @@ __all__ = [
     "PLAYER_CLASS_MAP",
     "POSITION_CATEGORIES",
     "PackManager",
+    "RATED_MATCHES_FOR_AVERAGE",
     "REPLAY_FORMAT_VERSION",
     "TIER_RANGES",
     "fields_to_player",

@@ -28,7 +28,6 @@ func _fill_side(panel: PanelContainer, team: int) -> void:
 	panel.get_node("Box/NameKitContainer/KitSwatch").set_design(KitDesign.parse(MatchSession.team_kit(team)))
 	panel.get_node("Box/NameKitContainer/NameLabel").text = MatchSession.team_name(team)
 
-	# A bot has no record.
 	var record := MatchSession.record(team)
 	panel.get_node("Box/InfoBox/RecordRow/Value").text = tr("%d W  %d D  %d L") % [0,0,0] if record.is_empty() else tr("%d W  %d D  %d L") % [
 		int(record.get("wins", 0)), int(record.get("draws", 0)), int(record.get("losses", 0))

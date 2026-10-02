@@ -15,8 +15,9 @@ embedded on the bot's own doc rather than written to players/, so bot cards
 never show up on the player leaderboards and picking one costs a single
 read.
 
-Bots never join a group, hold no tournament seat, and get no record of
-their own; they are only ever the other side of a match. Nothing here
+Bots never join a group and hold no tournament seat; they are only ever
+the other side of a match, though each match still adds to their record
+and their cards' stats (services.match.record_bot_result). Nothing here
 touches a pool that already exists -- a day already under way keeps the
 bots it started with, tomorrow's pool picks up the new list.
 
