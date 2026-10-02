@@ -40,7 +40,9 @@ extends Control
 ## the only one. They serve both formats; the period they cover is whatever
 ## `required` in the payload says.
 
-const MATCH_SCENE := "res://scenes/Match.tscn"
+const PRE_MATCH_SCENE := "res://scenes/PreMatch.tscn"
+const Shop := preload("res://scripts/screens/Shop.gd")
+const CURRENCY_AMOUNT := preload("res://scenes/components/CurrencyAmount.tscn")
 
 @onready var _tier_label: Label = %TierLabel
 @onready var _countdown_label: Label = %CountdownLabel
@@ -55,16 +57,19 @@ const MATCH_SCENE := "res://scenes/Match.tscn"
 @onready var _full_day_heading: Label = %FullDayHeading
 @onready var _full_day_bar: ProgressBar = %FullDayBar
 @onready var _full_day_label: Label = %FullDayLabel
-@onready var _full_day_reward: CurrencyAmount = %FullDayReward
+@onready var _full_day_rewards: HBoxContainer = %FullDayRewards
 @onready var _full_day_claim_button: Button = %FullDayClaimButton
 
 @onready var _join_button: Button = %JoinButton
+@onready var _energy_button: Button = %EnergyButton 
 @onready var _play_button: Button = %PlayButton
 @onready var _back_button: Button = %BackButton
 @onready var _busy_popup: Control = %BusyPopup
 
 @onready var _banner: Control = %ResultBanner
 @onready var _banner_label: Label = %BannerLabel
+@onready var _banner_claim_box: Control = %BannerClaimBox
+@onready var _banner_claim_rewards: HBoxContainer = %BannerClaimRewards
 @onready var _banner_claim_button: Button = %BannerClaimButton
 @onready var _banner_button: Button = %BannerButton
 
@@ -81,6 +86,7 @@ func _ready() -> void:
 	_join_button.pressed.connect(_on_join_pressed)
 	_play_button.pressed.connect(_on_play_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
+	_energy_button.pressed.connect(_on_energy_pressed)
 	_banner_button.pressed.connect(func() -> void: _banner.visible = false)
 	_full_day_claim_button.pressed.connect(_on_claim_full_day_pressed.bind({}))
 	_banner_claim_button.pressed.connect(_on_banner_claim_pressed)
@@ -229,36 +235,41 @@ func _refresh_full_day() -> void:
 	var required := _int(full_day, "required", 0)
 	var claimable: bool = bool(full_day.get("claimable", false))
 	var claimed: bool = bool(full_day.get("claimed", false))
-	var reward = full_day.get("reward")
-	var reward_dict: Dictionary = reward if reward is Dictionary else {}
 
 	_full_day_heading.text = tr("Play all %d matches") % required
 	_full_day_bar.max_value = required
 	_full_day_bar.value = mini(played, required)
 	_full_day_label.text = "%d / %d" % [mini(played, required), required]
 
-	# One currency is all the reward table carries today; show the first
-	# non-zero one, which is how a two-currency reward would degrade too.
-	var currency := "credits"
-	var amount := 0
-	for key in ["credits", "bucks", "medals"]:
-		if _int(reward_dict, key, 0) > 0:
-			currency = key
-			amount = _int(reward_dict, key, 0)
-			break
-	_full_day_reward.set_amount(currency, amount)
-	_full_day_reward.set_sizes(16, 12)
+	_fill_reward_row(_full_day_rewards, full_day.get("reward"), 16, 12)
 
 	if claimed:
 		_full_day_claim_button.text = tr("Claimed")
 		_full_day_claim_button.disabled = true
 	elif claimable:
-		CurrencyDisplay.set_button_price(_full_day_claim_button, tr("Claim"), amount, currency)
+		_full_day_claim_button.text = tr("Claim")
 		_full_day_claim_button.disabled = _busy
 	else:
 		_full_day_claim_button.text = tr("%d more to go") % (required - played)
-		_full_day_claim_button.icon = null
 		_full_day_claim_button.disabled = true
+
+
+## Every currency in `reward` as amount-plus-logo, in the standings' order.
+## A Button holds one icon, so a multi-currency payout sits beside its Claim.
+func _fill_reward_row(row: HBoxContainer, reward, icon_size: int, font_size: int) -> void:
+	for child in row.get_children():
+		row.remove_child(child)
+		child.queue_free()
+	if not (reward is Dictionary):
+		return
+	for currency in StandingsTable.REWARD_CURRENCY_ORDER:
+		var amount := _int(reward, currency, 0)
+		if amount <= 0:
+			continue
+		var view: CurrencyAmount = CURRENCY_AMOUNT.instantiate()
+		row.add_child(view)
+		view.set_amount(currency, amount)
+		view.set_sizes(icon_size, font_size)
 
 
 func _refresh_buttons() -> void:
@@ -273,6 +284,7 @@ func _refresh_buttons() -> void:
 
 	_join_button.visible = not joined
 	_play_button.visible = joined
+	_energy_button.visible = joined and not out_of_matches and out_of_energy
 
 	if not joined:
 		_join_button.disabled = _busy or closed
@@ -289,9 +301,10 @@ func _refresh_buttons() -> void:
 		_set_status(tr(TournamentSession.text("all_played")), false)
 	elif out_of_energy:
 		_play_button.text = tr("Out of energy")
-		_set_status(tr("No energy left -- it refills over time, or top up in the Shop."), true)
+		_set_status(tr("No energy left."), true)
 	else:
 		_play_button.text = tr("Play match %d of %d") % [played + 1, total]
+		_energy_button.visible = false
 
 
 func _show_pending_results(pending) -> void:
@@ -333,17 +346,14 @@ func _show_pending_results(pending) -> void:
 	_banner_claim = {}
 	var full_period = _full_period_of(pending)
 	var claimable: bool = full_period is Dictionary and bool(full_period.get("claimable", false))
-	_banner_claim_button.visible = claimable
+	_banner_claim_box.visible = claimable
 	if claimable:
 		_banner_claim = {
 			"period_id": str(pending.get("period_id", pending.get("day_id", ""))),
 			"group_id": str(pending.get("group_id", "")),
 		}
-		var reward = full_period.get("reward")
-		var amount := _int(reward if reward is Dictionary else {}, "credits", 0)
-		CurrencyDisplay.set_button_price(
-			_banner_claim_button, tr(TournamentSession.text("claim_last")), amount, "credits"
-		)
+		_fill_reward_row(_banner_claim_rewards, full_period.get("reward"), 18, 14)
+		_banner_claim_button.text = tr(TournamentSession.text("claim_last"))
 		_banner_claim_button.disabled = false
 	_banner.visible = true
 
@@ -371,6 +381,7 @@ func _set_status(text: String, warn: bool) -> void:
 func _apply_theme_colors() -> void:
 	MenuTile.style_button(_join_button, ThemeManager.color("accent"))
 	MenuTile.style_button(_play_button, ThemeManager.color("accent"))
+	MenuTile.style_button(_energy_button, ThemeManager.color("accent"))
 	MenuTile.style_button(_back_button, ThemeManager.color("surface_border"))
 	var heading := ThemeManager.color("heading")
 
@@ -491,7 +502,7 @@ func _on_play_pressed() -> void:
 
 	_busy_popup.set_status(tr("Kick off!"))
 	await get_tree().create_timer(0.3).timeout
-	get_tree().change_scene_to_file(MATCH_SCENE)
+	get_tree().change_scene_to_file(PRE_MATCH_SCENE)
 
 
 ## POST /claim for the play-everything reward. `target` is {} for the
@@ -548,7 +559,7 @@ func _on_claim_full_day_pressed(target: Dictionary) -> void:
 			full_period["claimed"] = true
 		_refresh_full_day()
 	else:
-		_banner_claim_button.visible = false
+		_banner_claim_box.visible = false
 		_banner_claim = {}
 
 
@@ -560,3 +571,7 @@ func _on_banner_claim_pressed() -> void:
 
 func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file(TournamentSession.HUB_SCENE)
+
+
+func _on_energy_pressed() -> void:
+	Shop.open_energy(get_tree(), TournamentSession.SCREEN_SCENE)

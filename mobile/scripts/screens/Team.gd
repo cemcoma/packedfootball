@@ -22,6 +22,11 @@ extends Control
 ## save-status message.
 
 const PLAYER_CARD_SCENE := preload("res://scenes/components/PlayerCardView.tscn")
+const ITEM_VIEW_SCENE := preload("res://scenes/components/ItemView.tscn")
+
+## Smaller than ItemView.COMPACT_SIZE so two rows fit above the buttons. Three
+## across is 146px: the card column's min width in Team.tscn.
+const ITEM_TILE_SIZE := Vector2(46, 60)
 
 ## How many name/value pairs sit side by side in the stats grid. The list is
 ## long enough to run out of vertical room well before horizontal.
@@ -83,15 +88,16 @@ var status_text: String = ""
 @onready var _out_of_position_label: Label = %OutOfPositionLabel
 @onready var _stats_card_view: PlayerCardView = %StatsCard
 @onready var _stats_extra_country: Label = %StatsExtraCountry
+@onready var _stats_items_grid: GridContainer = %StatsItemsGrid
 @onready var _stats_extra_gam: Label = %StatsExtraGam #goals assists matches
 @onready var _stats_attr_grid: GridContainer = %StatsAttrGrid
 @onready var _stats_page_label: Label = %StatsPageLabel
 @onready var _stats_page_button: Button = %StatsPageButton
 @onready var _replace_button: Button = %ReplaceButton
+@onready var _equip_button: Button = %EquipButton
 @onready var _clear_button: Button = %ClearButton
 @onready var _close_button: Button = %CloseButton
 @onready var _status_label: Label = %StatusLabel
-@onready var _kit_button: Button = %KitButton
 @onready var _save_button: Button = %SaveButton
 @onready var _back_button: Button = %BackButton
 @onready var _discard_overlay: Control = %DiscardConfirmOverlay
@@ -115,7 +121,7 @@ func _ready() -> void:
 	_clear_button.pressed.connect(_on_clear_pressed)
 	_close_button.pressed.connect(_on_close_stats_pressed)
 	_stats_page_button.pressed.connect(_on_stats_page_pressed)
-	_kit_button.pressed.connect(_on_kit_pressed)
+	_equip_button.pressed.connect(_on_equip_pressed)
 	_save_button.pressed.connect(_on_save_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 	_discard_save_button.pressed.connect(_on_discard_save_pressed)
@@ -167,11 +173,11 @@ func _style_controls() -> void:
 	var muted := ThemeManager.color("surface_border")
 	MenuTile.style_button(_formation_option, accent)
 	MenuTile.style_popup(_formation_option, accent)
-	for button in [_auto_button, _replace_button, _save_button]:
+	for button in [_auto_button, _replace_button, _equip_button, _save_button]:
 		MenuTile.style_button(button, accent)
 	for button in [
 		_cancel_button, _clear_button, _stats_page_button, _close_button,
-		_back_button, _kit_button, _discard_cancel_button,
+		_back_button, _discard_cancel_button,
 	]:
 		MenuTile.style_button(button, muted)
 	MenuTile.style_button(_discard_save_button, ThemeManager.color("positive"))
@@ -325,6 +331,10 @@ func _populate_stats_panel() -> void:
 	_stats_extra_country.text = "%s\n%s" % [
 		card.hometown, card.country
 	]
+	_populate_items(card)
+	# Items buff attributes, so they share that page; the rating belongs to statistics.
+	_stats_items_grid.visible = stats_page == StatsPage.ATTRIBUTES
+	_stats_extra_gam.visible = stats_page == StatsPage.STATISTICS
 
 	if stats_page == StatsPage.STATISTICS:
 		_populate_statistics_page(card)
@@ -333,22 +343,41 @@ func _populate_stats_panel() -> void:
 	_update_stats_page_button()
 
 
+## Every socket, filled or not, so free slots read at a glance. Display only:
+## the Equip button is the way to change them.
+func _populate_items(card: PlayerCard) -> void:
+	for child in _stats_items_grid.get_children():
+		_stats_items_grid.remove_child(child)
+		child.queue_free()
+	for i in range(card.item_capacity()):
+		var view: ItemView = ITEM_VIEW_SCENE.instantiate()
+		_stats_items_grid.add_child(view)
+		view.set_compact(true, ITEM_TILE_SIZE)
+		view.set_tappable(false)
+		if i < card.items.size():
+			view.set_item(card.items[i])
+		else:
+			view.set_empty()
+
+
+## Values include item buffs (base 80 + 11 shows 91); a buffed value is tinted.
 func _populate_attributes_page(card: PlayerCard) -> void:
 	_stats_page_label.text = tr("Attributes")
 	var entries: Array = []
 	var primary := card.primary_stats()
+	var effective := card.effective_attributes()
 	for row in ATTR_ROWS:
 		var key: String = row[1]
-		var value: int = card.attributes.get(key, 0)
+		var value: int = effective.get(key, 0)
 		# Height is centimetres, not a 0-100 skill (see player.py's
 		# PHYSICAL_FIELDS -- it's excluded from the overall for that reason).
 		entries.append([
 			tr(row[0]),
 			"%d cm" % value if key == "height" else str(value),
 			key in primary,
+			value != int(card.attributes.get(key, 0)),
 		])
 	_fill_stat_grid(entries)
-	_stats_extra_gam.text = ""
 
 
 func _populate_statistics_page(card: PlayerCard) -> void:
@@ -390,15 +419,20 @@ func _fill_stat_grid(entries: Array) -> void:
 			var i := c * rows + r
 			if i < entries.size():
 				var entry: Array = entries[i]
-				_add_stat_row(entry[0], entry[1], entry.size() > 2 and bool(entry[2]))
+				_add_stat_row(
+					entry[0], entry[1],
+					entry.size() > 2 and bool(entry[2]), entry.size() > 3 and bool(entry[3])
+				)
 			else:
 				# Keeps the grid rectangular so the filled columns stay aligned.
 				_stats_attr_grid.add_child(Control.new())
 
 
 ## `highlight` marks a primary stat, in the accent -- same rule and same
-## colour as PlayerDetail._add_row.
-func _add_stat_row(label_text: String, value_text: String, highlight: bool = false) -> void:
+## colour as PlayerDetail._add_row. `buffed` tints the value: items raised it.
+func _add_stat_row(
+	label_text: String, value_text: String, highlight: bool = false, buffed: bool = false
+) -> void:
 	var accent := ThemeManager.color("accent")
 
 	# Create a container for the pair that expands to fill its half of the grid
@@ -416,7 +450,9 @@ func _add_stat_row(label_text: String, value_text: String, highlight: bool = fal
 	var value_label := Label.new()
 	value_label.text = value_text
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	if highlight:
+	if buffed:
+		value_label.add_theme_color_override("font_color", ThemeManager.color("positive"))
+	elif highlight:
 		value_label.add_theme_color_override("font_color", accent)
 	pair_box.add_child(value_label)
 
@@ -569,6 +605,15 @@ func _on_card_view_pressed(player_id: String) -> void:
 	_refresh_all()
 
 
+## A popup rather than a trip to PlayerDetail, so the slot stays selected
+## underneath.
+func _on_equip_pressed() -> void:
+	if selected_slot == -1 or GameProfile.slot_assignment[selected_slot] == "":
+		return
+	var card: PlayerCard = GameProfile.all_cards[GameProfile.slot_assignment[selected_slot]]
+	EquipPopup.open(self, card).equipped.connect(func(_id: String) -> void: _refresh_all())
+
+
 func _lineup_is_complete() -> bool:
 	for player_id in GameProfile.slot_assignment:
 		if player_id == "":
@@ -588,14 +633,6 @@ func _on_save_pressed() -> void:
 	var ok: bool = await GameProfile.save_team()
 	status_text = tr("Saved!") if ok else tr("Save failed -- try again.")
 	_refresh_all()
-
-
-## Deliberately does NOT discard unsaved lineup changes the way Back does:
-## formation/slot_assignment live on the GameProfile autoload, not on this
-## scene, so they survive the trip to CustomizeKit and back and the manager
-## picks up exactly where they left off.
-func _on_kit_pressed() -> void:
-	get_tree().change_scene_to_file("res://scenes/CustomizeKit.tscn")
 
 
 ## Back with unsaved lineup changes asks first -- the "Unsaved changes" line

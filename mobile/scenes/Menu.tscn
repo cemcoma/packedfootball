@@ -130,7 +130,7 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 title_text = "Team"
-subtitle_text = "Squad, kit and inventory"
+subtitle_text = "Squad, tactics, kit and inventory"
 accent_key = "heading"
 
 [node name="LeaderboardTile" parent="MarginContainer/RootRow/MenuColumn/TileGrid" unique_id=731302606 instance=ExtResource("menutile")]

@@ -31,7 +31,9 @@ const _DESCRIPTIONS := {
 
 static func sanitize(raw) -> Dictionary:
 	var clean: Dictionary = raw.duplicate() if raw is Dictionary else {}
-	if not (clean.get("style") in STYLE_IDS):
+	# Type first: `in` on a typed Array logs an engine error for a non-String.
+	var style = clean.get("style")
+	if not (style is String and style in STYLE_IDS):
 		clean["style"] = DEFAULT_STYLE
 	return clean
 

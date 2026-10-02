@@ -6,14 +6,13 @@ extends Control
 ##
 ##   - a leaderboard row (ManagerSession.uid set): the squad comes from
 ##     GET /manager/{uid};
-##   - "View Opponent" on Match.tscn's pre-match popup (uid ""): the away
-##     side is read straight out of MatchSession, which already holds the
-##     opponent's roster, name and record from the match response -- no
-##     request, and a bot opponent (which has no profile) works too.
+##   - "View Team" on PreMatch.tscn (uid ""): either side is read straight
+##     out of MatchSession, which already holds both rosters, names and
+##     records from the match response -- no request, and a bot opponent
+##     (which has no profile) works too.
 ##
-## Back goes to ManagerSession.return_scene. Match.tscn re-reads the same
-## MatchSession on the way back, so the pre-match popup is exactly where
-## it was left.
+## Back goes to ManagerSession.return_scene. PreMatch.tscn re-reads the same
+## MatchSession on the way back, so it is exactly where it was left.
 ##
 ## A read-only cut of Team.tscn, on purpose: same pitch, same card grid,
 ## same stats panel, minus everything that edits (formation buttons, Auto
@@ -92,7 +91,7 @@ func _ready() -> void:
 	_apply_theme_colors()
 
 	if ManagerSession.uid == "":
-		_load_match_opponent()
+		_load_match_team(ManagerSession.match_team)
 		_refresh_all()
 	else:
 		_title_label.text = tr("Loading...")
@@ -100,19 +99,18 @@ func _ready() -> void:
 		_refresh_all()
 
 
-## The away side of MatchSession's roster. A missing or malformed entry
-## leaves its slot empty rather than failing the whole screen -- PitchView
-## draws an empty marker with just the role.
-func _load_match_opponent() -> void:
-	var roster := MatchSession.roster()
-	_manager_name = str(roster.get("away_name", tr("Opponent")))
-	_record = MatchSession.opponent_record
-	_kit = str(roster.get("away_kit", ""))
+## One side of MatchSession's roster. A missing or malformed entry leaves its
+## slot empty rather than failing the whole screen -- PitchView draws an empty
+## marker with just the role.
+func _load_match_team(team: int) -> void:
+	_manager_name = MatchSession.team_name(team)
+	_record = MatchSession.record(team)
+	_kit = MatchSession.team_kit(team)
 	_league_name = ""
 	var fields_list: Array = []
-	for index in MatchSession.team_indices(MatchSession.TEAM_AWAY):
+	for index in MatchSession.team_indices(team):
 		fields_list.append(MatchSession.player_fields(index))
-	_set_squad(MatchSession.away_formation(), fields_list)
+	_set_squad(MatchSession.formation(team), fields_list)
 
 
 ## GET /manager/{uid}: the squad as that manager has it saved right now.
@@ -240,7 +238,7 @@ func _refresh_right_panel() -> void:
 		_populate_squad_grid()
 
 
-## Every opponent card, best first -- the whole side at a glance, since
+## Every card, best first -- the whole side at a glance, since
 ## unlike Team.tscn there's no bench to browse here.
 func _populate_squad_grid() -> void:
 	# Can run from inside a card view's own "pressed" signal (tap a card ->
@@ -350,8 +348,8 @@ func _on_close_stats_pressed() -> void:
 
 
 ## Back to wherever ManagerSession says: the leaderboard, or the pre-match
-## popup (nothing to save or discard -- this screen never touches
-## MatchSession, and Match.tscn rebuilds itself from it).
+## screen (nothing to save or discard -- this screen never touches
+## MatchSession, and PreMatch.tscn rebuilds itself from it).
 func _on_back_pressed() -> void:
 	var destination := ManagerSession.return_scene
 	ManagerSession.clear()

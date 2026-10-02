@@ -180,6 +180,12 @@ func add_side_control(control: Control) -> void:
 	$Body/Row.add_child(control)
 
 
+## A control under the subtitle, for a tall tile with room to show something --
+## TeamHub's formation sketch on the Squad tile.
+func add_body_control(control: Control) -> void:
+	$Body/Row/Text.add_child(control)
+
+
 ## For a subtitle that carries a state rather than just context -- TeamHub's
 ## inventory counter goes amber once the club is full, which is the point it
 ## stops being a fact and starts being a blocker.

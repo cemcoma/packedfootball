@@ -11,6 +11,7 @@ extends CanvasLayer
 signal reserve_changed
 
 const BAR_SCENE := preload("res://scenes/components/CurrencyBar.tscn")
+const Shop := preload("res://scripts/screens/Shop.gd")
 
 ## Above the screens, below AdManager's grant blocker (layer 128) -- that one
 ## has to stay the thing nothing draws over.
@@ -18,7 +19,11 @@ const LAYER := 64
 
 ## Screens with no balances to show: no profile loaded yet, or a live match --
 ## a shootout counts, it is a match played a kick at a time.
-const HIDDEN_SCENES := ["Splash", "Auth", "Match", "Shootout"]
+const HIDDEN_SCENES := ["Splash", "Auth", "PreMatch", "Match", "Shootout"]
+
+## One-shot screens a tap on the energy bar won't leave: coming back to them
+## replays what they were showing.
+const NO_SHOP_SCENES := ["PackReveal", "MatchResult"]
 
 ## What the strip costs the screen below it. A measured height would be read
 ## before the bar has been laid out, and a header that jumps once the real
@@ -54,6 +59,7 @@ func _ready() -> void:
 	_bar.anchor_top = 0.0
 	_bar.anchor_bottom = 0.0
 	_bar.minimum_size_changed.connect(_place)
+	_bar.energy_pressed.connect(_on_energy_pressed)
 
 	get_tree().get_root().size_changed.connect(_place)
 	_refresh_visibility()
@@ -94,6 +100,18 @@ func _refresh_visibility() -> void:
 
 func _fetch_energy() -> void:
 	await GameProfile.refresh_energy()
+
+
+## The Shop's Energy tab, with Back returning to this screen.
+func _on_energy_pressed() -> void:
+	var scene := get_tree().current_scene
+	# Leaving mid-request would drop the response (a started match, a purchase).
+	if scene == null or Backend.is_busy() or String(scene.name) in NO_SHOP_SCENES:
+		return
+	if scene is Shop:
+		(scene as Shop).show_energy()
+	else:
+		Shop.open_energy(get_tree(), scene.scene_file_path)
 
 
 func _place() -> void:

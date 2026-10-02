@@ -15,8 +15,9 @@ embedded on the bot's own doc rather than written to players/, so bot cards
 never show up on the player leaderboards and picking one costs a single
 read.
 
-Bots never join a group, hold no tournament seat, and get no record of
-their own; they are only ever the other side of a match. Nothing here
+Bots never join a group and hold no tournament seat; they are only ever
+the other side of a match, though each match still adds to their record
+and their cards' stats (services.match.record_bot_result). Nothing here
 touches a pool that already exists -- a day already under way keeps the
 bots it started with, tomorrow's pool picks up the new list.
 
@@ -26,7 +27,8 @@ display-name rules is skipped, and when the file runs dry the run stops
 short and says so rather than inventing names.
 
 Idempotent per tier: tops each tier up to --per-tier bots and leaves the
-existing ones alone (their ids stay in the pool list).
+existing ones alone (their ids stay in the pool list), except that any bot
+without a valid play style is given a random one (backfill_tactics).
 
 Usage:
     python3 backend/scripts/seed_bots.py [--per-tier 30] [--dry-run]
@@ -128,6 +130,26 @@ def make_bot(rng: random.Random, rates: dict, display_name: str, extra: dict) ->
     }
 
 
+def backfill_tactics(db, rng: random.Random, dry_run: bool) -> int:
+    """Gives every stored bot without a valid play style a random one (bots
+    seeded before tactics existed play Balanced). A valid style is never rerolled.
+    Returns how many bots needed one."""
+    missing = []
+    for snap in db.collection("bots").stream():
+        raw = (snap.to_dict() or {}).get("tactics")
+        if not (isinstance(raw, dict) and raw.get("style") in TACTICS):
+            missing.append(snap.reference)
+    print(f"\nTactics: {len(missing)} bot(s) without a play style")
+    if dry_run:
+        return len(missing)
+    for start in range(0, len(missing), 500):  # Firestore's batch ceiling
+        batch = db.batch()
+        for ref in missing[start:start + 500]:
+            batch.set(ref, {"tactics": {"style": rng.choice(list(TACTICS))}}, merge=True)
+        batch.commit()
+    return len(missing)
+
+
 def seed_shootout_grid(db, rng: random.Random, names: list[str], dry_run: bool) -> None:
     """The daily shootout's opponents: one named bot per (day, prestige) cell.
 
@@ -218,6 +240,7 @@ def main() -> int:
         batch.commit()
 
     seed_shootout_grid(db, rng, names, args.dry_run)
+    backfill_tactics(db, rng, args.dry_run)
     return 0
 
 

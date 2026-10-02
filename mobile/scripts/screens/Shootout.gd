@@ -761,7 +761,7 @@ func _draw_figure(
 		PitchDraw.to_screen(pitch_pos, cam),
 		height_px,
 		appearance,
-		_kit_for(team),
+		_keeper_kit_for(team) if is_keeper else _kit_for(team),
 		facing,
 		pose,
 		PlayerFigure.DETAIL_FULL if height_px >= 26.0 else PlayerFigure.DETAIL_LOW,
@@ -780,6 +780,11 @@ func _kit_for(team: int) -> KitDesign:
 		return KitDesign.parse(_kits[team])
 	var fallback := ThemeManager.color("accent") if team == 0 else KEEPER_COLOR_FALLBACK
 	return KitDesign.create(KitDesign.PATTERN_SOLID, fallback.to_html(false), Color.WHITE.to_html(false))
+
+
+## The keeper's own shirt, changed if it would blend into the taker's.
+func _keeper_kit_for(team: int) -> KitDesign:
+	return _kit_for(team).keeper().avoiding([_kit_for(1 - team).primary_color()])
 
 
 ## Which side is taking this kick, and which is keeping. Before the first

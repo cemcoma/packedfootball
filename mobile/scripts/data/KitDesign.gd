@@ -3,12 +3,16 @@ extends RefCounted
 
 ### SUPER IMPORTANT ###
 ##
-## A manager's shirt: a pattern plus two colors.
+## A manager's shirt: a pattern plus two colors, and the keeper's own.
 ##
 ## Stored as ONE STRING on users/{uid}.kit, deliberately, so the shape can
 ## grow without a schema migration or a Firestore rules change every time:
 ##
 ##     v1;pattern=stripes;primary=1e6fe0;secondary=ffffff
+##     v1;pattern=solid;primary=c8102e;secondary=ffffff;gk_pattern=solid;gk_primary=8ed43f;gk_secondary=121216
+##
+## The gk_ keys are optional: without them keeper() derives a keeper shirt
+## that contrasts with the outfield one (see KEEPER_COLORS).
 ##
 ## Version first, then `key=value` pairs in any order. The rules for keeping
 ## this extendable, which parse() below actually enforces:
@@ -34,14 +38,40 @@ const VERSION := "v1"
 const PATTERN_SOLID := "solid"
 const PATTERN_STRIPES := "stripes"
 const PATTERN_QUARTERS := "quarters"
+const PATTERN_HOOPS := "hoops"
+const PATTERN_HALVES := "halves"
+const PATTERN_SASH := "sash"
+const PATTERN_DIAGONAL := "diagonal"
+const PATTERN_BAND := "band"
+const PATTERN_PINSTRIPES := "pinstripes"
+const PATTERN_CHECKERS := "checkers"
+const PATTERN_CHEVRON := "chevron"
+const PATTERN_SLEEVES := "sleeves"
+const PATTERN_SHOULDERS := "shoulders"
+const PATTERN_CHEST_BAND := "chestband"
 
-## Add to this and PATTERN_NAMES to ship a new pattern; the Customize Kit
-## screen builds its buttons from these, so nothing else needs touching.
-const PATTERNS := [PATTERN_SOLID, PATTERN_STRIPES,PATTERN_QUARTERS]
+## Add to this and PATTERN_NAMES to ship a new pattern, and paint it in
+## PlayerFigure.paint_shirt; the Customize Kit screen builds from these.
+const PATTERNS := [
+	PATTERN_SOLID, PATTERN_STRIPES, PATTERN_QUARTERS, PATTERN_HOOPS, PATTERN_HALVES,
+	PATTERN_SASH, PATTERN_DIAGONAL, PATTERN_BAND, PATTERN_PINSTRIPES, PATTERN_CHECKERS,
+	PATTERN_CHEVRON, PATTERN_SLEEVES, PATTERN_SHOULDERS, PATTERN_CHEST_BAND,
+]
 const PATTERN_NAMES := {
 	PATTERN_SOLID: "Solid",
 	PATTERN_STRIPES: "Stripes",
-	PATTERN_QUARTERS : "Quarters"
+	PATTERN_QUARTERS: "Quarters",
+	PATTERN_HOOPS: "Hoops",
+	PATTERN_HALVES: "Halves",
+	PATTERN_SASH: "Sash",
+	PATTERN_DIAGONAL: "Diagonal",
+	PATTERN_BAND: "Centre Band",
+	PATTERN_PINSTRIPES: "Pinstripes",
+	PATTERN_CHECKERS: "Checkers",
+	PATTERN_CHEVRON: "Chevron",
+	PATTERN_SLEEVES: "Sleeves",
+	PATTERN_SHOULDERS: "Shoulders",
+	PATTERN_CHEST_BAND: "Chest Band",
 }
 
 const DEFAULT_PATTERN := PATTERN_SOLID
@@ -72,9 +102,20 @@ const AVAILABLE_COLORS := [
 	{"name": "Black", "hex": "121216"},
 ]
 
+## Keeper colours, best first: what keeper() picks from when none is saved,
+## and what a clashing keeper changes into (see avoiding()). All palette hexes.
+const KEEPER_COLORS := ["8ed43f", "f2c227", "f08122", "d13d8a", "5fc2f0", "121216", "ffffff"]
+
+## How far apart two shirts must be to tell apart on the pitch.
+const CLASH_DISTANCE := 0.42
+
 var pattern: String = DEFAULT_PATTERN
 var primary: String = DEFAULT_PRIMARY      # 6-digit hex, no leading '#'
 var secondary: String = DEFAULT_SECONDARY
+## The keeper's shirt. gk_primary "" means none saved -- keeper() derives one.
+var gk_pattern: String = DEFAULT_PATTERN
+var gk_primary: String = ""
+var gk_secondary: String = ""
 
 
 static func create(new_pattern: String, new_primary: String, new_secondary: String) -> KitDesign:
@@ -108,13 +149,98 @@ static func parse(raw) -> KitDesign:
 				design.primary = _clean_hex(value, design.primary)
 			"secondary":
 				design.secondary = _clean_hex(value, design.secondary)
+			"gk_pattern":
+				var lowered := value.to_lower()
+				if lowered in PATTERNS:
+					design.gk_pattern = lowered
+			"gk_primary":
+				design.gk_primary = _clean_hex(value, design.gk_primary)
+			"gk_secondary":
+				design.gk_secondary = _clean_hex(value, design.gk_secondary)
 			# Anything else is a field from a newer client. Ignored on
 			# purpose -- see the class docstring.
 	return design
 
 
 func serialize() -> String:
-	return "%s;pattern=%s;primary=%s;secondary=%s" % [VERSION, pattern, primary, secondary]
+	var out := "%s;pattern=%s;primary=%s;secondary=%s" % [VERSION, pattern, primary, secondary]
+	if has_keeper():
+		var keeper_kit := keeper()
+		out += ";gk_pattern=%s;gk_primary=%s;gk_secondary=%s" % [
+			keeper_kit.pattern, keeper_kit.primary, keeper_kit.secondary
+		]
+	return out
+
+
+## Whether a keeper shirt was chosen, rather than derived by keeper().
+func has_keeper() -> bool:
+	return gk_primary != ""
+
+
+## The keeper's shirt as a plain outfield-shaped design: the saved one, or
+## the first KEEPER_COLORS entry that stands apart from this shirt.
+func keeper() -> KitDesign:
+	if has_keeper():
+		var trim := gk_secondary if gk_secondary != "" else _keeper_trim(gk_primary)
+		return KitDesign.create(gk_pattern, gk_primary, trim)
+	var chosen: String = KEEPER_COLORS[0]
+	for hex in KEEPER_COLORS:
+		var candidate := color_from_hex(hex)
+		if not clashes(candidate, primary_color()) and not clashes(candidate, secondary_color()):
+			chosen = hex
+			break
+	return KitDesign.create(PATTERN_SOLID, chosen, _keeper_trim(chosen))
+
+
+## The shirt a player in `position` wears: the keeper's for a GK.
+func for_position(position: String) -> KitDesign:
+	return keeper() if position == "GK" else self
+
+
+## A copy with the outfield shirt replaced; the keeper's is kept as it was,
+## so an unsaved (derived) one keeps following the outfield colours.
+func with_outfield(new_pattern: String, new_primary: String, new_secondary: String) -> KitDesign:
+	var out := KitDesign.create(new_pattern, new_primary, new_secondary)
+	out.gk_pattern = gk_pattern
+	out.gk_primary = gk_primary
+	out.gk_secondary = gk_secondary
+	return out
+
+
+## A copy with `keeper_kit` saved as the keeper's shirt.
+func with_keeper(keeper_kit: KitDesign) -> KitDesign:
+	var out := copy()
+	out.gk_pattern = keeper_kit.pattern
+	out.gk_primary = keeper_kit.primary
+	out.gk_secondary = keeper_kit.secondary
+	return out
+
+
+## This shirt, or a change of it into the first KEEPER_COLORS entry that
+## clashes with none of `avoid` (Colors) -- same pattern and trim.
+func avoiding(avoid: Array) -> KitDesign:
+	if not _clashes_any(primary_color(), avoid):
+		return self
+	for hex in KEEPER_COLORS:
+		if not _clashes_any(color_from_hex(hex), avoid):
+			return KitDesign.create(pattern, hex, secondary)
+	return self
+
+
+static func clashes(a: Color, b: Color) -> bool:
+	return Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length() < CLASH_DISTANCE
+
+
+static func _clashes_any(color: Color, others: Array) -> bool:
+	for other in others:
+		if clashes(color, other):
+			return true
+	return false
+
+
+## Black trim on a keeper shirt, white on a black one.
+static func _keeper_trim(shirt_hex: String) -> String:
+	return "ffffff" if shirt_hex == "121216" else "121216"
 
 
 func primary_color() -> Color:
@@ -133,13 +259,17 @@ static func color_from_hex(hex: String) -> Color:
 
 
 func copy() -> KitDesign:
-	return KitDesign.create(pattern, primary, secondary)
+	return with_outfield(pattern, primary, secondary)
 
 
 func matches(other: KitDesign) -> bool:
 	if other == null:
 		return false
-	return pattern == other.pattern and primary == other.primary and secondary == other.secondary
+	return (
+		pattern == other.pattern and primary == other.primary and secondary == other.secondary
+		and gk_pattern == other.gk_pattern and gk_primary == other.gk_primary
+		and gk_secondary == other.gk_secondary
+	)
 
 
 func pattern_name() -> String:

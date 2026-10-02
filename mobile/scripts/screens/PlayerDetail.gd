@@ -66,6 +66,7 @@ const KEEPER_STAT_ROWS := [
 @onready var _items_row: GridContainer = %ItemsRow
 @onready var _status_label: Label = %StatusLabel
 @onready var _socket_button: Button = %SocketButton
+@onready var _equip_button: Button = %EquipButton
 @onready var _customize_button: Button = %CustomizeButton
 @onready var _release_button: Button = %ReleaseButton
 @onready var _back_button: Button = %BackButton
@@ -95,6 +96,7 @@ var _replacing_item_id: String = ""
 
 func _ready() -> void:
 	_customize_button.pressed.connect(_on_customize_pressed)
+	_equip_button.pressed.connect(_on_equip_pressed)
 	_socket_button.pressed.connect(_on_socket_pressed)
 	_release_button.pressed.connect(_on_release_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
@@ -270,6 +272,9 @@ func _is_starting() -> bool:
 ## thing you can't do is worse than showing nothing.
 func _refresh_buttons() -> void:
 	_customize_button.text = tr("Customize")
+	# Mid-socket the Socket button is the equip path; two would be confusing.
+	_equip_button.visible = not ItemSession.is_pending()
+	_equip_button.disabled = _releasing
 	_refresh_socket_button()
 	if _is_starting():
 		_release_button.disabled = true
@@ -346,6 +351,10 @@ func _on_customize_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/CustomizePlayer.tscn")
 
 
+func _on_equip_pressed() -> void:
+	EquipPopup.open(self, _card).equipped.connect(func(_id: String) -> void: _refresh())
+
+
 ## Socketing is irreversible, so it goes through the SAME confirm overlay the
 ## only other irreversible action does, and the footnote spells out what is
 ## destroyed rather than leaving it to be inferred.
@@ -355,6 +364,8 @@ func _on_socket_pressed() -> void:
 		return
 
 	_confirm_action = "equip"
+	_confirm_button.text = tr("Equip")
+	_cancel_button.text = tr("Cancel")
 	_confirm_label.text = tr("Socket %s into %s?\n\nThis cannot be undone.") % [
 		ItemData.label(pending), _card.full_name()
 	]
@@ -378,6 +389,8 @@ func _on_release_pressed() -> void:
 	if _releasing or _is_starting():
 		return
 	_confirm_action = "release"
+	_confirm_button.text = tr("Release")
+	_cancel_button.text = tr("Keep")
 	_confirm_footnote.text = tr("This card is gone for good.")
 	_confirm_label.text = tr("Release %s?\n\n%s %s, overall %d.\n\nYou get") % [
 		_card.full_name(), PlayerCard.tier_label(_card.tier), _card.position, _card.overall()
@@ -514,6 +527,7 @@ func _style_chrome() -> void:
 		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("warning"), 3, true)
 	)
 	MenuTile.style_button(_customize_button, ThemeManager.color("accent"))
+	MenuTile.style_button(_equip_button, ThemeManager.color("accent"))
 	MenuTile.style_button(_release_button, ThemeManager.color("warning"))
 	MenuTile.style_button(_confirm_button, ThemeManager.color("warning"))
 	MenuTile.style_button(_back_button, muted)

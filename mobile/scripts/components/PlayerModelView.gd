@@ -33,6 +33,8 @@ var _kit: KitDesign = null
 # Width/height multipliers from this card's own height and power -- see
 # PlayerFigure.build_from. Vector2.ONE until a card is set.
 var _build: Vector2 = Vector2.ONE
+# A GK card wears the keeper's shirt and gloves.
+var _position: String = ""
 
 ## How much of the frame a celebrating figure gets -- enough headroom for
 ## the tallest hop (Jump's bounce) and the widest arms (the aeroplane).
@@ -42,6 +44,7 @@ const CELEBRATE_FIT := 0.8
 func set_card(card: PlayerCard) -> void:
 	# Build before appearance: set_appearance is what triggers the redraw.
 	_build = PlayerFigure.build_from(card.attributes)
+	_position = card.position
 	if card.appearance.is_empty():
 		set_appearance(PlayerAppearance.mock_from_id(card.player_id))
 	else:
@@ -71,8 +74,9 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
-## Overrides the shirt. Only needed where the card being shown isn't the
-## signed-in manager's (an opponent's squad, say) -- otherwise leave it.
+## Overrides the team kit. Only needed where the card being shown isn't the
+## signed-in manager's (an opponent's squad, say) -- otherwise leave it. A GK
+## card still picks the keeper's shirt out of it.
 func set_kit(kit: KitDesign) -> void:
 	_kit = kit
 	queue_redraw()
@@ -92,6 +96,7 @@ func _draw() -> void:
 	var kit: KitDesign = _kit
 	if kit == null:
 		kit = GameProfile.kit_design()
+	kit = kit.for_position(_position)
 
 	# Fit to whichever dimension runs out first, and leave room for the
 	# build: a tall card would otherwise grow straight out of the frame.
@@ -115,6 +120,6 @@ func _draw() -> void:
 		0,
 		Color(0, 0, 0, 0),
 		null,
-		false,
+		_position == "GK",
 		_build
 	)

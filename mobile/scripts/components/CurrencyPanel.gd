@@ -111,6 +111,12 @@ func _on_energy_tab_pressed() -> void:
 	_show_only(_energy_scroll)
 	await _load_energy()
 
+
+## Selects the Energy tab from code -- Shop.open_energy() lands here.
+func show_energy_tab() -> void:
+	_energy_tab_button.button_pressed = true
+	await _on_energy_tab_pressed()
+
 func _on_ads_tab_pressed() -> void:
 	_show_only(_ads_scroll)
 	await _load_ads()

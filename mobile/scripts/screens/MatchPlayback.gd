@@ -23,7 +23,7 @@ extends Control
 ## halfway line used to draw in full instead of just the visible sliver).
 ##
 ## The rest of the screen (scoreboard, timer, pause/camera buttons, the
-## pre-match blackout and pause overlay) are real Control nodes, siblings
+## pause overlay) are real Control nodes, siblings
 ## of PitchCanvas under Match.tscn's root -- reached below via the usual
 ## %-prefixed unique-name lookups despite this script living on a non-root
 ## node (unique names are scoped to the whole edited scene, not to the
@@ -85,8 +85,6 @@ const BALL_NET_DROP_UNITS_PER_SECOND := 5.0
 # backend older than kits).
 const DEFAULT_TEAM_COLORS := [Color(0.2, 0.5, 1.0), Color(1.0, 0.35, 0.35)]
 
-# How different two shirts must be before the away side changes kit.
-const TEAM_COLOR_MIN_DISTANCE := 0.42
 # Last resorts when even the away kit's second colour clashes: between
 # near-white and near-black, nothing can clash with both.
 const CHANGE_KIT_FALLBACKS := [Color(0.95, 0.95, 0.96), Color(0.12, 0.12, 0.14)]
@@ -282,13 +280,14 @@ var _out_ball_vz: float = 0.0
 var _out_ball_until_tick: float = -1.0
 const HALFTIME_PAUSE_SECONDS := 3.0  # matches gameEngine.py's halftime_pause_timer=180 ticks @ 60/sec
 
-var has_started: bool = false
 var is_paused: bool = false
 var _halftime_tick: float = -1.0
 var _pending_result_transition: bool = false
 
 
 var _team_kits: Array = []
+## [home, away] keeper shirts, already changed if they clashed -- see _resolve_team_colors.
+var _keeper_kits: Array = []
 var _team_colors: Array = DEFAULT_TEAM_COLORS.duplicate()
 
 # Goal celebration, entirely a playback concern 
@@ -349,11 +348,6 @@ var _is_real_match: bool = false #for local testing demo replays
 @onready var _camera_toggle_button: Button = %CameraToggleButton
 @onready var _speed_button: Button = %SpeedButton
 
-@onready var _pre_match_overlay: Control = %PreMatchOverlay
-@onready var _pre_match_teams_label: Label = %PreMatchTeamsLabel
-@onready var _view_opponent_button: Button = %ViewOpponentButton
-@onready var _start_button: Button = %StartButton
-
 @onready var _pause_overlay: Control = %PauseOverlay
 @onready var _legend_grid: GridContainer = %LegendGrid
 @onready var _skip_halftime_button: Button = %SkipHalftimeButton
@@ -405,17 +399,10 @@ func _ready() -> void:
 	# has to rebuild them.
 	ThemeManager.theme_changed.connect(_style_scoreboard)
 	_build_legend()
-	_pre_match_teams_label.text = tr("%s vs %s") % [roster.get("home_name", tr("Home")), roster.get("away_name", tr("Away"))]
-	# Only a real match has a roster worth opening -- the bundled demo's
-	# sidecar carries names only (see _attributes_for), so there'd be
-	# nothing to show but a grid of blanks.
-	_view_opponent_button.visible = _is_real_match
 	_update_camera_button_label()
 	_update_speed_button_label()
 	_update_pitch_canvas_size()
 
-	_view_opponent_button.pressed.connect(_on_view_opponent_pressed)
-	_start_button.pressed.connect(_on_start_match_pressed)
 	_pause_button.pressed.connect(_on_pause_pressed)
 	_camera_toggle_button.pressed.connect(_on_camera_toggle_pressed)
 	_speed_button.pressed.connect(_on_speed_pressed)
@@ -425,8 +412,9 @@ func _ready() -> void:
 
 
 
+	# PreMatch.tscn was the wait for Start, so playback runs from the first frame.
 	set_process(true)
-	queue_redraw()  # draw the static kickoff frame (hidden behind the pre-match blackout for now)
+	queue_redraw()
 
 
 func _setup_scoreboard() -> void:
@@ -518,13 +506,26 @@ func _resolve_team_colors() -> void:
 			if not _too_similar(home_kit.primary_color(), candidate):
 				# Keep their pattern and second colour, swap the primary --
 				# a change kit is the same shirt in different colours.
-				away_kit = KitDesign.create(
+				away_kit = away_kit.with_outfield(
 					away_kit.pattern, candidate.to_html(false), away_kit.secondary
 				)
 				break
 
-	_team_kits = [home_kit, away_kit]
+	# Each keeper must stand apart from both sides and from the other keeper;
+	# one that wouldn't changes colour, home keeper first.
+	var shirts := [home_kit.primary_color(), away_kit.primary_color()]
+	var home_keeper := home_kit.keeper().avoiding(shirts)
+	var away_keeper := away_kit.keeper().avoiding(shirts + [home_keeper.primary_color()])
+	_keeper_kits = [home_keeper, away_keeper]
+	# Carried on the team kit too, so a keeper's goal card shows the same shirt.
+	_team_kits = [home_kit.with_keeper(home_keeper), away_kit.with_keeper(away_keeper)]
 	_team_colors = [home_kit.primary_color(), away_kit.primary_color()]
+
+
+func _player_kit(team: int, is_keeper: bool) -> KitDesign:
+	if _team_kits.size() != 2:
+		return null
+	return _keeper_kits[team] if is_keeper else _team_kits[team]
 
 
 ## A plain one-colour kit, for the paths that have a Color but no kit string.
@@ -533,7 +534,7 @@ func _kit_from_color(color: Color) -> KitDesign:
 
 
 func _too_similar(a: Color, b: Color) -> bool:
-	return Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length() < TEAM_COLOR_MIN_DISTANCE
+	return KitDesign.clashes(a, b)
 
 
 func _team_color(team_index: int) -> Color:
@@ -614,23 +615,6 @@ func _reset_state() -> void:
 	_update_score_label()
 
 
-## A look at the other side before kicking off. A plain scene change, not
-## an overlay: MatchSession keeps the match, so coming back re-runs
-## _ready() from the same data and lands on this same popup, with nothing
-## having started in between. Not offered once the match is under way.
-func _on_view_opponent_pressed() -> void:
-	# The Manager screen reads the away side out of MatchSession and comes
-	# back here; this scene rebuilds from the same session on return.
-	ManagerSession.open_match_opponent("res://scenes/Match.tscn")
-
-
-func _on_start_match_pressed() -> void:
-	_pre_match_overlay.visible = false
-	_reset_state()
-	playback_tick = 0.0
-	has_started = true
-
-
 func _on_pause_pressed() -> void:
 	is_paused = not is_paused
 	_pause_overlay.visible = is_paused
@@ -708,7 +692,6 @@ func _jump_to_event(action_type: int) -> void:
 			_pending_stoppage = {}
 			_out_ball_latched = false
 			_out_ball_until_tick = -1.0
-			has_started = true
 			return
 
 
@@ -720,7 +703,7 @@ func _process(delta: float) -> void:
 	if samples.is_empty():
 		return
 
-	if not has_started or is_paused:
+	if is_paused:
 		queue_redraw()
 		return
 
@@ -1478,6 +1461,10 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 	for i in order:
 		var feet: Vector2 = _pitch_to_screen(players[i], cam)
 		var team: int = 0 if i < 11 else 1
+		# Index 0 / 11 are the keepers by formation contract -- the same
+		# assumption gameEngine._award_goal makes when it charges a goal
+		# to the conceding keeper.
+		var is_keeper: bool = i == 0 or i == 11
 		var velocity: Vector2 = velocities[i]
 
 		player_facings[i] = PlayerFigure.facing_from_velocity(
@@ -1528,7 +1515,7 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 			feet,
 			height_px,
 			appearance,
-			_team_kits[team] if _team_kits.size() == 2 else null,
+			_player_kit(team, is_keeper),
 			int(player_facings[i]),
 			pose,
 			detail,
@@ -1536,10 +1523,7 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 			i % 11 + 1,  # squad number: no real one exists in the data model
 			flash,
 			font,
-			# Index 0 / 11 are the keepers by formation contract -- the same
-			# assumption gameEngine._award_goal makes when it charges a goal
-			# to the conceding keeper.
-			i == 0 or i == 11,
+			is_keeper,
 			# Taller/wider from this card's own height and power, so 22
 			# figures aren't 22 identical blocks.
 			PlayerFigure.build_from(_attributes_for(i)),

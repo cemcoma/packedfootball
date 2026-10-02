@@ -20,6 +20,7 @@ from engine import (
     GameState,
     Midfielder,
     PLAYER_CLASS_MAP,
+    RATED_MATCHES_FOR_AVERAGE,
     TIER_RANGES,
     fields_to_player,
     game,
@@ -34,9 +35,9 @@ from services.tournament import bot_pool_path
 
 # Stored bots (bots/{id}, see scripts/seed_bots.py) share the "bot_" uid
 # prefix with the throwaway ones _generate_bot_opponent rolls, so every
-# "is this a bot" check downstream (no record, no uid in the response, no
-# stats persisted) already treats them right. The prefix is what tells the
-# candidate loop to read bots/ instead of users/.
+# "is this a bot" check downstream (no uid in the response) treats them
+# alike. The prefix is what tells the candidate loop to read bots/ instead
+# of users/.
 BOT_UID_PREFIX = "bot_"
 
 
@@ -61,6 +62,9 @@ def bot_profile_from_doc(bot_id: str, doc: dict) -> dict | None:
         "wins": doc.get("wins", 0),
         "draws": doc.get("draws", 0),
         "losses": doc.get("losses", 0),
+        # Career stats as loaded, so record_bot_result writes back only this
+        # match's change. Its presence is what marks a stored bot.
+        "loaded_statistics": [dict(p.statistics) for p in roster],
     }
 
 
@@ -196,8 +200,53 @@ async def persist_player_stats(caller_state: GameState, caller_profile: dict) ->
     Also sets up cleanly for a future where a player's own match count
     matters for something like a contract -- that should only ever move
     for whoever actually chose to play.
+    A stored bot is the exception -- see record_bot_result.
     """
     await caller_state.save_roster(caller_profile["roster"])
+
+
+def bot_doc_after_match(doc: dict, bot_profile: dict, bot_score: int, other_score: int) -> dict:
+    """The fields a stored bot's doc gets after one match: its record, and
+    each card's career stats as this match's change added to what the doc
+    holds NOW, so two overlapping matches against the same bot both count."""
+    fields = {
+        "wins": doc.get("wins", 0) + (bot_score > other_score),
+        "draws": doc.get("draws", 0) + (bot_score == other_score),
+        "losses": doc.get("losses", 0) + (bot_score < other_score),
+    }
+    stored_players = doc.get("players") or []
+    if len(stored_players) != len(bot_profile["roster"]):
+        return fields  # the doc's XI isn't the one that played -- record only
+
+    players = []
+    for stored, before, card in zip(stored_players, bot_profile["loaded_statistics"], bot_profile["roster"]):
+        stats = dict(stored.get("statistics") or {})
+        for key, value in card.statistics.items():
+            if key != "avg_rating":
+                stats[key] = stats.get(key, 0) + value - before.get(key, 0)
+        if stats.get("rating_count", 0) >= RATED_MATCHES_FOR_AVERAGE:
+            stats["avg_rating"] = round(stats["rating_sum"] / stats["rating_count"], 2)
+        players.append({**stored, "statistics": stats})
+    fields["players"] = players
+    return fields
+
+
+async def record_bot_result(bot_uid: str, bot_profile: dict, bot_score: int, other_score: int) -> None:
+    """Writes a stored bot's side of the match back to bots/{id}: record and
+    player stats, the same things the caller gets. A bot stuck at 0-0-0 with
+    cards that never played is how a player would spot it. No-op for a
+    throwaway bot (nothing to write to) or a real opponent (see
+    persist_player_stats)."""
+    if "loaded_statistics" not in bot_profile:
+        return
+    path = f"bots/{bot_uid}"
+
+    def _apply(txn):
+        doc = txn.get(path)
+        if doc is not None:
+            txn.set(path, bot_doc_after_match(doc, bot_profile, bot_score, other_score))
+
+    await AdminFirestoreClient(bot_uid).run_transaction(_apply)
 
 
 def _generate_bot_opponent(card_tier_rates: dict | None = None) -> tuple[str, dict]:

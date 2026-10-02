@@ -190,7 +190,7 @@ func _on_quick_match_pressed() -> void:
 	_set_matchmaking_status(tr("Match found!"))
 	await get_tree().create_timer(0.4).timeout
 	_hide_matchmaking_popup()
-	get_tree().change_scene_to_file("res://scenes/Match.tscn")
+	get_tree().change_scene_to_file("res://scenes/PreMatch.tscn")
 
 
 func _on_matchmaking_midpoint() -> void:
@@ -346,7 +346,7 @@ func _on_local_match_finished() -> void:
 	print("[local match] interval=%s  decisions=%s  cpu=%ss  wall=%ss  score=%s" % [
 		parsed.get("decision_interval"), parsed.get("decisions"), parsed.get("sim_seconds"), parsed.get("wall_seconds"), parsed.get("score")
 	])
-	get_tree().change_scene_to_file("res://scenes/Match.tscn")
+	get_tree().change_scene_to_file("res://scenes/PreMatch.tscn")
 
 
 # -- check a reported match ---------------------------------------------------
@@ -453,4 +453,4 @@ func _on_check_finished() -> void:
 		return
 	MatchSession.is_local = true
 	MatchSession.return_scene = "res://scenes/Play.tscn"
-	get_tree().change_scene_to_file("res://scenes/Match.tscn")
+	get_tree().change_scene_to_file("res://scenes/PreMatch.tscn")

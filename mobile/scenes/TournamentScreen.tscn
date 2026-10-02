@@ -5,7 +5,6 @@
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_vojua"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="5"]
 [ext_resource type="Script" uid="uid://l3fnvnqxw6uh" path="res://scripts/components/StandingsTable.gd" id="6"]
-[ext_resource type="PackedScene" path="res://scenes/components/CurrencyAmount.tscn" id="7"]
 
 [node name="TournamentScreen" type="Control" unique_id=1999000001]
 layout_mode = 3
@@ -109,7 +108,6 @@ theme_override_constants/separation = 6
 
 [node name="FullDayPanel" type="PanelContainer" parent="Margin/RootVBox/Body/FullDayColumn" unique_id=1999000041]
 unique_name_in_owner = true
-unique_name_in_owner = true
 layout_mode = 2
 
 [node name="FullDayMargin" type="MarginContainer" parent="Margin/RootVBox/Body/FullDayColumn/FullDayPanel" unique_id=1999000042]
@@ -148,8 +146,10 @@ size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 12
 text = "0 / 10"
 
-[node name="FullDayReward" parent="Margin/RootVBox/Body/FullDayColumn/FullDayPanel/FullDayMargin/FullDayVBox/FullDayRow" unique_id=1999000048 instance=ExtResource("7")]
+[node name="FullDayRewards" type="HBoxContainer" parent="Margin/RootVBox/Body/FullDayColumn/FullDayPanel/FullDayMargin/FullDayVBox/FullDayRow" unique_id=1999000053]
 unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="FullDayClaimButton" type="Button" parent="Margin/RootVBox/Body/FullDayColumn/FullDayPanel/FullDayMargin/FullDayVBox" unique_id=1999000049]
 unique_name_in_owner = true
@@ -179,6 +179,13 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 40)
 layout_mode = 2
 text = "Enter today's tournament"
+
+[node name="EnergyButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1220028977]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(200, 40)
+layout_mode = 2
+text = "Get energy"
 
 [node name="PlayButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1999000022]
 unique_name_in_owner = true
@@ -243,9 +250,20 @@ text = "Yesterday's result"
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="BannerClaimButton" type="Button" parent="ResultBanner/Center/Panel/PanelMargin/BannerVBox" unique_id=1999000050]
+[node name="BannerClaimBox" type="VBoxContainer" parent="ResultBanner/Center/Panel/PanelMargin/BannerVBox" unique_id=1999000051]
 unique_name_in_owner = true
 visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="BannerClaimRewards" type="HBoxContainer" parent="ResultBanner/Center/Panel/PanelMargin/BannerVBox/BannerClaimBox" unique_id=1999000052]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/separation = 12
+
+[node name="BannerClaimButton" type="Button" parent="ResultBanner/Center/Panel/PanelMargin/BannerVBox/BannerClaimBox" unique_id=1999000050]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(160, 40)
 layout_mode = 2
 size_flags_horizontal = 4

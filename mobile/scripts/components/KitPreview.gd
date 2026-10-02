@@ -28,6 +28,10 @@ const PREVIEW_APPEARANCE := {
 var top_player: PlayerCard = GameProfile.get_best_player()
 var top_player_appearance: Dictionary = {}
 
+## Draws the figure as a keeper (gloves). The design passed in should then be
+## the keeper's shirt -- KitDesign.keeper().
+@export var keeper: bool = false
+
 var design: KitDesign = KitDesign.new()
 
 var _outline: Color = Color(0.5, 0.5, 0.55)
@@ -35,7 +39,7 @@ var _outline: Color = Color(0.5, 0.5, 0.55)
 
 func _ready() -> void:
 	ThemeManager.theme_changed.connect(_refresh_outline)
-	top_player_appearance = top_player.appearance
+	top_player_appearance = top_player.appearance if top_player != null else PREVIEW_APPEARANCE
 	_refresh_outline()
 
 
@@ -68,7 +72,12 @@ func _draw() -> void:
 		design,
 		PlayerFigure.FACING_S,
 		PlayerFigure.POSE_IDLE,
-		PlayerFigure.DETAIL_FULL
+		PlayerFigure.DETAIL_FULL,
+		0.0,
+		0,
+		Color(0, 0, 0, 0),
+		null,
+		keeper
 	)
 
 	# A floor line, so the figure reads as standing rather than hanging.

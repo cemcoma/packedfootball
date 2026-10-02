@@ -1,29 +1,37 @@
 extends Control
 
-## Team hub: Squad, Inventory or Items. Sits between Menu and the three
-## screens that actually do something, the same way Play.tscn sits in front of
-## Quick Match/Tournament -- Menu's "Team" button used to go straight to the
-## squad editor, and now lands here first.
-##
-## The split is what the screens are FOR, not just where they live: Squad is
-## the eleven you play with (formation, who starts, the kit), Inventory is
-## every card you own (browse, release, restyle), and Items is the equipment
-## waiting to be socketed into them. Only Inventory has a size limit, which is
-## why the counter belongs here and not on the squad screen.
+## Team hub, between Menu and the five team screens. Squad is the hero; the
+## grid pairs how the side plays (Tactics, Kit) with what the club owns
+## (Inventory, Items). Each tile's subtitle shows that screen's current state.
 
 @onready var _squad_button: MenuTile = %SquadTile
+@onready var _tactics_button: MenuTile = %TacticsTile
+@onready var _kit_button: MenuTile = %KitTile
 @onready var _inventory_button: MenuTile = %InventoryTile
 @onready var _items_button: MenuTile = %ItemsTile
-@onready var _tactics_button: MenuTile = %TacticsTile
 @onready var _back_button: Button = %BackButton
 
 
 func _ready() -> void:
 	_squad_button.pressed.connect(_on_squad_pressed)
+	_tactics_button.pressed.connect(_on_tactics_pressed)
+	_kit_button.pressed.connect(_on_kit_pressed)
 	_inventory_button.pressed.connect(_on_inventory_pressed)
 	_items_button.pressed.connect(_on_items_pressed)
-	_tactics_button.pressed.connect(_on_tactics_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
+
+	# The shirt and the XI's shape on their tiles; IGNORE so taps still land on the tile.
+	var swatch := KitSwatch.new()
+	swatch.custom_minimum_size = Vector2(40, 46)
+	swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	swatch.set_design(GameProfile.kit_design())
+	_kit_button.add_side_control(swatch)
+	var sketch := FormationSketch.new()
+	sketch.custom_minimum_size = Vector2(0, 140)
+	sketch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sketch.formation = GameProfile.formation
+	sketch.kit = GameProfile.kit_design()
+	_squad_button.add_body_control(sketch)
 
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
 	_apply_theme_colors()
@@ -50,7 +58,9 @@ func _apply_theme_colors() -> void:
 func _refresh_hints() -> void:
 	var count := GameProfile.inventory_count()
 	var owned: int = GameProfile.all_cards.size()
-	_squad_button.subtitle_text = tr("Pick your formation, choose who starts, and design your kit.")
+	_squad_button.subtitle_text = tr("Pick your formation and choose who starts.")
+	_tactics_button.subtitle_text = tr("Playing %s. Choose how your side plays.") % Tactics.display_name(GameProfile.tactic_style())
+	_kit_button.subtitle_text = tr("Design your club's shirt: pattern and colours.")
 	if count >= GameProfile.inventory_cap:
 		_inventory_button.subtitle_text = (
 			tr("Full: %d / %d. Release players here to open packs again. %d owned in total.")
@@ -68,16 +78,19 @@ func _refresh_hints() -> void:
 		_items_button.subtitle_text = (
 			tr("%d spare items waiting for a card. Socketing one is permanent.") % spare
 		)
-	_tactics_button.subtitle_text = tr("Playing %s. Choose how your side plays.") % Tactics.display_name(GameProfile.tactic_style())
 	_apply_theme_colors()
+
+
+func _on_squad_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/Team.tscn")
 
 
 func _on_tactics_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/Tactics.tscn")
 
 
-func _on_squad_pressed() -> void:
-	get_tree().change_scene_to_file("res://scenes/Team.tscn")
+func _on_kit_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/CustomizeKit.tscn")
 
 
 func _on_inventory_pressed() -> void:
@@ -90,3 +103,28 @@ func _on_items_pressed() -> void:
 
 func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/Menu.tscn")
+
+
+## The XI's shape in the club's shirts, own goal at the bottom -- one half in
+## Formations' coordinates. Hard squares and lines, per MenuTile's pixel-art rules.
+class FormationSketch extends Control:
+	const HALF := Vector2(70.0, 50.0)
+	const LINE := Color(1.0, 1.0, 1.0, 0.22)
+	const DOT := 10.0
+
+	var formation := ""
+	var kit: KitDesign = null
+
+	func _draw() -> void:
+		var scale := minf(size.x / HALF.x, size.y / HALF.y)
+		var pitch := Rect2((size - HALF * scale) / 2.0, HALF * scale)
+		var at := func(p: Vector2) -> Vector2:
+			return Vector2(pitch.position.x + p.x * scale, pitch.end.y - p.y * scale)
+		draw_rect(pitch, LINE, false, 2.0)
+		draw_rect(Rect2(at.call(Vector2(14.0, 18.0)), Vector2(42.0, 18.0) * scale), LINE, false, 2.0)
+		draw_arc(at.call(Vector2(35.0, 50.0)), 9.15 * scale, 0.0, PI, 16, LINE, 2.0)
+		for slot in Formations.get_formation(formation):
+			var shirt: KitDesign = kit.for_position(slot["role"])
+			var centre: Vector2 = at.call(slot["pos"])
+			draw_rect(Rect2(centre - Vector2.ONE * DOT / 2.0, Vector2.ONE * DOT), shirt.secondary_color())
+			draw_rect(Rect2(centre - Vector2.ONE * (DOT / 2.0 - 2.0), Vector2.ONE * (DOT - 4.0)), shirt.primary_color())

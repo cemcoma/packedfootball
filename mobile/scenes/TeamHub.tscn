@@ -43,11 +43,11 @@ text = "TEAM"
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="TileRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1950000020]
+[node name="TileArea" type="HBoxContainer" parent="Margin/RootVBox" unique_id=1950000020]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="SquadTile" parent="Margin/RootVBox/TileRow" unique_id=1950000008 instance=ExtResource("menutile")]
+[node name="SquadTile" parent="Margin/RootVBox/TileArea" unique_id=1950000008 instance=ExtResource("menutile")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -56,31 +56,49 @@ accent_key = "heading"
 hero = true
 min_height = 150
 
-[node name="InventoryTile" parent="Margin/RootVBox/TileRow" unique_id=1950000011 instance=ExtResource("menutile")]
-unique_name_in_owner = true
+[node name="TileGrid" type="GridContainer" parent="Margin/RootVBox/TileArea" unique_id=1126808787]
 layout_mode = 2
 size_flags_horizontal = 3
-title_text = "Inventory"
-hero = true
-min_height = 150
+size_flags_stretch_ratio = 2.0
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 16
+columns = 2
 
-[node name="ItemsTile" parent="Margin/RootVBox/TileRow" unique_id=1950000012 instance=ExtResource("menutile")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-title_text = "Items"
-accent_key = "warning"
-hero = true
-min_height = 150
-
-[node name="TacticsTile" parent="Margin/RootVBox/TileRow" unique_id=1950000014 instance=ExtResource("menutile")]
+[node name="TacticsTile" parent="Margin/RootVBox/TileArea/TileGrid" unique_id=1950000014 instance=ExtResource("menutile")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 title_text = "Tactics"
 accent_key = "positive"
 hero = true
-min_height = 150
+min_height = 130
+
+[node name="KitTile" parent="Margin/RootVBox/TileArea/TileGrid" unique_id=559027932 instance=ExtResource("menutile")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+title_text = "Kit"
+accent_key = "heading_away"
+hero = true
+min_height = 130
+
+[node name="InventoryTile" parent="Margin/RootVBox/TileArea/TileGrid" unique_id=1950000011 instance=ExtResource("menutile")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+title_text = "Inventory"
+accent_key = "medals"
+hero = true
+min_height = 130
+
+[node name="ItemsTile" parent="Margin/RootVBox/TileArea/TileGrid" unique_id=1950000012 instance=ExtResource("menutile")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+title_text = "Items"
+accent_key = "warning"
+hero = true
+min_height = 130
 
 [node name="Spacer2" type="Control" parent="Margin/RootVBox" unique_id=1950000013]
 layout_mode = 2

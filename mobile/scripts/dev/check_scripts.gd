@@ -47,6 +47,7 @@ const SCRIPTS := [
 	"res://scripts/screens/MatchStats.gd",
 	"res://scripts/data/Tactics.gd",
 	"res://scripts/screens/Tactics.gd",
+	"res://scripts/screens/PreMatch.gd",
 ]
 
 const SCENES := [
@@ -55,6 +56,7 @@ const SCENES := [
 	"res://scenes/Items.tscn",
 	"res://scenes/TeamHub.tscn",
 	"res://scenes/Tactics.tscn",
+	"res://scenes/PreMatch.tscn",
 	"res://scenes/PlayerDetail.tscn",
 	"res://scenes/PackReveal.tscn",
 	"res://scenes/Inventory.tscn",

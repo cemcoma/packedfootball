@@ -37,6 +37,7 @@ from services.tournament import DAILY, WEEKLY, Mode
 from services.match import (
     persist_player_stats,
     pick_opponent_from_candidates,
+    record_bot_result,
     run_match,
     teams_snapshot,
     validate_formation_positions,
@@ -349,6 +350,7 @@ async def _match(uid: str, mode: Mode) -> dict:
         merge=True,
     )
     await persist_player_stats(caller_state, caller_profile)
+    await record_bot_result(opponent_uid, opponent_profile, opp_score, my_score)
 
     # The slot was already claimed, so folding the result in is a plain merge.
     entry = await client.get_document(
