@@ -81,6 +81,21 @@ PACK_DATABASE = {
         "price_currency":"credits",
         "sprite_key":"StandardPack1"
     },
+    "positional_defense": {
+        "active": True,
+        "order": 30,
+        "name": "The Gold Wall Pack",
+        "type": "standard",
+        "description": "Reinforce your spine. Dedicated keepers and defenders with elevated Gold rates.",
+        "price": 800,
+        "cards_per_pack": 1,
+        "items_per_pack": 1,
+        "price_currency": "credits",
+        "rates": {"silver": 0.40, "gold": 0.57, "platinum": 0.03},
+        "pos_rates": {"goalkeeper": 0.40, "defender": 0.60, "midfielder": 0.0, "attacker": 0.0},
+        "item_rates": {"bronze": 0.30, "silver": 0.40, "gold": 0.30},
+        "sprite_key": "StandardGold"
+    },
     "standard_gold": {
         "active": True,
         "order": 35,
@@ -175,6 +190,24 @@ PACK_DATABASE = {
         "price_currency":"bucks",
         "sprite_key":"PremiumPack1"
     },
+
+   "starter_captain": {
+        "active": True,
+        "order": 12,
+        "name": "Club Captain Pack",
+        "type": "premium",
+        "description": "The foundation of your club. Headline card is a guaranteed Platinum or better.",
+        "price": 10,
+        "cards_per_pack": 2,
+        "items_per_pack": 1,
+        "price_currency": "bucks",
+        "rates": {"silver": 0.20, "gold": 0.70, "platinum": 0.10},
+        "slot_rates": {"0": {"platinum": 0.80, "diamond": 0.20}},
+        "pos_rates": {"goalkeeper": 0.1, "defender": 0.3, "midfielder": 0.3, "attacker": 0.3},
+        "item_rates": {"silver": 0.40, "gold": 0.50, "platinum": 0.10},
+        "sprite_key": "PremiumPack1"
+    },
+
     "premium_plat": {
         "active": True,
         "order": 20,

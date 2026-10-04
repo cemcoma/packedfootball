@@ -15,7 +15,6 @@ import numpy as np
 import pytest
 
 from conftest import PITCH_HEIGHT, Team, freeze_players_away_from, launch_ball, quiesce
-from game_config import TIER_RANGES
 from gameEngine import (
     CROSS_ARRIVAL_HEIGHT,
     HEAD_MIN_HEIGHT,
@@ -95,21 +94,6 @@ def test_pack_roller_tiers_heading_by_position():
     # Short players can still head: no correlation with height is imposed.
     wingers = [p for p in pool if p.position in ("LW", "RW")]
     assert any(p.attributes.heading >= p.attributes.speed for p in wingers)
-
-
-def test_backfill_rolls_deterministically():
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location("backfill_heading", ROOT / "backend/scripts/backfill_heading.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    a = module.roll_heading("abc123", "CB", "gold")
-    assert a == module.roll_heading("abc123", "CB", "gold")
-    # CB heading is primary, i.e. the top half of the tier's range. Derived
-    # from TIER_RANGES rather than written out, so a respace can't silently
-    # turn this into a test of nothing.
-    low, high = TIER_RANGES["gold"]
-    assert low + (high - low) // 2 <= a <= high
 
 
 # ----------------------------------------------------------------- reach

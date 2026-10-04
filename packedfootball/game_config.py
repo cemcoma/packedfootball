@@ -24,6 +24,7 @@ Mirrored on the client -- change both ends together:
   TACTICS (the style ids)     mobile/scripts/data/Tactics.gd
 """
 
+import functools
 from dataclasses import dataclass
 from typing import Final
 
@@ -415,6 +416,7 @@ def take_on_skill(attrs) -> float:
 
 
 
+@functools.lru_cache(maxsize=4096)  # pure, and called ~100K times a match on a few dozen stats
 def pace_ability(stat: float, compress: float | None = None) -> float:
     a = stat_ability(stat)
     c = SPEED_COMPRESS if compress is None else compress
@@ -431,6 +433,7 @@ def pace_ability(stat: float, compress: float | None = None) -> float:
 STAT_OVERDRIVE: Final = 0.35
 
 
+@functools.lru_cache(maxsize=4096)  # as pace_ability
 def stat_ability(stat: float, gamma: float | None = None, compress: float | None = None) -> float:
     """Raw stat -> ability. 1.0 at 100, and it KEEPS RISING above that.
 

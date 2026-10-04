@@ -1,4 +1,4 @@
-from player.player import IN_BEHIND_PASS_BIAS, SHOT_PATIENCE, _clamp, _clamp_to_pitch, _count_within, _equal2, _norm2, player, ActionProfile
+from player.player import IN_BEHIND_PASS_BIAS, SHOT_PATIENCE, _clamp, _clamp_to_pitch, _ball_pressure, _count_within, _dists, _pick, _equal2, _norm2, player, ActionProfile
 from game_config import PRESS_FROM_DEFENDING, RECOVERY_ROLE_EFFORT, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
@@ -324,7 +324,7 @@ class Midfielder(player):
             return "dribble"
         probs = [t_pass / total, t_shoot / total, t_dribble / total, t_stop / total, t_through / total, t_wing / total, t_cross / total] + [weight / total for weight in moves.values()]
         actions = actions + list(moves)
-        return state["rng"].choice(actions, p=probs)
+        return _pick(state["rng"], actions, probs)
 
     def _decide_on_ball_defense(self, state: dict) -> str:
         latched = self._decide_wingplay(state)
@@ -393,7 +393,7 @@ class Midfielder(player):
         if total <= 0:
             return "dribble"
         probs = [t_pass / total, t_dribble / total, t_stop / total, t_clear / total, t_wing / total, t_through / total]
-        return state["rng"].choice(actions, p=probs)
+        return _pick(state["rng"], actions, probs)
 
     def _decide_off_ball_attack(self, state: dict) -> str:
         if state.get("is_loose", False):
@@ -422,7 +422,7 @@ class Midfielder(player):
             t_hold *= 0.3
 
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-        ball_pressure_count = _count_within(state["opponents"], state["ball_pos"], 3.0)
+        ball_pressure_count = _ball_pressure(state)
         own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else 100.0
         dist_to_own_goal = abs(state["formation_pos"][1] - own_goal_y)
 
@@ -458,7 +458,7 @@ class Midfielder(player):
 
         total = t_forward + t_support + t_hold + t_wide + t_box
         probs = [t_forward / total, t_support / total, t_hold / total, t_wide / total, t_box / total]
-        return state["rng"].choice(actions, p=probs)
+        return _pick(state["rng"], actions, probs)
 
     def _decide_off_ball_defense(self, state: dict) -> str:
         if state.get("is_loose", False):
@@ -478,7 +478,7 @@ class Midfielder(player):
             return "recovery_run" if RECOVERY_ROLE_EFFORT.get(state.get("my_role"), 1.0) > 0.0 else "hold_defense"
 
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-        ball_pressure_count = _count_within(state["opponents"], state["ball_pos"], 3.0)
+        ball_pressure_count = _ball_pressure(state)
 
         if dist_to_ball < 2.0:
             actions = ["tackle", "contain"]
@@ -489,7 +489,7 @@ class Midfielder(player):
             t_tackle = max(1.0, self.attributes.aggression * 1.5)
             t_contain = max(1.0, 160.0 - self.attributes.aggression)
             probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
-            return state["rng"].choice(actions, p=probs)
+            return _pick(state["rng"], actions, probs)
 
         if dist_to_ball < 15.0:
             if ball_pressure_count >= 2:
@@ -504,7 +504,7 @@ class Midfielder(player):
             actions = ["hold_defense", "screen"]
             t_hold = 1.0
             probs = [t_hold / (t_hold + t_screen), t_screen / (t_hold + t_screen)]
-            return state["rng"].choice(actions, p=probs)
+            return _pick(state["rng"], actions, probs)
 
         return "hold_defense"
 
@@ -514,7 +514,7 @@ class Midfielder(player):
             # Calculate distances of all teammates to the ball
             teammates = np.asarray(state.get("teammates", []))
             if teammates.size > 0:
-                teammate_dists = np.linalg.norm(teammates - state["ball_pos"], axis=1)
+                teammate_dists = _dists(teammates, state["ball_pos"])
                 # Count exactly how many teammates are closer to the ball than I am
                 # We subtract 0.1 to avoid tie-breaking bugs with our own distance
                 closer_teammates = int(np.sum(teammate_dists < dist_to_ball - 0.1))

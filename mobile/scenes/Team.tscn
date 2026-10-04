@@ -217,7 +217,6 @@ text = "Clear Slot"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
-theme_override_font_sizes/font_size = 13
 text = "Show Statistics"
 
 [node name="CloseButton" type="Button" parent="Margin/RootVBox/MainRow/RightPanel/StatsBackdrop/StatsButtonRow" unique_id=2088812848]

@@ -7,6 +7,7 @@ sequence of steps they are rather than as the engine plumbing underneath.
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,8 +21,8 @@ from config import (
     QUICK_MATCH_REWARD_CREDITS,
 )
 from admin_firestore_client import AdminFirestoreClient
-from deps import game_state_for, verify_id_token
-from engine import ENGINE_VERSION, REPLAY_FORMAT_VERSION
+from deps import game_state_for, replay_format, verify_id_token
+from engine import ENGINE_VERSION
 from services import energy as energy_service
 from services.match import (
     persist_player_stats,
@@ -36,7 +37,7 @@ router = APIRouter(tags=["matches"])
 
 
 @router.post("/match/quick")
-async def quick_match(uid: str = Depends(verify_id_token)):
+async def quick_match(uid: str = Depends(verify_id_token), fmt: int = Depends(replay_format)):
     """Quick Match: always-available, casual match against a randomly
     picked opponent (see pick_opponent_profile) for a small credit reward
     (see QUICK_MATCH_REWARD_CREDITS). Records wins/losses/draws.
@@ -79,7 +80,7 @@ async def quick_match(uid: str = Depends(verify_id_token)):
             "opponent_is_bot": is_bot,
             "seed": seed,
             "engine_version": ENGINE_VERSION,
-            "replay_format_version": REPLAY_FORMAT_VERSION,
+            "replay_format_version": fmt,
             "teams": teams_snapshot(uid, caller_profile, opponent_uid, opponent_profile),
             "created_at": firestore.SERVER_TIMESTAMP,
             "finished_at": None,
@@ -87,7 +88,8 @@ async def quick_match(uid: str = Depends(verify_id_token)):
         },
     )
 
-    result = run_match(caller_profile, opponent_profile, seed)
+    # Off the event loop: a simulation is seconds of CPU, and every other request on this instance would wait it out.
+    result = await asyncio.to_thread(run_match, caller_profile, opponent_profile, seed, fmt)
     my_score, opp_score = result["score"]
 
     await games_client.set_document(
@@ -118,7 +120,7 @@ async def quick_match(uid: str = Depends(verify_id_token)):
     return {
         "seed": seed,
         "engine_version": ENGINE_VERSION,
-        "replay_format_version": REPLAY_FORMAT_VERSION,
+        "replay_format_version": fmt,
         "score": result["score"],
         "opponent_display_name": opponent_profile["display_name"],
         "opponent_is_bot": is_bot,

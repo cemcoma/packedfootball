@@ -25,9 +25,18 @@ func is_busy() -> bool:
 	return false
 
 
+## The replay encoding this build reads (ReplayReader handles 1 and 2). The
+## backend sends v1 to anyone who doesn't say, so older installs keep working.
+const REPLAY_FORMAT := 2
+
+
 func _auth_headers() -> PackedStringArray:
 	return PackedStringArray(
-		["Authorization: Bearer %s" % FirebaseAuth.id_token, "Content-Type: application/json"]
+		[
+			"Authorization: Bearer %s" % FirebaseAuth.id_token,
+			"Content-Type: application/json",
+			"X-Replay-Format: %d" % REPLAY_FORMAT,
+		]
 	)
 
 
@@ -37,7 +46,8 @@ func _auth_headers() -> PackedStringArray:
 ## body wasn't a JSON object or the request never left.
 func call_endpoint(method: HTTPClient.Method, path: String, body: Dictionary = {}) -> Dictionary:
 	var http := HTTPRequest.new()
-	http.accept_gzip = false
+	# A browser sets Accept-Encoding itself and decompresses for us; Godot may not set it there.
+	http.accept_gzip = not OS.has_feature("web")
 	http.timeout = REQUEST_TIMEOUT_SECONDS
 	add_child(http)
 	var url := FirebaseConfig.BACKEND_URL + path

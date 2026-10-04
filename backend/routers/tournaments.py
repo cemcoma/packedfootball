@@ -21,6 +21,7 @@ about what a week is.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import secrets
 
@@ -29,8 +30,8 @@ from firebase_admin import firestore
 from pydantic import BaseModel
 
 import config
-from deps import admin_client, game_state_for, verify_id_token
-from engine import ENGINE_VERSION, REPLAY_FORMAT_VERSION
+from deps import admin_client, game_state_for, replay_format, verify_id_token
+from engine import ENGINE_VERSION
 from services import energy as energy_service
 from services import tournament as tournament_service
 from services.tournament import DAILY, WEEKLY, Mode
@@ -273,7 +274,7 @@ async def _join(uid: str, mode: Mode) -> dict:
     return payload
 
 
-async def _match(uid: str, mode: Mode) -> dict:
+async def _match(uid: str, mode: Mode, fmt: int) -> dict:
     """Plays one tournament match.
 
     The energy AND the match slot are claimed in one transaction BEFORE the
@@ -333,7 +334,7 @@ async def _match(uid: str, mode: Mode) -> dict:
             "opponent_is_bot": is_bot,
             "seed": seed,
             "engine_version": ENGINE_VERSION,
-            "replay_format_version": REPLAY_FORMAT_VERSION,
+            "replay_format_version": fmt,
             "teams": teams_snapshot(uid, caller_profile, opponent_uid, opponent_profile),
             "created_at": firestore.SERVER_TIMESTAMP,
             "finished_at": None,
@@ -341,7 +342,8 @@ async def _match(uid: str, mode: Mode) -> dict:
         },
     )
 
-    result = run_match(caller_profile, opponent_profile, seed)
+    # Off the event loop, as in routers/matches.py.
+    result = await asyncio.to_thread(run_match, caller_profile, opponent_profile, seed, fmt)
     my_score, opp_score = result["score"]
 
     await games_client.set_document(
@@ -379,7 +381,7 @@ async def _match(uid: str, mode: Mode) -> dict:
     return {
         "seed": seed,
         "engine_version": ENGINE_VERSION,
-        "replay_format_version": REPLAY_FORMAT_VERSION,
+        "replay_format_version": fmt,
         "score": result["score"],
         "opponent_display_name": opponent_profile["display_name"],
         "opponent_is_bot": is_bot,
@@ -522,8 +524,8 @@ async def join_tournament(uid: str = Depends(verify_id_token)):
 
 
 @router.post("/tournament/match")
-async def tournament_match(uid: str = Depends(verify_id_token)):
-    return await _match(uid, DAILY)
+async def tournament_match(uid: str = Depends(verify_id_token), fmt: int = Depends(replay_format)):
+    return await _match(uid, DAILY, fmt)
 
 
 @router.get("/tournament/results")
@@ -545,8 +547,8 @@ async def join_weekly_tournament(uid: str = Depends(verify_id_token)):
 
 
 @router.post("/tournament/weekly/match")
-async def weekly_tournament_match(uid: str = Depends(verify_id_token)):
-    return await _match(uid, WEEKLY)
+async def weekly_tournament_match(uid: str = Depends(verify_id_token), fmt: int = Depends(replay_format)):
+    return await _match(uid, WEEKLY, fmt)
 
 
 @router.get("/tournament/weekly/results")

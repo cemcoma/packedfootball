@@ -151,7 +151,6 @@ def test_teammates_going_up_together_is_no_foul(monkeypatch):
 # ------------------------------------------------------------ full matches
 
 REGULATION_FRAMES = 10800
-_TEAM_SLOTS = (slice(0, 11), slice(11, 22))
 
 
 class _Counting(game):
@@ -177,7 +176,7 @@ class _Counting(game):
         if self.ball_controller < 0:
             return
         team = 0 if self.ball_controller < 11 else 1
-        ys = self.positions[_TEAM_SLOTS[team]][self._cb_mask[_TEAM_SLOTS[team]], 1]
+        ys = self.positions[self._cb_indices[team], 1]
         depth = float(ys.mean()) if team == 0 else float(100.0 - ys.mean())
         self.cb_depth[team][0] += depth
         self.cb_depth[team][1] += 1

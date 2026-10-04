@@ -40,7 +40,7 @@ from game_config import RATED_MATCHES_FOR_AVERAGE
 from game_state import GameState, fields_to_player, player_to_fields
 from gameEngine import ENGINE_VERSION, game
 from formations import FORMATIONS, get_formation, is_similar_position
-from replay import FORMAT_VERSION as REPLAY_FORMAT_VERSION
+from replay import FORMAT_VERSION as REPLAY_FORMAT_VERSION, FORMAT_VERSION_V2 as REPLAY_FORMAT_VERSION_V2
 from packEngine import PLAYER_CLASS_MAP, POSITION_CATEGORIES, TIER_RANGES, PackManager, generate_starter_roster, tier_family
 from player.classes.midfielder import Midfielder
 from player.player import APPEARANCE_OPTION_COUNTS, APPEARANCE_SLOTS, DEFAULT_APPEARANCE
@@ -61,6 +61,7 @@ __all__ = [
     "PackManager",
     "RATED_MATCHES_FOR_AVERAGE",
     "REPLAY_FORMAT_VERSION",
+    "REPLAY_FORMAT_VERSION_V2",
     "TIER_RANGES",
     "fields_to_player",
     "game",

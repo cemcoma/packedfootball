@@ -15,7 +15,7 @@ from firebase_admin import auth as firebase_auth
 
 import config
 from admin_firestore_client import AdminFirestoreClient
-from engine import GameState, Midfielder, PLAYER_CLASS_MAP
+from engine import REPLAY_FORMAT_VERSION, REPLAY_FORMAT_VERSION_V2, GameState, Midfielder, PLAYER_CLASS_MAP
 
 # get_app() raises when nothing is initialised yet; initialize_app() raises
 # when something already is. Asking first makes this safe to import twice --
@@ -36,6 +36,11 @@ async def verify_id_token(authorization: str = Header(...)) -> str:
     except Exception as exc:
         raise HTTPException(401, f"Invalid ID token: {exc}") from exc
     return decoded["uid"]
+
+
+def replay_format(x_replay_format: str = Header("1")) -> int:
+    """The replay encoding this client reads. v2 only when it asks, so an old install keeps getting v1."""
+    return REPLAY_FORMAT_VERSION_V2 if x_replay_format.strip() == "2" else REPLAY_FORMAT_VERSION
 
 
 def game_state_for(uid: str) -> GameState:

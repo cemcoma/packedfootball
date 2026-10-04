@@ -33,11 +33,12 @@ def test_stamina_depletes_over_a_match(make_match):
     assert g.stamina.min() >= 0.0
 
 
-def test_a_higher_stamina_player_tires_less_for_the_same_work(match):
-    """The whole point of the attribute."""
+def test_a_higher_stamina_player_tires_less_for_the_same_work(rosters, make_match):
+    """The whole point of the attribute. Set before kick-off: the engine reads it once per match."""
     lazy, fit = 1, 2
-    match.all_players[lazy].attributes.stamina = 40
-    match.all_players[fit].attributes.stamina = 95
+    rosters[0][lazy].attributes.stamina = 40
+    rosters[0][fit].attributes.stamina = 95
+    match = make_match()
     match.velocity[lazy] = np.array([10.0, 0.0])
     match.velocity[fit] = np.array([10.0, 0.0])
 

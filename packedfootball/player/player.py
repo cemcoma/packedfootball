@@ -319,6 +319,31 @@ def _count_within(points, centre, radius: float) -> int:
     return sum(1 for x, y in np.asarray(points, dtype=float).tolist() if math.hypot(x - cx, y - cy) < radius)
 
 
+def _ball_pressure(state: dict) -> int:
+    """Opponents within 3 units of the ball. The engine counts it once per side per round."""
+    count = state.get("ball_pressure")
+    return count if count is not None else _count_within(state.get("opponents", []), state["ball_pos"], 3.0)
+
+
+def _pick(rng, options, probs):
+    """rng.choice(options, p=probs) minus numpy's ~10us of overhead: the same single draw picks the same option."""
+    cumulative, total = [], 0.0
+    for p in probs:
+        total += p
+        cumulative.append(total)
+    u = rng.random()
+    for option, c in zip(options, cumulative):
+        if c / total > u:
+            return option
+    return options[-1]
+
+
+def _dists(points, centre) -> np.ndarray:
+    """Distance from `centre` to each row of `points` -- np.linalg.norm(axis=1) without its wrapper cost."""
+    d = np.asarray(points, dtype=float) - centre
+    return np.sqrt(np.einsum("ij,ij->i", d, d))
+
+
 class ActionProfile:
     """Role template for tweening action sets and decision weights per position."""
     role_name = "generic"
@@ -720,24 +745,27 @@ class player(ABC):
     def _box_runners(self, state: dict) -> int:
         """Teammates a cross could actually find: bodies in the opposition
         box. state["teammates"] holds all eleven, so drop my own row."""
-        return len(self._cross_candidates(state))
+        return sum(1 for _ in self._cross_arrivals(state))
 
     def _cross_candidates(self, state: dict, lofted: bool = False) -> list:
         """(arrival_pos, velocity) for teammates a cross could actually find --
         in the box now, or arriving there by the time the ball does. A man
         running in counts: crossing only to bodies already stood there meant
         the ball went to whoever was loitering outside the area instead."""
+        return [(np.array([ax, ay]), np.array([vx, vy])) for ax, ay, vx, vy in self._cross_arrivals(state, lofted)]
+
+    def _cross_arrivals(self, state: dict, lofted: bool = False):
+        """_cross_candidates as plain floats (ax, ay, vx, vy), for callers that only count."""
         teammates = np.asarray(state.get("teammates", []), dtype=float)
         if teammates.size == 0:
-            return []
+            return
         vels = state.get("teammate_vel")
         vels = np.asarray(vels, dtype=float).tolist() if vels is not None else None
-        my_pos = state["my_pos"]
-        mx, my = float(my_pos[0]), float(my_pos[1])
+        mx, my = (float(v) for v in state["my_pos"])
+        me = (mx, my)
         enemy_goal_y = PITCH_HEIGHT if state.get("a_direction", 1) == 1 else 0.0
-        out = []
         for i, tm in enumerate(teammates.tolist()):
-            if _isclose2(tm, my_pos):
+            if _isclose2(tm, me):
                 continue
             tx, ty = tm
             vx, vy = vels[i] if vels is not None else (0.0, 0.0)
@@ -751,8 +779,7 @@ class player(ABC):
                 BOX_X_MIN < ax < BOX_X_MAX
                 and abs(enemy_goal_y - ay) <= CROSS_TARGET_DEPTH
             ):
-                out.append((np.array([ax, ay]), np.array([vx, vy])))
-        return out
+                yield ax, ay, vx, vy
 
     def _runners_in_box_now(self, state: dict) -> int:
         """Teammates actually in the box now, not just on their way (_box_runners)."""
@@ -866,13 +893,13 @@ class player(ABC):
             t_pass = (pressure * 18.0 if progressive else 0.0) * tac.pass_bias
             t_run = 10.0
             total = t_cross + t_pass + t_run
-            return rng.choice(["cross", "pass", "wing_run"], p=[t_cross / total, t_pass / total, t_run / total])
+            return _pick(rng, ["cross", "pass", "wing_run"], [t_cross / total, t_pass / total, t_run / total])
         if self._overlap_release(state) and rng.random() < OVERLAP_RELEASE:
             return "pass"
         if self._beat_marker(state):
             return None
         if pressure >= 2 and progressive:
-            return rng.choice(["pass", "wing_run"], p=[0.6, 0.4])
+            return _pick(rng, ["pass", "wing_run"], [0.6, 0.4])
         # Unmarked with the goal in range and the lane inside open: break off
         # the line instead of running it to the byline on rails.
         if (

@@ -58,7 +58,6 @@ from formations import FORMATIONS  # noqa: E402
 from game_state import fields_to_player, player_to_fields  # noqa: E402
 from packEngine import PLAYER_CLASS_MAP, TIER_RANGES, generate_starter_roster  # noqa: E402
 from player.classes.midfielder import Midfielder  # noqa: E402
-from replay import FORMAT_VERSION as REPLAY_FORMAT_VERSION  # noqa: E402
 from game_config import TACTICS  # noqa: E402
 
 DEFAULT_OUT = Path(__file__).resolve().parent.parent.parent / "mobile" / "test_data" / "local_match.json"
@@ -139,12 +138,12 @@ def run(args) -> dict:
     return {
         "seed": args.seed,
         "engine_version": ENGINE_VERSION,
-        "replay_format_version": REPLAY_FORMAT_VERSION,
+        "replay_format_version": args.replay_format,
         "score": list(match.scores),
         "opponent_display_name": away["display_name"],
         "opponent_is_bot": True,
         "credits_earned": 0,
-        "replay": base64.b64encode(match.replay.encode()).decode(),
+        "replay": base64.b64encode(match.replay.encode_v2() if args.replay_format == 2 else match.replay.encode()).decode(),
         "roster": [player_to_fields(p) for p in home["roster"]] + [player_to_fields(p) for p in away["roster"]],
         "player_match_stats": match.match_summary(),
         "added_time": [frames // 2 for frames in match.added_time_frames],
@@ -168,6 +167,7 @@ def main() -> int:
     parser.add_argument("--home-tier", choices=list(TIER_RANGES.keys()), default="gold", help="Only used without --home-roster")
     parser.add_argument("--home-roster", type=Path, default=None, help="JSON: {formation, players: [player fields...], display_name, kit}")
     parser.add_argument("--seed", type=int, default=None, help="Match seed (random if omitted)")
+    parser.add_argument("--replay-format", type=int, choices=(1, 2), default=2, help="Replay encoding (2 = what current clients ask for)")
     parser.add_argument("--home-tactic", choices=list(TACTICS), default="balanced")
     parser.add_argument("--away-tactic", choices=list(TACTICS), default="balanced")
     parser.add_argument("--opponent-formation", choices=list(FORMATIONS), default=None, help="Random if omitted")

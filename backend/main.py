@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from config import ALLOWED_ORIGINS
 from routers import (
@@ -54,6 +55,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Only for clients that send Accept-Encoding: gzip; a match response is mostly replay.
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
 
 for _router in (
     account.router,

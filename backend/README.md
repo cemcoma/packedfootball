@@ -231,11 +231,6 @@ Read it through `tier_of()` / `entered_period()` / `entered_group()` /
 settling one league cannot blank the other's seat (a test models that merge
 and holds it).
 
-Accounts written before this carry flat fields (`daily_tournament_tier`,
-`tournament_day_id`, ...). `scripts/migrate_tournament_fields.py` moves
-them; it is safe to run before or after the deploy, since a slot the new
-code already owns is never rewritten.
-
 A **tier** is one entry in `config.TOURNAMENT_TIERS` (and
 `WEEKLY_TOURNAMENT_TIERS`) holding everything that tier decides -- its
 `name`, its `bot_card_rates`, its `rewards` table. One block per league
@@ -338,6 +333,12 @@ Both responses carry `engine_version`, `replay_format_version`,
 per-player numbers, same index order as `roster`) and `kits` (both sides'
 shirt strings, `[caller, opponent]`). Both also stamp the two versions onto
 the `games/{id}` doc alongside the seed -- see Engine versioning below.
+
+The replay is format 1 unless the request sends `X-Replay-Format: 2`, which
+current clients do: the same match, delta-coded and gzipped, ~3x smaller
+(`replay.encode_v2`). Every response over 1KB is also gzipped for clients
+that send `Accept-Encoding: gzip`. Together they take a match response from
+~490KB to ~116KB. Old installs send neither and get exactly what they always did.
 
 `kits` is passed straight through from each profile's `users/{uid}.kit` and
 is never parsed server-side -- the format lives in
@@ -542,7 +543,6 @@ python3 backend/scripts/<script>.py [--dry-run]
 | `list_deals.py` | Read-only dump of live `deals/{id}` docs. |
 | `list_match_reports.py` | Read-only. Open bug reports newest first, with seed and engine version; `--dump-dir` writes each report's `games/{id}` doc as JSON. `--all` includes reports whose `status` you've changed by hand. To watch one: paste its game id into Play.tscn's TESTING panel (editor only, "Check a reported match"), which runs `packedfootball/scripts/replay_game.py` -- re-simulates the match on your Mac from the game doc and plays it back, showing the report text and flagging an engine-version mismatch. |
 | `list_accounts.py` | Read-only. Lists every `users/{uid}` and whether its roster is Quick-Match complete (`roster_player_ids` length == 11). |
-| `migrate_tournament_fields.py` | Moves each account's flat `daily_tournament_tier` / `tournament_day_id` / ... into the `tournament_tiers` / `tournament_entries` / `tournament_last` maps. `--dry-run` first; `--drop-old` removes the flat fields once the maps look right. Re-runnable. |
 | `settle_tournaments.py` | Settles tournaments by hand when a period is stuck; `--dry-run` to see why it failed (or why it will work), `--mode daily\|weekly` to pick a format. |
 
 A synced deal left `active: false` won't appear in `GET /deals/list` until

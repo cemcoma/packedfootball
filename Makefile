@@ -23,7 +23,9 @@
 #   make attack                 the man on the ball near goal: moves and what they end in
 #   make items         what a kit is worth; does the ladder survive it
 #   make fk-report     what a direct free kick turns into, taker v keeper tier
+#   make bench         CPU seconds per served match (BENCH_MATCHES=12)
 #   make godot-check   load every script/scene items touched, headless
+#   make replay-check  Godot decodes one match as v1 and v2; they must agree
 #
 # `sim` is the calibration harness, not a test: it prints shots, shots on
 # target, save rate, goals and how long the ball spends airborne, which is
@@ -65,7 +67,7 @@ SEED    ?= 1
 KICKS   ?= 200
 
 .PHONY: test test-fast test-slow test-gap test-tiers test-one test-k sim tiers \
-        tactics ladder items fk-report godot-check web serve-web deploy-web deploy-ads clean-web
+        tactics ladder items fk-report bench godot-check replay-check web serve-web deploy-web deploy-ads clean-web
 
 ## Everything. Config (testpaths, sys.path) comes from pytest.ini.
 test:
@@ -129,6 +131,10 @@ items:
 fk-report:
 	$(PYTHON) packedfootball/scripts/free_kick_report.py --kicks $(KICKS)
 
+## CPU per served match. What the Cloud Run bill scales with.
+bench:
+	$(PYTHON) packedfootball/scripts/bench_engine.py --matches $(or $(BENCH_MATCHES),12)
+
 ## Load every script and scene items touched, headless. Not a test runner --
 ## it catches parse errors and broken scene references, which is what actually
 ## breaks in GDScript. --import first so a newly added class_name is in the
@@ -138,6 +144,15 @@ godot-check:
 	"$(GODOT)" --headless --path $(MOBILE_DIR) --import >/dev/null 2>&1 || true
 	"$(GODOT)" --headless --path $(MOBILE_DIR) --script scripts/dev/check_scripts.gd 2>&1 \
 		| grep -E '^(ok|FAIL)|Parse Error|failures'
+
+## ReplayReader.gd's v2 parser against its v1 one, on the same match.
+replay-check:
+	@test -x "$(GODOT)" || { echo "Godot binary not found at: $(GODOT)"; exit 1; }
+	@tmp=$$(mktemp -d); \
+	$(PYTHON) packedfootball/scripts/dump_test_replay.py --out $$tmp/v1.bin --v2-out $$tmp/v2.bin >/dev/null && \
+	"$(GODOT)" --headless --path $(MOBILE_DIR) --import >/dev/null 2>&1; \
+	"$(GODOT)" --headless --path $(MOBILE_DIR) --script scripts/dev/check_replay_v2.gd -- $$tmp/v1.bin $$tmp/v2.bin >$$tmp/out.txt 2>&1; \
+	grep -E '^(ok|FAIL)' $$tmp/out.txt; grep -q '^ok' $$tmp/out.txt; status=$$?; rm -rf $$tmp; exit $$status
 
 ## Export the Godot client to $(BUILD_WEB).
 # --headless so it never opens the editor window. Godot creates the output

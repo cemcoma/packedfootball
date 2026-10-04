@@ -24,15 +24,18 @@ extension, not built here.
 
 DEAL_DATABASE = {
     "1": {
+        "active": True,
         "name": "Welcome Bundle",
         "description": "A one-time thank-you for new managers -- extra credits for a small bucks spend.",
         "cost_currency": "bucks",
         "cost_amount": 5,
-        "reward_credits": 5000,
+        "reward_credits": 750,
         "reward_bucks": 0,
         "max_redemptions_per_account":1
     },
     "2": {
+        "active": True,
+
         "name": "Midweek Credits Boost",
         "description": "A limited-run credits top-up at a better rate than the standard Exchange tab.",
         "cost_currency": "bucks",
@@ -40,4 +43,14 @@ DEAL_DATABASE = {
         "reward_credits": 6000,
         "reward_bucks": 0,
     },
+    "flash_tournament_kickstart": {
+        "active": True,
+        "name": "Contender Kickstart",
+        "description": "Essential war chest for climbing the leagues.",
+        "cost_currency": "bucks",
+        "cost_amount": 15,
+        "reward_credits": 2500,
+        "reward_bucks": 0,
+        "max_redemptions_per_account": 2
+    }
 }

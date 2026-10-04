@@ -78,6 +78,7 @@ def main():
     parser.add_argument("--seed", type=int, default=7, help="Match simulation seed")
     parser.add_argument("--roster-seed", type=int, default=55, help="Seed for generating the two test rosters")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Output .bin path")
+    parser.add_argument("--v2-out", type=Path, default=None, help="Also write the same match as format v2 (make replay-check)")
     args = parser.parse_args()
 
     team_home, team_away = build_teams(args.roster_seed)
@@ -87,6 +88,8 @@ def main():
     data = match.replay.encode()
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_bytes(data)
+    if args.v2_out:
+        args.v2_out.write_bytes(match.replay.encode_v2())
 
     # Companion roster metadata: the replay itself only ever carries array
     # indices (0-21), never names -- a real client gets names from the

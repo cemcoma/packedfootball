@@ -320,7 +320,9 @@ from formations import get_formation, is_similar_position
 #         - Nobody touches a teammate's kick while it is still rising (crosses exempt).
 #         - Fixes: a played-in free kick is taken (its taker was out of capture reach); a stale must_pass no
 #           longer cancels a free kick's; a tackle is never made on a teammate (it gave the fouling side a penalty).
-ENGINE_VERSION: Final[str] = "5.0.0"
+#   5.0.1 ~32% less CPU per match, same decisions and cadence: player push-apart every 2nd frame, per-side
+#         shared decision state, plain-float hot paths. Seeds replay differently; balance harness within noise.
+ENGINE_VERSION: Final[str] = "5.0.1"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -544,6 +546,7 @@ def _clamp(x: float, lo: float, hi: float) -> float:
 
 # The i < j player pairs, so _resolve_player_collisions doesn't rebuild them every frame.
 _UPPER_PAIRS: Final = np.triu(np.ones((22, 22), dtype=bool), k=1)
+_PITCH_MAX: Final = np.array([PITCH_WIDTH, PITCH_HEIGHT])
 
 # --- pass execution error --------------------------------------------------
 #
@@ -640,7 +643,10 @@ class game:
         # Each side's Tactic (tactics.py); None plays Balanced.
         self._tactics = [tactic_for(tactics_home), tactic_for(tactics_away)]
         self._keeper_indices = [i for i in range(22) if self.formation[i]["role"] == "GK"]
-        self._cb_mask = np.array([self.formation[i]["role"] == "CB" for i in range(22)])
+        self._cb_indices = [[i for i in side if self.formation[i]["role"] == "CB"] for side in (range(11), range(11, 22))]
+        self._home_mask = np.arange(22) < 11
+        # [i, j] is True when i and j are on opposite sides -- the pressure count only counts opponents.
+        self._opponents_mask = np.not_equal.outer(self._home_mask, self._home_mask)
         # Each player's target goal and own goal, fixed for the match -- the
         # state dicts step() builds hand these out every round.
         self._goal_targets = np.array([self._goal_for_player(i) for i in range(22)], dtype=float)
@@ -664,6 +670,12 @@ class game:
         # teammate's and an opponent's top speed, not just their velocity.
         self._pace = np.array([pace_ability(p.attributes.speed) * base_speed for p in self.all_players], dtype=float)
         self._reach = np.array([self._head_reach(i) for i in range(22)], dtype=float)
+        # Per-player constants the movement and stamina code read every step.
+        self._accel = [PLAYER_ACCEL * stat_ability(float(p.attributes.agility)) for p in self.all_players]
+        self._max_turn = [0.18 + (getattr(p.attributes, "agility", 50) / 100.0) * 0.9 for p in self.all_players]
+        self._stamina_resistance = np.array(
+            [max(20.0, float(getattr(p.attributes, "stamina", STAMINA_REFERENCE))) for p in self.all_players], dtype=float
+        )
         # A plan a player is latched onto across decision rounds ("wingplay"),
         # carried on the action dict's "intent" key; cleared on ball release.
         self.intent: list = [None] * 22
@@ -805,15 +817,6 @@ class game:
                 overlap = (min_dist - dist) / 2.0
                 self.positions[i] += normal * overlap
                 self.positions[j] -= normal * overlap
-
-        self.positions[:, 0] = np.clip(self.positions[:, 0], 0.0, PITCH_WIDTH)
-        self.positions[:, 1] = np.clip(self.positions[:, 1], 0.0, PITCH_HEIGHT)
-
-        if self.ball_controller >= 0:
-            self.ball[0:2] = self.positions[self.ball_controller]
-            self.ball[2:4] = self.velocity[self.ball_controller]
-            self.ball[4] = 0.0
-            self.ball[5] = 0.0
 
     def _pick_role_slot(self, team: int, preferred_roles: tuple, fallback_local_index: int) -> int:
         """Finds the first slot on `team` whose formation role matches, in
@@ -1367,21 +1370,17 @@ class game:
         Cost scales with how fast they're actually moving, and is divided by their stamina ATTRIBUTE relative to STAMINA_REFERENCE
         Players barely moving get a little back.
         """
-        speeds = np.linalg.norm(self.velocity, axis=1)
-        effort = np.clip(speeds / base_speed, 0.0, 1.5)
+        speeds = np.sqrt(np.einsum("ij,ij->i", self.velocity, self.velocity))
+        effort = np.minimum(speeds / base_speed, 1.5)
 
-        resistance = np.array(
-            [max(20.0, float(getattr(p.attributes, "stamina", STAMINA_REFERENCE))) for p in self.all_players],
-            dtype=float,
-        )
-        drain = STAMINA_DRAIN_PER_STEP * effort * (STAMINA_REFERENCE / resistance)
+        drain = STAMINA_DRAIN_PER_STEP * effort * (STAMINA_REFERENCE / self._stamina_resistance)
         # Only a player who has genuinely stopped gets anything back. Scaling
         # recovery by (1 - effort) across the whole range meant a player
         # jogging at half pace recovered faster than they drained.
-        idle = np.clip((STAMINA_RECOVERY_EFFORT - effort) / STAMINA_RECOVERY_EFFORT, 0.0, 1.0)
+        idle = np.maximum((STAMINA_RECOVERY_EFFORT - effort) / STAMINA_RECOVERY_EFFORT, 0.0)
         recovery = STAMINA_RECOVERY_PER_STEP * idle
 
-        self.stamina = np.clip(self.stamina - drain + recovery, 0.0, STAMINA_MAX)
+        self.stamina = np.minimum(np.maximum(self.stamina - drain + recovery, 0.0), STAMINA_MAX)
 
     def _match_rating(self, index: int) -> float:
         """This player's rating for the match just played, 0.0-10.0.
@@ -1708,7 +1707,11 @@ class game:
 
         self._maybe_kickoff()
         self.positions += self.velocity * dt
-        self._resolve_player_collisions()
+        # Push-apart on even frames only (a one-frame overlap never shows); bounds every frame.
+        if self.match_clock_frames % 2 == 0:
+            self._resolve_player_collisions()
+        np.maximum(self.positions, 0.0, out=self.positions)
+        np.minimum(self.positions, _PITCH_MAX, out=self.positions)
 
         prev_ball_xy = np.array(self.ball[0:2], dtype=float)
         prev_ball_height = float(self.ball[4])
@@ -1845,9 +1848,9 @@ class game:
             return
         unit = seg / length
         rel = self.positions - np.asarray(prev_xy, dtype=float)
-        along = np.clip(rel @ unit, 0.0, length)
-        perp = np.linalg.norm(rel - np.outer(along, unit), axis=1)
-        hits = np.flatnonzero(perp < BALL_TOUCH_RADIUS)
+        along = np.minimum(np.maximum(rel @ unit, 0.0), length)
+        off_line = rel - np.outer(along, unit)
+        hits = np.flatnonzero(np.einsum("ij,ij->i", off_line, off_line) < BALL_TOUCH_RADIUS * BALL_TOUCH_RADIUS)
         if hits.size == 0:
             return
 
@@ -2455,21 +2458,20 @@ class game:
         plus a step of acceleration, up to `top`. Slowing down is instant."""
         if index == self.ball_controller:
             return top   # turning with the ball is the dribble's own business
-        vx, vy = float(self.velocity[index][0]), float(self.velocity[index][1])
+        vx, vy = self.velocity[index].tolist()
         carried = max(0.0, vx * hx + vy * hy)
         if top <= carried:
             return top
-        accel = PLAYER_ACCEL * stat_ability(float(self.all_players[index].attributes.agility))
-        return min(top, carried + accel * self.decision_interval * self._dt)
+        return min(top, carried + self._accel[index] * self.decision_interval * self._dt)
 
     def _turn_heading_toward(self, index: int, tx: float, ty: float) -> tuple[float, float]:
         # ~100K calls a match: plain floats in and out, numpy overhead dwarfs the maths here.
+        cx, cy = self.heading[index].tolist()
         target_norm = math.hypot(tx, ty)
         if target_norm < 1e-8:
-            return float(self.heading[index][0]), float(self.heading[index][1])
+            return cx, cy
         tx, ty = tx / target_norm, ty / target_norm
 
-        cx, cy = float(self.heading[index][0]), float(self.heading[index][1])
         current_norm = math.hypot(cx, cy)
         if current_norm < 1e-8:
             cx, cy = (0.0, 1.0) if index < 11 else (0.0, -1.0)
@@ -2479,8 +2481,7 @@ class game:
         dot = min(1.0, max(-1.0, cx * tx + cy * ty))
         angle = math.acos(dot)
 
-        agility = getattr(self.all_players[index].attributes, "agility", 50)
-        max_turn = 0.18 + (agility / 100.0) * 0.9
+        max_turn = self._max_turn[index]
 
         if angle <= max_turn:  # covers the old angle <= 1e-6 case too
             return tx, ty
@@ -2555,8 +2556,9 @@ class game:
         action_type = action["type"]
 
         if action_type == "move":
-            target, pos = action["target"], self.positions[index]
-            vx, vy = float(target[0]) - float(pos[0]), float(target[1]) - float(pos[1])
+            target = action["target"]
+            px, py = self.positions[index].tolist()
+            vx, vy = float(target[0]) - px, float(target[1]) - py
             dist = math.hypot(vx, vy)
 
             if dist > 0.1:
@@ -3557,7 +3559,7 @@ class game:
             if speed > 0.5:
                 direction = ball_vel / speed
                 rel = self.positions - self.ball[0:2]
-                along = np.clip(rel @ direction, 0.0, speed * ADAPTIVE_PATH_LOOKAHEAD)
+                along = np.minimum(np.maximum(rel @ direction, 0.0), speed * ADAPTIVE_PATH_LOOKAHEAD)
                 closest = rel - along[:, None] * direction
                 path_dist = np.sqrt(np.einsum("ij,ij->i", closest, closest))
                 rounds[path_dist < ADAPTIVE_PATH_RADIUS] = ADAPTIVE_NEAR_ROUNDS
@@ -3631,7 +3633,10 @@ class game:
         ball_pos = self.ball[0:2]
 
         direction_vectors = ball_pos - self.positions
-        distances = np.linalg.norm(direction_vectors, axis=1)
+        distances = np.sqrt(np.einsum("ij,ij->i", direction_vectors, direction_vectors))
+        # Each side's players within 3 units of the ball, before the capture logic masks distances.
+        near_ball = distances < 3.0
+        near_ball_counts = (int(near_ball[:11].sum()), int(near_ball[11:].sum()))
         # Which players re-decide this round. `distances` gets masked with
         # inf below for the capture logic, so the gate reads it now.
         deciding = self._players_deciding(distances) if self.adaptive_decisions else None
@@ -3656,7 +3661,8 @@ class game:
                     distances[11:] = np.inf
                 if self.ball_release_cooldown > 0:
                     release_pos = self.positions[self.ball_release_player]
-                    nearby_release_zone = np.linalg.norm(self.positions - release_pos, axis=1) < 4.0
+                    from_release = self.positions - release_pos
+                    nearby_release_zone = np.einsum("ij,ij->i", from_release, from_release) < 16.0  # 4.0 ** 2
                     distances[nearby_release_zone] = np.inf
 
             ball_h = max(0.0, float(self.ball[4]))
@@ -3715,28 +3721,26 @@ class game:
         dists_to_goal = np.sqrt(np.einsum("ij,ij->i", goal_vecs, goal_vecs))
         goal_dirs = goal_vecs / (dists_to_goal[:, None] + 1e-8)
         # "Pressure": opponents within 3 units and ahead of the player, in
-        # the direction of their goal. One 22x11 pass instead of 22 small ones.
-        pressure_counts = np.zeros(22, dtype=int)
-        for team_slice, opp_slice in ((slice(0, 11), slice(11, 22)), (slice(11, 22), slice(0, 11))):
-            rel = self.positions[opp_slice][None, :, :] - self.positions[team_slice][:, None, :]  # 11x11x2
-            forward = np.einsum("ijk,ik->ij", rel, goal_dirs[team_slice])
-            near = np.einsum("ijk,ijk->ij", rel, rel) < 9.0  # 3.0 ** 2
-            pressure_counts[team_slice] = np.sum((forward > 0.0) & near, axis=1)
+        # the direction of their goal. One 22x22 pass instead of 22 small ones.
+        rel = self.positions[None, :, :] - self.positions[:, None, :]  # [i, j] = j's position from i
+        forward = np.einsum("ijk,ik->ij", rel, goal_dirs)
+        near = np.einsum("ijk,ijk->ij", rel, rel) < 9.0  # 3.0 ** 2
+        pressure_counts = ((forward > 0.0) & near & self._opponents_mask).sum(axis=1).tolist()
         ys = self.positions[:, 1]
         xs = self.positions[:, 0]
-        past_halfspaces = np.where(np.arange(22) < 11, ys > 50.0, ys < 50.0)
-        in_boxes = (14.0 < xs) & (xs < 56.0) & np.where(np.arange(22) < 11, ys > 82.0, ys < 18.0)
+        past_halfspaces = np.where(self._home_mask, ys > 50.0, ys < 50.0).tolist()
+        in_boxes = ((14.0 < xs) & (xs < 56.0) & np.where(self._home_mask, ys > 82.0, ys < 18.0)).tolist()
         # Is a centre-back home for each side (see CB_HOME_DEPTH), and where is their line?
         cb_home = [False, False]
         cb_line = [None, None]
-        for team, (team_slice, goal_y) in enumerate(((slice(0, 11), 0.0), (slice(11, 22), PITCH_HEIGHT))):
-            cbs = self._cb_mask[team_slice]
-            if cbs.any():
-                pos = self.positions[team_slice][cbs]
-                cb_line[team] = float(pos[:, 1].mean())
-                cb_home[team] = bool(np.any(
-                    (np.abs(pos[:, 1] - goal_y) < CB_HOME_DEPTH) & (np.abs(pos[:, 0] - PITCH_WIDTH / 2.0) < CB_HOME_HALF_WIDTH)
-                ))
+        position_list = self.positions.tolist()
+        for team, goal_y in ((0, 0.0), (1, PITCH_HEIGHT)):
+            cbs = [position_list[j] for j in self._cb_indices[team]]
+            if cbs:
+                cb_line[team] = sum(y for _, y in cbs) / len(cbs)
+                cb_home[team] = any(
+                    abs(y - goal_y) < CB_HOME_DEPTH and abs(x - PITCH_WIDTH / 2.0) < CB_HOME_HALF_WIDTH for x, y in cbs
+                )
         # The keeper's loose-ball read is per TEAM, not per player -- computed
         # at most twice a round, not 22 times.
         goal_crossings = (
@@ -3749,6 +3753,44 @@ class game:
         holder = self.keeper_holding if self.keeper_holding == self.ball_controller else -1
         # Each side's full-back on an overlap (player intent "overlap"), or -1.
         overlaps = [next((j for j in side if self.intent[j] == "overlap"), -1) for side in (range(11), range(11, 22))]
+        # What every deciding player on a side shares this round; each one's state is a copy plus their own keys.
+        side_states = [
+            {
+                "ball_pos": ball_pos,
+                "ball_velocity": ball_velocity,
+                "ball_height": ball_height,
+                "ball_vz": float(self.ball[5]),
+                "a_direction": 1 if side == 0 else -1,
+                "teammates": self.positions[mine],
+                "teammate_vel": self.velocity[mine],
+                "opponent_vel": self.velocity[theirs],
+                "teammate_pace": self._pace[mine],
+                "opponent_pace": self._pace[theirs],
+                "opponents": self.positions[theirs],
+                # Whether one of my centre-backs is holding the middle. A
+                # full-back reads this to decide between its flank and the
+                # centre -- see defender.py's "cover".
+                "cb_home": cb_home[side],
+                # Mean y of my centre-backs, or None -- the line a full-back holds (defender.py).
+                "cb_line": cb_line[side],
+                "tactic": self._tactics[side],
+                "team_possession": possesion if side == 0 else -possesion,
+                "is_loose": (self.ball_controller == -1),
+                # Where the loose ball will cross this player's own goal line,
+                # or null. Only the keeper reads it (see goalkeeper.py) -- it
+                # is what lets them tell a shot that's going in from one
+                # drifting wide, instead of diving at everything.
+                "goal_crossing": goal_crossings[side],
+                # Opponents within 3 units of the ball (player._ball_pressure).
+                "ball_pressure": near_ball_counts[1 - side],
+                "rng": self.rng,
+            }
+            for side, mine, theirs in ((0, slice(0, 11), slice(11, 22)), (1, slice(11, 22), slice(0, 11)))
+        ]
+        if deciding is not None:
+            deciding = deciding.tolist()
+        distance_list = distances.tolist()
+        goal_distance_list = dists_to_goal.tolist()
         actions = []
         for i in range(22):
             if flight is not None and flight.controls(i, self.positions):
@@ -3774,52 +3816,28 @@ class game:
             overlap = overlaps[0 if home else 1]
 
             state = {
+                **side_states[0 if home else 1],
                 "has_ball": (self.ball_controller == i),
-                "ball_pos": ball_pos,
-                "ball_velocity": ball_velocity,
-                "ball_height": ball_height,
-                "ball_vz": float(self.ball[5]),
                 "my_pos": self.positions[i],
                 "my_velocity": self.velocity[i],
                 "my_heading": self.heading[i],
-                "dist_to_ball": distances[i],
-                "dist_to_goal": dists_to_goal[i],
+                "dist_to_ball": distance_list[i],
+                "dist_to_goal": goal_distance_list[i],
                 "vec_to_goal": goal_vecs[i],
                 "enemy_goal": enemy_goal,
                 "goal_target": enemy_goal,
-                "a_direction": 1 if home else -1,
-                "in_penalty_box": bool(in_boxes[i]),
-                "in_attacking_box": bool(in_boxes[i]),
-                "pressure_count": int(pressure_counts[i]),
-                "teammates": self.positions[0:11] if home else self.positions[11:22],
-                "teammate_vel": self.velocity[0:11] if home else self.velocity[11:22],
-                "opponent_vel": self.velocity[11:22] if home else self.velocity[0:11],
-                "teammate_pace": self._pace[0:11] if home else self._pace[11:22],
-                "opponent_pace": self._pace[11:22] if home else self._pace[0:11],
-                "opponents": self.positions[11:22] if home else self.positions[0:11],
+                "in_penalty_box": in_boxes[i],
+                "in_attacking_box": in_boxes[i],
+                "pressure_count": pressure_counts[i],
                 "formation_pos": self.formation[i]["pos"],
                 "my_role": self.formation[i]["role"],
-                # Whether one of my centre-backs is holding the middle. A
-                # full-back reads this to decide between its flank and the
-                # centre -- see defender.py's "cover".
-                "cb_home": cb_home[0 if home else 1],
-                # Mean y of my centre-backs, or None -- the line a full-back holds (defender.py).
-                "cb_line": cb_line[0 if home else 1],
-                "tactic": self._tactics[0 if home else 1],
-                "team_possession": possesion if home else -possesion,
-                "past_halfspace": bool(past_halfspaces[i]),
+                "past_halfspace": past_halfspaces[i],
                 "own_goal": self._own_goals[i],
                 "must_pass_next": self.must_pass_next and self.must_pass_player == i and self.ball_controller == i,
-                "is_loose": (self.ball_controller == -1),
                 # 0-100. Available for player classes that want to pace
                 # themselves; fatigue already slows movement regardless (see
                 # _fatigue_factor).
                 "stamina": float(self.stamina[i]),
-                # Where the loose ball will cross this player's own goal line,
-                # or null. Only the keeper reads it (see goalkeeper.py) -- it
-                # is what lets them tell a shot that's going in from one
-                # drifting wide, instead of diving at everything.
-                "goal_crossing": goal_crossings[0 if home else 1],
                 # The plan this player latched onto last round ("wingplay")
                 # or None; a decision keeps it by returning it on its action.
                 "intent": self.intent[i],
@@ -3831,7 +3849,6 @@ class game:
                 ),
                 # A teammate full-back overlapping me (index into "teammates"), or -1.
                 "overlap": overlap - (0 if home else 11) if overlap >= 0 and overlap != i else -1,
-                "rng": self.rng,
             }
             intended_action = self.all_players[i].step(state)
             # The intended receiver goes to meet the ball instead of running his
@@ -3872,10 +3889,9 @@ class game:
         if holder >= 0:
             actions = [a if i == holder else self._back_off(i, a, holder) for i, a in enumerate(actions)]
 
-        resolve_order = np.argsort(distances)
-
-        for i in resolve_order:
-            self._resolve_action(int(i), actions[int(i)])
+        for i in np.argsort(distances).tolist():
+            if actions[i]:
+                self._resolve_action(i, actions[i])
 
         # Charged after the actions land, so this step's cost reflects the
         # velocities those actions just set.

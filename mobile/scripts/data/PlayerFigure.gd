@@ -198,7 +198,7 @@ const PROFILE_RIDGE_W := 0.76
 # above arm_spread() or a diving keeper looks like a standing one.
 const REACH_SPREAD := 0.62
 const REACH_Y := 0.66
-const REACH_H := 0.10
+const REACH_H := 0.16
 const REACH_SPAN := 1.60          # multiple of ARM_W
 const REACH_GLOVE := 0.45         # fraction of the arm that is glove
 
@@ -248,8 +248,8 @@ const CELEBRATE_WIDE_Y := 0.58
 const CELEBRATE_WIDE_HAND := 0.30 # fraction of the arm that is hand
 
 # "shush": the near arm bends up so a finger lands on the mouth.
-const CELEBRATE_SHUSH_MOUTH_Y := 0.22   # fraction up the head, PlayerAppearance's mouth band
-const CELEBRATE_SHUSH_FOREARM_H := 0.07
+const CELEBRATE_SHUSH_MOUTH_Y := 0.15   # fraction up the head, PlayerAppearance's mouth band
+const CELEBRATE_SHUSH_FOREARM_H := 0.06
 
 # "back": arms swept down and behind, wider than the body, chest out.
 const CELEBRATE_BACK_FLARE := 0.14
@@ -259,7 +259,7 @@ const CELEBRATE_BACK_H := 0.24
 # "cradle": both forearms across the front at waist height.
 const CELEBRATE_CRADLE_Y := 0.50
 const CELEBRATE_CRADLE_H := 0.08
-const CELEBRATE_CRADLE_OVERHANG := 0.06 # how far the arms stick out past the torso
+const CELEBRATE_CRADLE_OVERHANG := 0.20 # how far the arms stick out past the torso
 
 # Whole-body motion.
 const CELEBRATE_BOUNCE_SPEED := 1.10    # hops per phase unit, roughly (abs(sin) doubles it)

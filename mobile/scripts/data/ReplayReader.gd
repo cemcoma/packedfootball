@@ -40,6 +40,14 @@ const NUM_PLAYERS := 22
 ## 45:00 in clock frames, at gameEngine's FRAMES_PER_CLOCK_SECOND = 2.
 const REGULATION_HALF_FRAMES := 5400
 
+## v2 layout constants -- see replay.py's module docstring.
+const V2_HEADER_SIZE := 19
+const V2_CHANNELS := 93
+const V2_BALL_CHANNEL := 44
+const V2_VEL_CHANNEL := 49
+## Gzip bomb guard; a real match unpacks to ~360KB.
+const MAX_REPLAY_BYTES := 8 * 1024 * 1024
+
 
 ## The tick the HALFTIME event sits on, or -1.0 if this replay has none.
 static func halftime_tick(replay: Dictionary) -> float:
@@ -93,6 +101,12 @@ static func _to_signed16(value: int) -> int:
 ## per-match load, and zero risk of a second, subtly-different parser
 ## drifting from the proven-working one.
 static func load_from_bytes(bytes: PackedByteArray) -> Dictionary:
+	# v2 arrives gzipped (replay.py's encode_v2) and is parsed straight from memory.
+	if bytes.size() >= 2 and bytes[0] == 0x1f and bytes[1] == 0x8b:
+		bytes = bytes.decompress_dynamic(MAX_REPLAY_BYTES, FileAccess.COMPRESSION_GZIP)
+	if bytes.size() > V2_HEADER_SIZE and bytes[4] == 2 and bytes.slice(0, 4).get_string_from_ascii() == MAGIC:
+		return _parse_v2(bytes)
+
 	var tmp_path := "user://_last_match_replay.bin"
 	var file := FileAccess.open(tmp_path, FileAccess.WRITE)
 	if file == null:
@@ -101,6 +115,88 @@ static func load_from_bytes(bytes: PackedByteArray) -> Dictionary:
 	file.store_buffer(bytes)
 	file.close()
 	return load_from_file(tmp_path)
+
+
+## Format v2: channel-major int16 deltas split into low/high byte planes. Builds
+## the same Dictionary load_from_file does, so playback can't tell them apart.
+static func _parse_v2(bytes: PackedByteArray) -> Dictionary:
+	var version := bytes.decode_u8(4)
+	var sample_interval_ticks := bytes.decode_u16(5)
+	var num_samples := bytes.decode_u32(7)
+	var num_events := bytes.decode_u32(11)
+	var pos_scale := float(bytes.decode_u16(15))
+	var vel_scale := float(bytes.decode_u16(17))
+	var plane := V2_CHANNELS * num_samples
+	var events_offset := V2_HEADER_SIZE + 3 * num_samples + 2 * plane
+	if bytes.size() < events_offset + 7 * num_events:
+		push_error("Truncated v2 replay: %d bytes" % bytes.size())
+		return {}
+
+	var ticks_offset := V2_HEADER_SIZE
+	var controller_offset := ticks_offset + 2 * num_samples
+	var low_offset := controller_offset + num_samples
+	var high_offset := low_offset + plane
+
+	# Undo the deltas channel by channel into one flat [channel * n + sample] table.
+	var values := PackedInt32Array()
+	values.resize(plane)
+	for c in range(V2_CHANNELS):
+		var running := 0
+		var base := c * num_samples
+		for i in range(num_samples):
+			var k := base + i
+			running = (running + (bytes[low_offset + k] | (bytes[high_offset + k] << 8))) & 0xFFFF
+			values[k] = running - 0x10000 if running >= 0x8000 else running
+
+	var samples: Array = []
+	var tick := 0
+	for i in range(num_samples):
+		tick += bytes.decode_u16(ticks_offset + 2 * i)
+		var players: Array = []
+		for p in range(NUM_PLAYERS):
+			players.append(
+				{
+					"x": values[(2 * p) * num_samples + i] / pos_scale,
+					"y": values[(2 * p + 1) * num_samples + i] / pos_scale,
+					"vx": values[(V2_VEL_CHANNEL + 2 * p) * num_samples + i] / vel_scale,
+					"vy": values[(V2_VEL_CHANNEL + 2 * p + 1) * num_samples + i] / vel_scale,
+				}
+			)
+		var b := V2_BALL_CHANNEL * num_samples + i
+		var ball := {
+			"x": values[b] / POSITION_SCALE,
+			"y": values[b + num_samples] / POSITION_SCALE,
+			"height": values[b + 2 * num_samples] / POSITION_SCALE,
+			"vx": values[b + 3 * num_samples] / POSITION_SCALE,
+			"vy": values[b + 4 * num_samples] / POSITION_SCALE,
+		}
+		samples.append(
+			{
+				"tick": tick,
+				"players": players,
+				"ball": ball,
+				"ball_controller": bytes.decode_s8(controller_offset + i),
+			}
+		)
+
+	var events: Array = []
+	for i in range(num_events):
+		var e := events_offset + 7 * i
+		events.append(
+			{
+				"tick": bytes.decode_u32(e),
+				"type": bytes.decode_u8(e + 4),
+				"player_idx": bytes.decode_s8(e + 5),
+				"team": bytes.decode_s8(e + 6),
+			}
+		)
+
+	return {
+		"version": version,
+		"sample_interval_ticks": sample_interval_ticks,
+		"samples": samples,
+		"events": events,
+	}
 
 
 static func load_from_file(path: String) -> Dictionary:

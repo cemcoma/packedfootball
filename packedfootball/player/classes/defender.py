@@ -1,4 +1,4 @@
-from player.player import _clamp, _count_within, _norm2, player, ActionProfile, OFFSIDE_MARGIN, GOAL_SIDE_PRESS, GOAL_SIDE_CONTAIN
+from player.player import _clamp, _ball_pressure, _count_within, _dists, _pick, _norm2, player, ActionProfile, OFFSIDE_MARGIN, GOAL_SIDE_PRESS, GOAL_SIDE_CONTAIN
 from game_config import PRESS_FROM_DEFENDING, RECOVERY_CB_LANE, RECOVERY_MIN_DEPTH, RECOVERY_PRESS_RANGE, RECOVERY_RANGE, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
@@ -337,7 +337,7 @@ class Defender(player):
         
         probs = [t_pass/total, t_shoot/total, t_dribble/total, t_cross/total, t_stop/total, t_wing/total] + [weight / total for weight in moves.values()]
         actions = actions + list(moves)
-        return state["rng"].choice(actions, p=probs)
+        return _pick(state["rng"], actions, probs)
 
     def _decide_on_ball_defense(self, state: dict) -> str:
         actions = ["pass", "dribble", "stop", "clear"]
@@ -389,7 +389,7 @@ class Defender(player):
         if total <= 0: return "clear"
         
         probs = [t_pass/total, t_dribble/total, t_stop/total, t_clear/total]
-        return state["rng"].choice(actions, p=probs)
+        return _pick(state["rng"], actions, probs)
 
     def _holds_the_middle(self, state: dict) -> bool:
         """A centre-back does not follow a winger out: while the ball is wide of
@@ -451,7 +451,7 @@ class Defender(player):
 
         total = t_forward + t_support + t_hold + t_overlap
         probs = [t_forward/total, t_support/total, t_hold/total, t_overlap/total]
-        return state["rng"].choice(actions, p=probs)
+        return _pick(state["rng"], actions, probs)
 
     def _decide_off_ball_defense(self, state: dict) -> str:
         if state.get("is_loose", False):
@@ -470,7 +470,7 @@ class Defender(player):
             return "recovery_run"
 
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-        ball_pressure_count = _count_within(state.get("opponents", []), state["ball_pos"], 3.0)
+        ball_pressure_count = _ball_pressure(state)
 
         if self._holds_the_middle(state):
             return "hold_line"
@@ -489,7 +489,7 @@ class Defender(player):
             t_tackle = max(1.0, self.attributes.aggression * 1.5)
             t_contain = max(1.0, 160.0 - self.attributes.aggression)
             probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
-            return state["rng"].choice(actions, p=probs)
+            return _pick(state["rng"], actions, probs)
 
         if dist_to_ball < 15.0:
             if dist_to_ball >= FB_ENGAGE_RANGE and self._holds_back_line(state):
@@ -503,7 +503,7 @@ class Defender(player):
         t_hold = 50.0 * self.get_action_bias("hold_defense")
         t_mark = 50.0 * self.get_action_bias("man_mark")
         probs = [t_hold / (t_hold + t_mark), t_mark / (t_hold + t_mark)]
-        return state["rng"].choice(actions, p=probs)
+        return _pick(state["rng"], actions, probs)
 
     def _flank(self, state: dict) -> float:
         return -1.0 if state["formation_pos"][0] < PITCH_WIDTH / 2.0 else 1.0
@@ -599,7 +599,7 @@ class Defender(player):
             # Calculate distances of all teammates to the ball
             teammates = np.asarray(state.get("teammates", []))
             if teammates.size > 0:
-                teammate_dists = np.linalg.norm(teammates - state["ball_pos"], axis=1)
+                teammate_dists = _dists(teammates, state["ball_pos"])
                 # Count exactly how many teammates are closer to the ball than I am
                 # We subtract 0.1 to avoid tie-breaking bugs with our own distance
                 closer_teammates = int(np.sum(teammate_dists < dist_to_ball - 0.1))

@@ -93,7 +93,7 @@ def validate_formation_positions(profile: dict) -> None:
             raise HTTPException(400, f"Player {i + 1} ({p.position}) cannot play {role} in {profile['formation']}")
 
 
-def run_match(caller_profile: dict, opponent_profile: dict, seed: int) -> dict:
+def run_match(caller_profile: dict, opponent_profile: dict, seed: int, replay_format: int = 1) -> dict:
     """Runs one simulated match and returns everything the match endpoints
     need for their HTTP response: the score, the base64
     replay (see packedfootball/replay.py's ReplayRecorder), and every
@@ -102,6 +102,8 @@ def run_match(caller_profile: dict, opponent_profile: dict, seed: int) -> dict:
     MatchPlayback.gd needs this to show real names during playback, the
     same way packedfootball/main.py's local test replay ships a matching
     roster sidecar.
+
+    `replay_format` 2 sends the compact gzipped encoding (replay.encode_v2).
     """
     match = game(
         _Team(caller_profile["display_name"], caller_profile["roster"]),
@@ -117,7 +119,8 @@ def run_match(caller_profile: dict, opponent_profile: dict, seed: int) -> dict:
     # top of that, so a real match finishes a few minutes later.
     match.run_match(max_steps=10800, render=False)
     my_score, opp_score = match.scores
-    replay_b64 = base64.b64encode(match.replay.encode()).decode()
+    replay_bytes = match.replay.encode_v2() if replay_format == 2 else match.replay.encode()
+    replay_b64 = base64.b64encode(replay_bytes).decode()
     roster_fields = [player_to_fields(p) for p in caller_profile["roster"]] + [
         player_to_fields(p) for p in opponent_profile["roster"]
     ]
