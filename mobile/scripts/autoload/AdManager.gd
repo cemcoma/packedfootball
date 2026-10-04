@@ -61,7 +61,7 @@ static func ads_supported() -> bool:
 func _get_unit_id() -> String:
 	if OS.get_name() == "iOS":
 		# A registered test device gets test creatives off the live unit, so SSV fires.
-		if not FirebaseConfig.ADMOB_TEST_DEVICE_IDS.is_empty():
+		if not FirebaseConfig.ADMOB_TEST_DEVICE_IDS_IOS.is_empty():
 			return REWARDED_ID_IOS
 		return REWARDED_TEST_ID_IOS if test_mode() else REWARDED_ID_IOS
 	return ""  # Android: no live unit yet
@@ -185,9 +185,9 @@ func _start_ads() -> void:
 		return
 	_sdk_started = true
 	# Must land before initialize() to cover the first request.
-	if not FirebaseConfig.ADMOB_TEST_DEVICE_IDS.is_empty():
+	if not FirebaseConfig.ADMOB_TEST_DEVICE_IDS_IOS.is_empty():
 		var request_config := RequestConfiguration.new()
-		request_config.test_device_ids = FirebaseConfig.ADMOB_TEST_DEVICE_IDS
+		request_config.test_device_ids = FirebaseConfig.ADMOB_TEST_DEVICE_IDS_IOS
 		MobileAds.set_request_configuration(request_config)
 	MobileAds.initialize()
 	_create_and_load_ad()

@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://b7mg1qshootx0"]
 
-[ext_resource type="Script" path="res://scripts/screens/Minigames.gd" id="1"]
+[ext_resource type="Script" uid="uid://bmraf0r5fdeqx" path="res://scripts/screens/Minigames.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
-[ext_resource type="PackedScene" path="res://scenes/components/MenuTile.tscn" id="menutile"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_snc3w"]
+[ext_resource type="PackedScene" path="res://scenes/components/MenuTile.tscn" id="menutile"]
 
 [node name="Minigames" type="Control" unique_id=1960000001]
 layout_mode = 3

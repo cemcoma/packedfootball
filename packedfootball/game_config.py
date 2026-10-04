@@ -468,8 +468,6 @@ def stat_ability(stat: float, gamma: float | None = None, compress: float | None
 #
 # Plain "special" is the family's own baseline
 #
-# NON-OVERLAPPING, and they must stay that way -- diamond (75,82) against
-# special (80,85) meant half of each tier rolled inside the other.
 TIER_RANGES = {
     "bronze": (52, 60),
     "silver": (60, 67),

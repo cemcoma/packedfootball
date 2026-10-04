@@ -40,6 +40,14 @@ const ATTR_ROWS := [
 	["Heading", "heading"],
 ]
 
+## Short names for the picker's comparison table, which is only one card wide.
+const STAT_ABBREVIATIONS := {
+	"stamina": "STA", "speed": "SPD", "agility": "AGI", "passing": "PAS",
+	"ballcontrol": "CTL", "defending": "DEF", "tackling": "TAC", "dribbling": "DRI",
+	"shooting": "SHO", "power": "POW", "accuracy": "ACC", "vision": "VIS", "heading": "HEA",
+}
+const COMPARE_FONT_SIZE := 12
+
 ## Page 2 of the stats panel: career totals rather than attributes. Keys are
 ## the ones player.py's DEFAULT_STATISTICS defines; "_pass_accuracy" is
 ## derived. Keeper-only rows are filtered out for outfielders, whose zeroes
@@ -251,7 +259,13 @@ func _refresh_right_panel() -> void:
 	elif showing_picker:
 		var slots := Formations.get_formation(GameProfile.formation)
 		var role: String = slots[selected_slot]["role"]
-		_panel_header.text = tr("Pick a %s:") % role
+		var current_id: String = GameProfile.slot_assignment[selected_slot]
+		if current_id == "":
+			_panel_header.text = tr("Pick a %s:") % role
+		else:
+			_panel_header.text = tr("Pick a %s to replace %s:") % [
+				role, GameProfile.all_cards[current_id].display_name()
+			]
 		_populate_bench_grid(_eligible_bench_ids(role), role)
 	else:
 		_panel_header.text = tr("Bench (tap a slot to assign)")
@@ -301,14 +315,74 @@ func _populate_bench_grid(ids: Array, role: String = "") -> void:
 		_bench_grid.add_child(empty_label)
 		return
 
+	var current: PlayerCard = null
+	if role != "" and GameProfile.slot_assignment[selected_slot] != "":
+		current = GameProfile.all_cards[GameProfile.slot_assignment[selected_slot]]
+
 	for player_id in ids:
 		var card: PlayerCard = GameProfile.all_cards[player_id]
 		var view: PlayerCardView = PLAYER_CARD_SCENE.instantiate()
-		_bench_grid.add_child(view)
+		if role == "":
+			_bench_grid.add_child(view)
+		else:
+			var column := VBoxContainer.new()
+			column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_bench_grid.add_child(column)
+			column.add_child(view)
+			column.add_child(_primary_comparison(card, current, role))
 		view.set_card(card)
 		if role != "":
 			view.set_out_of_position(card.position != role)
 		view.pressed.connect(_on_card_view_pressed.bind(player_id))
+
+
+## The role's primary stats for a picker candidate, with the change against
+## the slot's current player (no change column when the slot is empty).
+func _primary_comparison(card: PlayerCard, current: PlayerCard, role: String) -> GridContainer:
+	var stats: Array = PlayerCard.PRIMARY_STATS_BY_POSITION.get(role, PlayerCard.DEFAULT_PRIMARY_STATS)
+	var values := _primary_in_role(card, stats, role)
+	var baseline := _primary_in_role(current, stats, role) if current != null else {}
+
+	var grid := GridContainer.new()
+	grid.columns = 3 if current != null else 2
+	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	grid.add_theme_constant_override("v_separation", 0)
+	grid.add_theme_constant_override("h_separation", 6)
+	for key in stats:
+		_add_compare_label(grid, tr(STAT_ABBREVIATIONS.get(key, key.left(3).to_upper())), ThemeManager.color("text_hint"), true)
+		_add_compare_label(grid, str(values[key]), ThemeManager.color("heading"))
+		if current != null:
+			var delta: int = values[key] - baseline[key]
+			var color := ThemeManager.color("text_hint")
+			if delta > 0:
+				color = ThemeManager.color("positive")
+			elif delta < 0:
+				color = ThemeManager.color("warning")
+			_add_compare_label(grid, "%+d" % delta if delta != 0 else "=", color)
+	return grid
+
+
+## Primary stats as they'd play in this slot: items on, and the engine's 0.9x
+## when the role isn't the card's own position.
+func _primary_in_role(card: PlayerCard, stats: Array, role: String) -> Dictionary:
+	var effective := card.effective_attributes()
+	var factor := 1.0 if card.position == role else SquadOptimizer.OUT_OF_POSITION_FACTOR
+	var values := {}
+	for key in stats:
+		values[key] = int(round(float(effective.get(key, 0)) * factor))
+	return values
+
+
+func _add_compare_label(grid: GridContainer, text: String, color: Color, expand: bool = false) -> void:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", COMPARE_FONT_SIZE)
+	label.add_theme_color_override("font_color", color)
+	if expand:
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	else:
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	grid.add_child(label)
 
 
 func _populate_stats_panel() -> void:
