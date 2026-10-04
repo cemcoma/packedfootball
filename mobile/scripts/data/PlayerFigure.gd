@@ -286,8 +286,8 @@ const SOCK_DARKEN := 0.55         # how much darker the sock is than the boot
 const ARMBAND_COLOR := Color(1.0, 0.84, 0.1)
 const ARMBAND_ALT_COLOR := Color(0.1, 0.14, 0.45)  # on a sleeve too close to the yellow
 const ARMBAND_CONTRAST := 0.45    # RGB distance under which the alt colour is used
-const ARMBAND_H := 0.06
-const ARMBAND_DROP := 0.04        # gap between the shoulder and the band
+const ARMBAND_H := 0.10
+const ARMBAND_DROP := 0.10        # gap between the shoulder and the band
 const ARMBAND_MIN_PX := 1.0
 
 # -- actions ------------------------------------------------------------------

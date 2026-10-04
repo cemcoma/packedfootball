@@ -45,7 +45,21 @@ const MIN_DRAW := 8.0
 ## "full" fits the whole pitch plus the margin behind each goal line, so both
 ## goals and both keepers are in frame rather than cropped at y=0/100.
 ## "zoom" follows the ball at a fixed vertical span.
-static func compute_camera(box: Vector2, ball_pos: Vector2, mode: String = "zoom") -> Dictionary:
+## `flip` turns the view 180 degrees (the second half's change of ends).
+static func compute_camera(
+	box: Vector2, ball_pos: Vector2, mode: String = "zoom", flip: bool = false
+) -> Dictionary:
+	var cam := _compute_camera_unflipped(box, flip_point(ball_pos) if flip else ball_pos, mode)
+	cam["flip"] = flip
+	return cam
+
+
+## Pitch point turned 180 degrees about the centre spot.
+static func flip_point(p: Vector2) -> Vector2:
+	return Vector2(PITCH_WIDTH - p.x, PITCH_HEIGHT - p.y)
+
+
+static func _compute_camera_unflipped(box: Vector2, ball_pos: Vector2, mode: String) -> Dictionary:
 	var w := box.x
 	var h := box.y
 	if w < MIN_DRAW or h < MIN_DRAW:
@@ -129,6 +143,8 @@ static func to_screen(p: Vector2, cam: Dictionary) -> Vector2:
 	var scale: float = cam.scale
 	var cam_x: float = cam.cam_x
 	var cam_y: float = cam.cam_y
+	if cam.get("flip", false):
+		p = flip_point(p)
 	return Vector2((p.x - cam_x) * scale, (p.y - cam_y) * scale)
 
 
@@ -219,6 +235,9 @@ static func draw_corner_quarter(
 ) -> void:
 	var scale: float = cam.scale
 	var base := to_screen(corner, cam)
+	if cam.get("flip", false):
+		start_angle += PI
+		end_angle += PI
 	# White and antialiased, unlike the markings -- a 2-unit arc is short
 	# enough that the line colour's alpha would lose it against the grass.
 	canvas.draw_arc(base, 2.0 * scale, start_angle, end_angle, 16, Color.WHITE, 2.0, true)

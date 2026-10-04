@@ -125,7 +125,7 @@ func _ready() -> void:
 func _refresh() -> void:
 	_name_label.text = _card.full_name()
 	_subtitle_label.text = tr("%s  ·  %s  ·  Overall %d") % [
-		_card.position, PlayerCard.tier_label(_card.tier), _card.overall()
+		_card.position, PlayerCard.tier_label(_card.tier), _card.effective_overall()
 	]
 	_origin_label.text = "%s\n%s\n%d cm" % [
 		_card.hometown, _card.country, int(_card.attributes.get("height", 0))
@@ -393,7 +393,7 @@ func _on_release_pressed() -> void:
 	_cancel_button.text = tr("Keep")
 	_confirm_footnote.text = tr("This card is gone for good.")
 	_confirm_label.text = tr("Release %s?\n\n%s %s, overall %d.\n\nYou get") % [
-		_card.full_name(), PlayerCard.tier_label(_card.tier), _card.position, _card.overall()
+		_card.full_name(), PlayerCard.tier_label(_card.tier), _card.position, _card.effective_overall()
 	]
 	# The reward is its own row rather than part of the sentence above,
 	# because it needs the logo beside it -- a Label can't carry an inline

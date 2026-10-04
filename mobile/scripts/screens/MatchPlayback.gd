@@ -283,6 +283,12 @@ const HALFTIME_PAUSE_SECONDS := 3.0  # matches gameEngine.py's halftime_pause_ti
 
 var is_paused: bool = false
 var _halftime_tick: float = -1.0
+# The last first-half sample, which the HALF TIME banner holds on, and the
+# kickoff sample after it, where the view turns for the second half.
+var _halftime_hold_tick: float = -1.0
+var _second_half_tick: float = -1.0
+# Which way player_facings were last worked out, so the change of ends can turn them.
+var _facings_flipped: bool = false
 var _pending_result_transition: bool = false
 
 
@@ -395,6 +401,10 @@ func _ready() -> void:
 	_scorer_card_slot.add_child(_scorer_card_view)
 
 	_halftime_tick = ReplayReader.halftime_tick(replay)
+	if _halftime_tick >= 0.0:
+		var halftime_bracket := _find_bracket(replay["samples"], _halftime_tick)
+		_halftime_hold_tick = float(halftime_bracket[0]["tick"])
+		_second_half_tick = float(halftime_bracket[1]["tick"])
 
 	_resolve_team_colors()  # before _setup_scoreboard -- it paints the swatches
 	_setup_scoreboard()
@@ -550,6 +560,13 @@ func _update_score_label() -> void:
 
 func _update_timer_label() -> void:# display_tick, not the raw playback tick:
 	var shown := ReplayReader.display_tick(playback_tick, _halftime_tick)
+	# Added time reads "45+2" for its 2nd minute, the way football writes it.
+	var second_half := _halftime_tick < 0.0 or playback_tick > _halftime_tick
+	var half_end := float(ReplayReader.REGULATION_HALF_FRAMES) * (2.0 if second_half else 1.0)
+	if shown > half_end:
+		var added_seconds := int((shown - half_end) / 2.0)
+		_timer_label.text = "%d+%d" % [int(half_end / 2.0) / 60, added_seconds / 60 + 1]
+		return
 	var clock_total_seconds := int(shown / 2.0)
 	_timer_label.text = "%02d:%02d" % [clock_total_seconds / 60, clock_total_seconds % 60]
 
@@ -625,7 +642,9 @@ func _on_pause_pressed() -> void:
 	if is_paused:
 		# "No going back": once playback has moved past halftime, jumping to
 		# it again would rewind the score -- see _jump_to_event's docstring.
-		_skip_halftime_button.disabled = _halftime_tick < 0.0 or playback_tick >= _halftime_tick
+		_skip_halftime_button.disabled = (
+			_halftime_tick < 0.0 or halftime_pause_remaining > 0.0 or playback_tick >= _halftime_tick
+		)
 
 
 func _close_pause_overlay() -> void:
@@ -719,6 +738,9 @@ func _process(delta: float) -> void:
 	if halftime_pause_remaining > 0.0:
 		halftime_pause_remaining = maxf(0.0, halftime_pause_remaining - effective_delta)
 		banner_timer = maxf(0.0, banner_timer - effective_delta)
+		if halftime_pause_remaining <= 0.0:
+			# Cut straight to the kickoff shape; the frames between are a slide, not play.
+			playback_tick = maxf(playback_tick, _second_half_tick)
 		queue_redraw()
 		return  # action is genuinely paused -- playback_tick does not advance
 
@@ -773,6 +795,8 @@ func _process(delta: float) -> void:
 
 	_process_events(playback_tick)
 	_arm_actions(playback_tick)
+	if halftime_pause_remaining > 0.0:
+		playback_tick = minf(playback_tick, _halftime_hold_tick)
 	if not _pending_stoppage.is_empty():
 		# Back to the last recorded in-play frame -- at most a sample
 		# interval, and events already passed can't fire twice.
@@ -961,7 +985,7 @@ func _dive_aim(index: int) -> float:
 	var offset: float = float(state["ball"].x) - float(players[index].x)
 	if absf(offset) < DIVE_STRAIGHT_UNITS:
 		return 0.0
-	return signf(offset)
+	return -signf(offset) if _view_flipped() else signf(offset)
 
 
 func _action_color(event_type: int) -> Color:
@@ -1148,7 +1172,12 @@ func _interpolated_state() -> Dictionary:
 # "full" and "zoom" are gameEngine.py render()'s two cameras; the maths is
 # PitchDraw's, so the shootout frames the same pitch the same way.
 func _compute_camera(ball_pos: Vector2) -> Dictionary:
-	return PitchDraw.compute_camera(size, ball_pos, camera_mode)
+	return PitchDraw.compute_camera(size, ball_pos, camera_mode, _view_flipped())
+
+
+## Second half: the camera turns 180 degrees so the sides change ends on screen.
+func _view_flipped() -> bool:
+	return _second_half_tick >= 0.0 and playback_tick >= _second_half_tick
 
 
 # Local to PitchCanvas -- (0, 0) is this box's own top-left, not the
@@ -1424,6 +1453,12 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 				players = players.duplicate()
 				players[sp_taker] = stand + back.normalized() * (SET_PIECE_BACKOFF_UNITS * away)
 
+	var flipped := _view_flipped()
+	if _facings_flipped != flipped:
+		_facings_flipped = flipped
+		for i in range(player_facings.size()):
+			player_facings[i] = posmod(int(player_facings[i]) + 4, 8)
+
 	var celebrating := _celebrating()
 	if celebrating:
 		# Latch where the scoring side stood when the ball went in, on the
@@ -1433,7 +1468,9 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 		if _celebration_positions.is_empty():
 			_celebration_positions = players.duplicate()
 			_celebration_direction = _celebration_run_direction()
-			_celebration_facing = PlayerFigure.facing_from_direction(_celebration_direction)
+			_celebration_facing = PlayerFigure.facing_from_direction(
+				-_celebration_direction if flipped else _celebration_direction
+			)
 		players = _celebration_positions
 		# ...except the scorer, who runs off along their celebration's
 		# timeline: toward the nearest corner, as far as its stages carry
@@ -1456,7 +1493,8 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 	var order: Array = []
 	for i in range(ReplayReader.NUM_PLAYERS):
 		order.append(i)
-	order.sort_custom(func(a, b): return players[a].y < players[b].y)
+	# Feet lowest on screen last, which is the far end of the pitch once flipped.
+	order.sort_custom(func(a, b): return players[a].y > players[b].y if flipped else players[a].y < players[b].y)
 
 	var height_px: float = FIGURE_HEIGHT_UNITS * scale
 	var detail: int = PlayerFigure.DETAIL_FULL if height_px >= FIGURE_FULL_DETAIL_PX else PlayerFigure.DETAIL_LOW
@@ -1471,7 +1509,7 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 		var velocity: Vector2 = velocities[i]
 
 		player_facings[i] = PlayerFigure.facing_from_velocity(
-			velocity, int(player_facings[i]), FACING_MIN_SPEED
+			-velocity if flipped else velocity, int(player_facings[i]), FACING_MIN_SPEED
 		)
 
 		var action: Dictionary = player_actions[i]

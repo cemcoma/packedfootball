@@ -239,9 +239,8 @@ func effective_attributes() -> Dictionary:
 	return ItemData.apply(attributes, items)
 
 
-## What the card rates WITH its equipment. overall() stays the rolled number,
-## because that is what a release payout, the squad optimiser and the
-## leaderboard all go by.
+## What the card rates WITH its equipment -- the number shown on the card.
+## overall() stays the rolled number for the squad optimiser and leaderboard.
 func effective_overall() -> int:
 	if items.is_empty():
 		return overall()

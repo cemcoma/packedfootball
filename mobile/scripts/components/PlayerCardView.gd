@@ -102,7 +102,7 @@ func set_card(card: PlayerCard) -> void:
 		print("No background... %s" % _card.tier)
 		_background_texture.texture = null
 		
-	_overall_label.text = str(card.overall())
+	_overall_label.text = str(card.effective_overall())
 	_position_label.text = card.position
 	_tier_label.text = PlayerCard.tier_label(card.tier)
 	_model_view.set_card(card)
