@@ -280,6 +280,16 @@ const LEGS_STEP := "step"
 
 const SOCK_DARKEN := 0.55         # how much darker the sock is than the boot
 
+# -- captain's armband --------------------------------------------------------
+# Round the LEFT upper arm, just under the shoulder: screen-right facing the
+# viewer, screen-left from behind, the far arm side on facing east.
+const ARMBAND_COLOR := Color(1.0, 0.84, 0.1)
+const ARMBAND_ALT_COLOR := Color(0.1, 0.14, 0.45)  # on a sleeve too close to the yellow
+const ARMBAND_CONTRAST := 0.45    # RGB distance under which the alt colour is used
+const ARMBAND_H := 0.06
+const ARMBAND_DROP := 0.04        # gap between the shoulder and the band
+const ARMBAND_MIN_PX := 1.0
+
 # -- actions ------------------------------------------------------------------
 # What a player does when the replay says they shot, passed, cleared, tackled
 # or saved: a short timeline, one recipe each. draw_into gets the recipe's
@@ -567,7 +577,8 @@ static func draw_into(
 	font: Font = null,
 	is_keeper: bool = false,
 	build: Vector2 = Vector2.ONE,
-	aim: float = 0.0
+	aim: float = 0.0,
+	captain: bool = false
 ) -> void:
 	if height_px <= 1.0:
 		return
@@ -583,6 +594,7 @@ static func draw_into(
 	var shirt := kit.primary_color() if kit != null else Color(0.2, 0.5, 1.0)
 	var trim := kit.secondary_color() if kit != null else Color.WHITE
 	var pattern: String = kit.pattern if kit != null else KitDesign.PATTERN_SOLID
+	var band := armband_color(sleeve_color(pattern, shirt, trim)) if captain else Color(0, 0, 0, 0)
 
 	# Ground marker first -- everything else sits on top of it.
 	var marker := flash if flash.a > 0.0 else SHADOW_COLOR
@@ -686,7 +698,7 @@ static func draw_into(
 		_draw_profile(
 			canvas, body + Vector2(rock, 0.0), w, h, side, pose, swing, arms, legs, phase,
 			skin, hair, boots, shirt, trim, pattern, appearance, detail, is_keeper,
-			kick, lunge, drop, motion
+			kick, lunge, drop, motion, band
 		)
 		return
 
@@ -709,9 +721,9 @@ static func draw_into(
 	var sleeve := sleeve_color(pattern, shirt, trim)
 	if arms in ["shush", "head"]:
 		_draw_head(canvas, body, w, h, skin, hair, appearance, facing, lean, detail)
-		_draw_arms(canvas, body, w, h, sleeve, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
+		_draw_arms(canvas, body, w, h, sleeve, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift, band, faces_viewer(facing))
 	else:
-		_draw_arms(canvas, body, w, h, sleeve, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift)
+		_draw_arms(canvas, body, w, h, sleeve, skin, pose, swing, lean, phase, is_keeper, arms, arm_lift, band, faces_viewer(facing))
 		_draw_head(canvas, body, w, h, skin, hair, appearance, facing, lean, detail)
 
 	if detail == DETAIL_FULL and number > 0 and faces_away(facing) and font != null:
@@ -870,7 +882,7 @@ static func _draw_arms(
 	canvas: CanvasItem, feet: Vector2, w: float, h: float,
 	sleeve: Color, skin: Color, pose: String, swing: float, lean: float,
 	phase: float = 0.0, is_keeper: bool = false, celebration_arms: String = "",
-	arm_lift: float = 0.0
+	arm_lift: float = 0.0, band: Color = Color(0, 0, 0, 0), band_right: bool = false
 ) -> void:
 	var arm_w := w * ARM_W
 	var hand := GLOVE_COLOR if is_keeper else skin
@@ -885,22 +897,28 @@ static func _draw_arms(
 		_rect(canvas, feet, w, h, right_x, REACH_Y, span, h * REACH_H, sleeve)
 		_rect(canvas, feet, w, h, left_x, REACH_Y, span * REACH_GLOVE, h * REACH_H, hand)
 		_rect(canvas, feet, w, h, right_x + span * (1.0 - REACH_GLOVE), REACH_Y, span * REACH_GLOVE, h * REACH_H, hand)
+		_armband_across(canvas, feet, w, h, lean, REACH_Y, h * REACH_H, 1.0 if band_right else -1.0, band)
 		return
 
 	# "swing" is the ordinary run-cycle arms, driven by the leg swing
 	# draw_into computed for a LEGS_STEP celebration; every other arm pose
 	# is its own gesture. A throw or a dive borrows the raised arms.
 	if (pose == POSE_CELEBRATE and celebration_arms != "swing") or celebration_arms in ["up", "head"]:
-		_draw_celebrating_arms(canvas, feet, w, h, sleeve, hand, celebration_arms, lean, phase if pose == POSE_CELEBRATE else 0.0)
+		_draw_celebrating_arms(
+			canvas, feet, w, h, sleeve, hand, celebration_arms, lean,
+			phase if pose == POSE_CELEBRATE else 0.0, band, band_right
+		)
 		return
 
 	var lift := swing * ARM_SWING + arm_lift
 	var spread := arm_spread()
-	for side in [[-w * spread + lean, -lift], [w * spread - arm_w + lean, lift]]:
+	for side in [[-w * spread + lean, -lift, false], [w * spread - arm_w + lean, lift, true]]:
 		var x: float = side[0]
 		var dy: float = side[1]
 		_rect(canvas, feet, w, h, x, ARM_Y + dy, arm_w, h * ARM_H, sleeve)
 		_rect(canvas, feet, w, h, x, ARM_Y + dy - HAND_H, arm_w, h * HAND_H, hand)
+		if side[2] == band_right:
+			_armband(canvas, feet, w, h, x, ARM_Y + dy + ARM_H - ARMBAND_DROP - ARMBAND_H, band)
 
 
 ## The arm poses a celebration recipe can name (PlayerAppearance.CELEBRATIONS'
@@ -910,11 +928,15 @@ static func _draw_arms(
 ## arms-up wave, so a recipe from a newer build still shows something.
 static func _draw_celebrating_arms(
 	canvas: CanvasItem, feet: Vector2, w: float, h: float,
-	sleeve: Color, hand: Color, arms: String, lean: float, phase: float
+	sleeve: Color, hand: Color, arms: String, lean: float, phase: float,
+	band: Color = Color(0, 0, 0, 0), band_right: bool = false
 ) -> void:
 	var arm_w := w * ARM_W
 	var spread := arm_spread()
 	var wave := sin(phase * CELEBRATE_WAVE_SPEED) * w * CELEBRATE_WAVE_W
+	var none := Color(0, 0, 0, 0)
+	var left_band := none if band_right else band
+	var right_band := band if band_right else none
 	# Screen-space: "left" is the viewer's left, hanging arms are drawn
 	# from ARM_Y up (hand below), raised arms from CELEBRATE_ARM_Y up
 	# (hand on top).
@@ -932,32 +954,37 @@ static func _draw_celebrating_arms(
 			_rect(canvas, feet, w, h, rx, CELEBRATE_WIDE_Y, span, h * REACH_H, sleeve)
 			_rect(canvas, feet, w, h, lx, CELEBRATE_WIDE_Y, span * CELEBRATE_WIDE_HAND, h * REACH_H, hand)
 			_rect(canvas, feet, w, h, rx + span * (1.0 - CELEBRATE_WIDE_HAND), CELEBRATE_WIDE_Y, span * CELEBRATE_WIDE_HAND, h * REACH_H, hand)
+			_armband_across(canvas, feet, w, h, lean, CELEBRATE_WIDE_Y, h * REACH_H, -1.0, left_band)
+			_armband_across(canvas, feet, w, h, lean, CELEBRATE_WIDE_Y, h * REACH_H, 1.0, right_band)
 		"pump":
 			# Right fist punching the air, left arm hanging.
 			var pump := (0.5 + 0.5 * sin(phase * CELEBRATE_WAVE_SPEED)) * CELEBRATE_PUMP_H
-			_draw_raised_arm(canvas, feet, w, h, right_x + w * CELEBRATE_FLARE, CELEBRATE_ARM_Y + pump, sleeve, hand)
-			_draw_hanging_arm(canvas, feet, w, h, left_x, sleeve, hand)
+			_draw_raised_arm(canvas, feet, w, h, right_x + w * CELEBRATE_FLARE, CELEBRATE_ARM_Y + pump, sleeve, hand, right_band)
+			_draw_hanging_arm(canvas, feet, w, h, left_x, sleeve, hand, left_band)
 		"shush":
 			# Right upper arm raised, forearm across to the mouth, finger
 			# on the lips. Left arm hanging.
 			var mouth_y := HEAD_Y + HEAD_H * CELEBRATE_SHUSH_MOUTH_Y
 			_rect(canvas, feet, w, h, right_x, ARM_Y + ARM_H * 0.5, arm_w, h * (mouth_y - ARM_Y - ARM_H * 0.5), sleeve)
+			_armband(canvas, feet, w, h, right_x, ARM_Y + ARM_H - ARMBAND_DROP - ARMBAND_H, right_band)
 			_rect(canvas, feet, w, h, lean, mouth_y, right_x + arm_w - lean, h * CELEBRATE_SHUSH_FOREARM_H, sleeve)
 			_rect(canvas, feet, w, h, lean - arm_w * 0.5, mouth_y, arm_w * 0.5, h * CELEBRATE_SHUSH_FOREARM_H, hand)
-			_draw_hanging_arm(canvas, feet, w, h, left_x, sleeve, hand)
+			_draw_hanging_arm(canvas, feet, w, h, left_x, sleeve, hand, left_band)
 		"back":
 			# Both arms down and swept out behind: lower than a hanging arm
 			# and flared past the shoulders, chest out.
 			var flare := w * CELEBRATE_BACK_FLARE
-			for ax in [left_x - flare, right_x + flare]:
-				_rect(canvas, feet, w, h, ax, CELEBRATE_BACK_Y, arm_w, h * CELEBRATE_BACK_H, sleeve)
-				_rect(canvas, feet, w, h, ax, CELEBRATE_BACK_Y - HAND_H, arm_w, h * HAND_H, hand)
+			for ab in [[left_x - flare, left_band], [right_x + flare, right_band]]:
+				_rect(canvas, feet, w, h, ab[0], CELEBRATE_BACK_Y, arm_w, h * CELEBRATE_BACK_H, sleeve)
+				_rect(canvas, feet, w, h, ab[0], CELEBRATE_BACK_Y - HAND_H, arm_w, h * HAND_H, hand)
+				_armband(canvas, feet, w, h, ab[0], CELEBRATE_BACK_Y + CELEBRATE_BACK_H - ARMBAND_DROP - ARMBAND_H, ab[1])
 		"head":
 			# Hands on the head (POSE_DEJECTED): both upper arms straight up,
 			# forearms folded in over the hair so the hands meet in the middle.
 			var top := CELEBRATE_ARM_Y + DEJECTED_ARM_H - DEJECTED_FOREARM_H
-			for ax in [left_x, right_x]:
-				_rect(canvas, feet, w, h, ax, CELEBRATE_ARM_Y, arm_w, h * DEJECTED_ARM_H, sleeve)
+			for ab in [[left_x, left_band], [right_x, right_band]]:
+				_rect(canvas, feet, w, h, ab[0], CELEBRATE_ARM_Y, arm_w, h * DEJECTED_ARM_H, sleeve)
+				_armband(canvas, feet, w, h, ab[0], CELEBRATE_ARM_Y + ARMBAND_DROP, ab[1])
 			_rect(canvas, feet, w, h, left_x, top, right_x + arm_w - left_x, h * DEJECTED_FOREARM_H, sleeve)
 			_rect(canvas, feet, w, h, lean - arm_w, top, arm_w * 2.0, h * DEJECTED_FOREARM_H, hand)
 		"cradle":
@@ -976,26 +1003,56 @@ static func _draw_celebrating_arms(
 			# "up", and anything this build doesn't know: both arms raised,
 			# swaying together.
 			var celebrate_spread := spread + CELEBRATE_FLARE
-			for ax in [-w * celebrate_spread + lean + wave, w * celebrate_spread - arm_w + lean + wave]:
-				_draw_raised_arm(canvas, feet, w, h, ax, CELEBRATE_ARM_Y, sleeve, hand)
+			_draw_raised_arm(canvas, feet, w, h, -w * celebrate_spread + lean + wave, CELEBRATE_ARM_Y, sleeve, hand, left_band)
+			_draw_raised_arm(canvas, feet, w, h, w * celebrate_spread - arm_w + lean + wave, CELEBRATE_ARM_Y, sleeve, hand, right_band)
 
 
 ## One arm straight up from `y`, hand on top.
 static func _draw_raised_arm(
-	canvas: CanvasItem, feet: Vector2, w: float, h: float, x: float, y: float, sleeve: Color, hand: Color
+	canvas: CanvasItem, feet: Vector2, w: float, h: float, x: float, y: float, sleeve: Color, hand: Color,
+	band: Color = Color(0, 0, 0, 0)
 ) -> void:
 	var arm_w := w * ARM_W
 	_rect(canvas, feet, w, h, x, y, arm_w, h * CELEBRATE_ARM_H, sleeve)
 	_rect(canvas, feet, w, h, x, y + CELEBRATE_ARM_H, arm_w, h * CELEBRATE_HAND_H, hand)
+	_armband(canvas, feet, w, h, x, y + ARMBAND_DROP, band)
 
 
 ## One arm hanging at the side, hand below -- the idle arm.
 static func _draw_hanging_arm(
-	canvas: CanvasItem, feet: Vector2, w: float, h: float, x: float, sleeve: Color, hand: Color
+	canvas: CanvasItem, feet: Vector2, w: float, h: float, x: float, sleeve: Color, hand: Color,
+	band: Color = Color(0, 0, 0, 0)
 ) -> void:
 	var arm_w := w * ARM_W
 	_rect(canvas, feet, w, h, x, ARM_Y, arm_w, h * ARM_H, sleeve)
 	_rect(canvas, feet, w, h, x, ARM_Y - HAND_H, arm_w, h * HAND_H, hand)
+	_armband(canvas, feet, w, h, x, ARM_Y + ARM_H - ARMBAND_DROP - ARMBAND_H, band)
+
+
+## The captain's armband across one upper arm, `y` its bottom edge; a clear
+## `band` (not the captain, or not this arm) draws nothing.
+static func _armband(canvas: CanvasItem, feet: Vector2, w: float, h: float, x: float, y: float, band: Color) -> void:
+	if band.a <= 0.0:
+		return
+	_rect(canvas, feet, w, h, x, y, w * ARM_W, maxf(h * ARMBAND_H, ARMBAND_MIN_PX), band)
+
+
+## The band on an arm held straight out (`out` -1 screen-left, +1 right), flush
+## with the torso's edge: the arm only shows from there, and further out it reads as a wristband.
+static func _armband_across(
+	canvas: CanvasItem, feet: Vector2, w: float, h: float, lean: float, y: float, arm_h: float, out: float, band: Color
+) -> void:
+	if band.a <= 0.0:
+		return
+	var band_w := maxf(h * ARMBAND_H, ARMBAND_MIN_PX)
+	var x := lean + out * w * TORSO_W / 2.0 - (band_w if out < 0.0 else 0.0)
+	_rect(canvas, feet, w, h, x, y, band_w, arm_h, band)
+
+
+## Yellow, unless the sleeve is close enough to it that the band would vanish.
+static func armband_color(sleeve: Color) -> Color:
+	var gap := Vector3(sleeve.r - ARMBAND_COLOR.r, sleeve.g - ARMBAND_COLOR.g, sleeve.b - ARMBAND_COLOR.b).length()
+	return ARMBAND_ALT_COLOR if gap < ARMBAND_CONTRAST else ARMBAND_COLOR
 
 
 ## The side view. `side` is +1 facing east (screen right), -1 west, and
@@ -1007,7 +1064,8 @@ static func _draw_profile(
 	pose: String, swing: float, arms: String, legs: String, phase: float,
 	skin: Color, hair: Color, boots: Color, shirt: Color, trim: Color, pattern: String,
 	appearance: Dictionary, detail: int, is_keeper: bool,
-	kick: float = 0.0, lunge: float = 0.0, drop: float = 0.0, motion: Dictionary = {}
+	kick: float = 0.0, lunge: float = 0.0, drop: float = 0.0, motion: Dictionary = {},
+	band: Color = Color(0, 0, 0, 0)
 ) -> void:
 	var hand := GLOVE_COLOR if is_keeper else skin
 	var sock := boots.lerp(Color.BLACK, SOCK_DARKEN)
@@ -1056,8 +1114,11 @@ static func _draw_profile(
 	_profile_leg(canvas, body, w, h, side, far_fwd - PROFILE_LEG_OFFSET, far_lift, leg_w, leg_h, toe,
 		boots.lerp(far, PROFILE_FAR_SHADE), sock.lerp(far, PROFILE_FAR_SHADE))
 	var gesture := arms if (pose == POSE_CELEBRATE or arms == "up") else "hang"
+	# The left arm: the far one facing east, the near one facing west.
+	var far_band := band.lerp(far, PROFILE_FAR_SHADE) if band.a > 0.0 and side > 0.0 else Color(0, 0, 0, 0)
+	var near_band := band if side < 0.0 else Color(0, 0, 0, 0)
 	_profile_arm(canvas, body, w, h, side, -side * arm_swing * w - arm_w / 2.0, arm_w, gesture,
-		sleeve.lerp(far, PROFILE_FAR_SHADE), hand.lerp(far, PROFILE_FAR_SHADE), phase, false)
+		sleeve.lerp(far, PROFILE_FAR_SHADE), hand.lerp(far, PROFILE_FAR_SHADE), phase, false, far_band)
 
 	_profile_leg(canvas, body, w, h, side, near_fwd, near_lift, leg_w, leg_h, toe, boots, sock)
 	_rect(canvas, body, w, h, -w * PROFILE_SHORTS_W / 2.0, shorts_y, w * PROFILE_SHORTS_W, h * SHORTS_H, shirt)
@@ -1065,7 +1126,7 @@ static func _draw_profile(
 
 	_draw_torso(canvas, body, w, h, shirt, trim, pattern, lunge * TORSO_LUNGE_TILT, 0.0, detail, PROFILE_TORSO_W)
 	_profile_arm(canvas, body, w, h, side, side * arm_swing * w - arm_w / 2.0, arm_w, gesture,
-		sleeve, hand, phase, true)
+		sleeve, hand, phase, true, near_band)
 	_profile_head(canvas, body, w, h, side, skin, hair, appearance, detail)
 
 
@@ -1086,7 +1147,8 @@ static func _profile_leg(
 ## "wide" (near arm forward, far arm back -- the aeroplane, side on).
 static func _profile_arm(
 	canvas: CanvasItem, body: Vector2, w: float, h: float, side: float,
-	x: float, arm_w: float, gesture: String, sleeve: Color, hand: Color, phase: float, near: bool
+	x: float, arm_w: float, gesture: String, sleeve: Color, hand: Color, phase: float, near: bool,
+	band: Color = Color(0, 0, 0, 0)
 ) -> void:
 	match gesture:
 		"wide":
@@ -1099,12 +1161,14 @@ static func _profile_arm(
 		"hang", "swing":
 			_rect(canvas, body, w, h, x, ARM_Y, arm_w, h * ARM_H, sleeve)
 			_rect(canvas, body, w, h, x, ARM_Y - HAND_H, arm_w, h * HAND_H, hand)
+			if band.a > 0.0:
+				_rect(canvas, body, w, h, x, ARM_Y + ARM_H - ARMBAND_DROP - ARMBAND_H, arm_w, maxf(h * ARMBAND_H, ARMBAND_MIN_PX), band)
 		_:
 			# "up" and every other gesture: raised, swaying, the far arm a
 			# touch behind so it shows past the near one.
 			var wave := sin(phase * CELEBRATE_WAVE_SPEED) * w * CELEBRATE_WAVE_W * 0.5
 			var back := 0.0 if near else -side * arm_w * 0.5
-			_draw_raised_arm(canvas, body, w, h, x + wave + back, CELEBRATE_ARM_Y, sleeve, hand)
+			_draw_raised_arm(canvas, body, w, h, x + wave + back, CELEBRATE_ARM_Y, sleeve, hand, band)
 
 
 ## The head side on: narrower, one eye toward the front, hair as the style's

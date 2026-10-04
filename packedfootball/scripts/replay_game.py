@@ -56,6 +56,7 @@ from game_state import fields_to_player, player_to_fields  # noqa: E402
 from packEngine import PLAYER_CLASS_MAP  # noqa: E402
 from player.classes.midfielder import Midfielder  # noqa: E402
 from replay import FORMAT_VERSION as REPLAY_FORMAT_VERSION  # noqa: E402
+from tactics import sanitize_tactics  # noqa: E402
 
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "packedfootball")
 
@@ -88,6 +89,10 @@ def _side(snapshot: dict, label: str) -> dict:
     players = [fields_to_player(f, PLAYER_CLASS_MAP, Midfielder) for f in snapshot.get("players") or []]
     if len(players) != 11:
         raise ValueError(f"{label} side has {len(players)} players in the snapshot, need 11")
+    # The tactics map picks its captain and takers by id; absent before engine 5.1.0.
+    for p, player_id in zip(players, snapshot.get("player_ids") or []):
+        if player_id:
+            p.player_id = player_id
     formation = snapshot.get("formation", "4-4-2")
     if formation not in FORMATIONS:
         raise ValueError(f"{label} side has unknown formation {formation!r}")
@@ -96,6 +101,7 @@ def _side(snapshot: dict, label: str) -> dict:
         "formation": formation,
         "roster": players,
         "kit": snapshot.get("kit") or "",
+        "tactics": sanitize_tactics(snapshot.get("tactics")),
     }
 
 
@@ -116,6 +122,8 @@ def run(doc: dict, reports: list[dict], game_id: str) -> dict:
         record_replay=True,
         formation_home=home["formation"],
         formation_away=away["formation"],
+        tactics_home=home["tactics"],
+        tactics_away=away["tactics"],
     )
     cpu_start = time.process_time()
     match.run_match(max_steps=10800, render=False)
@@ -137,6 +145,8 @@ def run(doc: dict, reports: list[dict], game_id: str) -> dict:
         "added_time": [frames // 2 for frames in match.added_time_frames],
         "kits": [home["kit"], away["kit"]],
         "formations": [home["formation"], away["formation"]],
+        "tactics": [home["tactics"], away["tactics"]],
+        "captains": list(match.captains),
         # Local-only extras, ignored by MatchSession and shown by the CHECK
         # panel. A score that differs from the recorded one is the clearest
         # sign the engine has moved since the match was played.

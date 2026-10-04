@@ -7,7 +7,7 @@ from typing import Final
 
 import free_kick
 from replay import ActionType, ReplayRecorder
-from tactics import tactic_for
+from tactics import ROLE_KEYS, duty_rating, sanitize_tactics, tactic_for
 from game_config import (  # noqa: F401
     CROSS_MAX_SPEED,
     cross_flight_max,
@@ -322,7 +322,9 @@ from formations import get_formation, is_similar_position
 #           longer cancels a free kick's; a tackle is never made on a teammate (it gave the fouling side a penalty).
 #   5.0.1 ~32% less CPU per match, same decisions and cadence: player push-apart every 2nd frame, per-side
 #         shared decision state, plain-float hot paths. Seeds replay differently; balance harness within noise.
-ENGINE_VERSION: Final[str] = "5.0.1"
+#   5.1.0 set-piece takers and a captain from the tactics map (penalty/corner/free_kick_taker, captain:
+#         player ids). Corner takers also deliver crossed free kicks. Unpicked = the old choice, seeds unchanged.
+ENGINE_VERSION: Final[str] = "5.1.0"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -665,6 +667,13 @@ class game:
             p if p.position == self.formation[i]["role"] else _apply_out_of_position_penalty(p)
             for i, p in enumerate(raw_players)
         ]
+        # The captain and set-piece takers each manager picked, as slot indices.
+        self._picked = [self._picked_slots(0, tactics_home), self._picked_slots(1, tactics_away)]
+        # Cosmetic for now (the armband); unpicked, the best outfielder (a keeper's overall runs high).
+        self.captains = [
+            self._picked[team].get("captain", max(self._fk_outfield(team), key=lambda i: self.all_players[i].overall))
+            for team in (0, 1)
+        ]
         # How high each player can get to a ball, fixed for the match.
         # Pace per player, cached like _reach: the decision layer needs a
         # teammate's and an opponent's top speed, not just their velocity.
@@ -831,6 +840,30 @@ class game:
                 if self.formation[base + local_i]["role"] == role:
                     return base + local_i
         return base + fallback_local_index
+
+    @staticmethod
+    def _side_range(team: int) -> range:
+        return range(0, 11) if team == 0 else range(11, 22)
+
+    def _picked_slots(self, team: int, tactics) -> dict:
+        """Role key -> slot for each pick (tactics.ROLE_KEYS, by player_id) that is in
+        this XI; a set-piece taker must be an outfielder. Missing means Auto."""
+        slot_of = {}
+        for i in self._side_range(team):
+            player_id = getattr(self.all_players[i], "player_id", None)
+            if player_id:
+                slot_of[player_id] = i
+        picked = {}
+        for key, player_id in sanitize_tactics(tactics).items():
+            slot = slot_of.get(player_id) if key in ROLE_KEYS else None
+            if slot is not None and (key == "captain" or slot not in self._keeper_indices):
+                picked[key] = slot
+        return picked
+
+    def _set_piece_taker(self, team: int, duty: str, preferred_roles: tuple, fallback_local_index: int) -> int:
+        """The manager's pick for `duty`, else the formation's usual man for it."""
+        picked = self._picked[team].get(duty)
+        return picked if picked is not None else self._pick_role_slot(team, preferred_roles, fallback_local_index)
 
     def _kickoff_player_for_team(self, team: int | None = None) -> int:
         team_id = self.kickoff_team if team is None else team
@@ -1034,7 +1067,7 @@ class game:
             # Same pick _begin_restart makes just after this returns (it
             # snaps the taker to the flag then) -- restart_player itself is
             # still the previous restart's here.
-            taker = self._pick_role_slot(team, ("RW", "LW", "RM", "LM", "LWB", "RWB"), 8)
+            taker = self._set_piece_taker(team, "corner_taker", ("RW", "LW", "RM", "LM", "LWB", "RWB"), 8)
             rest = [p for p in (range(0, 11) if team == 0 else range(11, 22)) if p not in a_box and p not in (keeper, taker)]
             rest_y = 50.0 - CORNER_REST_LINE_BEHIND_HALFWAY if team == 0 else 50.0 + CORNER_REST_LINE_BEHIND_HALFWAY
             for k, p in enumerate(rest):
@@ -1123,7 +1156,7 @@ class game:
             goal_y = PITCH_HEIGHT if self.restart_team == 0 else 0.0
             spot_y = goal_y - 11.0 if self.restart_team == 0 else 11.0
             self.ball[:] = [PITCH_WIDTH / 2.0, spot_y, 0.0, 0.0, 0.0, 0.0]
-            taker = self._pick_role_slot(self.restart_team, ("ST", "CF", "CAM", "LW", "RW"), 9)
+            taker = self._set_piece_taker(self.restart_team, "penalty_taker", ("ST", "CF", "CAM", "LW", "RW"), 9)
             self.restart_player = taker
             back = -1.5 if self.restart_team == 0 else 1.5
             keeper = self._keeper_indices[1] if self.restart_team == 0 else self._keeper_indices[0]
@@ -1140,7 +1173,7 @@ class game:
                 )
 
         elif restart_type == "corner":
-            corner_player = self._pick_role_slot(self.restart_team, ("RW", "LW", "RM", "LM", "LWB", "RWB"), 8)
+            corner_player = self._set_piece_taker(self.restart_team, "corner_taker", ("RW", "LW", "RM", "LM", "LWB", "RWB"), 8)
             self.restart_player = corner_player
             
             # Snap player to the left or right corner flag depending on out_x
@@ -2899,8 +2932,8 @@ class game:
 
     def _setup_crossable_free_kick(self, spot, team: int) -> int:
         """Wide, or too far out to shoot: a delivery into the box, set up like a
-        corner (_load_box)."""
-        taker = self._pick_role_slot(team, ("LM", "RM", "LW", "RW", "CM"), 7)
+        corner (_load_box) and taken by the corner taker."""
+        taker = self._set_piece_taker(team, "corner_taker", ("LM", "RM", "LW", "RW", "CM"), 7)
         forward = 1.0 if team == 0 else -1.0
         self.positions[taker] = np.asarray(spot, dtype=float) - np.array([0.0, forward * 1.5])
         self._load_box(spot, team, taker, PITCH_HEIGHT-20 if team == 0 else 20.0)
@@ -2941,14 +2974,12 @@ class game:
 
     def _setup_shooting_free_kick(self, spot, team: int) -> int:
         """Close and central: a wall, a loaded box and a keeper off his line.
-        The best striker of a ball has a go (_take_direct_free_kick), or plays it
-        in (_fk_pass_chance) -- the setup is the same, so nobody can read it."""
-        candidates = self._fk_outfield(team)
-        taker = max(
-            candidates,
-            key=lambda i: self.all_players[i].attributes.shooting * 0.7
-            + self.all_players[i].attributes.accuracy * 0.3,
-        )
+        The free-kick taker (picked, else the best striker of a ball) has a go
+        (_take_direct_free_kick), or plays it in (_fk_pass_chance) -- the setup
+        is the same, so nobody can read it."""
+        taker = self._picked[team].get("free_kick_taker")
+        if taker is None:
+            taker = max(self._fk_outfield(team), key=lambda i: duty_rating(self.all_players[i].attributes, "free_kick_taker"))
         forward = 1.0 if team == 0 else -1.0
         self.positions[taker] = np.asarray(spot, dtype=float) - np.array([0.0, forward * 2.0])
 
@@ -3440,7 +3471,7 @@ class game:
         # Capped: MIN + SPAN already lands at 0.99, and stat_ability keeps
         # rising past 100, so an item-fed taker would never miss.
         placement = min(PENALTY_CERTAINTY_CAP, PENALTY_PLACEMENT_MIN + PENALTY_PLACEMENT_SPAN * stat_ability(
-            attrs.shooting * 0.8 + attrs.accuracy * 0.2
+            duty_rating(attrs, "penalty_taker")
         ))
         save = min(PENALTY_CERTAINTY_CAP, PENALTY_SAVE_MIN + PENALTY_SAVE_SPAN * stat_ability(
             (gk.agility * 0.6 + gk.vision * 0.4 + gk.ballcontrol * 0.3) / 1.3

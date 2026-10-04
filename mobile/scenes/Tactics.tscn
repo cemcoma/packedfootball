@@ -44,21 +44,49 @@ size_flags_vertical = 3
 horizontal_scroll_mode = 0
 scroll_deadzone = 12
 
-[node name="Sections" type="VBoxContainer" parent="Margin/RootVBox/SectionScroll"]
+[node name="Columns" type="HBoxContainer" parent="Margin/RootVBox/SectionScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 20
+
+[node name="StyleColumn" type="VBoxContainer" parent="Margin/RootVBox/SectionScroll/Columns"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 12
 
-[node name="StyleHeading" type="Label" parent="Margin/RootVBox/SectionScroll/Sections"]
+[node name="StyleHeading" type="Label" parent="Margin/RootVBox/SectionScroll/Columns/StyleColumn"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
 text = "Play style"
 
-[node name="StyleList" type="VBoxContainer" parent="Margin/RootVBox/SectionScroll/Sections"]
+[node name="StyleList" type="VBoxContainer" parent="Margin/RootVBox/SectionScroll/Columns/StyleColumn"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 10
+
+[node name="RolesColumn" type="VBoxContainer" parent="Margin/RootVBox/SectionScroll/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="RolesHeading" type="Label" parent="Margin/RootVBox/SectionScroll/Columns/RolesColumn"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Captain & set pieces"
+
+[node name="RoleList" type="VBoxContainer" parent="Margin/RootVBox/SectionScroll/Columns/RolesColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="LineupNote" type="Label" parent="Margin/RootVBox/SectionScroll/Columns/RolesColumn"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+autowrap_mode = 2
+text = "Pick a full XI on the Squad screen first."
 
 [node name="StatusLabel" type="Label" parent="Margin/RootVBox"]
 unique_name_in_owner = true
@@ -70,3 +98,78 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 0
 text = "Back"
+
+[node name="Picker" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="Picker"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.7)
+
+[node name="Center" type="CenterContainer" parent="Picker"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PickerPanel" type="PanelContainer" parent="Picker/Center"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(560, 0)
+layout_mode = 2
+
+[node name="PanelMargin" type="MarginContainer" parent="Picker/Center/PickerPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 14
+
+[node name="VBox" type="VBoxContainer" parent="Picker/Center/PickerPanel/PanelMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PickerTitle" type="Label" parent="Picker/Center/PickerPanel/PanelMargin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="PickerHint" type="Label" parent="Picker/Center/PickerPanel/PanelMargin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="PickerScroll" type="ScrollContainer" parent="Picker/Center/PickerPanel/PanelMargin/VBox"]
+custom_minimum_size = Vector2(0, 320)
+layout_mode = 2
+horizontal_scroll_mode = 0
+scroll_deadzone = 12
+
+[node name="PickerList" type="VBoxContainer" parent="Picker/Center/PickerPanel/PanelMargin/VBox/PickerScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="PickerCancel" type="Button" parent="Picker/Center/PickerPanel/PanelMargin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Cancel"

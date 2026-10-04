@@ -145,6 +145,8 @@ def run_match(caller_profile: dict, opponent_profile: dict, seed: int, replay_fo
         "formations": [caller_profile["formation"], opponent_profile["formation"]],
         # Both sides' tactics maps, same order -- View Opponent and the result screen show the style.
         "tactics": [sanitize_tactics(caller_profile.get("tactics")), sanitize_tactics(opponent_profile.get("tactics"))],
+        # Who wears each side's armband, as a roster index (0-21) -- the replay draws it.
+        "captains": list(match.captains),
     }
 
 
@@ -169,6 +171,8 @@ def teams_snapshot(uid: str, caller_profile: dict, opponent_uid: str, opponent_p
             "kit": caller_profile.get("kit", ""),
             "tactics": sanitize_tactics(caller_profile.get("tactics")),
             "players": [player_to_fields(p) for p in caller_profile["roster"]],
+            # The tactics map names its captain and takers by these; replay_game.py needs them back.
+            "player_ids": [getattr(p, "player_id", None) for p in caller_profile["roster"]],
         },
         "opponent": {
             "uid": opponent_uid,
@@ -177,6 +181,7 @@ def teams_snapshot(uid: str, caller_profile: dict, opponent_uid: str, opponent_p
             "kit": opponent_profile.get("kit", ""),
             "tactics": sanitize_tactics(opponent_profile.get("tactics")),
             "players": [player_to_fields(p) for p in opponent_profile["roster"]],
+            "player_ids": [getattr(p, "player_id", None) for p in opponent_profile["roster"]],
         },
     }
 

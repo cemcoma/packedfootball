@@ -147,6 +147,7 @@ async def quick_match(uid: str = Depends(verify_id_token), fmt: int = Depends(re
         "kits": result["kits"],
         "formations": result["formations"],
         "tactics": result["tactics"],
+        "captains": result["captains"],
     }
 
 

@@ -59,6 +59,7 @@ from game_state import fields_to_player, player_to_fields  # noqa: E402
 from packEngine import PLAYER_CLASS_MAP, TIER_RANGES, generate_starter_roster  # noqa: E402
 from player.classes.midfielder import Midfielder  # noqa: E402
 from game_config import TACTICS  # noqa: E402
+from tactics import sanitize_tactics  # noqa: E402
 
 DEFAULT_OUT = Path(__file__).resolve().parent.parent.parent / "mobile" / "test_data" / "local_match.json"
 
@@ -97,6 +98,8 @@ def _home_profile(args, rng: random.Random) -> dict:
 
     data = json.loads(Path(args.home_roster).read_text())
     players = [fields_to_player(f, PLAYER_CLASS_MAP, Midfielder) for f in data["players"]]
+    for p, fields in zip(players, data["players"]):
+        p.player_id = fields.get("player_id")
     if len(players) != 11:
         raise ValueError(f"home roster has {len(players)} players, need 11")
     formation = data.get("formation", "4-4-2")
@@ -107,6 +110,8 @@ def _home_profile(args, rng: random.Random) -> dict:
         "formation": formation,
         "roster": players,
         "kit": data.get("kit") or DEFAULT_HOME_KIT,
+        # Your captain and set-piece takers; the style still comes from --home-tactic.
+        "tactics": sanitize_tactics(data.get("tactics")),
     }
 
 
@@ -115,7 +120,7 @@ def run(args) -> dict:
     rng = random.Random(args.seed)
     home = _home_profile(args, rng)
     away = _bot_profile(args.opponent_tier, rng, args.opponent_formation)
-    tactics = [{"style": args.home_tactic}, {"style": args.away_tactic}]
+    tactics = [{**home.get("tactics", {}), "style": args.home_tactic}, {"style": args.away_tactic}]
 
     match = game(
         _Team(home["display_name"], home["roster"]),
@@ -150,6 +155,7 @@ def run(args) -> dict:
         "kits": [home["kit"], away["kit"]],
         "formations": [home["formation"], away["formation"]],
         "tactics": tactics,
+        "captains": list(match.captains),
         # Local-only extras, ignored by MatchSession and shown by Play.gd.
         "decision_interval": args.decision_interval,
         "decisions": match._decisions_made,

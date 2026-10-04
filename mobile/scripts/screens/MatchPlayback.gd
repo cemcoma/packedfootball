@@ -228,6 +228,7 @@ const SCORER_CARD_SCALE := 0.6
 
 var replay: Dictionary = {}
 var roster: Dictionary = {}
+var _captains: Array = []  # roster indices wearing the armband (MatchSession's "captains")
 var playback_tick: float = 0.0
 var next_event_index: int = 0
 var player_facings: Array = []
@@ -376,6 +377,8 @@ func _ready() -> void:
 	if replay.is_empty():
 		push_error("No replay loaded -- run packedfootball/scripts/dump_test_replay.py first.")
 		return
+	var captains_raw = roster.get("captains")
+	_captains = captains_raw if captains_raw is Array else []
 
 	player_facings.resize(ReplayReader.NUM_PLAYERS)
 	player_actions.resize(ReplayReader.NUM_PLAYERS)
@@ -1527,7 +1530,8 @@ func _draw_players(state: Dictionary, cam: Dictionary, font: Font) -> void:
 			# Taller/wider from this card's own height and power, so 22
 			# figures aren't 22 identical blocks.
 			PlayerFigure.build_from(_attributes_for(i)),
-			aim
+			aim,
+			_captains.has(i)
 		)
 
 

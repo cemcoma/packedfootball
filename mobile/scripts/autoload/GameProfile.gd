@@ -454,10 +454,32 @@ func tactic_style() -> String:
 	return tactics.get("style", Tactics.DEFAULT_STYLE)
 
 
-## Writes the whole map back, so keys this build doesn't know survive.
 func set_tactic_style(style: String) -> bool:
 	var updated := tactics.duplicate()
 	updated["style"] = style
+	return await _save_tactics(updated)
+
+
+## The captain or a set-piece taker (Tactics.ROLE_KEYS); "" puts it back to Auto.
+func set_tactic_role(role: String, player_id: String) -> bool:
+	var updated := tactics.duplicate()
+	if player_id == "":
+		updated.erase(role)
+	else:
+		updated[role] = player_id
+	return await _save_tactics(updated)
+
+
+## Your XI as cards in slot order, null where a slot is empty.
+func lineup_cards() -> Array:
+	var cards: Array = []
+	for player_id in slot_assignment:
+		cards.append(all_cards.get(player_id))
+	return cards
+
+
+## Writes the whole map back, so keys this build doesn't know survive.
+func _save_tactics(updated: Dictionary) -> bool:
 	var ok := await Firestore.set_document(_user_doc_path(), {"tactics": updated}, true)
 	if ok:
 		tactics = updated

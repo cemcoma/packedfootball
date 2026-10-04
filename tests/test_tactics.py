@@ -13,9 +13,9 @@ import numpy as np
 import pytest
 
 import gameEngine
-from conftest import Team
+from conftest import Team, quiesce
 from game_config import TACTICS, Tactic
-from gameEngine import game
+from gameEngine import PITCH_HEIGHT, PITCH_WIDTH, game
 from packEngine import generate_starter_roster
 from tactics import sanitize_tactics, tactic_for
 
@@ -50,7 +50,12 @@ def test_sanitize_tactics(raw, style):
 
 def test_unknown_keys_are_dropped():
     """The client writes this map directly; nothing it invents reaches the engine."""
-    assert sanitize_tactics({"style": "long_ball", "captain": "p1", "cheat": True}) == {"style": "long_ball"}
+    assert sanitize_tactics({"style": "long_ball", "captain": "p1", "cheat": True}) == {"style": "long_ball", "captain": "p1"}
+
+
+def test_role_picks_must_be_player_ids():
+    raw = {"penalty_taker": "p9", "corner_taker": "", "free_kick_taker": 7, "captain": "x" * 65}
+    assert sanitize_tactics(raw) == {"style": "balanced", "penalty_taker": "p9"}
 
 
 def test_tactic_for_resolves_styles():
@@ -74,6 +79,70 @@ def test_each_side_gets_its_own_tactic_in_state():
         match.step()
     assert seen[1] is TACTICS["long_ball"]
     assert seen[12] is TACTICS["possession"]
+
+
+# ------------------------------------------------------- captain and takers
+
+
+def _picked(home_tactics):
+    """Home XI carries player ids p0..p10 in slot order (4-4-2: 0 GK, 3 CB, 6 CM, 8 RM, 9 ST)."""
+    home = generate_starter_roster("4-4-2", "gold", seed=1)
+    for i, p in enumerate(home):
+        p.player_id = f"p{i}"
+    match = game(Team("H", home), Team("A", generate_starter_roster("4-4-2", "gold", seed=2)),
+                 seed=3, record_replay=True, tactics_home=home_tactics)
+    quiesce(match)
+    return match
+
+
+def test_the_picked_penalty_taker_takes_it():
+    match = _picked({"penalty_taker": "p3"})
+    match._begin_restart("penalty", team=0)
+    assert match.restart_player == 3
+    assert match.replay._events[-1][2] == 3
+
+
+def test_the_picked_corner_taker_takes_corners_and_wide_free_kicks():
+    match = _picked({"corner_taker": "p6"})
+    match._begin_restart("corner", team=0, out_x=60.0)
+    assert match.restart_player == 6
+    assert list(match.positions[6]) == [PITCH_WIDTH, PITCH_HEIGHT]
+    quiesce(match)
+    match._begin_restart("free_kick", 0, out_x=6.0, out_y=85.0)
+    assert match.free_kick_kind == "crossable"
+    assert match.restart_player == 6
+
+
+def test_the_picked_free_kick_taker_shoots(monkeypatch):
+    match = _picked({"free_kick_taker": "p1"})
+    monkeypatch.setattr(match, "_fk_pass_chance", lambda team: 0.0)
+    match._begin_restart("free_kick", 0, out_x=35.0, out_y=75.0)
+    assert match.free_kick_kind == "shooting"
+    assert match.restart_player == 1
+
+
+def test_a_pick_off_the_pitch_or_in_goal_plays_auto():
+    match = _picked({"penalty_taker": "benched", "corner_taker": "p0"})
+    match._begin_restart("penalty", team=0)
+    assert match.restart_player == 9
+    quiesce(match)
+    match._begin_restart("corner", team=0, out_x=60.0)
+    assert match.restart_player == 8
+
+
+def test_the_captain_defaults_to_the_best_outfielder_but_can_be_the_keeper():
+    match = _picked(None)
+    assert match.captains[0] == max(range(1, 11), key=lambda i: match.all_players[i].overall)
+    assert match.captains[1] in range(11, 22)
+    assert _picked({"captain": "p0"}).captains[0] == 0
+
+
+def test_the_captain_is_cosmetic():
+    def replay(tactics):
+        match = _picked(tactics)
+        match.run_match(max_steps=1200, render=False)
+        return match.replay.encode()
+    assert replay({"captain": "p4"}) == replay(None)
 
 
 # ---------------------------------------------------------------- long ball

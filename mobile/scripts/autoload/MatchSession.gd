@@ -144,6 +144,8 @@ func set_from_match_response(data: Dictionary) -> void:
 		"home_tactics": tactics[0] if tactics.size() > 0 else {},
 		"away_tactics": tactics[1] if tactics.size() > 1 else {},
 		"players": players_raw if players_raw is Array else [],
+		# Roster indices (0-21) wearing the armband; none from a backend older than captains.
+		"captains": _captains(data.get("captains")),
 	}
 
 	var score_raw = data.get("score")
@@ -179,6 +181,15 @@ func set_from_match_response(data: Dictionary) -> void:
 
 	var game_id_raw = data.get("game_id")
 	game_id = game_id_raw if game_id_raw is String else ""
+
+
+static func _captains(raw) -> Array:
+	var captains: Array = []
+	if raw is Array:
+		for index in raw:
+			if typeof(index) in [TYPE_INT, TYPE_FLOAT] and int(index) >= 0 and int(index) < PLAYERS_PER_TEAM * 2:
+				captains.append(int(index))
+	return captains
 
 
 static func _formation_or_default(formations: Array, side: int) -> String:

@@ -255,7 +255,7 @@ func _write_home_roster() -> String:
 	for player_id in GameProfile.slot_assignment:
 		var card: PlayerCard = GameProfile.all_cards[player_id]
 		players.append({
-			"fname": card.fname, "lname": card.lname, "tier": card.tier, "position": card.position,
+			"player_id": card.player_id, "fname": card.fname, "lname": card.lname, "tier": card.tier, "position": card.position,
 			"country": card.country, "hometown": card.hometown,
 			"attributes": card.attributes, "statistics": card.statistics, "appearance": card.appearance,
 		})
@@ -263,7 +263,7 @@ func _write_home_roster() -> String:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	file.store_string(JSON.stringify({
 		"display_name": GameProfile.display_name, "formation": GameProfile.formation,
-		"kit": GameProfile.kit, "players": players,
+		"kit": GameProfile.kit, "tactics": GameProfile.tactics, "players": players,
 	}))
 	file.close()
 	return ProjectSettings.globalize_path(path)
