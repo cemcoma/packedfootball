@@ -1,6 +1,6 @@
 extends Node
 
-## Rewarded ads, iOS. Consent first (Google UMP -- the GDPR message and,
+## Rewarded ads, iOS and Android. Consent first (Google UMP -- the GDPR message and,
 ## on iOS, the IDFA/ATT prompt, both configured in AdMob > Privacy &
 ## messaging), then the SDK, then one rewarded ad kept loaded.
 ##
@@ -21,6 +21,8 @@ const TRACK_ENERGY := "energy_track"
 # registered. A release export (OS.is_debug_build() == false) uses the live unit.
 const REWARDED_TEST_ID_IOS := "ca-app-pub-3940256099942544/1712485313"
 const REWARDED_ID_IOS := "ca-app-pub-1704438625576029/5444455793"
+const REWARDED_TEST_ID_ANDROID := "ca-app-pub-3940256099942544/5224354917"
+const REWARDED_ID_ANDROID := "ca-app-pub-1704438625576029/8745416297"
 
 const LOADING_POPUP_SCENE := preload("res://scenes/components/LoadingPopup.tscn")
 
@@ -55,16 +57,22 @@ static func test_mode() -> bool:
 
 
 static func ads_supported() -> bool:
-	return OS.get_name() == "iOS"
+	return OS.get_name() == "iOS" or OS.get_name() == "Android"
+
+
+static func _test_device_ids() -> Array[String]:
+	if OS.get_name() == "iOS":
+		return FirebaseConfig.ADMOB_TEST_DEVICE_IDS_IOS
+	return FirebaseConfig.ADMOB_TEST_DEVICE_IDS_ANDROID
 
 
 func _get_unit_id() -> String:
-	if OS.get_name() == "iOS":
-		# A registered test device gets test creatives off the live unit, so SSV fires.
-		if not FirebaseConfig.ADMOB_TEST_DEVICE_IDS.is_empty():
-			return REWARDED_ID_IOS
-		return REWARDED_TEST_ID_IOS if test_mode() else REWARDED_ID_IOS
-	return ""  # Android: no live unit yet
+	var live_id := REWARDED_ID_IOS if OS.get_name() == "iOS" else REWARDED_ID_ANDROID
+	var test_id := REWARDED_TEST_ID_IOS if OS.get_name() == "iOS" else REWARDED_TEST_ID_ANDROID
+	# A registered test device gets test creatives off the live unit, so SSV fires.
+	if not _test_device_ids().is_empty():
+		return live_id
+	return test_id if test_mode() else live_id
 
 
 func _ready() -> void:
@@ -185,9 +193,9 @@ func _start_ads() -> void:
 		return
 	_sdk_started = true
 	# Must land before initialize() to cover the first request.
-	if not FirebaseConfig.ADMOB_TEST_DEVICE_IDS.is_empty():
+	if not _test_device_ids().is_empty():
 		var request_config := RequestConfiguration.new()
-		request_config.test_device_ids = FirebaseConfig.ADMOB_TEST_DEVICE_IDS
+		request_config.test_device_ids = _test_device_ids()
 		MobileAds.set_request_configuration(request_config)
 	MobileAds.initialize()
 	_create_and_load_ad()
