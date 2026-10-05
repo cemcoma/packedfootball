@@ -66,6 +66,10 @@ var game_id: String = ""
 ## never touches the network.
 var is_local: bool = false
 
+## The response's credit balance and W/D/L, held until the result is on screen:
+## the payout differs by outcome, so applying it at kick-off gives the score away.
+var _held_profile: Dictionary = {}
+
 
 func has_pending() -> bool:
 	return not _replay.is_empty()
@@ -181,6 +185,24 @@ func set_from_match_response(data: Dictionary) -> void:
 
 	var game_id_raw = data.get("game_id")
 	game_id = game_id_raw if game_id_raw is String else ""
+
+	_held_profile = {}
+	for key in ["credits_remaining", "wins", "draws", "losses"]:
+		if typeof(data.get(key)) in [TYPE_INT, TYPE_FLOAT]:
+			_held_profile[key] = int(data.get(key))
+
+
+## Moves the held balance and record into GameProfile. Call once the result is
+## shown (or the match is abandoned); a no-op after the first call.
+func release_held_profile() -> void:
+	var held := _held_profile
+	_held_profile = {}
+	if held.is_empty() or is_local:  # a local match's file never touched this account
+		return
+	GameProfile.wins = held.get("wins", GameProfile.wins)
+	GameProfile.draws = held.get("draws", GameProfile.draws)
+	GameProfile.losses = held.get("losses", GameProfile.losses)
+	GameProfile.apply_currency_balances(held.get("credits_remaining"))
 
 
 static func _captains(raw) -> Array:
@@ -377,6 +399,7 @@ func clear() -> void:
 	tournament = {}
 	game_id = ""
 	is_local = false
+	_held_profile = {}
 	# Back to the default, or a tournament return would leak into the next
 	# Quick Match and send it somewhere it never came from.
 	return_scene = DEFAULT_RETURN_SCENE

@@ -494,7 +494,7 @@ func _on_play_pressed() -> void:
 		await _load(tr("Refreshing..."))
 		return
 
-	GameProfile.apply_currency_balances(res.data.get("credits_remaining"))
+	# Credits wait in MatchSession for the result screen (see Play.gd).
 	GameProfile.apply_energy(res.data.get("energy"))
 	# So Continue and Exit come back HERE instead of the Menu, mid-run --
 	# and to the format being played, since TournamentSession keeps it.

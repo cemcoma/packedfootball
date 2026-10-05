@@ -65,7 +65,8 @@ gcloud run deploy packedfootball-backend \
   --image gcr.io/<project-id>/packedfootball-backend \
   --region europe-west3 \
   --allow-unauthenticated \
-  --max-instances 3 \
+  --max-instances 10 \
+  --update-env-vars FIREBASE_PROJECT_ID=<project-id>
   --cpu-boost
 ```
 
@@ -203,7 +204,7 @@ A promo: `upload_art.py card <tier> <png> --range LO HI`, `upload_art.py pack
 Only variants of existing families can be remote. Never delete a `card_types`
 doc, because cards of that tier stay in `players/` for good.
 
-Step by step, including the one-time prod setup: [PROMO_MANUAL.md](PROMO_MANUAL.md).
+Step by step: [PROMO_MANUAL.md](PROMO_MANUAL.md).
 
 ### Tournaments
 

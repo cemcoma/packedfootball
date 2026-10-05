@@ -174,19 +174,8 @@ func _on_quick_match_pressed() -> void:
 		_tournament_button.set_tile_disabled(false)
 		return
 
-	# .get(key, default) only falls back to `default` when the key is
-	# entirely absent -- a present-but-null value comes back as null
-	# regardless, and null can't go into a statically-typed int var (same
-	# concern PackData.gd's own _int() helper guards against). Updated here
-	# (rather than waiting for a future full GameProfile reload) so Profile
-	# screen reflects this match immediately.
-	# Through apply_currency_balances rather than assigned: that is what
-	# tells the HUD strip its number moved.
-	GameProfile.apply_currency_balances(res.data.get("credits_remaining"))
-	GameProfile.wins = _int(res.data, "wins", GameProfile.wins)
-	GameProfile.losses = _int(res.data, "losses", GameProfile.losses)
-	GameProfile.draws = _int(res.data, "draws", GameProfile.draws)
-
+	# Credits and record are NOT applied here -- MatchSession holds them until
+	# the result screen, or the strip would show the payout before kick-off.
 	_set_matchmaking_status(tr("Match found!"))
 	await get_tree().create_timer(0.4).timeout
 	_hide_matchmaking_popup()
@@ -195,11 +184,6 @@ func _on_quick_match_pressed() -> void:
 
 func _on_matchmaking_midpoint() -> void:
 	_set_matchmaking_status(tr("Getting players ready..."))
-
-
-static func _int(data: Dictionary, key: String, default: int) -> int:
-	var value = data.get(key)
-	return value if typeof(value) in [TYPE_INT, TYPE_FLOAT] else default
 
 
 func _on_tournament_pressed() -> void:

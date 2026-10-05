@@ -80,6 +80,9 @@ func _ready() -> void:
 	_report_button.visible = MatchSession.game_id != ""
 	_report_footnote.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 
+	# The outcome is on screen now, so the strip can show the payout.
+	MatchSession.release_held_profile()
+
 	var score: Array = MatchSession.score
 	var my_score: int = score[0] if score.size() == 2 else 0
 	var opp_score: int = score[1] if score.size() == 2 else 0
