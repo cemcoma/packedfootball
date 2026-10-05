@@ -70,3 +70,15 @@ def test_he_shoots_less_with_a_better_shot_ahead(monkeypatch):
         return sum(st._decide_on_ball_attack(state) == "shoot" for _ in range(400)) / 400
 
     assert shoot_share(True) < 0.6 * shoot_share(False)
+
+
+def _centre_back_state(y, seed):
+    return {**_state(y, seed=seed), "my_role": "CB", "formation_pos": [27.0, 15.0], "must_pass_next": False}
+
+
+def test_a_defender_never_shoots_from_midfield():
+    """Before 5.2.0 a defender's shot had no range at all: over halfway, with no pass on, he shot."""
+    cb = generate_starter_roster("4-4-2", tier="gold", seed=3)[2]
+    assert cb.position == "CB"
+    assert all(cb._decide_on_ball_attack(_centre_back_state(55.0, seed)) != "shoot" for seed in range(300))
+    assert "shoot" in {cb._decide_on_ball_attack(_centre_back_state(92.0, seed)) for seed in range(300)}

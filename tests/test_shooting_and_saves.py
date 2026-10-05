@@ -13,9 +13,11 @@ problems rather than one:
   4. The save was re-rolled every step while the ball was near, so 111 shots
      produced 74 save rolls.
 
-Everything here tests the fix for one of those. The numbers are anchored to
-the agreed spec: a 100-rated keeper saves ~100% of an easy shot (slow,
-straight at them) and ~50% of a hard one (fast, at full stretch).
+Everything here tests the fix for one of those. Since 5.2.0 the curve is anchored
+to: any keeper saves a slow ball straight at him, a hard one at him is mostly
+saved (parried), and how far he has to go matters more than pace -- a slow ball
+at full stretch is harder than a rocket at his chest, a rocket into the far
+corner is rarely kept out.
 """
 
 import numpy as np
@@ -27,7 +29,6 @@ from gameEngine import (
     HARD_SHOT_SPEED,
     KEEPER_BEATEN_FRAMES,
     KEEPER_REACH,
-    MAX_DIFFICULTY_PENALTY,
     SAVE_COMMIT_MARGIN,
     STAT_CEILING,
 )
@@ -73,16 +74,63 @@ def set_up_shot(g, cross_x, speed=20.0, keeper_x=GOAL_CENTER_X, distance=4.0, he
 
 # ------------------------------------------------------------ the save curve
 
-def test_a_perfect_keeper_saves_an_easy_shot(match):
-    """Slow ball, straight at them: the agreed ~100% anchor."""
-    chance = match._save_chance(FakeAttrs(STAT_CEILING), ball_speed=5.0, lateral=0.0)
-    assert chance >= 0.95
+@pytest.mark.parametrize("rating", [50, 70, 90, STAT_CEILING])
+def test_any_keeper_saves_a_slow_ball_straight_at_him(match, rating):
+    """A tame roller at his body is not a goal, bronze or icon."""
+    assert match._save_chance(FakeAttrs(rating), ball_speed=8.0, lateral=0.3) >= 0.97
 
 
-def test_a_perfect_keeper_is_even_money_on_the_hardest_shot(match):
-    """Fastest ball, full-stretch dive: the agreed ~50% anchor."""
-    chance = match._save_chance(FakeAttrs(STAT_CEILING), ball_speed=HARD_SHOT_SPEED, lateral=KEEPER_REACH)
-    assert chance == pytest.approx(1.0 - MAX_DIFFICULTY_PENALTY, abs=0.02)
+def test_a_hard_shot_at_the_keeper_is_mostly_saved(match):
+    """Reflexes: more often than not for a bronze keeper, nearly always for an icon."""
+    assert match._save_chance(FakeAttrs(58), ball_speed=HARD_SHOT_SPEED, lateral=0.5) >= 0.6
+    assert match._save_chance(FakeAttrs(91), ball_speed=HARD_SHOT_SPEED, lateral=0.5) >= 0.9
+
+
+def test_a_slow_ball_at_full_stretch_is_harder_than_a_rocket_at_his_chest(match):
+    """Reach matters more than pace."""
+    slow_far = match._save_chance(FakeAttrs(70), ball_speed=8.0, lateral=5.0)
+    fast_at_him = match._save_chance(FakeAttrs(70), ball_speed=HARD_SHOT_SPEED, lateral=0.5)
+    assert slow_far < fast_at_him - 0.15
+
+
+def test_a_hard_shot_into_the_far_corner_is_rarely_saved(match):
+    """The 1v1 struck hard at the far corner."""
+    assert match._save_chance(FakeAttrs(70), ball_speed=35.0, lateral=5.5) <= 0.2
+
+
+def test_items_keep_helping_on_a_dive_he_can_reach(match):
+    """Past an icon card's agility the dive still grows (to 6.5 at STAT_CEILING)."""
+    icon, at_100, kitted = (match._save_chance(FakeAttrs(r), 20.0, 3.0) for r in (91, 100, STAT_CEILING))
+    assert kitted > at_100 > icon
+
+
+@pytest.mark.parametrize("speed, lateral", [(8.0, 0.3), (10.0, 0.8), (20.0, 0.5)])
+def test_a_routine_save_is_routine_for_every_tier(match, speed, lateral):
+    """Within standing reach and short of real pace, a bronze keeper is as safe as an icon."""
+    bronze = match._save_chance(FakeAttrs(58), speed, lateral)
+    assert bronze >= 0.97
+    assert match._save_chance(FakeAttrs(91), speed, lateral) - bronze <= 0.02
+
+
+def test_better_keepers_pull_away_on_dives_and_fast_shots(match):
+    """Dive reach is agility, pace is reflexes: that is where the tiers part (routine saves: above)."""
+    for speed, lateral, gap in [(20.0, 2.0, 0.15), (HARD_SHOT_SPEED, 0.5, 0.1)]:
+        bronze = match._save_chance(FakeAttrs(58), speed, lateral)
+        icon = match._save_chance(FakeAttrs(91), speed, lateral)
+        assert icon > bronze + gap, (speed, lateral)
+
+
+def test_dive_reach_grows_with_agility_and_items_still_tell(match):
+    reach = [match._shot_terms(FakeAttrs(a), 20.0, 3.0)[1] for a in (58, 72, 91, 100, 130)]
+    assert reach == sorted(reach, reverse=True), "a better keeper needs less of his dive for the same ball"
+    assert reach[3] > reach[4] > reach[3] * 0.5, "past 100 it keeps growing, but on the overdrive tail"
+
+
+def test_a_slow_ball_at_him_is_held_a_rocket_is_parried(match):
+    held = match._gather_chance(FakeAttrs(70), ball_speed=8.0, lateral=0.3)
+    parried = match._gather_chance(FakeAttrs(70), ball_speed=HARD_SHOT_SPEED, lateral=0.3)
+    assert held >= 0.75
+    assert parried <= 0.25
 
 
 def test_save_chance_falls_as_the_shot_gets_faster(match):
@@ -108,13 +156,11 @@ def test_a_better_keeper_saves_more_of_the_same_shot(match):
     assert icon > bronze + 0.1
 
 
-def test_beyond_full_stretch_is_no_worse_than_full_stretch(match):
-    """Difficulty terms are clamped, so an absurd input can't drive the save
-    chance negative or below the floor."""
+def test_a_ball_beyond_any_dive_is_at_the_floor_not_below_it(match):
     far = match._save_chance(FakeAttrs(80), ball_speed=999.0, lateral=999.0)
     stretch = match._save_chance(FakeAttrs(80), ball_speed=HARD_SHOT_SPEED, lateral=KEEPER_REACH)
-    assert far == pytest.approx(stretch)
-    assert 0.02 <= far <= 0.99
+    assert far == pytest.approx(0.02)
+    assert stretch >= far
 
 
 def test_even_a_terrible_keeper_saves_something(match):

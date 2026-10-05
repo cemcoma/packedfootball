@@ -1,18 +1,26 @@
-from player.player import _clamp, _ball_pressure, _count_within, _dists, _pick, _norm2, player, ActionProfile, OFFSIDE_MARGIN, GOAL_SIDE_PRESS, GOAL_SIDE_CONTAIN
+from player.player import _clamp, _ball_pressure, _count_within, _dists, _pick, _norm2, player, ActionProfile, OFFSIDE_MARGIN, GOAL_SIDE_PRESS, GOAL_SIDE_CONTAIN, EDGE_SHOT_PENALTY, EDGE_SHOT_RANGE
 from game_config import PRESS_FROM_DEFENDING, RECOVERY_CB_LANE, RECOVERY_MIN_DEPTH, RECOVERY_PRESS_RANGE, RECOVERY_RANGE, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
-# Where a full-back stands in to cover the middle when no centre-back is
-# home (state["cb_home"] is False): this far off their own goal line, this
-# far either side of the centre, on the side their flank is. Deep enough
-# to be between a lone striker and the goal, not so deep the whole side
-# collapses onto the six-yard box.
 # How far ahead of his man a marker positions himself.
 MARK_LEAD_SECONDS = 0.35
 
-COVER_DEPTH = 22.0
 COVER_HALF_GAP = 7.0
 COVER_ROLES = ("LB", "RB", "LWB", "RWB")
+
+# Standing in, he plays centre-back on a high line: at halfway (a deep tactic's line_depth drops it) so a long ball
+# to a man behind him is offside, in the lane of the deepest attacker in his half of the middle (up to
+# STAND_IN_ACROSS over it, STAND_IN_ZONE out, within STAND_IN_DEPTH of goal) -- or COVER_HALF_GAP off it with nobody
+# there. Their ball past the line, or played in behind, he drops STAND_IN_BALL_GAP goal-side of it.
+STAND_IN_LINE = PITCH_HEIGHT / 2.0
+STAND_IN_ZONE = 18.0
+STAND_IN_ACROSS = 3.0
+STAND_IN_DEPTH = 60.0
+STAND_IN_BALL_GAP = 4.0
+# Released, he walks back to his own spot (HANDBACK_DECISIONS) until he is HANDBACK_DONE from it.
+HANDBACK_PACE = 0.45
+HANDBACK_DONE = 3.0
+HANDBACK_DECISIONS = frozenset({"back_line", "hold_defense", "hold_attack", "recover", "recover_slow"})
 
 # A full-back off the ball holds the back line (_back_line_target): level with the
 # centre-backs, tucking in toward the far post -- a third CB -- as the ball nears his goal.
@@ -100,6 +108,20 @@ class WingbackActionProfile(ActionProfile):
 
 class Defender(player):
     def _build_action(self, decision: str, state: dict) -> dict | None:
+        action = self._defender_action(decision, state)
+        if action is None or state.get("has_ball"):
+            return action
+        if self._should_cover(state):
+            action.setdefault("intent", "stand_in")
+        elif (
+            state.get("intent") in ("stand_in", "handback") and decision in HANDBACK_DECISIONS and action["type"] == "move"
+            and _norm2(np.asarray(action["target"], dtype=float) - state["my_pos"]) > HANDBACK_DONE
+        ):
+            action["speed_mod"] = min(action["speed_mod"], pace_ability(self.attributes.speed) * HANDBACK_PACE)
+            action["intent"] = "handback"
+        return action
+
+    def _defender_action(self, decision: str, state: dict) -> dict | None:
         if decision == "stop":
             return None
             
@@ -179,7 +201,10 @@ class Defender(player):
             return {"type": "move", "target": tactical_pos, "speed_mod": pace_ability(self.attributes.speed) * pace}
             
         elif decision == "cover" or (decision in {"hold_defense", "hold_attack", "recover", "recover_slow"} and self._should_cover(state)):
-            return {"type": "move", "target": self._cover_target(state), "speed_mod": pace_ability(self.attributes.speed) * 0.8}
+            # Full pace on a man: at 0.8 he could never stay goal-side of him.
+            man = self._stand_in_man(state)
+            pace = 1.0 if man is not None else 0.8
+            return {"type": "move", "target": self._cover_target(state, man), "speed_mod": pace_ability(self.attributes.speed) * pace}
 
         elif decision == "hold_defense":
             # A high line (line_depth < 0) holds up the pitch; a deep one is home already.
@@ -291,6 +316,13 @@ class Defender(player):
 
         t_pass = self.attributes.pass_tendency * 0.4 * self.get_action_bias("pass")
         t_shoot = self.attributes.shoot_tendency * self.get_action_bias("shoot", 0.5)
+        # A forward's range: in the box, or from the edge with the lane open -- never from midfield.
+        if state.get("in_attacking_box"):
+            t_shoot *= 2.5
+        elif state["dist_to_goal"] <= EDGE_SHOT_RANGE and self._shot_lane_open(state, state["my_pos"]):
+            t_shoot -= state["dist_to_goal"] * EDGE_SHOT_PENALTY
+        else:
+            t_shoot = 0.0
         t_dribble = self.attributes.drible_tendency * self.get_action_bias("dribble")
         # Only with someone in the box to find (_box_runners), like any cross.
         t_cross = self.get_action_bias("cross") * 25.0 if self._box_runners(state) > 0 else 0.0
@@ -394,7 +426,7 @@ class Defender(player):
     def _holds_the_middle(self, state: dict) -> bool:
         """A centre-back does not follow a winger out: while the ball is wide of
         his lane and not yet on him, he keeps his place in the line."""
-        if state.get("my_role") != "CB" or state.get("is_loose", False):
+        if not self._plays_cb(state) or state.get("is_loose", False):
             return False
         ball_pos = np.asarray(state["ball_pos"], dtype=float)
         wide = abs(float(ball_pos[0]) - PITCH_WIDTH / 2.0) > RECOVERY_CB_LANE
@@ -402,10 +434,12 @@ class Defender(player):
         return wide and RECOVERY_PRESS_RANGE < dist < RECOVERY_RANGE
 
     def _should_cover(self, state: dict) -> bool:
-        """A full-back with no centre-back home holds the middle instead of
-        its flank -- own corners, or both CBs caught upfield. Checked after
-        the loose-ball chase so a ball only they can reach is still theirs."""
-        return state.get("my_role") in COVER_ROLES and not state.get("cb_home", True)
+        """A full-back standing in at centre-back (gameEngine._update_stand_ins): no CB home, or his own
+        not yet back level with him. Checked after the loose-ball chase so a ball only he can reach is his."""
+        return state.get("my_role") in COVER_ROLES and state.get("stand_in", not state.get("cb_home", True))
+
+    def _plays_cb(self, state: dict) -> bool:
+        return state.get("my_role") == "CB" or self._should_cover(state)
 
     def _decide_off_ball_attack(self, state: dict) -> str:
         if state.get("is_loose", False):
@@ -472,13 +506,13 @@ class Defender(player):
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
         ball_pressure_count = _ball_pressure(state)
 
-        if self._holds_the_middle(state):
-            return "hold_line"
-
         # Close enough to matter, the ball wins; otherwise an uncovered
         # middle does.
         if dist_to_ball >= 15.0 and self._should_cover(state):
             return "cover"
+
+        if self._holds_the_middle(state):
+            return "hold_line"
 
         if dist_to_ball < 2.0:
             actions = ["tackle", "contain"]
@@ -510,7 +544,7 @@ class Defender(player):
 
     def _holds_back_line(self, state: dict) -> bool:
         """A full-back leaves a ball in the middle or on the far flank to the centre-backs."""
-        if state.get("my_role") not in FB_ROLES:
+        if state.get("my_role") not in FB_ROLES or self._should_cover(state):
             return False
         return (float(state["ball_pos"][0]) - PITCH_WIDTH / 2.0) * self._flank(state) <= FB_FLANK_X
 
@@ -530,7 +564,7 @@ class Defender(player):
     def _stand_ground(self, state: dict, target: np.ndarray) -> np.ndarray:
         """A centre-back's goal-side `target`, but no deeper than CB_STAND_DEPTH while the man is
         still outside it: on his line to goal, at the edge of the box."""
-        if state.get("my_role") != "CB":
+        if not self._plays_cb(state):
             return target
         own_goal = np.asarray(state["own_goal"], dtype=float)
         forward = 1.0 if own_goal[1] == 0.0 else -1.0
@@ -547,7 +581,7 @@ class Defender(player):
 
     def _overlap_on(self, state: dict) -> bool:
         """A teammate has it on my flank past OVERLAP_FROM, with a centre-back home behind me."""
-        if state.get("my_role") not in FB_ROLES or state.get("is_loose", False) or not state.get("cb_home", True):
+        if state.get("my_role") not in FB_ROLES or state.get("is_loose", False) or self._should_cover(state):
             return False
         own_goal_y = float(state["own_goal"][1])
         ball_x, ball_y = float(state["ball_pos"][0]), float(state["ball_pos"][1])
@@ -585,13 +619,50 @@ class Defender(player):
         x = PITCH_WIDTH / 2.0 + self._flank(state) * width + (ball_x - PITCH_WIDTH / 2.0) * FB_BALL_SHIFT
         return np.array([_clamp(x, 3.0, PITCH_WIDTH - 3.0), own_goal_y + forward * depth])
 
-    def _cover_target(self, state: dict) -> np.ndarray:
-        """The spot a covering full-back holds: COVER_DEPTH off its own goal
-        line, COVER_HALF_GAP to the side of centre its flank is on."""
-        own_goal_y = 0.0 if state.get("a_direction", 1) == 1 else PITCH_HEIGHT
-        toward_pitch = 1.0 if own_goal_y == 0.0 else -1.0
-        side = -1.0 if state["formation_pos"][0] < PITCH_WIDTH / 2.0 else 1.0
-        return np.array([PITCH_WIDTH / 2.0 + side * COVER_HALF_GAP, own_goal_y + toward_pitch * COVER_DEPTH])
+    def _cover_x(self, state: dict) -> float:
+        return PITCH_WIDTH / 2.0 + self._flank(state) * COVER_HALF_GAP
+
+    def _stand_in_depth(self, state: dict) -> float:
+        """The stand-in line, off his own goal: halfway (or a deep tactic's line), goal-side of their ball once it
+        is past that, or of where a ball played in behind comes down."""
+        depth = STAND_IN_LINE - max(0.0, self._tactic(state).line_depth)
+        if state.get("team_possession") == 1:
+            return depth
+        own_goal_y = float(state["own_goal"][1])
+        ball = self._predict_ball_landing_target(state) if self._ball_coming(state) else state["ball_pos"]
+        ball_depth = (float(ball[1]) - own_goal_y) * (1.0 if own_goal_y == 0.0 else -1.0)
+        return max(RECOVERY_MIN_DEPTH, min(depth, ball_depth - STAND_IN_BALL_GAP))
+
+    def _stand_in_man(self, state: dict) -> np.ndarray | None:
+        """The deepest attacker in my half of the middle, where he is going -- the man a CB would have."""
+        opps = np.asarray(state.get("opponents", []), dtype=float)
+        if opps.size == 0:
+            return None
+        if state.get("opponent_vel") is not None:
+            opps = opps + np.asarray(state["opponent_vel"], dtype=float) * MARK_LEAD_SECONDS
+        own_goal_y = float(state["own_goal"][1])
+        depth = (opps[:, 1] - own_goal_y) * (1.0 if own_goal_y == 0.0 else -1.0)
+        off_mid = (opps[:, 0] - PITCH_WIDTH / 2.0) * self._flank(state)
+        mine = np.flatnonzero((depth < STAND_IN_DEPTH) & (off_mid > -STAND_IN_ACROSS) & (off_mid < STAND_IN_ZONE))
+        return opps[mine[np.argmin(depth[mine])]] if mine.size else None
+
+    def _cover_target(self, state: dict, man: np.ndarray | None) -> np.ndarray:
+        """On the stand-in line, in my man's lane (_stand_in_man): where his run to goal crosses it, or his own x
+        if he is behind it -- offside there. Nobody to pick up: COVER_HALF_GAP to my side of centre."""
+        own_goal = np.asarray(state["own_goal"], dtype=float)
+        forward = 1.0 if own_goal[1] == 0.0 else -1.0
+        depth = self._stand_in_depth(state)
+        x = self._cover_x(state)
+        if man is not None:
+            man_depth = (float(man[1]) - float(own_goal[1])) * forward
+            along = _clamp((man_depth - depth) / max(man_depth, 1e-6), 0.0, 1.0)
+            x = float(man[0]) + (float(own_goal[0]) - float(man[0])) * along
+        return np.array([_clamp(x, 0.0, PITCH_WIDTH), float(own_goal[1]) + forward * depth])
+
+    def _line_lane_x(self, state: dict, ball_x: float) -> float:
+        if self._should_cover(state):   # standing in: his CB's lane
+            state = {**state, "my_role": "CB", "formation_pos": np.array([self._cover_x(state), 0.0])}
+        return super()._line_lane_x(state, ball_x)
 
     def _decide_loose_ball(self, state: dict) -> str:
             dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])

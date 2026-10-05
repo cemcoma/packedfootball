@@ -26,6 +26,7 @@ from game_config import (  # noqa: F401
     PENALTY_SHOT_SPEED,
     PENALTY_SIDES,
     STAT_CEILING,
+    STAT_OVERDRIVE,
     cross_flight,
     pace_ability,
     stat_ability,
@@ -324,7 +325,11 @@ from formations import get_formation, is_similar_position
 #         shared decision state, plain-float hot paths. Seeds replay differently; balance harness within noise.
 #   5.1.0 set-piece takers and a captain from the tactics map (penalty/corner/free_kick_taker, captain:
 #         player ids). Corner takers also deliver crossed free kicks. Unpicked = the old choice, seeds unchanged.
-ENGINE_VERSION: Final[str] = "5.1.0"
+#   5.2.0 a full-back stands in at CB on a halfway line (a man behind it is offside) until his own CB is back level,
+#         then walks out; defenders shoot only from a forward's range; a ball the keeper can stand up to is ~99% for
+#         any keeper (slow ones were 57%) -- beyond it his dive is agility and pace his reflexes, so tiers part on dives
+#         and rockets, not routine saves; slow ones are held. 2.6 goals/match.
+ENGINE_VERSION: Final[str] = "5.2.0"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -350,8 +355,8 @@ ADDED_TIME_MAX_FRAMES: Final = 840   # cap at 8:00
 
 # A half doesn't end while an attack is live (see _attack_is_live). This caps
 # how long the whistle can be held so a team knocking it around up there
-# can't stall the match. 200 frames == 1:40 of clock.
-MAX_WHISTLE_HOLD_FRAMES: Final = 200
+# can't stall the match. 1200 frames == 10:00 of clock.
+MAX_WHISTLE_HOLD_FRAMES: Final = 1200
 DANGEROUS_ZONE_Y: Final = PITCH_HEIGHT * 2.0 / 3.0
 
 # Sentinel for "not latched yet", since None legitimately means "ball dead".
@@ -421,11 +426,23 @@ FK_LANE_MARGIN: Final = 1.5
 # Penalty scales, shot speed and keeper reach live in game_config -- the
 # shootout minigame reads them too.
 
-KEEPER_QUALITY_BASE: Final = 0.55        # save odds floor before attributes
 HARD_SHOT_SPEED: Final = 37.0            # ball speed counting as "hard" (observed max)
-SAVE_DIFFICULTY_SPEED_WEIGHT: Final = 0.5
-SAVE_DIFFICULTY_REACH_WEIGHT: Final = 0.5
-MAX_DIFFICULTY_PENALTY: Final = 0.5      # hardest shot halves the save chance
+# Save odds 1 / (1 + (difficulty / SAVE_SKILL) ** SAVE_CURVE_STEEPNESS). The keeper is in the difficulty, not the
+# skill, so a routine save is near-certain for anyone: within KEEPER_STANDING_REACH he need not dive; beyond it his
+# dive covers DIVE_REACH, (agility, reach) points interpolated and capped at the ends; real pace (cubed) is read
+# by his reflexes, REFLEX_BASE plus the rest from save stat ** REFLEX_EXP (per 100, items on STAT_OVERDRIVE).
+SAVE_SKILL: Final = 0.215
+SAVE_CURVE_STEEPNESS: Final = 2.2
+KEEPER_STANDING_REACH: Final = 0.8
+DIVE_REACH: Final = ((55.0, 4.0), (100.0, 6.0), (float(STAT_CEILING), 6.5))
+REFLEX_BASE: Final = 0.1
+REFLEX_EXP: Final = 1.25
+SAVE_REACH_SLOW_SHARE: Final = 0.7       # of a dive's difficulty a slow ball still carries
+SAVE_SPEED_DIFFICULTY: Final = 0.067     # a rocket straight at him, at reflexes 1
+# Held rather than parried: his hands, less for pace (squared) and for reach.
+GATHER_HANDS: Final = (0.7, 1.0)
+GATHER_SPEED_FALL: Final = 0.9
+GATHER_REACH_FALL: Final = 0.8
 KEEPER_BEATEN_FRAMES: Final = 90 # How long a beaten keeper is on the floor.
 # A keeper who picks the ball up in his box holds it this long, in his hands,
 # while opponents back off to the box edge and teammates give him room.
@@ -531,6 +548,10 @@ base_kick_pow:Final = 20
 # --- rest defence ------------------------------------------------------------
 CB_HOME_DEPTH: Final[float] = 40.0
 CB_HOME_HALF_WIDTH: Final[float] = 20.0
+# With no CB home a full-back stands in at centre-back, until his own CB is back level with him
+# (within STAND_IN_LEVEL) -- or home with the danger gone: our ball, or the ball in their half.
+STAND_IN_ROLES: Final = frozenset({"LB", "RB", "LWB", "RWB"})
+STAND_IN_LEVEL: Final[float] = 1.0
 CORNER_REST_LINE_BEHIND_HALFWAY: Final[float] = 5.0
 CORNER_REST_SPACING: Final[float] = 9.0
 
@@ -646,6 +667,12 @@ class game:
         self._tactics = [tactic_for(tactics_home), tactic_for(tactics_away)]
         self._keeper_indices = [i for i in range(22) if self.formation[i]["role"] == "GK"]
         self._cb_indices = [[i for i in side if self.formation[i]["role"] == "CB"] for side in (range(11), range(11, 22))]
+        # Each full-back's centre-back (nearest slot), and whether he is standing in for him (_update_stand_ins).
+        self._fb_partner = {
+            i: min(self._cb_indices[0 if i < 11 else 1], key=lambda j: abs(self.formation[j]["pos"][0] - self.formation[i]["pos"][0]))
+            for i in range(22) if self.formation[i]["role"] in STAND_IN_ROLES and self._cb_indices[0 if i < 11 else 1]
+        }
+        self._stand_in = [False] * 22
         self._home_mask = np.arange(22) < 11
         # [i, j] is True when i and j are on opposite sides -- the pressure count only counts opponents.
         self._opponents_mask = np.not_equal.outer(self._home_mask, self._home_mask)
@@ -3369,10 +3396,7 @@ class game:
         if self.replay:
             self.replay.event(self.match_clock_frames, ActionType.SAVE, player_idx=index, team=defending_team)
 
-        handling_stat = (gk_attrs.composure * 0.6) + (gk_attrs.ballcontrol * 0.4)
-        gather_chance = float(_clamp((handling_stat / 100.0) * 0.85 - (ball_speed / 40.0), 0.05, 0.85))
-
-        if self.rng.random() < gather_chance:
+        if self.rng.random() < self._gather_chance(gk_attrs, ball_speed, lateral):
             self._keeper_gather(index)
         else:
             # --- DEFLECTION (PARRY) ---
@@ -3429,25 +3453,31 @@ class game:
         self.keeper_hold_timer = KEEPER_HOLD_FRAMES
         self.velocity[index] = np.zeros(2, dtype=float)
 
+    @staticmethod
+    def _keeper_stat(stat: float) -> float:
+        """A keeper stat over 100, its item tail worth STAT_OVERDRIVE a point (as stat_ability's)."""
+        return max(1.0, min(stat, 100.0) + max(0.0, stat - 100.0) * STAT_OVERDRIVE) / 100.0
+
+    def _shot_terms(self, gk_attrs, ball_speed: float, lateral: float) -> tuple[float, float]:
+        """(pace 0..1, dive): the dive as a share of how far THIS keeper can throw himself, 0 within standing reach."""
+        dive_reach = float(np.interp(float(gk_attrs.agility), *zip(*DIVE_REACH)))
+        return min(1.0, max(0.0, ball_speed / HARD_SHOT_SPEED)), max(0.0, lateral - KEEPER_STANDING_REACH) / dive_reach
+
     def _save_chance(self, gk_attrs, ball_speed: float, lateral: float) -> float:
-        """How likely this keeper is to stop THIS shot.
-
-        Quality scales with the keeper; difficulty comes from the shot -- how
-        fast it is, and how far they have to move to reach where it will
-        cross the line. Anchored so a keeper at STAT_CEILING is near-certain on a
-        slow ball straight at them and about even money on a fast one at full
-        stretch.
-        """
+        """How likely this keeper is to stop THIS shot. A ball he can stand up to is near-certain for any keeper;
+        better keepers pull away on the dives (agility) and on pace (reflexes)."""
         save_stat = ((gk_attrs.agility * 0.6) + (gk_attrs.vision * 0.4) + (gk_attrs.ballcontrol * 0.3)) / 1.3
-        quality = KEEPER_QUALITY_BASE + (1.0 - KEEPER_QUALITY_BASE) * min(1.0, save_stat / STAT_CEILING)
+        reflexes = REFLEX_BASE + (1.0 - REFLEX_BASE) * self._keeper_stat(save_stat) ** REFLEX_EXP
+        pace, dive = self._shot_terms(gk_attrs, ball_speed, lateral)
+        difficulty = dive * (SAVE_REACH_SLOW_SHARE + (1.0 - SAVE_REACH_SLOW_SHARE) * pace) + SAVE_SPEED_DIFFICULTY * pace ** 3 / reflexes
+        return float(_clamp(1.0 / (1.0 + (difficulty / SAVE_SKILL) ** SAVE_CURVE_STEEPNESS), 0.02, 0.99))
 
-        speed_term = min(1.0, max(0.0, ball_speed / HARD_SHOT_SPEED))
-        reach_term = min(1.0, max(0.0, lateral / KEEPER_REACH))
-        difficulty = (
-            SAVE_DIFFICULTY_SPEED_WEIGHT * speed_term + SAVE_DIFFICULTY_REACH_WEIGHT * reach_term
-        )
-
-        return float(_clamp(quality * (1.0 - MAX_DIFFICULTY_PENALTY * difficulty), 0.02, 0.99))
+    def _gather_chance(self, gk_attrs, ball_speed: float, lateral: float) -> float:
+        """A save he holds rather than parries."""
+        handling = min(1.0, (gk_attrs.composure * 0.6 + gk_attrs.ballcontrol * 0.4) / STAT_CEILING)
+        hands = GATHER_HANDS[0] + (GATHER_HANDS[1] - GATHER_HANDS[0]) * handling
+        pace, dive = self._shot_terms(gk_attrs, ball_speed, lateral)
+        return float(_clamp(hands * (1.0 - GATHER_SPEED_FALL * pace * pace) * (1.0 - GATHER_REACH_FALL * min(1.0, dive)), 0.05, 0.97))
 
     def _resolve_penalty(self, taker_index: int, keeper_index: int):
         """A penalty is a guessing game, not a shot.
@@ -3619,6 +3649,25 @@ class game:
         # Staggered by index so the far players don't all land on one round.
         return (self.step_count + np.arange(22)) % rounds == 0
 
+    def _update_stand_ins(self, cb_home: list, possession: int, positions: list) -> None:
+        """Latch a full-back in at centre-back while no CB is home; release him once his own CB is
+        level with him, or home with the danger gone."""
+        for fb, cb in self._fb_partner.items():
+            side = 0 if fb < 11 else 1
+            if not cb_home[side]:
+                self._stand_in[fb] = True
+                continue
+            if not self._stand_in[fb]:
+                continue
+            goal_y = 0.0 if side == 0 else PITCH_HEIGHT
+            cb_x, cb_y = positions[cb]
+            cb_depth = abs(cb_y - goal_y)
+            level = cb_depth <= abs(positions[fb][1] - goal_y) + STAND_IN_LEVEL
+            cb_home_now = cb_depth < CB_HOME_DEPTH and abs(cb_x - PITCH_WIDTH / 2.0) < CB_HOME_HALF_WIDTH
+            calm = possession == (1 if side == 0 else -1) or abs(float(self.ball[1]) - goal_y) > PITCH_HEIGHT / 2.0
+            if level or (cb_home_now and calm):
+                self._stand_in[fb] = False
+
     def step(self):
         self.step_count += 1
         if self.pass_and_move_timer > 0:
@@ -3772,6 +3821,7 @@ class game:
                 cb_home[team] = any(
                     abs(y - goal_y) < CB_HOME_DEPTH and abs(x - PITCH_WIDTH / 2.0) < CB_HOME_HALF_WIDTH for x, y in cbs
                 )
+        self._update_stand_ins(cb_home, possesion, position_list)
         # The keeper's loose-ball read is per TEAM, not per player -- computed
         # at most twice a round, not 22 times.
         goal_crossings = (
@@ -3872,6 +3922,8 @@ class game:
                 # The plan this player latched onto last round ("wingplay")
                 # or None; a decision keeps it by returning it on its action.
                 "intent": self.intent[i],
+                # A full-back playing centre-back while his CB is caught upfield (defender.py).
+                "stand_in": self._stand_in[i],
                 # The teammate who just passed to me and is running on (index into "teammates"), or -1.
                 "give_and_go": (
                     self.pass_and_move - (0 if home else 11)

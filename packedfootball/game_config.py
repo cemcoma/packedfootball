@@ -595,7 +595,7 @@ TACTICS: Final = {
     ),
     "possession": Tactic(
         pass_bias=1.4, cross_bias=0.8, clear_bias=0.3, safety_scale=2.0,
-        backward_scale=0.4, recycle_bias=4.0, support_bias=1.4, forward_run_bias=0.8, line_depth=-8.0,
+        backward_scale=0.4, recycle_bias=4.0, support_bias=1.4, forward_run_bias=0.8, line_depth=-4.0,
         press_bias=1.3, punt_share=0.15, progress_scale=0.35, lane_scale=4.0, show_in_space=True,
     ),
     "wing_play": Tactic(
