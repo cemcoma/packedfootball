@@ -3,8 +3,8 @@
 [ext_resource type="Script" uid="uid://ce0gqgfdbq3ou" path="res://scripts/screens/Play.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="3"]
-[ext_resource type="PackedScene" path="res://scenes/components/MenuTile.tscn" id="menutile"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_7a5gm"]
+[ext_resource type="PackedScene" path="res://scenes/components/MenuTile.tscn" id="menutile"]
 
 [node name="Play" type="Control" unique_id=1553461410]
 layout_mode = 3
@@ -38,12 +38,6 @@ theme_override_constants/separation = 12
 [node name="HeaderRow" type="HBoxContainer" parent="Margin/RootVBox" unique_id=971980624]
 layout_mode = 2
 theme_override_constants/separation = 16
-
-[node name="TitleLabel" type="Label" parent="Margin/RootVBox/HeaderRow" unique_id=971980623]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 24
-text = "PLAY"
 
 [node name="StatusLabel" type="Label" parent="Margin/RootVBox" unique_id=2039528902]
 unique_name_in_owner = true
@@ -83,7 +77,6 @@ unique_name_in_owner = true
 layout_mode = 2
 title_text = "Minigames"
 subtitle_text = "A reward every day. Play one, come back tomorrow for a bigger one."
-accent_key = "accent"
 hero = true
 min_height = 96
 
@@ -182,10 +175,6 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 2
-
-[node name="Spacer6" type="Control" parent="Margin/RootVBox" unique_id=479933101]
-layout_mode = 2
-size_flags_vertical = 3
 
 [node name="BackButton" type="Button" parent="Margin/RootVBox" unique_id=1120299802]
 unique_name_in_owner = true

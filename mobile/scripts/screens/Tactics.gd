@@ -69,7 +69,7 @@ func _refresh_selection() -> void:
 		var tile: MenuTile = _tiles[style]
 		tile.hero = style == current
 		tile.accent_key = "heading" if style == current else "accent"
-		tile.disabled = _saving
+		tile.set_tile_disabled(_saving)
 
 
 func _on_style_pressed(style: String) -> void:

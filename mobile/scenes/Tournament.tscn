@@ -2,8 +2,8 @@
 
 [ext_resource type="Script" uid="uid://igulq75x7wce" path="res://scripts/screens/TournamentHub.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/BackgroundLayer.tscn" id="2"]
-[ext_resource type="PackedScene" path="res://scenes/components/MenuTile.tscn" id="menutile"]
 [ext_resource type="Script" uid="uid://cjx6vw47141q1" path="res://scripts/components/SafeMargin.gd" id="3_snc3w"]
+[ext_resource type="PackedScene" path="res://scenes/components/MenuTile.tscn" id="menutile"]
 
 [node name="Tournament" type="Control" unique_id=1998000001]
 layout_mode = 3
@@ -33,11 +33,6 @@ script = ExtResource("3_snc3w")
 [node name="RootVBox" type="VBoxContainer" parent="Margin" unique_id=1998000004]
 layout_mode = 2
 theme_override_constants/separation = 12
-
-[node name="TitleLabel" type="Label" parent="Margin/RootVBox" unique_id=1998000005]
-layout_mode = 2
-theme_override_font_sizes/font_size = 24
-text = "TOURNAMENTS"
 
 [node name="Spacer" type="Control" parent="Margin/RootVBox" unique_id=1998000006]
 layout_mode = 2
