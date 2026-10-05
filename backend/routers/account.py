@@ -15,6 +15,7 @@ from engine import generate_starter_roster, player_to_fields, sanitize_tactics
 from services import account as account_service
 from services import ads as ads_service
 from services import energy as energy_service
+from services import remote_art
 from services import tournament as tournament_service
 
 router = APIRouter(tags=["account"])
@@ -73,15 +74,17 @@ async def bootstrap_account(uid: str = Depends(verify_id_token)):
     user_path = f"users/{uid}"
     existing = await state.client.get_document(user_path)
     if existing is not None:
-        roster, inventory = await asyncio.gather(
+        roster, inventory, _ = await asyncio.gather(
             state.load_players(existing.get("roster_player_ids") or []),
             state.load_inventory(),
+            remote_art.refresh(state.client),
         )
         current, anchor = energy_service.from_profile(existing)
         return {
             "created": False,
             "inventory_cap": INVENTORY_CAP,
             "energy": energy_service.describe(current, anchor),
+            "art": remote_art.manifest(),
             "profile": {
                 **{k: existing[k] for k in PROFILE_FIELDS if k in existing},
                 "tactics": sanitize_tactics(existing.get("tactics")),  # client-written: never passed on raw
@@ -101,12 +104,14 @@ async def bootstrap_account(uid: str = Depends(verify_id_token)):
     # uid don't collide, and the client replaces it moments later anyway.
     await state.client.set_document(account_service.reservation_path(profile["display_name"]), {"uid": uid})
     current, anchor = energy_service.from_profile(None)
+    await remote_art.refresh(state.client)
     return {
         "created": True,
         "formation": profile["formation"],
         "roster_size": len(profile["roster"]),
         "inventory_cap": INVENTORY_CAP,
         "energy": energy_service.describe(current, anchor),
+        "art": remote_art.manifest(),
         "profile": {
             **{k: profile[k] for k in PROFILE_FIELDS if k in profile},
             "ad_counters": ads_service.counters(profile),

@@ -11,8 +11,8 @@ extends Control
 ## portrait exists, instead of every screen that shows a card needing its
 ## own update.
 ##
-## Styling today is handled by applying a pre-loaded texture to the 
-## BackgroundTexture node based on the player's tier.
+## The BackgroundTexture is the tier's art from RemoteArt (bundled or
+## downloaded); it swaps in when a download lands.
 ##
 ## The "Model" child (see PlayerModelView.gd) is the placeholder layered
 ## character portrait -- a real appearance rolled server-side per card (see
@@ -73,6 +73,8 @@ const GLOW_PERIOD := 1.2
 @onready var _glow: Panel = %Glow
 
 var _card: PlayerCard = null
+## The card type's label colour from the manifest, null for the theme's.
+var _text_color = null
 
 var _badge_text: String = ""
 var _badge_color: Color = BADGE_THEME_ACCENT
@@ -85,6 +87,7 @@ func _ready() -> void:
 	# dark/light swap has to rebuild them -- same as CurrencyChip. A widget
 	# that only uses themed Panel styles gets restyled for free; these don't.
 	ThemeManager.theme_changed.connect(_restyle_highlight)
+	RemoteArt.art_ready.connect(_on_art_ready)
 	# Scaling the glow about its middle rather than its top-left corner.
 	_glow.resized.connect(func() -> void: _glow.pivot_offset = _glow.size / 2.0)
 
@@ -93,15 +96,21 @@ func _on_tap_button_pressed() -> void:
 	pressed.emit()
 
 
+func _on_art_ready(kind: String, key: String, texture: Texture2D) -> void:
+	if kind == "cards" and _card != null and key == _card.tier:
+		_background_texture.texture = texture
+
+
 func set_card(card: PlayerCard) -> void:
 	_card = card
-	
-	if card.background_texture:
-		_background_texture.texture = card.background_texture
-	else:
-		print("No background... %s" % _card.tier)
-		_background_texture.texture = null
-		
+	_background_texture.texture = RemoteArt.card_texture(card.tier)
+	_text_color = RemoteArt.text_color(card.tier)
+	for label: Label in [_overall_label, _name_label, _tier_label]:
+		if _text_color == null:
+			label.remove_theme_color_override("font_color")
+		else:
+			label.add_theme_color_override("font_color", _text_color)
+
 	_overall_label.text = str(card.effective_overall())
 	_position_label.text = card.position
 	_tier_label.text = PlayerCard.tier_label(card.tier)
@@ -156,6 +165,8 @@ func set_kit(kit: KitDesign) -> void:
 func set_out_of_position(is_out_of_position: bool) -> void:
 	if is_out_of_position:
 		_position_label.add_theme_color_override("font_color", OUT_OF_POSITION_COLOR)
+	elif _text_color != null:
+		_position_label.add_theme_color_override("font_color", _text_color)
 	else:
 		_position_label.remove_theme_color_override("font_color")
 

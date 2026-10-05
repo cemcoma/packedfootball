@@ -232,10 +232,15 @@ func _load_packs() -> void:
 		print(res)
 		_status_label.text = tr("Could not load packs -- try again later.")
 		return
+	RemoteArt.apply_manifest(res.data.get("art"))
 	var pack_fields: Array = res.data.get("packs", [])
 	_packs = []
 	for fields in pack_fields:
 		_packs.append(PackData.from_fields(fields))
+	# Promo art lands on the device before anyone buys the pack.
+	for pack: PackData in _packs:
+		RemoteArt.prefetch("packs", [pack.sprite_key])
+		RemoteArt.prefetch("cards", pack.card_tiers())
 	_sections = []
 	var sections_raw = res.data.get("sections")
 	if sections_raw is Array:
@@ -484,6 +489,9 @@ func _on_buy_pressed(pack: PackData) -> void:
 		res.data.get("bucks_remaining"),
 		res.data.get("medals_remaining"),
 	)
+
+	# Normally already prefetched; this only waits on a slow network.
+	await RemoteArt.ensure("cards", cards.map(func(card: PlayerCard) -> String: return card.tier), 4.0)
 
 	# The reveal screen is the actual "you got these" moment now -- see
 	# PackReveal.gd. No need to refresh credits/status/the pack grid here:

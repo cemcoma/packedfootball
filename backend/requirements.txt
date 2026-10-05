@@ -10,3 +10,4 @@ python-dotenv>=1.0
 # service; harmless in the image, and keeping it here means one install line
 # gets you a runnable test suite.
 pytest>=8.0
+Pillow>=10  # scripts/upload_art.py only

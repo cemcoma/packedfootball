@@ -48,6 +48,9 @@ const SCRIPTS := [
 	"res://scripts/data/Tactics.gd",
 	"res://scripts/screens/Tactics.gd",
 	"res://scripts/screens/PreMatch.gd",
+	"res://scripts/autoload/RemoteArt.gd",
+	"res://scripts/components/PlayerCardView.gd",
+	"res://scripts/components/PackView.gd",
 ]
 
 const SCENES := [
@@ -66,6 +69,8 @@ const SCENES := [
 	"res://scenes/Shootout.tscn",
 	"res://scenes/MatchResult.tscn",
 	"res://scenes/MatchStats.tscn",
+	"res://scenes/components/PlayerCardView.tscn",
+	"res://scenes/components/PackView.tscn",
 ]
 
 func _init() -> void:

@@ -141,6 +141,19 @@ func bench_slots_needed() -> int:
 	return cards_per_pack
 
 
+## Every tier this pack can drop, which the Shop prefetches art for.
+func card_tiers() -> Array:
+	var tiers := {}
+	for table in [rates] + slot_rates.values():
+		for tier in table:
+			if float(table[tier]) > 0.0:
+				tiers[tier] = true
+	for guarantee in guarantees:
+		if guarantee is Dictionary and guarantee.get("tier") is String:
+			tiers[guarantee["tier"]] = true
+	return tiers.keys()
+
+
 func is_limited() -> bool:
 	return max_opens != null
 
@@ -165,13 +178,16 @@ func tag_text() -> String:
 		return unavailable_reason
 	return TranslationServer.translate("Not available")
 
-## Pack art lives at res://sprites/packs/<type>/<sprite_key>.png; missing art
-## falls back to the standard pack.
+## Pack art is RemoteArt's (downloaded) for the sprite_key, else
+## res://sprites/packs/<type>/<sprite_key>.png, else the standard pack.
 const FALLBACK_TEXTURE := "res://sprites/packs/standard/StandardPack1.png"
 
 
 func get_texture() -> Texture2D:
 	if sprite_key != "":
+		var remote := RemoteArt.pack_texture(sprite_key)
+		if remote != null:
+			return remote
 		var path := "res://sprites/packs/%s/%s.png" % [type.to_lower(), sprite_key]
 		if ResourceLoader.exists(path):
 			return load(path)

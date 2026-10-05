@@ -242,9 +242,11 @@ def _roll_tendency_stat(rng: random.Random, stat_type: str, low: int, high: int)
 
 
 class PackManager:
-    def __init__(self, db: dict, seed=None):
+    def __init__(self, db: dict, seed=None, tier_ranges: dict | None = None):
         self.db = db
         self.rng = random.Random(seed)
+        # The backend passes TIER_RANGES plus the remote card_types variants.
+        self.tier_ranges = tier_ranges if tier_ranges is not None else TIER_RANGES
 
     def get_all_packs(self) -> list:
         packs = []
@@ -397,7 +399,7 @@ class PackManager:
         nerfed per stat (default "secondary" for anything that position's
         entry doesn't mention, or for an unrecognized position entirely).
         """
-        min_s, max_s = TIER_RANGES.get(tier, (40, 50))
+        min_s, max_s = self.tier_ranges.get(tier, (40, 50))
         position_profile = POSITION_STAT_TIERS.get(position, {})
 
         generated_stats = {}

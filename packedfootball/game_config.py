@@ -462,7 +462,8 @@ def stat_ability(stat: float, gamma: float | None = None, compress: float | None
 # of it with its own range and its own card art
 # (mobile/sprites/player_cards/<tier>.png). So special_champ is a special,
 # and a future diamond_turkish would be a diamond. A new variant is one
-# entry here plus a sprite, and nothing else needs to know it exists; a new
+# entry here plus a sprite, and nothing else needs to know it exists (or,
+# with no app update, backend/scripts/upload_art.py -- see services/remote_art.py); a new
 # FAMILY also needs a row in the family tables (backend/config.RELEASE_CREDITS_BY_TIER,
 # PlayerCard.TIER_COLORS / RELEASE_CREDITS).
 #

@@ -1,0 +1,7 @@
+[
+  {
+    "origin": ["https://cemcoma.github.io", "http://localhost:8060", "http://127.0.0.1:8060"],
+    "method": ["GET"],
+    "maxAgeSeconds": 3600
+  }
+]

@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// Card and pack art is public; only backend/scripts/upload_art.py (Admin SDK, bypasses rules) writes.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /card_art/{file} {
+      allow read: if true;
+    }
+    match /pack_art/{file} {
+      allow read: if true;
+    }
+  }
+}

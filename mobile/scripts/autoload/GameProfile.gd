@@ -154,11 +154,13 @@ func load_all() -> bool:
 	var bootstrap: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_POST, "/account/bootstrap")
 	var loaded := false
 	if bootstrap.ok:
+		RemoteArt.apply_manifest(bootstrap.data.get("art"))
 		apply_inventory_cap(bootstrap.data.get("inventory_cap"))
 		apply_energy(bootstrap.data.get("energy"))
 		loaded = _apply_bootstrap(bootstrap.data)
 	if not loaded:
 		loaded = await _load_from_firestore()
+	RemoteArt.prefetch("cards", all_cards.values().map(func(card: PlayerCard) -> String: return card.tier))
 	saved_formation = formation
 	saved_slot_assignment = slot_assignment.duplicate()
 	is_loaded = true

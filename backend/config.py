@@ -28,6 +28,8 @@ load_dotenv()
 # -- deployment ---------------------------------------------------------------
 
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "packedfootball")
+# Firebase Storage bucket holding card/pack art; only scripts/upload_art.py writes to it.
+ART_BUCKET = os.environ.get("ART_BUCKET", "packedfootball.firebasestorage.app")
 #allowed websites to call this backend
 ALLOWED_ORIGINS = [
     "https://cemcoma.github.io",

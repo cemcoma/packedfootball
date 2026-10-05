@@ -18,7 +18,7 @@ from config import INVENTORY_CAP, PACK_PRICE_CURRENCIES
 from admin_firestore_client import AdminFirestoreClient
 from deps import game_state_for, verify_id_token
 from engine import PackManager, player_to_fields
-from services import storefront
+from services import remote_art, storefront
 
 router = APIRouter(tags=["packs"])
 
@@ -109,6 +109,7 @@ async def list_packs(uid: str = Depends(verify_id_token)):
     category list, which the client's dropdown follows verbatim.
     """
     client = AdminFirestoreClient(uid)
+    await remote_art.refresh(client)
     docs = await client.list_collection("packs")
     orders = storefront.type_orders(await client.list_collection("pack_types"))
     packs = []
@@ -152,7 +153,21 @@ async def list_packs(uid: str = Depends(verify_id_token)):
         )
     # Never the document id -- ids are slugs, and alphabetical is not a shop.
     packs.sort(key=lambda p: storefront.shop_sort_key(p, orders))
-    return {"packs": packs, "sections": storefront.sections(packs, orders)}
+    return {"packs": packs, "sections": storefront.sections(packs, orders), "art": remote_art.manifest()}
+
+
+async def _pack_tier_ranges(client: AdminFirestoreClient, config: dict) -> dict:
+    """The ranges to roll with. A tier the cache doesn't know forces one early
+    re-read (a card type uploaded in the last few minutes) before failing."""
+    await remote_art.refresh(client)
+    ranges = remote_art.tier_ranges()
+    if remote_art.pack_tiers(config) - ranges.keys():
+        await remote_art.refresh(client, max_age=remote_art.FORCED_REFRESH_SECONDS)
+        ranges = remote_art.tier_ranges()
+    unknown = remote_art.pack_tiers(config) - ranges.keys()
+    if unknown:
+        raise HTTPException(500, f"Pack sells unknown tier: {', '.join(sorted(unknown))}")
+    return ranges
 
 
 class OpenPackRequest(BaseModel):
@@ -172,6 +187,9 @@ async def open_pack(req: OpenPackRequest, uid: str = Depends(verify_id_token)):
     unavailable_reason = _pack_unavailable_reason(config)
     if unavailable_reason is not None:
         raise HTTPException(403, unavailable_reason)
+
+    # Checked before charging: an unknown tier would otherwise roll 40-50 stats.
+    tier_ranges = await _pack_tier_ranges(packs_client, config)
 
     state = game_state_for(uid)
     profile = await state.load_or_create_profile(default_roster=[], default_display_name=uid[:8])
@@ -197,7 +215,7 @@ async def open_pack(req: OpenPackRequest, uid: str = Depends(verify_id_token)):
     # One manager for both draws, in this order: items are rolled from the
     # rng AFTER every card, which is what lets a pack gain an item_rates
     # table without changing what its old seeds already rolled.
-    manager = PackManager({req.pack_id: config}, seed=seed)
+    manager = PackManager({req.pack_id: config}, seed=seed, tier_ranges=tier_ranges)
     cards = manager.open_pack(req.pack_id)
     items = manager.open_pack_items(req.pack_id)
 

@@ -39,7 +39,13 @@ func _ready() -> void:
 	_tap_button.pressed.connect(_on_tap_button_pressed)
 	_info_button.pressed.connect(_on_info_button_pressed)
 	ThemeManager.theme_changed.connect(_restyle)
+	RemoteArt.art_ready.connect(_on_art_ready)
 	_restyle()
+
+
+func _on_art_ready(kind: String, key: String, texture: Texture2D) -> void:
+	if kind == "packs" and _pack != null and key == _pack.sprite_key:
+		_pack_texture.texture = texture
 
 
 func _on_tap_button_pressed() -> void:

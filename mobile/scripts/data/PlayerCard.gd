@@ -158,8 +158,6 @@ var appearance: Dictionary = {}
 ## GameProfile.average_overall() all read that raw, and the base card is what
 ## gets written back. Use effective_attributes() to see a card as it plays.
 var items: Array = []
-# Holds the custom background texture based on the player's tier
-var background_texture: Texture2D = null
 
 
 static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
@@ -180,15 +178,6 @@ static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
 	card.appearance = _dict(fields, "appearance", {})
 	# Absent on every card written before items existed.
 	card.items = ItemData.sanitize(fields.get("items"))
-	
-	# Load the corresponding background sprite
-	var sprite_path = "res://sprites/player_cards/%s.png" % card.tier
-	if ResourceLoader.exists(sprite_path):
-		
-		card.background_texture = load(sprite_path)
-	else:
-		push_warning("Missing background sprite for tier: " + card.tier)
-		
 	return card
 
 

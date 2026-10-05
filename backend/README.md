@@ -178,13 +178,32 @@ client) is the collapse, and everything that treats a tier as a rarity --
 release value, card colour, ordering, the pack-odds disclosure -- goes by
 the family. The variant only picks the card art and, in
 `game_config.TIER_RANGES`, the overall range. Adding a variant is a
-`TIER_RANGES` entry plus a sprite; a
+`TIER_RANGES` entry plus a sprite, or, with no app update or deploy,
+`scripts/upload_art.py card` (see Remote art below); a
 new family also needs rows in `RELEASE_CREDITS_BY_TIER` and the client's
 `PlayerCard.TIER_COLORS` / `RELEASE_CREDITS`. Renaming a key means a
 one-off sweep over `players/{id}` for the cards already out there (a
 `where("tier", "==", old)` query and a batched update -- the ucl/uel ->
 champ/cont rename was done that way), plus `sync_pack_definitions.py` for
 the pack odds that name it.
+
+### Remote art
+
+Promo card types and pack art ship without an app update. `card_types/{tier}`
+(a variant's range plus art) and `pack_art/{sprite_key}` point at WebP files in
+Firebase Storage (`config.ART_BUCKET`, public read via `storage.rules`).
+`services/remote_art.py` caches both for 5 minutes, merges the variants into the
+ranges `/pack/open` rolls with (an unknown tier is a 500, not a silent 40-50
+roll), and sends the manifest as `art` on `/account/bootstrap` and `/pack/list`.
+The client (`RemoteArt.gd`) downloads each file once per device into
+`user://remote_art/` and checks its sha256; bundled tiers need no download.
+
+A promo: `upload_art.py card <tier> <png> --range LO HI`, `upload_art.py pack
+<sprite_key> <png>`, then the `packs/{slug}` doc using that tier and sprite_key.
+Only variants of existing families can be remote. Never delete a `card_types`
+doc, because cards of that tier stay in `players/` for good.
+
+Step by step, including the one-time prod setup: [PROMO_MANUAL.md](PROMO_MANUAL.md).
 
 ### Tournaments
 
@@ -543,6 +562,7 @@ python3 backend/scripts/<script>.py [--dry-run]
 | `list_deals.py` | Read-only dump of live `deals/{id}` docs. |
 | `list_match_reports.py` | Read-only. Open bug reports newest first, with seed and engine version; `--dump-dir` writes each report's `games/{id}` doc as JSON. `--all` includes reports whose `status` you've changed by hand. To watch one: paste its game id into Play.tscn's TESTING panel (editor only, "Check a reported match"), which runs `packedfootball/scripts/replay_game.py` -- re-simulates the match on your Mac from the game doc and plays it back, showing the report text and flagging an engine-version mismatch. |
 | `list_accounts.py` | Read-only. Lists every `users/{uid}` and whether its roster is Quick-Match complete (`roster_player_ids` length == 11). |
+| `upload_art.py` | `card <tier> <png> --range LO HI [--text-color #rrggbb]` or `pack <sprite_key> <png>`: converts to WebP at the bundled size, uploads it to Storage under a content-hashed name, and writes `card_types/{tier}` / `pack_art/{key}`. `--preview out.webp` to check quality, `--lossless`, `--dry-run`. |
 | `settle_tournaments.py` | Settles tournaments by hand when a period is stuck; `--dry-run` to see why it failed (or why it will work), `--mode daily\|weekly` to pick a format. |
 
 A synced deal left `active: false` won't appear in `GET /deals/list` until
