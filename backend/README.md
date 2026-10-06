@@ -66,7 +66,7 @@ gcloud run deploy packedfootball-backend \
   --region europe-west3 \
   --allow-unauthenticated \
   --max-instances 10 \
-  --update-env-vars FIREBASE_PROJECT_ID=<project-id>
+  --update-env-vars FIREBASE_PROJECT_ID=<project-id> \
   --cpu-boost
 ```
 

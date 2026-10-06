@@ -25,6 +25,9 @@ signal purchase_failed(product_id: String, reason: String)
 signal prices_updated
 
 var _revenuecat = null
+# Only true once initialize() ran with this platform's key; the plugin is
+# present on Android before its key exists, and an unconfigured SDK must not be called.
+var _initialized: bool = false
 
 ## product_id -> the price string the store itself shows for it, in the
 ## storefront's own currency and formatting ("₺49,99", "$4.99", "4,99 €").
@@ -49,14 +52,14 @@ func _ready() -> void:
 
 
 func is_available() -> bool:
-	return _revenuecat != null
+	return _revenuecat != null and _initialized
 
 
 ## Call once, right after sign-in succeeds (see Auth.gd's _go_to_menu) --
 ## uid becomes RevenueCat's app_user_id, which is what the backend webhook
 ## uses to know which account to credit.
 func initialize_for_signed_in_user(uid: String) -> void:
-	if not is_available():
+	if _revenuecat == null:
 		return
 	var api_key: String = (
 		RevenueCatConfig.REVENUECAT_IOS_API_KEY if OS.get_name() == "iOS"
@@ -65,6 +68,7 @@ func initialize_for_signed_in_user(uid: String) -> void:
 	if api_key == "":
 		return  # this platform's key isn't set up yet -- see RevenueCatConfig.gd
 	_revenuecat.initialize(api_key, uid, false)
+	_initialized = true
 
 
 func purchase(product_id: String) -> void:

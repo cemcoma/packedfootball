@@ -13,5 +13,9 @@ extends Control
 @onready var _status_label: Label = %StatusLabel
 
 
+func _ready() -> void:
+	add_to_group(BackNavigation.LOADING_POPUP_GROUP)
+
+
 func set_status(status: String) -> void:
 	_status_label.text = status
