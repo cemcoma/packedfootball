@@ -50,6 +50,7 @@ const SUMMARY_ROWS := [
 @onready var _score_label: Label = %ScoreLabel
 @onready var _credits_label: Label = %CreditsLabel
 @onready var _credits_icon: TextureRect = %CreditsIcon
+@onready var _double_button: Button = %DoubleButton
 @onready var _home_scorers: VBoxContainer = %HomeScorers
 @onready var _away_scorers: VBoxContainer = %AwayScorers
 @onready var _stats_grid: GridContainer = %StatsGrid
@@ -70,6 +71,8 @@ var _reporting: bool = false
 func _ready() -> void:
 	_continue_button.pressed.connect(_on_continue_pressed)
 	_details_button.pressed.connect(_on_details_pressed)
+	_double_button.pressed.connect(_on_double_pressed)
+	AdManager.ad_reward_completed.connect(_on_ad_completed)
 	_report_button.pressed.connect(_on_report_pressed)
 	_report_cancel_button.pressed.connect(func() -> void: _report_overlay.visible = false)
 	_report_send_button.pressed.connect(_on_report_send_pressed)
@@ -110,6 +113,7 @@ func _ready() -> void:
 	# so CurrencyDisplay.ICONS stays the only place a logo path lives.
 	_credits_label.text = "+%s" % CurrencyDisplay.format_amount(MatchSession.credits_earned)
 	_credits_icon.texture = CurrencyDisplay.icon_for("credits")
+	_refresh_double_button(my_score > opp_score)
 
 	_populate_scorers(my_name, MatchSession.TEAM_HOME, _home_scorers)
 	_populate_scorers(opponent_name, MatchSession.TEAM_AWAY, _away_scorers)
@@ -229,6 +233,40 @@ func _on_details_pressed() -> void:
 	get_tree().change_scene_to_file(MATCH_STATS_SCENE)
 
 
+## Offered after a win that paid something, while today's doubles last. The
+## server re-checks all of it (services/ads.double_win_credits) before paying.
+func _refresh_double_button(won: bool) -> void:
+	var track := AdManager.TRACK_DOUBLE_WIN
+	var left := GameProfile.ad_max(track) - GameProfile.ad_watched(track)
+	_double_button.visible = (
+		won and MatchSession.credits_earned > 0 and MatchSession.game_id != ""
+		and not MatchSession.is_local and AdManager.ads_supported() and left > 0
+	)
+	_double_button.text = tr("Double it with an ad (%d left)") % left
+
+
+func _on_double_pressed() -> void:
+	_double_button.disabled = true
+	if not AdManager.show_ad_for_track(AdManager.TRACK_DOUBLE_WIN, MatchSession.game_id):
+		_double_button.text = tr("Ad not ready -- try again in a moment.")
+		_double_button.disabled = false
+
+
+## AdManager's signal is global, so the track has to be checked.
+func _on_ad_completed(track: String, status: String) -> void:
+	if track != AdManager.TRACK_DOUBLE_WIN:
+		return
+	match status:
+		"granted":
+			_credits_label.text = "+%s" % CurrencyDisplay.format_amount(MatchSession.credits_earned * 2)
+			_double_button.visible = false
+		"pending":
+			_double_button.text = tr("Reward is on its way -- it lands within a minute.")
+		_:
+			_double_button.text = tr("Ad was closed early or failed to verify.")
+			_double_button.disabled = false
+
+
 # -- bug report ---------------------------------------------------------------
 
 
@@ -277,25 +315,18 @@ func _on_report_send_pressed() -> void:
 	_report_button.text = tr("Reported -- thanks! Tap to add more")
 
 
-## Re-fetches the squad from Firestore before heading back to Menu --
-## /match/quick already persisted each played player's updated statistics
-## server-side (see backend/main.py's _persist_player_stats), but
-## GameProfile.all_cards was only ever populated once at sign-in (see
-## Auth.gd's _go_to_menu -> GameProfile.load_all()) and nothing had
-## refreshed it since, so Team's own card views kept showing the pre-match
-## stats until a full app restart. Same fix, same reason, in
-## MatchPlayback.gd's _on_exit_pressed() for whoever backs out via the pause
-## menu before ever reaching this screen.
+## The squad already has its post-match stats from the response (see
+## MatchSession.release_held_profile); only an older backend's reply needs a reload.
 func _on_continue_pressed() -> void:
 	_continue_button.disabled = true
 	_details_button.disabled = true
-	_loading_popup.set_status(tr("Loading players..."))
-	_loading_popup.visible = true
 	# Read the destination BEFORE clear(), which resets it -- otherwise a
 	# tournament match silently lands back on the Menu mid-run.
 	var destination := MatchSession.return_scene
-	var is_local := MatchSession.is_local
+	var reload := not MatchSession.squad_is_current()
 	MatchSession.clear()
-	if not is_local:  # a local test match persisted nothing -- see MatchSession.is_local
+	if reload:
+		_loading_popup.set_status(tr("Loading players..."))
+		_loading_popup.visible = true
 		await GameProfile.load_all()
 	get_tree().change_scene_to_file(destination)

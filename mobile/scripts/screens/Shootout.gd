@@ -697,10 +697,11 @@ func _reset_for_retry() -> void:
 	_open_picker()
 
 
+## No reload: the final kick's balances are already in GameProfile (see
+## ShootoutSession._apply_rewards), and a shootout touches nothing else.
 func _on_continue_pressed() -> void:
 	var destination := ShootoutSession.return_scene
 	ShootoutSession.clear()
-	await GameProfile.load_all()
 	get_tree().change_scene_to_file(destination)
 
 

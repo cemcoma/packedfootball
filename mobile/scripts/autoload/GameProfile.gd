@@ -192,6 +192,24 @@ func _apply_bootstrap(data: Dictionary) -> bool:
 	return true
 
 
+## Swaps in the XI a match response sent back, that match already in their
+## career stats. False, touching nothing, unless every card is one we hold.
+func apply_match_cards(cards: Array) -> bool:
+	if cards.size() != slot_assignment.size():
+		return false
+	var parsed: Array[PlayerCard] = []
+	for fields in cards:
+		if not (fields is Dictionary):
+			return false
+		var card := PlayerCard.from_response(fields)
+		if not all_cards.has(card.player_id):
+			return false
+		parsed.append(card)
+	for card in parsed:
+		all_cards[card.player_id] = card
+	return true
+
+
 ## The slow path: users/{uid} and then each card as its own request.
 func _load_from_firestore() -> bool:
 	var doc = await Firestore.get_document(_user_doc_path())

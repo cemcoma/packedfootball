@@ -92,17 +92,6 @@ async def quick_match(uid: str = Depends(verify_id_token), fmt: int = Depends(re
     result = await asyncio.to_thread(run_match, caller_profile, opponent_profile, seed, fmt)
     my_score, opp_score = result["score"]
 
-    await games_client.set_document(
-        f"games/{game_id}",
-        {"status": "finished", "finished_at": firestore.SERVER_TIMESTAMP, "score": result["score"]},
-        merge=True,
-    )
-
-    await persist_player_stats(caller_state, caller_profile)
-    await record_bot_result(opponent_uid, opponent_profile, opp_score, my_score)
-
-    credits_earned = 0
-
     wins, losses, draws = caller_profile["wins"], caller_profile["losses"], caller_profile["draws"]
     if my_score > opp_score:
         wins += 1
@@ -113,6 +102,22 @@ async def quick_match(uid: str = Depends(verify_id_token), fmt: int = Depends(re
     else:
         losses += 1
         credits_earned = QUICK_MATCH_REWARD_CREDITS["loss"]
+
+    # credits_earned is what the double_win ad pays again (services/ads.py).
+    await games_client.set_document(
+        f"games/{game_id}",
+        {
+            "status": "finished",
+            "finished_at": firestore.SERVER_TIMESTAMP,
+            "score": result["score"],
+            "credits_earned": credits_earned,
+        },
+        merge=True,
+    )
+
+    await persist_player_stats(caller_state, caller_profile)
+    await record_bot_result(opponent_uid, opponent_profile, opp_score, my_score)
+
     await caller_state.record_match_result(wins, losses, draws)
     new_credits = caller_profile["credits"] + credits_earned
     await caller_state.set_credits(new_credits)

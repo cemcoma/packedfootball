@@ -21,7 +21,7 @@ async def admob_server_side_verification(request: Request):
     """AdMob's callback for a finished rewarded ad. Unauthenticated: the
     query string is signed by Google (services/ads.verify_signature), and
     `user_id` / `custom_data` are what the client attached to the ad
-    (its uid and the track), covered by that signature.
+    (its uid and the track, plus the game for double_win), covered by that signature.
 
     Answers 200 for anything but a bad signature -- AdMob retries non-2xx
     callbacks, and a reward refused today (cap reached, energy full) or an
@@ -39,7 +39,7 @@ async def admob_server_side_verification(request: Request):
         raise HTTPException(401, "Bad signature")
 
     uid = params.get("user_id", "")
-    track = params.get("custom_data", "")
+    track, game_id = ads_service.parse_custom_data(params.get("custom_data", ""))
     transaction_id = params.get("transaction_id", "")
     if not uid or not transaction_id or track not in ads_service.TRACKS:
         # The console's "verify URL" test ping, or an ad shown without our
@@ -63,8 +63,10 @@ async def admob_server_side_verification(request: Request):
             "admob_timestamp": params.get("timestamp", ""),
             "received_at": now.isoformat(),
         }
+        if game_id:
+            record["game_id"] = game_id
         try:
-            paid = ads_service.grant_in_tx(tx, user_path, track, now)
+            paid = ads_service.grant_in_tx(tx, user_path, track, now, game_id)
         except ads_service.AdRewardRefused as refused:
             record["status"] = "refused"
             record["reason"] = str(refused)

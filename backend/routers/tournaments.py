@@ -345,10 +345,19 @@ async def _match(uid: str, mode: Mode, fmt: int) -> dict:
     # Off the event loop, as in routers/matches.py.
     result = await asyncio.to_thread(run_match, caller_profile, opponent_profile, seed, fmt)
     my_score, opp_score = result["score"]
+    credits_earned = mode.match_reward_credits[
+        "win" if my_score > opp_score else "draw" if my_score == opp_score else "loss"
+    ]
 
+    # credits_earned is what the double_win ad pays again (services/ads.py).
     await games_client.set_document(
         f"games/{game_id}",
-        {"status": "finished", "finished_at": firestore.SERVER_TIMESTAMP, "score": result["score"]},
+        {
+            "status": "finished",
+            "finished_at": firestore.SERVER_TIMESTAMP,
+            "score": result["score"],
+            "credits_earned": credits_earned,
+        },
         merge=True,
     )
     await persist_player_stats(caller_state, caller_profile)
@@ -365,7 +374,6 @@ async def _match(uid: str, mode: Mode, fmt: int) -> dict:
         tournament_service.entry_path(period_id, group_id, uid, mode), fields, merge=True
     )
 
-    credits_earned = mode.match_reward_credits[outcome]
     wins, losses, draws = caller_profile["wins"], caller_profile["losses"], caller_profile["draws"]
     wins += outcome == "win"
     draws += outcome == "draw"

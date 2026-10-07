@@ -16,6 +16,7 @@ signal ad_reward_completed(track: String, status: String)
 # Reward tracks, as custom_data on the ad and as keys in ad_counters.
 const TRACK_BUCK := "buck_track"
 const TRACK_ENERGY := "energy_track"
+const TRACK_DOUBLE_WIN := "double_win"
 
 # Google's test unit ids -- what a debug build loads unless a test device is
 # registered. A release export (OS.is_debug_build() == false) uses the live unit.
@@ -228,7 +229,8 @@ func _create_and_load_ad() -> void:
 	RewardedAdLoader.new().load(unit_id, AdRequest.new(), rewarded_ad_load_callback)
 
 
-func show_ad_for_track(track: String) -> bool:
+## `argument` rides along as "track:argument" -- double_win's game id.
+func show_ad_for_track(track: String, argument: String = "") -> bool:
 	if not ads_supported():
 		# No SDK here: nothing is granted (the backend only pays on AdMob's
 		# callback), but the shop's flow can still be walked through.
@@ -241,7 +243,7 @@ func show_ad_for_track(track: String) -> bool:
 		# What AdMob hands back to /ads/ssv, under Google's signature.
 		var ssv := ServerSideVerificationOptions.new()
 		ssv.user_id = FirebaseAuth.uid
-		ssv.custom_data = track
+		ssv.custom_data = track if argument == "" else "%s:%s" % [track, argument]
 		_rewarded_ad.set_server_side_verification_options(ssv)
 		_current_track = track
 		_rewarded_ad.show(_user_earned_reward_listener)

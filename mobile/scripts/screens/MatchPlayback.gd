@@ -665,7 +665,7 @@ func _on_skip_fulltime_pressed() -> void:
 func _on_exit_pressed() -> void:
 	# Before load_all(), so the server's fresher numbers win if it succeeds.
 	MatchSession.release_held_profile()
-	if _is_real_match and not MatchSession.is_local:
+	if _is_real_match and not MatchSession.squad_is_current():
 		_exit_button.disabled = true
 		_loading_popup.set_status(tr("Loading players..."))
 		_loading_popup.visible = true

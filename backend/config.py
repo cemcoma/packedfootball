@@ -604,3 +604,6 @@ AD_REWARD_PATH = [
 # The separate track for energy ads
 AD_ENERGY_MAX = 3
 AD_ENERGY_REWARD = 1
+
+# The result screen's "double it" ad: a won match's credits paid again.
+AD_DOUBLE_WIN_MAX = 3

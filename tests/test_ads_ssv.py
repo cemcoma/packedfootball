@@ -202,3 +202,59 @@ def test_no_client_claim_endpoint_remains():
     assert ("/ads/reward", ("POST",)) not in paths
     assert ("/ads/ssv", ("GET",)) in paths
     assert ("/ads/status", ("GET",)) in paths
+
+
+# --------------------------------------------------------------- double win
+
+def _won_game(**over) -> dict:
+    return {"initiator_uid": "u", "status": "finished", "score": [2, 1], "credits_earned": 300, **over}
+
+
+def test_custom_data_carries_the_game_only_for_double_win():
+    assert ads.parse_custom_data("double_win:g1") == ("double_win", "g1")
+    assert ads.parse_custom_data("buck_track") == ("buck_track", "")
+
+
+def test_doubling_pays_the_wins_credits_again_and_marks_the_game():
+    tx = FakeTx({"users/u": _profile(), "games/g1": _won_game()})
+    paid = ads.grant_in_tx(tx, "users/u", "double_win", T0, "g1")
+    assert paid["credits_remaining"] == 100 + 300
+    assert tx.docs["users/u"]["ad_counters"]["double_win"] == 1
+    assert tx.docs["games/g1"]["doubled"] is True
+
+
+@pytest.mark.parametrize("game", [
+    None,                                   # no such game
+    _won_game(initiator_uid="someone"),     # not yours
+    _won_game(score=[1, 1]),                # a draw
+    _won_game(score=[0, 2]),                # a loss
+    _won_game(status="in_progress"),        # not finished
+    _won_game(doubled=True),                # already doubled
+    _won_game(credits_earned=0),            # nothing to double
+])
+def test_only_your_own_undoubled_win_can_be_doubled(game):
+    docs = {"users/u": _profile()}
+    if game is not None:
+        docs["games/g1"] = game
+    tx = FakeTx(docs)
+    with pytest.raises(ads.AdRewardRefused):
+        ads.grant_in_tx(tx, "users/u", "double_win", T0, "g1")
+    assert tx.writes == []  # a refusal spends none of the day's three
+
+
+def test_the_same_game_cannot_be_doubled_twice():
+    tx = FakeTx({"users/u": _profile(), "games/g1": _won_game()})
+    ads.grant_in_tx(tx, "users/u", "double_win", T0, "g1")
+    with pytest.raises(ads.AdRewardRefused):
+        ads.grant_in_tx(tx, "users/u", "double_win", T0, "g1")
+    assert tx.docs["users/u"]["credits"] == 100 + 300
+
+
+def test_three_doubles_a_day():
+    games = {f"games/g{i}": _won_game() for i in range(config.AD_DOUBLE_WIN_MAX + 1)}
+    tx = FakeTx({"users/u": _profile(), **games})
+    for i in range(config.AD_DOUBLE_WIN_MAX):
+        ads.grant_in_tx(tx, "users/u", "double_win", T0, f"g{i}")
+    with pytest.raises(ads.AdRewardRefused):
+        ads.grant_in_tx(tx, "users/u", "double_win", T0, f"g{config.AD_DOUBLE_WIN_MAX}")
+    assert tx.docs["users/u"]["credits"] == 100 + 300 * config.AD_DOUBLE_WIN_MAX

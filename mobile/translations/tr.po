@@ -1667,3 +1667,6 @@ msgstr "Hazır -- başlamak için sıralamanı gönder."
 
 msgid "%d of %d picked. Tap Auto-select to fill the rest, then Send."
 msgstr "%d / %d seçildi. Kalanları doldurmak için Otomatik seç'e, sonra Gönder'e dokun."
+
+msgid "Double it with an ad (%d left)"
+msgstr "Reklam izle, ikiye katla (%d hak kaldı)"

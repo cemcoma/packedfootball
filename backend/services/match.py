@@ -121,9 +121,11 @@ def run_match(caller_profile: dict, opponent_profile: dict, seed: int, replay_fo
     my_score, opp_score = match.scores
     replay_bytes = match.replay.encode_v2() if replay_format == 2 else match.replay.encode()
     replay_b64 = base64.b64encode(replay_bytes).decode()
-    roster_fields = [player_to_fields(p) for p in caller_profile["roster"]] + [
-        player_to_fields(p) for p in opponent_profile["roster"]
-    ]
+    # The caller's 11 carry their player_id: with this match already in their
+    # career stats, the client swaps them in instead of reloading the squad.
+    roster_fields = [
+        {**player_to_fields(p), "player_id": getattr(p, "player_id", "") or ""} for p in caller_profile["roster"]
+    ] + [player_to_fields(p) for p in opponent_profile["roster"]]
     return {
         "score": [my_score, opp_score],
         "replay": replay_b64,

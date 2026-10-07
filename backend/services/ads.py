@@ -37,10 +37,18 @@ def track_caps() -> dict[str, int]:
         # The daily shootout's retry. The cap IS the allowance: one ad, one
         # extra attempt, refused here rather than by the shootout.
         "shootout_retry": config.PENALTY_SHOOTOUT_AD_RETRIES_PER_DAY,
+        "double_win": config.AD_DOUBLE_WIN_MAX,
     }
 
 
 TRACKS = tuple(track_caps())
+
+
+def parse_custom_data(custom_data: str) -> tuple[str, str]:
+    """(track, argument) from the ad's custom_data -- "double_win:<game_id>"
+    names the game it doubles; every other track is the bare name."""
+    track, _, argument = custom_data.partition(":")
+    return track, argument
 
 # Google publishes the public keys AdMob signs SSV callbacks with here; they
 # rotate, so an unknown key_id triggers one refetch before it is refused.
@@ -79,7 +87,23 @@ def counters(profile: dict | None, today: str | None = None) -> dict:
     }
 
 
-def grant_in_tx(tx, user_path: str, track: str, now: datetime | None = None) -> dict:
+def double_win_credits(game: dict | None, uid: str) -> int:
+    """What doubling this game pays: its credits again, if it is uid's own
+    finished win and not doubled yet. Refuses otherwise."""
+    if game is None or game.get("initiator_uid") != uid:
+        raise AdRewardRefused("not your game")
+    score = game.get("score") or []
+    if game.get("status") != "finished" or len(score) != 2 or score[0] <= score[1]:
+        raise AdRewardRefused("only a finished win can be doubled")
+    if game.get("doubled"):
+        raise AdRewardRefused("already doubled")
+    credits = int(game.get("credits_earned", 0) or 0)
+    if credits <= 0:
+        raise AdRewardRefused("nothing to double")
+    return credits
+
+
+def grant_in_tx(tx, user_path: str, track: str, now: datetime | None = None, game_id: str = "") -> dict:
     """Pays the next step of `track` for the profile at `user_path`, inside
     the caller's transaction. Returns the fields the client shows."""
     if track not in TRACKS:
@@ -128,6 +152,13 @@ def grant_in_tx(tx, user_path: str, track: str, now: datetime | None = None) -> 
         # shootout, which /shootout/daily/start reads. Nothing else to pay, and
         # nothing here has to know whether the player actually lost.
         pass
+    elif track == "double_win":
+        game_path = f"games/{game_id}" if game_id else ""
+        uid = user_path.rsplit("/", 1)[-1]
+        credits = double_win_credits(tx.get(game_path) if game_path else None, uid)
+        updates["credits"] = int(profile.get("credits", 0)) + credits
+        result.update(credits_remaining=updates["credits"], credits_doubled=credits)
+        tx.set(game_path, {"doubled": True, "doubled_at": now.isoformat()}, merge=True)
     else:
         # Named in track_caps but with no rule here. This used to be the energy
         # branch's `else`, so a new track silently paid energy.

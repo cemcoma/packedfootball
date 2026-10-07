@@ -69,6 +69,10 @@ var is_local: bool = false
 ## The response's credit balance and W/D/L, held until the result is on screen:
 ## the payout differs by outcome, so applying it at kick-off gives the score away.
 var _held_profile: Dictionary = {}
+## Your 11 as the response left them, released with the balance. Applying them
+## is what lets the exits skip reloading the squad.
+var _held_cards: Array = []
+var _squad_updated: bool = false
 
 
 func has_pending() -> bool:
@@ -190,19 +194,31 @@ func set_from_match_response(data: Dictionary) -> void:
 	for key in ["credits_remaining", "wins", "draws", "losses"]:
 		if typeof(data.get(key)) in [TYPE_INT, TYPE_FLOAT]:
 			_held_profile[key] = int(data.get(key))
+	var players: Array = _roster["players"]
+	_held_cards = players.slice(0, PLAYERS_PER_TEAM) if players.size() == PLAYERS_PER_TEAM * 2 else []
+	_squad_updated = false
 
 
-## Moves the held balance and record into GameProfile. Call once the result is
-## shown (or the match is abandoned); a no-op after the first call.
+## Moves the held balance, record and cards into GameProfile. Call once the
+## result is shown (or the match is abandoned); a no-op after the first call.
 func release_held_profile() -> void:
 	var held := _held_profile
+	var cards := _held_cards
 	_held_profile = {}
+	_held_cards = []
 	if held.is_empty() or is_local:  # a local match's file never touched this account
 		return
 	GameProfile.wins = held.get("wins", GameProfile.wins)
 	GameProfile.draws = held.get("draws", GameProfile.draws)
 	GameProfile.losses = held.get("losses", GameProfile.losses)
 	GameProfile.apply_currency_balances(held.get("credits_remaining"))
+	_squad_updated = GameProfile.apply_match_cards(cards)
+
+
+## False when the squad still shows pre-match stats (a backend that sent no
+## card ids), so the exit has to reload it.
+func squad_is_current() -> bool:
+	return is_local or _squad_updated
 
 
 static func _captains(raw) -> Array:
@@ -400,6 +416,8 @@ func clear() -> void:
 	game_id = ""
 	is_local = false
 	_held_profile = {}
+	_held_cards = []
+	_squad_updated = false
 	# Back to the default, or a tournament return would leak into the next
 	# Quick Match and send it somewhere it never came from.
 	return_scene = DEFAULT_RETURN_SCENE
