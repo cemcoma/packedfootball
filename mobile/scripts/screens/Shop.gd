@@ -26,6 +26,9 @@ extends Control
 ## sells out from someone else buying it, etc).
 
 const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
+const PACK_GAP := 14.0
+## A 4:3 tablet's viewport is 720 tall; past this the centred pack swamps the screen.
+const PACK_MAX_HEIGHT := 380.0
 
 @onready var _inventory_label: Label = %InventoryLabel
 @onready var _currency_tabs: CurrencyPanel = %CurrencyTabs
@@ -34,7 +37,9 @@ const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
 @onready var _status_label: Label = %StatusLabel
 @onready var _packs_panel: VBoxContainer = %PacksPanel
 @onready var _pack_type_dropdown: OptionButton = %PackTypeDropdown
-@onready var _packs_grid: HBoxContainer = %PacksGrid
+@onready var _packs_carousel: CardCarousel = %PacksCarousel
+@onready var _packs_empty_label: Label = %PacksEmptyLabel
+@onready var _packs_dots: HBoxContainer = %PacksDots
 @onready var _currency_panel: VBoxContainer = %CurrencyPanel
 @onready var _back_button: Button = %BackButton
 @onready var _info_popup: PackInfoPopup = %InfoPopup
@@ -56,6 +61,7 @@ const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
 var _confirming_pack: PackData = null
 
 var _packs: Array = []  # PackData, every pack the backend returned
+var _visible_packs: Array = []  # PackData in the selected type, in carousel order
 var _pack_types: Array[String] = []  # dropdown item index -> pack type
 ## /pack/list's `sections`: [{"type", "order"}, ...] in the order the
 ## backend wants the categories shown (pack_types/{type}.order in
@@ -78,6 +84,8 @@ var _sections: Array = []
 ## account data, and a type that no longer exists falls back to the first
 ## one on its own (see the find() below).
 static var _last_pack_type: String = ""
+## The pack last centred, kept the same way so buying one comes back to it.
+static var _last_pack_id: String = ""
 ## Set by open_energy(); one-shot, so a later plain visit opens on Packs again.
 static var _energy_back_to: String = ""
 var _return_scene: String = "res://scenes/Menu.tscn"
@@ -99,6 +107,11 @@ func _ready() -> void:
 	_buy_cancel_button.pressed.connect(_close_buy_confirm)
 	_buy_confirm_button.pressed.connect(_on_buy_confirmed)
 	_buy_info_button.pressed.connect(_on_buy_info_pressed)
+	_packs_carousel.focus_changed.connect(_on_pack_focus_changed)
+	_packs_carousel.card_tapped.connect(_on_pack_tapped)
+	_packs_carousel.resized.connect(_fit_pack_views)
+	# Unclipped so side packs run off the screen's edge, not the margin's.
+	_packs_carousel.clip_contents = false
 	_info_popup.closed.connect(_on_info_closed)
 	_buy_confirm_overlay.visible = false
 
@@ -165,6 +178,7 @@ func _restyle_chrome() -> void:
 	MenuTile.style_button(_pack_type_dropdown, accent)
 	MenuTile.style_popup(_pack_type_dropdown, accent)
 	_buy_info_icon.self_modulate = accent
+	_paint_dots()
 	# Opaque, so the packs behind it can't be mistaken for part of the dialog.
 	_buy_panel.add_theme_stylebox_override(
 		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("accent"), 3, true)
@@ -255,7 +269,7 @@ func _load_packs() -> void:
 
 	_status_label.text = ""
 	_rebuild_pack_type_dropdown()
-	_populate_packs_grid()
+	_populate_packs()
 
 
 ## The dropdown's entries and their order come from the backend, not a
@@ -301,38 +315,84 @@ func _selected_pack_type() -> String:
 
 func _on_pack_type_selected(_index: int) -> void:
 	_last_pack_type = _selected_pack_type()
-	_populate_packs_grid()
+	_populate_packs()
 
 
-func _populate_packs_grid() -> void:
-	# Same remove_child()-then-queue_free() pairing Team.gd's bench grid
-	# uses: safe even though this can indirectly run from a PackView's own
-	# "pressed" signal (tap -> confirm -> _on_buy_pressed -> _load_packs -> here).
-	for child in _packs_grid.get_children():
-		_packs_grid.remove_child(child)
-		child.queue_free()
+## One carousel per pack type, opening on the pack last centred (see _last_pack_id).
+func _populate_packs() -> void:
+	_packs_carousel.clear()
 	var selected_type := _selected_pack_type()
-	var visible_packs: Array = []
-	for pack in _packs:
-		if (pack as PackData).type == selected_type:
-			visible_packs.append(pack)
+	_visible_packs = _packs.filter(func(pack: PackData) -> bool: return pack.type == selected_type)
 
-	if visible_packs.is_empty():
-		var empty_label := Label.new()
-		empty_label.text = (
-			tr("No packs available right now.") if _packs.is_empty()
-			else tr("No %s packs available right now.") % tr(selected_type.capitalize())
-		)
-		_packs_grid.add_child(empty_label)
-		return
+	var empty := _visible_packs.is_empty()
+	_packs_carousel.visible = not empty
+	_packs_empty_label.visible = empty
+	_packs_empty_label.text = (
+		tr("No packs available right now.") if _packs.is_empty()
+		else tr("No %s packs available right now.") % tr(selected_type.capitalize())
+	)
 
-	for pack in visible_packs:
-		var typed_pack: PackData = pack
+	var focus := 0
+	for i in _visible_packs.size():
+		var pack: PackData = _visible_packs[i]
 		var view: PackView = PACK_VIEW_SCENE.instantiate()
-		_packs_grid.add_child(view)
-		view.set_pack(typed_pack)
-		view.set_shortfall(_shortfall_for(typed_pack))
-		view.pressed.connect(_open_buy_confirm.bind(typed_pack))
+		_packs_carousel.add_view(view)
+		view.set_pack(pack)
+		view.set_shortfall(_shortfall_for(pack))
+		if pack.pack_id == _last_pack_id:
+			focus = i
+	_fit_pack_views()
+	_packs_carousel.snap_to(focus, false)
+
+	for dot in _packs_dots.get_children():
+		_packs_dots.remove_child(dot)
+		dot.queue_free()
+	if _visible_packs.size() > 1:
+		for i in _visible_packs.size():
+			var dot := ColorRect.new()
+			dot.custom_minimum_size = Vector2(8, 8)
+			dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_packs_dots.add_child(dot)
+	_on_pack_focus_changed(_packs_carousel.focus_index())
+
+
+## Packs take the carousel's full height, so they are refitted whenever it
+## resizes -- including the first time the Packs tab is shown after Energy.
+func _fit_pack_views() -> void:
+	var height := minf(_packs_carousel.size.y - MenuTile.SHADOW_OFFSET, PACK_MAX_HEIGHT)
+	if height <= 0.0 or _packs_carousel.get_child_count() == 0:
+		return
+	var width := 0.0
+	for view: PackView in _packs_carousel.get_children():
+		view.fit_height(height)
+		width = view.custom_minimum_size.x
+	# Side packs clear the centred one by PACK_GAP rather than tucking under it.
+	_packs_carousel.separation = (
+		width * (_packs_carousel.focus_scale - _packs_carousel.side_scale) * 0.5 + PACK_GAP
+	)
+	_packs_carousel.refit()
+
+
+func _on_pack_focus_changed(index: int) -> void:
+	if index >= 0 and index < _visible_packs.size():
+		_last_pack_id = (_visible_packs[index] as PackData).pack_id
+	_paint_dots()
+
+
+func _paint_dots() -> void:
+	var index := _packs_carousel.focus_index()
+	for i in _packs_dots.get_child_count():
+		(_packs_dots.get_child(i) as ColorRect).color = (
+			ThemeManager.color("accent") if i == index else ThemeManager.color("surface_border")
+		)
+
+
+## A side pack slides to the centre; only the centred one opens Buy.
+func _on_pack_tapped(index: int) -> void:
+	if index != _packs_carousel.focus_index():
+		_packs_carousel.snap_to(index)
+		return
+	_open_buy_confirm(_visible_packs[index])
 
 
 ## The short reason on a pack's bar, "" when it can be opened. Same order as

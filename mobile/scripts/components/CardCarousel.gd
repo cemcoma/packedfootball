@@ -17,11 +17,12 @@ signal card_tapped(index: int)
 
 ## The gap between two cards at their resting size. The centred one is
 ## bigger than that, so it overlaps its neighbours' edges -- which is why
-## it is also the one raised to the front.
-const SEPARATION := 10.0
-const FOCUS_SCALE := 1.4
-const SIDE_SCALE := 0.9
-const SIDE_ALPHA := 0.55
+## it is also the one raised to the front. Defaults are the reveal's.
+@export var separation := 10.0
+@export var focus_scale := 1.4
+@export var side_scale := 0.9
+## A side view's modulate; the reveal fades its cards, the Shop darkens its packs.
+@export var side_modulate := Color(1, 1, 1, 0.55)
 
 ## How far a press may wander before it counts as a drag and not a tap.
 const TAP_SLOP := 10.0
@@ -61,15 +62,42 @@ func _ready() -> void:
 func add_view(view: Control) -> void:
 	add_child(view)
 	_go_deaf(view)
-	view.size = view.get_combined_minimum_size()
-	view.pivot_offset = view.size * 0.5
 	view.scale = Vector2.ONE
 	view.rotation = 0.0
 	view.modulate = Color.WHITE
 	_views.append(view)
-	_spacing = view.size.x * SIDE_SCALE + SEPARATION
+	view.minimum_size_changed.connect(refit)
+	_measure(view)
 	_layout()
 	_raise_centred()
+
+
+## Re-reads every view's size, for a caller that resized them after adding.
+## Also runs on its own when a view's minimum moves -- a wrapped label only
+## settles its height once it has been laid out at a width.
+func refit() -> void:
+	for view: Control in _views:
+		_measure(view)
+	_set_offset(_index * _spacing)
+
+
+func _measure(view: Control) -> void:
+	view.size = view.get_combined_minimum_size()
+	view.pivot_offset = view.size * 0.5
+	_spacing = view.size.x * side_scale + separation
+
+
+## Frees every view and starts over at the first slot.
+func clear() -> void:
+	_kill_snap()
+	for view: Control in _views:
+		remove_child(view)
+		view.queue_free()
+	_views.clear()
+	_offset = 0.0
+	_index = 0
+	_pressing = false
+	_dragging = false
 
 
 ## Takes a card out of the strip without freeing it -- the caller owns it.
@@ -79,6 +107,7 @@ func remove_view(view: Control) -> void:
 	if i < 0:
 		return
 	_views.remove_at(i)
+	view.minimum_size_changed.disconnect(refit)
 	remove_child(view)
 	_index = clampi(_index, 0, maxi(_views.size() - 1, 0))
 	_set_offset(_index * _spacing)
@@ -139,8 +168,8 @@ func _layout() -> void:
 		var view: Control = _views[i]
 		var from_middle: float = i * _spacing - _offset
 		var nearness: float = clampf(1.0 - absf(from_middle) / _spacing, 0.0, 1.0)
-		view.scale = Vector2.ONE * lerpf(SIDE_SCALE, FOCUS_SCALE, nearness)
-		view.modulate.a = lerpf(SIDE_ALPHA, 1.0, nearness)
+		view.scale = Vector2.ONE * lerpf(side_scale, focus_scale, nearness)
+		view.modulate = side_modulate.lerp(Color.WHITE, nearness)
 		view.position = Vector2(
 			middle + from_middle - view.size.x * 0.5, (size.y - view.size.y) * 0.5
 		)

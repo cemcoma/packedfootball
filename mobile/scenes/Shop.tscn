@@ -8,6 +8,7 @@
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="6"]
 [ext_resource type="PackedScene" path="res://scenes/components/CurrencyAmount.tscn" id="7_buyconfirm"]
 [ext_resource type="Texture2D" uid="uid://i6v2g4col8ei" path="res://sprites/icons/info_icon.png" id="8_info"]
+[ext_resource type="Script" uid="uid://cqrv7m2xk1wbe" path="res://scripts/components/CardCarousel.gd" id="9_carousel"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_shop_tabs"]
 
@@ -111,17 +112,30 @@ text = "Pack type"
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="PacksScroll" type="ScrollContainer" parent="Margin/RootVBox/PacksPanel" unique_id=327384293]
+[node name="PacksCarousel" type="Control" parent="Margin/RootVBox/PacksPanel" unique_id=327384293]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 10
-vertical_scroll_mode = 0
+size_flags_vertical = 3
+script = ExtResource("9_carousel")
+focus_scale = 1.0
+side_scale = 0.78
+side_modulate = Color(0.45, 0.45, 0.5, 1)
 
-[node name="PacksGrid" type="HBoxContainer" parent="Margin/RootVBox/PacksPanel/PacksScroll" unique_id=683860734]
+[node name="PacksEmptyLabel" type="Label" parent="Margin/RootVBox/PacksPanel" unique_id=683860734]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 4
+size_flags_vertical = 3
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PacksDots" type="HBoxContainer" parent="Margin/RootVBox/PacksPanel" unique_id=683860735]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 2
+theme_override_constants/separation = 8
 
 [node name="CurrencyPanel" type="VBoxContainer" parent="Margin/RootVBox" unique_id=928833879]
 unique_name_in_owner = true
