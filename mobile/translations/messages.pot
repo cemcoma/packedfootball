@@ -200,7 +200,7 @@ msgstr ""
 # -------- Play hub / Quick Match --------------------------------------
 msgid "Quick Match"
 msgstr ""
-msgid "One match against a random opponent -- a real player if one's around, otherwise a bot. Small credit reward, no ranking effect."
+msgid "One match against a random opponent. Small credit reward."
 msgstr ""
 msgid "Finding an opponent..."
 msgstr ""

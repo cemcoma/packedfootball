@@ -13,12 +13,12 @@ extends PanelContainer
 ## it belongs -- a confirmation popup (Shop.gd's BuyConfirm) that shows
 ## the price and asks. That's also what lets an unaffordable or not-yet-
 ## available pack stay tappable: the popup explains instead of a greyed
-## button that explains nothing.
+## button that explains nothing. TapButton covers the whole box, frame and
+## price included; the odds ("i") button lives in that popup.
 
 ## 600 width 800 height px
 
-signal pressed  ## the pack itself was tapped -- see Shop.gd, which opens the buy confirmation.
-signal info_pressed  ## "i" button tapped -- see Shop.gd, which opens PackInfoPopup for this pack.
+signal pressed  ## anywhere on the box was tapped -- see Shop.gd, which opens the buy confirmation.
 
 @onready var _name_label: Label = %NameLabel
 @onready var _cards_label: Label = %CardsLabel
@@ -28,7 +28,6 @@ signal info_pressed  ## "i" button tapped -- see Shop.gd, which opens PackInfoPo
 @onready var _status_bar: PanelContainer = %StatusBar
 @onready var _status_label: Label = %StatusLabel
 @onready var _tap_button: Button = %TapButton
-@onready var _info_button: Button = %InfoButton
 @onready var _pack_texture: TextureRect = %PackTexture
 
 var _pack: PackData = null
@@ -37,7 +36,6 @@ var _shortfall: String = ""
 
 func _ready() -> void:
 	_tap_button.pressed.connect(_on_tap_button_pressed)
-	_info_button.pressed.connect(_on_info_button_pressed)
 	ThemeManager.theme_changed.connect(_restyle)
 	RemoteArt.art_ready.connect(_on_art_ready)
 	_restyle()
@@ -50,10 +48,6 @@ func _on_art_ready(kind: String, key: String, texture: Texture2D) -> void:
 
 func _on_tap_button_pressed() -> void:
 	pressed.emit()
-
-
-func _on_info_button_pressed() -> void:
-	info_pressed.emit()
 
 
 func set_pack(pack: PackData) -> void:
@@ -79,8 +73,9 @@ func _restyle() -> void:
 		CurrencyDisplay.color_for(_pack.price_currency) if _pack != null
 		else ThemeManager.color("surface_border")
 	)
+	# No content margin: Pad holds the inset, so TapButton reaches the frame's edge.
 	add_theme_stylebox_override(
-		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, accent, 3, true, Vector2(6, 6))
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, accent, 3, true, Vector2.ZERO)
 	)
 	_price_panel.add_theme_stylebox_override(
 		"panel",

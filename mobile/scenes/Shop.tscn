@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" uid="uid://4v5328a5h2ap" path="res://scenes/components/CurrencyPanel.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://scenes/components/LoadingPopup.tscn" id="6"]
 [ext_resource type="PackedScene" path="res://scenes/components/CurrencyAmount.tscn" id="7_buyconfirm"]
+[ext_resource type="Texture2D" uid="uid://i6v2g4col8ei" path="res://sprites/icons/info_icon.png" id="8_info"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_shop_tabs"]
 
@@ -202,12 +203,37 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 10
 
-[node name="BuyConfirmTitle" type="Label" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox" unique_id=2119326709]
+[node name="TitleRow" type="HBoxContainer" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox" unique_id=2119326720]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BuyConfirmTitle" type="Label" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox/TitleRow" unique_id=2119326709]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 18
 text = "Pack Name"
 autowrap_mode = 2
+
+[node name="BuyInfoButton" type="Button" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox/TitleRow" unique_id=2119326721]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+size_flags_vertical = 0
+flat = true
+
+[node name="BuyInfoIcon" type="TextureRect" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox/TitleRow/BuyInfoButton" unique_id=2119326722]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("8_info")
+expand_mode = 1
+stretch_mode = 5
 
 [node name="BuyConfirmCards" type="Label" parent="BuyConfirmOverlay/Center/Panel/PanelMargin/ConfirmHBox/ConfirmVBox" unique_id=2119326710]
 unique_name_in_owner = true

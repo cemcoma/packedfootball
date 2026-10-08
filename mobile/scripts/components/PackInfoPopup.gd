@@ -4,7 +4,7 @@ extends Control
 ## Full-screen modal disclosing a pack's odds -- App Store Guideline 3.1.1 /
 ## Google Play's loot box policy both require showing the probability of
 ## obtaining each item tier before purchase, not just after. Opened from
-## PackView's "i" button (see Shop.gd); a single instance lives statically
+## the buy confirmation's "i" button (see Shop.gd); a single instance lives statically
 ## in Shop.tscn (embedded like PitchView is in Team.tscn) rather than being
 ## instantiated per-pack the way PackView itself is, since only one can
 ## ever be open at a time.
@@ -30,6 +30,8 @@ extends Control
 ## key order (already the project's one canonical tier ordering); position
 ## category order is this file's own POSITION_CATEGORY_ORDER, since nothing
 ## else client-side needs those four names today.
+
+signal closed
 
 const POSITION_CATEGORY_ORDER := ["goalkeeper", "defender", "midfielder", "attacker"]
 const PAGE_COUNT := 5
@@ -232,3 +234,4 @@ func _on_next_pressed() -> void:
 
 func _on_close_pressed() -> void:
 	visible = false
+	closed.emit()

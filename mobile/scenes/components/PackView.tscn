@@ -3,7 +3,6 @@
 [ext_resource type="Script" uid="uid://cw8vr0qytgoyu" path="res://scripts/components/PackView.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/components/CurrencyAmount.tscn" id="2"]
 [ext_resource type="Texture2D" uid="uid://jy6t3g5ql7ky" path="res://sprites/packs/standard/StandardPack1.png" id="2_4opi3"]
-[ext_resource type="Texture2D" uid="uid://i6v2g4col8ei" path="res://sprites/icons/info_icon.png" id="4_mp5dl"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_84nhg"]
 
@@ -14,42 +13,49 @@ offset_right = 158.0
 offset_bottom = 280.0
 script = ExtResource("1")
 
-[node name="Layout" type="VBoxContainer" parent="." unique_id=141529489]
+[node name="Pad" type="MarginContainer" parent="." unique_id=1846203518]
+layout_mode = 2
+theme_override_constants/margin_left = 6
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 6
+
+[node name="Layout" type="VBoxContainer" parent="Pad" unique_id=141529489]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="PackArtRatio" type="AspectRatioContainer" parent="Layout" unique_id=1030939728]
+[node name="PackArtRatio" type="AspectRatioContainer" parent="Pad/Layout" unique_id=1030939728]
 layout_mode = 2
 size_flags_vertical = 3
 ratio = 0.75
 
-[node name="PackTexture" type="TextureRect" parent="Layout/PackArtRatio" unique_id=451774919]
+[node name="PackTexture" type="TextureRect" parent="Pad/Layout/PackArtRatio" unique_id=451774919]
 unique_name_in_owner = true
 layout_mode = 2
 texture = ExtResource("2_4opi3")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="Overlay" type="VBoxContainer" parent="Layout/PackArtRatio" unique_id=740358494]
+[node name="Overlay" type="VBoxContainer" parent="Pad/Layout/PackArtRatio" unique_id=740358494]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 2
 alignment = 1
 
-[node name="SpacerTop" type="Control" parent="Layout/PackArtRatio/Overlay" unique_id=1659674711]
+[node name="SpacerTop" type="Control" parent="Pad/Layout/PackArtRatio/Overlay" unique_id=1659674711]
 mouse_filter = 2
 custom_minimum_size = Vector2(0, 18)
 layout_mode = 2
 
-[node name="HBoxContainer" type="HBoxContainer" parent="Layout/PackArtRatio/Overlay" unique_id=1883222767]
+[node name="HBoxContainer" type="HBoxContainer" parent="Pad/Layout/PackArtRatio/Overlay" unique_id=1883222767]
 layout_mode = 2
 
-[node name="SpacerTop2" type="Control" parent="Layout/PackArtRatio/Overlay/HBoxContainer" unique_id=1923333380]
+[node name="SpacerTop2" type="Control" parent="Pad/Layout/PackArtRatio/Overlay/HBoxContainer" unique_id=1923333380]
 mouse_filter = 2
 custom_minimum_size = Vector2(10, 0)
 layout_mode = 2
 
-[node name="NameLabel" type="Label" parent="Layout/PackArtRatio/Overlay/HBoxContainer" unique_id=512768204]
+[node name="NameLabel" type="Label" parent="Pad/Layout/PackArtRatio/Overlay/HBoxContainer" unique_id=512768204]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -58,23 +64,23 @@ label_settings = SubResource("LabelSettings_84nhg")
 horizontal_alignment = 1
 autowrap_mode = 3
 
-[node name="SpacerTop3" type="Control" parent="Layout/PackArtRatio/Overlay/HBoxContainer" unique_id=1226668136]
+[node name="SpacerTop3" type="Control" parent="Pad/Layout/PackArtRatio/Overlay/HBoxContainer" unique_id=1226668136]
 mouse_filter = 2
 custom_minimum_size = Vector2(10, 0)
 layout_mode = 2
 
-[node name="SpacerBottom" type="Control" parent="Layout/PackArtRatio/Overlay" unique_id=738354060]
+[node name="SpacerBottom" type="Control" parent="Pad/Layout/PackArtRatio/Overlay" unique_id=738354060]
 mouse_filter = 2
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="StatusBar" type="PanelContainer" parent="Layout/PackArtRatio/Overlay" unique_id=906613517]
+[node name="StatusBar" type="PanelContainer" parent="Pad/Layout/PackArtRatio/Overlay" unique_id=906613517]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 mouse_filter = 2
 
-[node name="StatusLabel" type="Label" parent="Layout/PackArtRatio/Overlay/StatusBar" unique_id=1340277958]
+[node name="StatusLabel" type="Label" parent="Pad/Layout/PackArtRatio/Overlay/StatusBar" unique_id=1340277958]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
@@ -83,73 +89,56 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 3
 
-[node name="SpacerMid" type="Control" parent="Layout/PackArtRatio/Overlay" unique_id=1873402215]
+[node name="SpacerMid" type="Control" parent="Pad/Layout/PackArtRatio/Overlay" unique_id=1873402215]
 mouse_filter = 2
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="LimitedLabel" type="Label" parent="Layout/PackArtRatio/Overlay" unique_id=2129620869]
+[node name="LimitedLabel" type="Label" parent="Pad/Layout/PackArtRatio/Overlay" unique_id=2129620869]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 horizontal_alignment = 1
 
-[node name="CardsLabel" type="Label" parent="Layout/PackArtRatio/Overlay" unique_id=1352483796]
+[node name="CardsLabel" type="Label" parent="Pad/Layout/PackArtRatio/Overlay" unique_id=1352483796]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "0 cards"
 horizontal_alignment = 1
 
-[node name="SpacerBottom2" type="Control" parent="Layout/PackArtRatio/Overlay" unique_id=5390657]
+[node name="SpacerBottom2" type="Control" parent="Pad/Layout/PackArtRatio/Overlay" unique_id=5390657]
 mouse_filter = 2
 custom_minimum_size = Vector2(0, 15)
 layout_mode = 2
 
-[node name="TapButton" type="Button" parent="Layout/PackArtRatio" unique_id=740358600]
-unique_name_in_owner = true
-layout_mode = 2
-mouse_filter = 1
-flat = true
-
-[node name="Footer" type="VBoxContainer" parent="Layout" unique_id=153961355]
+[node name="Footer" type="VBoxContainer" parent="Pad/Layout" unique_id=153961355]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="HBoxContainer" type="HBoxContainer" parent="Layout/Footer" unique_id=1964720762]
+[node name="HBoxContainer" type="HBoxContainer" parent="Pad/Layout/Footer" unique_id=1964720762]
 layout_mode = 2
 
-[node name="PricePanel" type="PanelContainer" parent="Layout/Footer/HBoxContainer" unique_id=954498575]
+[node name="PricePanel" type="PanelContainer" parent="Pad/Layout/Footer/HBoxContainer" unique_id=954498575]
 mouse_filter = 1
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Margin" type="MarginContainer" parent="Layout/Footer/HBoxContainer/PricePanel" unique_id=571284187]
+[node name="Margin" type="MarginContainer" parent="Pad/Layout/Footer/HBoxContainer/PricePanel" unique_id=571284187]
 layout_mode = 2
 theme_override_constants/margin_left = 4
 theme_override_constants/margin_top = 4
 theme_override_constants/margin_right = 4
 theme_override_constants/margin_bottom = 4
 
-[node name="PriceAmount" parent="Layout/Footer/HBoxContainer/PricePanel/Margin" unique_id=1727860591 instance=ExtResource("2")]
+[node name="PriceAmount" parent="Pad/Layout/Footer/HBoxContainer/PricePanel/Margin" unique_id=1727860591 instance=ExtResource("2")]
 unique_name_in_owner = true
 alignment = 1
 
-[node name="InfoButton" type="Button" parent="Layout/Footer/HBoxContainer" unique_id=1597718877]
-mouse_filter = 1
+[node name="TapButton" type="Button" parent="." unique_id=740358600]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(25, 25)
 layout_mode = 2
+mouse_filter = 1
+focus_mode = 0
 flat = true
-
-[node name="TextureRect" type="TextureRect" parent="Layout/Footer/HBoxContainer/InfoButton" unique_id=1533259597]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-texture = ExtResource("4_mp5dl")
-expand_mode = 1
-stretch_mode = 5

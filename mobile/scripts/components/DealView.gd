@@ -4,7 +4,7 @@ extends PanelContainer
 ## Reusable deal "box" visual for the Deals sub-tab -- closely mirrors
 ## PackView.gd (deals genuinely have availability/expiry/teasing, same as
 ## packs: a real "Redeem" button that swaps for a tag label when
-## !available), but deliberately has NO info/odds-popup button. PackView's
+## !available), but deliberately has NO info/odds-popup button. The pack
 ## info button exists specifically for App Store Guideline 3.1.1's
 ## randomized-reward odds disclosure (see PackInfoPopup.gd's own doc
 ## comment) -- a deal's reward is fixed and fully known upfront (shown

@@ -42,6 +42,8 @@ const PACK_VIEW_SCENE := preload("res://scenes/components/PackView.tscn")
 @onready var _buy_confirm_overlay: Control = %BuyConfirmOverlay
 @onready var _buy_confirm_art: TextureRect = %BuyConfirmArt
 @onready var _buy_confirm_title: Label = %BuyConfirmTitle
+@onready var _buy_info_button: Button = %BuyInfoButton
+@onready var _buy_info_icon: TextureRect = %BuyInfoIcon
 @onready var _buy_confirm_cards: Label = %BuyConfirmCards
 @onready var _buy_confirm_price_label: Label = %BuyConfirmPriceLabel
 @onready var _buy_confirm_price: CurrencyAmount = %BuyConfirmPrice
@@ -96,6 +98,8 @@ func _ready() -> void:
 	_currency_tabs.currency_changed.connect(_refresh_inventory_label)
 	_buy_cancel_button.pressed.connect(_close_buy_confirm)
 	_buy_confirm_button.pressed.connect(_on_buy_confirmed)
+	_buy_info_button.pressed.connect(_on_buy_info_pressed)
+	_info_popup.closed.connect(_on_info_closed)
 	_buy_confirm_overlay.visible = false
 
 
@@ -160,6 +164,7 @@ func _restyle_chrome() -> void:
 	MenuTile.style_button(_back_button, ThemeManager.color("surface_border"))
 	MenuTile.style_button(_pack_type_dropdown, accent)
 	MenuTile.style_popup(_pack_type_dropdown, accent)
+	_buy_info_icon.self_modulate = accent
 	# Opaque, so the packs behind it can't be mistaken for part of the dialog.
 	_buy_panel.add_theme_stylebox_override(
 		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("accent"), 3, true)
@@ -328,11 +333,6 @@ func _populate_packs_grid() -> void:
 		view.set_pack(typed_pack)
 		view.set_shortfall(_shortfall_for(typed_pack))
 		view.pressed.connect(_open_buy_confirm.bind(typed_pack))
-		view.info_pressed.connect(_on_info_pressed.bind(typed_pack))
-
-
-func _on_info_pressed(pack: PackData) -> void:
-	_info_popup.open_for(pack)
 
 
 ## The short reason on a pack's bar, "" when it can be opened. Same order as
@@ -383,6 +383,19 @@ func _open_buy_confirm(pack: PackData) -> void:
 	CurrencyDisplay.set_button_price(_buy_confirm_button, tr("Buy"), -pack.price, pack.price_currency)
 	_status_label.text = ""
 	_buy_confirm_overlay.visible = true
+
+
+## Buy steps aside for the odds popup and comes back when it closes.
+func _on_buy_info_pressed() -> void:
+	if _confirming_pack == null:
+		return
+	_buy_confirm_overlay.visible = false
+	_info_popup.open_for(_confirming_pack)
+
+
+func _on_info_closed() -> void:
+	if _confirming_pack != null:
+		_buy_confirm_overlay.visible = true
 
 
 func _close_buy_confirm() -> void:
