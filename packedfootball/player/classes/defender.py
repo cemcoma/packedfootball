@@ -1,5 +1,5 @@
-from player.player import _clamp, _ball_pressure, _count_within, _dists, _pick, _norm2, player, ActionProfile, OFFSIDE_MARGIN, GOAL_SIDE_PRESS, GOAL_SIDE_CONTAIN, EDGE_SHOT_PENALTY, EDGE_SHOT_RANGE
-from game_config import PRESS_FROM_DEFENDING, RECOVERY_CB_LANE, RECOVERY_MIN_DEPTH, RECOVERY_PRESS_RANGE, RECOVERY_RANGE, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
+from player.player import _clamp, _pick, _norm2, player, ActionProfile, OFFSIDE_MARGIN, GOAL_SIDE_PRESS, GOAL_SIDE_CONTAIN, EDGE_SHOT_PENALTY, EDGE_SHOT_RANGE
+from game_config import RECOVERY_CB_LANE, RECOVERY_MIN_DEPTH, RECOVERY_PRESS_RANGE, RECOVERY_RANGE, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
 # How far ahead of his man a marker positions himself.
@@ -58,13 +58,6 @@ DEF_LINE_MAX = 38.0
 CB_STAND_DEPTH = 22.0
 
 class CenterBackActionProfile(ActionProfile):
-    role_name = "center_back"
-    allowed_actions = {
-        "stop", "pass", "clear", "dribble", "forward_run",
-        "support", "hold_attack", "hold_defense", "press",
-        "contain", "recover", "recover_slow", "tackle", "capture",
-        "man_mark"
-    }
     action_biases = {
         "pass": 0.8, "clear": 0.8, "dribble": 0.2, "cross": 0.1,
         "forward_run": 0.2, "support": 0.5, "hold_attack": 0.3,
@@ -73,13 +66,6 @@ class CenterBackActionProfile(ActionProfile):
     }
 
 class FullbackActionProfile(ActionProfile):
-    role_name = "fullback"
-    allowed_actions = {
-        "stop", "pass", "clear", "dribble", "forward_run", "cross",
-        "support", "hold_attack", "hold_defense", "press",
-        "contain", "recover", "recover_slow", "tackle", "capture",
-        "man_mark", "cover"
-    }
     action_biases = {
         "pass": 2.0, "clear": 0.2, "dribble": 0.8, "cross": 1.6,
         "forward_run": 1.2, "support": 1.0, "hold_attack": 1.0,
@@ -90,13 +76,6 @@ class FullbackActionProfile(ActionProfile):
 
 
 class WingbackActionProfile(ActionProfile):
-    role_name = "wingback"
-    allowed_actions = {
-        "stop", "pass", "clear", "dribble", "forward_run", "cross",
-        "support", "hold_attack", "hold_defense", "press",
-        "contain", "recover", "recover_slow", "tackle", "capture",
-        "man_mark", "overlap", "cover"
-    }
     action_biases = {
         "pass": 1.8, "clear": 0.15, "dribble": 1.0, "cross": 2.0,
         "forward_run": 1.8, "support": 1.3, "hold_attack": 1.4,
@@ -294,11 +273,9 @@ class Defender(player):
         return None
 
     def _decide_on_ball_attack(self, state: dict) -> str:
-        if state.get("must_pass_next", False):
-            px, py = state["my_pos"]
-            if (px <= 5.0 or px >= PITCH_WIDTH ) and (py <= 5.0 or py >= PITCH_HEIGHT):
-                return "cross"
-            return "pass"
+        restart = self._must_pass_decision(state)
+        if restart is not None:
+            return restart
 
         latched_move = self._latched_attack_move(state)
         if latched_move is not None:
@@ -442,17 +419,8 @@ class Defender(player):
         return state.get("my_role") == "CB" or self._should_cover(state)
 
     def _decide_off_ball_attack(self, state: dict) -> str:
-        if state.get("is_loose", False):
-            landing_target = self._predict_ball_landing_target(state)
-            my_dist = _norm2(landing_target - state["my_pos"])
-            
-            teammates = np.asarray(state.get("teammates", []))
-            closer_teammates = 0
-            if teammates.size > 0:
-                closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
-
-            if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
-                return "chase"
+        if self._chases_loose_ball(state):
+            return "chase"
 
         if self._should_cover(state):
             return "cover"
@@ -488,23 +456,13 @@ class Defender(player):
         return _pick(state["rng"], actions, probs)
 
     def _decide_off_ball_defense(self, state: dict) -> str:
-        if state.get("is_loose", False):
-            landing_target = self._predict_ball_landing_target(state)
-            my_dist = _norm2(landing_target - state["my_pos"])
-            
-            teammates = np.asarray(state.get("teammates", []))
-            closer_teammates = 0
-            if teammates.size > 0:
-                closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
-
-            if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
-                return "chase"
+        if self._chases_loose_ball(state):
+            return "chase"
 
         if self._is_beaten(state):
             return "recovery_run"
 
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-        ball_pressure_count = _ball_pressure(state)
 
         # Close enough to matter, the ball wins; otherwise an uncovered
         # middle does.
@@ -515,21 +473,12 @@ class Defender(player):
             return "hold_line"
 
         if dist_to_ball < 2.0:
-            actions = ["tackle", "contain"]
-            # Aggression alone, so the better side gets better challenges and
-            # not more of them. The 160 holds the overall rate at the ~33% it
-            # was when defending sat in t_contain -- 50% sampled the quality
-            # gap half again as often and cost the underdog badly.
-            t_tackle = max(1.0, self.attributes.aggression * 1.5)
-            t_contain = max(1.0, 160.0 - self.attributes.aggression)
-            probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
-            return _pick(state["rng"], actions, probs)
+            return self._tackle_or_contain(state)
 
         if dist_to_ball < 15.0:
             if dist_to_ball >= FB_ENGAGE_RANGE and self._holds_back_line(state):
                 return "back_line"
-            if ball_pressure_count >= 2: return "contain"
-            return "press" if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING * self._tactic(state).press_bias) else "contain"
+            return self._press_or_contain(state)
 
         if self._holds_back_line(state):
             return "back_line"
@@ -664,34 +613,6 @@ class Defender(player):
             state = {**state, "my_role": "CB", "formation_pos": np.array([self._cover_x(state), 0.0])}
         return super()._line_lane_x(state, ball_x)
 
-    def _decide_loose_ball(self, state: dict) -> str:
-            dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-            
-            # Calculate distances of all teammates to the ball
-            teammates = np.asarray(state.get("teammates", []))
-            if teammates.size > 0:
-                teammate_dists = _dists(teammates, state["ball_pos"])
-                # Count exactly how many teammates are closer to the ball than I am
-                # We subtract 0.1 to avoid tie-breaking bugs with our own distance
-                closer_teammates = int(np.sum(teammate_dists < dist_to_ball - 0.1))
-            else:
-                closer_teammates = 0
-
-            # Absolute priority: grab the ball if it is at our feet
-            if dist_to_ball < 2.5: 
-                return "capture"
-
-            # 1. The single closest player to the ball goes directly to the landing spot
-            if closer_teammates == 0:
-                return "chase"
-                
-            # 2. The second closest player provides secondary support if nearby
-            if closer_teammates == 1 and dist_to_ball < 15.0:
-                return "contain"
-
-            # 3. Everyone else actively runs away from the ball back to their tactical zone
-            return "recover"
-
 
 class CenterBack(Defender):
     primary_stats = ("defending", "tackling", "heading")
@@ -699,7 +620,6 @@ class CenterBack(Defender):
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = CenterBackActionProfile()
-        self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
 
 class Fullback(Defender):
@@ -708,7 +628,6 @@ class Fullback(Defender):
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = FullbackActionProfile()
-        self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
 
 
@@ -721,5 +640,4 @@ class Wingback(Defender):
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = WingbackActionProfile()
-        self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())

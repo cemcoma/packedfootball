@@ -139,6 +139,14 @@ class ReplayRecorder:
                 self._events[i] = (tick, int(ActionType.SHOOT), idx, team)
             return
 
+    def retype_last_save_as_failed(self, keeper_idx: int) -> None:
+        """Turns that keeper's most recent SAVE into a SAVE_FAILED: his parry went in."""
+        for i in range(len(self._events) - 1, -1, -1):
+            tick, action, idx, team = self._events[i]
+            if idx == keeper_idx and action == int(ActionType.SAVE):
+                self._events[i] = (tick, int(ActionType.SAVE_FAILED), idx, team)
+                return
+
     def encode(self) -> bytes:
         header = struct.pack(
             _HEADER_FMT, MAGIC, FORMAT_VERSION, self.sample_interval_ticks, len(self._samples), len(self._events)

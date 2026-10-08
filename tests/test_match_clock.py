@@ -8,6 +8,8 @@ ate 180 frames == 90 clock-seconds == 1:30 of football, on every match.
 
 import pytest
 
+from conftest import quiesce
+
 REGULATION_FRAMES = 10800  # 90:00 at 2 frames per clock-second
 
 
@@ -170,3 +172,49 @@ def test_a_real_match_restarts_its_second_half_at_forty_five(played):
 
     assert display_seconds(g) >= 90 * 60, "full time came before 90:00"
     assert display_seconds(g) < clock_seconds(g), "first-half stoppage was not taken back off"
+
+
+@pytest.mark.parametrize("half", [1, 2])
+def test_a_penalty_given_as_the_whistle_is_due_is_still_taken(make_match, monkeypatch, half):
+    """A pending penalty is a live attack: the whistle waits for the kick, at either half."""
+    g = make_match()
+    monkeypatch.setattr(g, "_compute_added_time", lambda: 0)   # the whistle is due at 300 / 600
+    due = 300 if half == 1 else 600
+    taken = []
+    real_take, real_tick = g._take_penalty, g.tick
+
+    def take():
+        taken.append(g.match_clock_frames)
+        real_take()
+
+    def tick(dt=1 / 60):
+        in_half = g.halftime_clock_frames < 0 if half == 1 else g.halftime_clock_frames >= 0
+        if in_half and due - 3 <= g.match_clock_frames < due and g.restart_type is None \
+                and g.goal_pause_timer == 0 and not getattr(g, "_forced", False):
+            g._forced = True
+            g._begin_restart("penalty", 0)
+        real_tick(dt)
+
+    monkeypatch.setattr(g, "_take_penalty", take)
+    monkeypatch.setattr(g, "tick", tick)
+    g.run_match(max_steps=600)
+
+    assert getattr(g, "_forced", False), "never found a free frame to give the penalty"
+    assert taken, "the half ended with the penalty never taken"
+    if half == 1:
+        assert taken[0] < g.halftime_clock_frames, "taken after the break"
+
+
+@pytest.mark.parametrize("pause", ["goal_pause_timer", "halftime_pause_timer"])
+def test_nobody_decides_while_the_match_is_paused(match, monkeypatch, pause):
+    quiesce(match)
+    setattr(match, pause, 50)
+    decided = []
+    for p in match.all_players:
+        monkeypatch.setattr(p, "step", lambda state: decided.append(1))
+    stamina = match.stamina.copy()
+
+    match.step()
+
+    assert not decided
+    assert (match.stamina == stamina).all(), "players tired standing still"

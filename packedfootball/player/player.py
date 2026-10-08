@@ -8,6 +8,7 @@ from game_config import (  # noqa: F401 -- the appearance/career names are re-ex
     PITCH_HEIGHT,
     PITCH_WIDTH,
     PLAYER_BASE_SPEED,
+    PRESS_FROM_DEFENDING,
     RATED_MATCHES_FOR_AVERAGE,
     LINE_ROLES,
     RECOVERY_BEATEN_MARGIN,
@@ -191,12 +192,6 @@ MATCH_STAT_FIELDS = (
 # APPEARANCE_SLOTS / APPEARANCE_OPTION_COUNTS / DEFAULT_APPEARANCE: see
 # game_config.py (imported above).
 
-DEFAULT_ACTIONS = {
-    "stop", "shoot", "pass", "clear", "cross", "dribble",
-    "forward_run", "support", "hold_attack", "hold_defense",
-    "press", "contain", "recover", "recover_slow", "tackle", "capture",
-}
-
 
 def _norm2(v) -> float:
     """|v| for a 2-vector. np.linalg.norm spends more on call overhead than
@@ -345,9 +340,7 @@ def _dists(points, centre) -> np.ndarray:
 
 
 class ActionProfile:
-    """Role template for tweening action sets and decision weights per position."""
-    role_name = "generic"
-    allowed_actions = set(DEFAULT_ACTIONS)
+    """Decision weights per position."""
     action_biases = {
         "pass": 1.0, "shoot": 1.0, "dribble": 1.0, "cross": 0.5,
         "clear": 0.5, "forward_run": 1.0, "support": 1.0,
@@ -355,12 +348,6 @@ class ActionProfile:
         "contain": 0.8, "recover": 0.9, "recover_slow": 0.5,
         "tackle": 0.8, "capture": 0.8,
     }
-
-    def get_allowed_actions(self, phase: str | None = None):
-        actions = set(self.allowed_actions)
-        if phase is not None:
-            return {action for action in actions if action not in {"stop"}}
-        return actions
 
     def get_action_biases(self):
         return dict(self.action_biases)
@@ -539,9 +526,7 @@ class player(ABC):
         self.position = position
         if not self.primary_stats:
             raise ValueError(f"{type(self).__name__}.primary_stats must be a non-empty tuple of Attributes field names")
-        self.role_name = getattr(self, "role_name", "generic")
         self.action_profile = getattr(self, "action_profile", ActionProfile())
-        self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
         if attributes is None:
             self.attributes = Attributes()
@@ -554,12 +539,6 @@ class player(ABC):
         self.base_attributes = self.attributes
         self.overall = self._calculate_overall()
 
-    def getAttributes(self):
-        return self.attributes
-
-    def getStatistics(self):
-        return self.statistics
-
     @property
     @abstractmethod
     def primary_stats(self) -> tuple[str, ...]:
@@ -570,13 +549,6 @@ class player(ABC):
         """
         raise NotImplementedError
 
-    def get_allowed_actions(self, phase: str | None = None):
-        return set(self.action_profile.get_allowed_actions(phase=phase))
-
-    def register_action(self, name: str, bias: float = 1.0):
-        self.allowed_actions.add(name)
-        self.action_biases[name] = bias
-
     def _tactic(self, state: dict):
         """This side's Tactic (game_config.TACTICS); Balanced when a state has none."""
         return state.get("tactic") or _BALANCED
@@ -584,13 +556,43 @@ class player(ABC):
     def get_action_bias(self, action_name: str, default: float = 1.0) -> float:
         return float(self.action_biases.get(action_name, default))
 
-    def _apply_action_limits(self, weights: dict) -> dict:
-        filtered = {}
-        allowed = self.get_allowed_actions()
-        for action_name, value in weights.items():
-            if action_name in allowed:
-                filtered[action_name] = value * self.get_action_bias(action_name)
-        return filtered
+    # --- Shared decisions -------------------------------------------------
+    def _must_pass_decision(self, state: dict) -> str | None:
+        """A restart taker plays it: a cross from by a corner flag (the engine's rule), else a pass."""
+        if not state.get("must_pass_next", False):
+            return None
+        px, py = state["my_pos"]
+        if (px <= 5.0 or px >= PITCH_WIDTH - 5.0) and (py <= 5.0 or py >= PITCH_HEIGHT - 5.0):
+            return "cross"
+        return "pass"
+
+    def _chases_loose_ball(self, state: dict) -> bool:
+        """A loose ball is mine to chase: nobody on my side is nearer where it lands, or it is a high
+        one and I am among the nearest few (_high_ball_mine)."""
+        if not state.get("is_loose", False):
+            return False
+        landing_target = self._predict_ball_landing_target(state)
+        my_dist = _norm2(landing_target - state["my_pos"])
+        teammates = np.asarray(state.get("teammates", []))
+        closer_teammates = 0
+        if teammates.size > 0:
+            closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
+        return closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates)
+
+    def _tackle_or_contain(self, state: dict) -> str:
+        """On the man with the ball: aggression alone decides whether I challenge. The 160 holds the
+        overall challenge rate at ~33%, so the better side gets better challenges, not more of them."""
+        t_tackle = max(1.0, self.attributes.aggression * 1.5)
+        t_contain = max(1.0, 160.0 - self.attributes.aggression)
+        probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
+        return _pick(state["rng"], ["tackle", "contain"], probs)
+
+    def _press_or_contain(self, state: dict) -> str:
+        """Near the ball: contain when two of theirs are round it (_ball_pressure), else press at defending's rate."""
+        if _ball_pressure(state) >= 2:
+            return "contain"
+        rate = getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING * self._tactic(state).press_bias
+        return "press" if state["rng"].integers(0, 100) < min(100, rate) else "contain"
 
     # --- Helper Functions ---
     def _calculate_overall(self):
@@ -1607,9 +1609,22 @@ class player(ABC):
     def _decide_off_ball_defense(self, state: dict) -> str:
         pass
 
-    @abstractmethod
     def _decide_loose_ball(self, state: dict) -> str:
-        pass
+        """Nobody has it: at my feet I take it, the nearest goes for it, the next one in range
+        supports, everyone else gets back into shape."""
+        dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
+        teammates = np.asarray(state.get("teammates", []))
+        closer_teammates = 0
+        if teammates.size > 0:
+            # -0.1 so my own row never counts as nearer than me.
+            closer_teammates = int(np.sum(_dists(teammates, state["ball_pos"]) < dist_to_ball - 0.1))
+        if dist_to_ball < 2.5:
+            return "capture"
+        if closer_teammates == 0:
+            return "chase"
+        if closer_teammates == 1 and dist_to_ball < 15.0:
+            return "contain"
+        return "recover"
 
     def __str__(self):
         attributes_str = "".join([f"{k}: {v}\n" for k, v in asdict(self.attributes).items()])

@@ -155,6 +155,15 @@ def test_keeper_holds_position_when_its_own_team_attacks(match):
     assert gk._decide_off_ball_attack(st) == "hold_defense"
 
 
+def test_keeper_comes_for_a_loose_ball_off_his_own_man(match):
+    """His side touched it last (a deflection), so it is 'our' ball -- but it is loose near
+    goal and his to deal with: he sweeps it, he does not stroll back to his line."""
+    _park_outfielders_away(match)
+    gk = match.all_players[KEEPER_A]
+    st = keeper_state(match, KEEPER_A, (GOAL_CENTER_X + 6.0, 10.0), ball_vel=(0.0, -4.0), team_possession=1)
+    assert gk._decide_off_ball_attack(st) == "sweep"
+
+
 def test_both_keepers_use_their_own_end(match):
     a = match.all_players[KEEPER_A]._get_keeper_line(keeper_state(match, KEEPER_A, (35.0, 50.0)))
     b = match.all_players[KEEPER_B]._get_keeper_line(keeper_state(match, KEEPER_B, (35.0, 50.0)))

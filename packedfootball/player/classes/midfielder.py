@@ -1,14 +1,8 @@
-from player.player import IN_BEHIND_PASS_BIAS, SHOT_PATIENCE, _clamp, _clamp_to_pitch, _ball_pressure, _count_within, _dists, _pick, _equal2, _norm2, player, ActionProfile
-from game_config import PRESS_FROM_DEFENDING, RECOVERY_ROLE_EFFORT, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
+from player.player import IN_BEHIND_PASS_BIAS, SHOT_PATIENCE, _clamp, _clamp_to_pitch, _ball_pressure, _pick, _equal2, _norm2, player, ActionProfile
+from game_config import RECOVERY_ROLE_EFFORT, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
 class MidfielderActionProfile(ActionProfile):
-    role_name = "midfielder"
-    allowed_actions = {
-        "stop", "shoot", "pass", "clear", "cross", "dribble",
-        "forward_run", "attack_box", "support", "hold_attack", "hold_defense",
-        "press", "contain", "recover", "recover_slow", "tackle", "capture",
-    }
     action_biases = {
         "pass": 1.5, "shoot": 0.8, "cross": 1.1, "dribble": 1.1,
         "forward_run": 1.2, "attack_box": 0.6, "support": 1.4, "hold_attack": 1.0,
@@ -20,8 +14,6 @@ class MidfielderActionProfile(ActionProfile):
 class WideMidActionProfile(MidfielderActionProfile):
     """LM/RM: the 4-4-2's wingers. Runs the line and crosses (see
     player._decide_wingplay) instead of the central through_ball."""
-    role_name = "wide_mid"
-    allowed_actions = MidfielderActionProfile.allowed_actions | {"wing_run", "wide_run"}
     action_biases = {
         **MidfielderActionProfile.action_biases,
         "cross": 1.5, "wing_run": 1.3, "wide_run": 1.3, "dribble": 1.2,
@@ -29,13 +21,6 @@ class WideMidActionProfile(MidfielderActionProfile):
 
 
 class DefensiveMidActionProfile(ActionProfile):
-    role_name = "defensive_mid"
-    allowed_actions = {
-        "stop", "shoot", "pass", "clear", "cross", "dribble",
-        "forward_run", "support", "hold_attack", "hold_defense",
-        "press", "contain", "recover", "recover_slow", "tackle", "capture",
-        "screen",
-    }
     action_biases = {
         "pass": 1.6, "shoot": 0.3, "cross": 0.3, "dribble": 0.6,
         "forward_run": 0.5, "support": 1.3, "hold_attack": 0.6,
@@ -46,13 +31,6 @@ class DefensiveMidActionProfile(ActionProfile):
 
 
 class AttackingMidActionProfile(ActionProfile):
-    role_name = "attacking_mid"
-    allowed_actions = {
-        "stop", "shoot", "pass", "clear", "cross", "dribble",
-        "forward_run", "support", "hold_attack", "hold_defense",
-        "press", "contain", "recover", "recover_slow", "tackle", "capture",
-        "through_ball", "attack_box",
-    }
     action_biases = {
         "pass": 1.3, "shoot": 1.5, "cross": 1.0, "dribble": 1.3,
         "forward_run": 1.4, "attack_box": 1.2, "support": 1.2, "hold_attack": 0.6,
@@ -221,11 +199,9 @@ class Midfielder(player):
         return self._build_wing_action(decision, state)
 
     def _decide_on_ball_attack(self, state: dict) -> str:
-        if state.get("must_pass_next", False):
-            px, py = state["my_pos"]
-            if (px <= 5.0 or px >=PITCH_WIDTH ) and (py <= 5.0 or py >=PITCH_HEIGHT):
-                return "cross"
-            return "pass"
+        restart = self._must_pass_decision(state)
+        if restart is not None:
+            return restart
 
         latched_move = self._latched_attack_move(state)
         if latched_move is not None:
@@ -396,17 +372,8 @@ class Midfielder(player):
         return _pick(state["rng"], actions, probs)
 
     def _decide_off_ball_attack(self, state: dict) -> str:
-        if state.get("is_loose", False):
-            landing_target = self._predict_ball_landing_target(state)
-            my_dist = _norm2(landing_target - state["my_pos"])
-            
-            teammates = np.asarray(state.get("teammates", []))
-            closer_teammates = 0
-            if teammates.size > 0:
-                closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
-
-            if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
-                return "chase"
+        if self._chases_loose_ball(state):
+            return "chase"
         
         actions = ["forward_run", "support", "hold_attack", "wide_run", "attack_box"]
         t_forward = self.attributes.shoot_tendency + (self.attributes.speed * 0.5)
@@ -461,43 +428,20 @@ class Midfielder(player):
         return _pick(state["rng"], actions, probs)
 
     def _decide_off_ball_defense(self, state: dict) -> str:
-        if state.get("is_loose", False):
-            landing_target = self._predict_ball_landing_target(state)
-            my_dist = _norm2(landing_target - state["my_pos"])
-            
-            teammates = np.asarray(state.get("teammates", []))
-            closer_teammates = 0
-            if teammates.size > 0:
-                closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
-
-            if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
-                return "chase"
+        if self._chases_loose_ball(state):
+            return "chase"
 
         if self._is_beaten(state):
             # Attacking midfielders leave it to the others and hold their shape.
             return "recovery_run" if RECOVERY_ROLE_EFFORT.get(state.get("my_role"), 1.0) > 0.0 else "hold_defense"
 
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-        ball_pressure_count = _ball_pressure(state)
 
         if dist_to_ball < 2.0:
-            actions = ["tackle", "contain"]
-            # Aggression alone, so the better side gets better challenges and
-            # not more of them. The 160 holds the overall rate at the ~33% it
-            # was when defending sat in t_contain -- 50% sampled the quality
-            # gap half again as often and cost the underdog badly.
-            t_tackle = max(1.0, self.attributes.aggression * 1.5)
-            t_contain = max(1.0, 160.0 - self.attributes.aggression)
-            probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
-            return _pick(state["rng"], actions, probs)
+            return self._tackle_or_contain(state)
 
         if dist_to_ball < 15.0:
-            if ball_pressure_count >= 2:
-                return "contain"
-            if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING * self._tactic(state).press_bias):
-                return "press"
-            else:
-                return "contain"
+            return self._press_or_contain(state)
 
         t_screen = self.get_action_bias("screen", 0.0)
         if t_screen > 0.0:
@@ -507,34 +451,6 @@ class Midfielder(player):
             return _pick(state["rng"], actions, probs)
 
         return "hold_defense"
-
-    def _decide_loose_ball(self, state: dict) -> str:
-            dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-            
-            # Calculate distances of all teammates to the ball
-            teammates = np.asarray(state.get("teammates", []))
-            if teammates.size > 0:
-                teammate_dists = _dists(teammates, state["ball_pos"])
-                # Count exactly how many teammates are closer to the ball than I am
-                # We subtract 0.1 to avoid tie-breaking bugs with our own distance
-                closer_teammates = int(np.sum(teammate_dists < dist_to_ball - 0.1))
-            else:
-                closer_teammates = 0
-
-            # Absolute priority: grab the ball if it is at our feet
-            if dist_to_ball < 2.5: 
-                return "capture"
-
-            # 1. The single closest player to the ball goes directly to the landing spot
-            if closer_teammates == 0:
-                return "chase"
-                
-            # 2. The second closest player provides secondary support if nearby
-            if closer_teammates == 1 and dist_to_ball < 15.0:
-                return "contain"
-
-            # 3. Everyone else actively runs away from the ball back to their tactical zone
-            return "recover"
 
 
 class DefensiveMid(Midfielder):
@@ -548,7 +464,6 @@ class DefensiveMid(Midfielder):
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = DefensiveMidActionProfile()
-        self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
 
 
@@ -564,5 +479,4 @@ class AttackingMid(Midfielder):
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = AttackingMidActionProfile()
-        self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())

@@ -358,6 +358,39 @@ def test_a_shot_is_only_credited_on_target_once(match, monkeypatch):
     assert match.match_stats[SHOOTER_B]["shots_on_target"] == 1
 
 
+def test_a_parry_that_goes_in_untouched_is_a_goal_not_a_save(match, monkeypatch):
+    monkeypatch.setattr(match, "_save_chance", lambda *a, **k: 1.0)
+    monkeypatch.setattr(match, "_gather_chance", lambda *a, **k: 0.0)   # parried, not held
+    set_up_shot(match, cross_x=GOAL_CENTER_X)
+    assert match._attempt_save(KEEPER_A) is True and match.ball_controller == -1
+
+    match._award_goal(1)
+
+    assert match.match_stats[KEEPER_A]["saves"] == 0
+    assert match._match_goals[SHOOTER_B] == 1
+
+
+def test_a_parry_someone_touches_before_it_goes_in_is_still_a_save(match, monkeypatch):
+    monkeypatch.setattr(match, "_save_chance", lambda *a, **k: 1.0)
+    monkeypatch.setattr(match, "_gather_chance", lambda *a, **k: 0.0)
+    set_up_shot(match, cross_x=GOAL_CENTER_X)
+    match._attempt_save(KEEPER_A)
+
+    match._register_touch(SHOOTER_B - 1)   # bundled in by a teammate
+    match._award_goal(1)
+
+    assert match.match_stats[KEEPER_A]["saves"] == 1
+
+
+def test_a_shot_that_is_over_is_not_credited_by_a_later_goal(match):
+    """A missed shot, then play goes on: a goal after that is not the old shot on target."""
+    match.last_shot_player = SHOOTER_B
+    match._release_ball(SHOOTER_B - 1, np.array([0.0, -1.0]), 10.0, event_type="pass")
+    match._award_goal(1)
+
+    assert match.match_stats[SHOOTER_B]["shots_on_target"] == 0
+
+
 # -------------------------------------------------------------- the dive
 
 def test_a_dive_is_a_real_save_attempt_when_the_ball_is_close(match):

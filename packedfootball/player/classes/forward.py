@@ -1,26 +1,9 @@
-from player.player import CUT_INSIDE_DONE_X, SHOT_PATIENCE, TARGET_MAN_ROLES, TARGET_MAN_WEIGHT, _clamp, _ball_pressure, _count_within, _dists, _pick, _norm2, player, ActionProfile, EDGE_SHOT_PENALTY, EDGE_SHOT_RANGE
-from game_config import PRESS_FROM_DEFENDING, pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
+from player.player import CUT_INSIDE_DONE_X, SHOT_PATIENCE, TARGET_MAN_ROLES, TARGET_MAN_WEIGHT, _clamp, _ball_pressure, _pick, _norm2, player, ActionProfile, EDGE_SHOT_PENALTY, EDGE_SHOT_RANGE
+from game_config import pass_power, PITCH_HEIGHT, PITCH_WIDTH, pace_ability, stat_ability
 import numpy as np
 
 
 class ForwardActionProfile(ActionProfile):
-    role_name = "forward"
-    allowed_actions = {
-        "stop",
-        "shoot",
-        "pass",
-        "cross",
-        "dribble",
-        "forward_run",
-        "attack_box",
-        "support",
-        "hold_attack",
-        "hold_defense",
-        "press",
-        "recover",
-        "recover_slow",
-        "capture",
-    }
     action_biases = {
         "shoot": 1.6,
         "pass": 0.9,
@@ -37,26 +20,6 @@ class ForwardActionProfile(ActionProfile):
 
 
 class WingerActionProfile(ActionProfile):
-    role_name = "winger"
-    allowed_actions = {
-        "stop",
-        "shoot",
-        "pass",
-        "cross",
-        "dribble",
-        "cut_inside",
-        "wing_run",
-        "wide_run",
-        "forward_run",
-        "attack_box",
-        "support",
-        "hold_attack",
-        "hold_defense",
-        "press",
-        "recover",
-        "recover_slow",
-        "capture",
-    }
     action_biases = {
         "shoot": 1.0,
         "pass": 1.1,
@@ -195,11 +158,9 @@ class Forward(player):
         return self._build_wing_action(decision, state)
 
     def _decide_on_ball_attack(self, state: dict) -> str:
-        if state.get("must_pass_next", False):
-            px, py = state["my_pos"]
-            if (px <= 5.0 or px >=PITCH_WIDTH ) and (py <= 5.0 or py >=PITCH_HEIGHT):
-                return "cross"
-            return "pass"
+        restart = self._must_pass_decision(state)
+        if restart is not None:
+            return restart
 
         latched_move = self._latched_attack_move(state)
         if latched_move is not None:
@@ -375,17 +336,8 @@ class Forward(player):
         return _pick(state["rng"], actions, probs)
 
     def _decide_off_ball_attack(self, state: dict) -> str:
-        if state.get("is_loose", False):
-            landing_target = self._predict_ball_landing_target(state)
-            my_dist = _norm2(landing_target - state["my_pos"])
-            
-            teammates = np.asarray(state.get("teammates", []))
-            closer_teammates = 0
-            if teammates.size > 0:
-                closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
-
-            if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
-                return "chase"
+        if self._chases_loose_ball(state):
+            return "chase"
 
         # A teammate is carrying it down the flank: always make the run, timed
         # to his (_timed_box_run). Re-rolling it each round left the box empty.
@@ -454,73 +406,22 @@ class Forward(player):
         return _pick(state["rng"], actions, probs)
 
     def _decide_off_ball_defense(self, state: dict) -> str:
-        if state.get("is_loose", False):
-            landing_target = self._predict_ball_landing_target(state)
-            my_dist = _norm2(landing_target - state["my_pos"])
-            
-            teammates = np.asarray(state.get("teammates", []))
-            closer_teammates = 0
-            if teammates.size > 0:
-                closer_teammates = _count_within(teammates, landing_target, my_dist - 0.1)
+        if self._chases_loose_ball(state):
+            return "chase"
 
-            if closer_teammates == 0 or self._high_ball_mine(state, my_dist, closer_teammates):
-                return "chase"
-            
         dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-        ball_pressure_count = _ball_pressure(state)
 
         # The out-ball: a target man leaves the defending to the rest and waits on their line.
         if dist_to_ball >= 15.0 and self._tactic(state).target_man and state.get("my_role") in TARGET_MAN_ROLES:
             return "stay_up"
 
         if dist_to_ball < 2.0:
-            actions = ["tackle", "contain"]
-            # Aggression alone, so the better side gets better challenges and
-            # not more of them. The 160 holds the overall rate at the ~33% it
-            # was when defending sat in t_contain -- 50% sampled the quality
-            # gap half again as often and cost the underdog badly.
-            t_tackle = max(1.0, self.attributes.aggression * 1.5)
-            t_contain = max(1.0, 160.0 - self.attributes.aggression)
-            probs = [t_tackle / (t_tackle + t_contain), t_contain / (t_tackle + t_contain)]
-            return _pick(state["rng"], actions, probs)
+            return self._tackle_or_contain(state)
 
         if dist_to_ball < 15.0:
-            if ball_pressure_count >= 2:
-                return "contain"
-            if state["rng"].integers(0, 100) < min(100, getattr(self.attributes, "defending", 50) * PRESS_FROM_DEFENDING * self._tactic(state).press_bias):
-                return "press"
-            else:
-                return "contain"
+            return self._press_or_contain(state)
 
         return "hold_defense"
-
-    def _decide_loose_ball(self, state: dict) -> str:
-        dist_to_ball = _norm2(state["ball_pos"] - state["my_pos"])
-        
-        # Calculate distances of all teammates to the ball
-        teammates = np.asarray(state.get("teammates", []))
-        if teammates.size > 0:
-            teammate_dists = _dists(teammates, state["ball_pos"])
-            # Count exactly how many teammates are closer to the ball than I am
-            # We subtract 0.1 to avoid tie-breaking bugs with our own distance
-            closer_teammates = int(np.sum(teammate_dists < dist_to_ball - 0.1))
-        else:
-            closer_teammates = 0
-
-        # Absolute priority: grab the ball if it is at our feet
-        if dist_to_ball < 2.5: 
-            return "capture"
-
-        # 1. The single closest player to the ball goes directly to the landing spot
-        if closer_teammates == 0:
-            return "chase"
-            
-        # 2. The second closest player provides secondary support if nearby
-        if closer_teammates == 1 and dist_to_ball < 15.0:
-            return "contain"
-
-        # 3. Everyone else actively runs away from the ball back to their tactical zone
-        return "recover"
 
 
 class Winger(Forward):
@@ -538,5 +439,4 @@ class Winger(Forward):
         # order CenterBack/Fullback/Wingback already use for this reason.
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = WingerActionProfile()
-        self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())

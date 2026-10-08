@@ -329,7 +329,11 @@ from formations import get_formation, is_similar_position
 #         then walks out; defenders shoot only from a forward's range; a ball the keeper can stand up to is ~99% for
 #         any keeper (slow ones were 57%) -- beyond it his dive is agility and pace his reflexes, so tiers part on dives
 #         and rockets, not routine saves; slow ones are held. 2.6 goals/match.
-ENGINE_VERSION: Final[str] = "5.2.0"
+#   5.2.1 fixes: a block that drops dead stays with the blocker; a pending penalty holds the whistle; the passer's
+#         side is off loose-ball offers only for TEAMMATE_RELEASE_BLOCK_FRAMES; nobody decides during a goal or
+#         half-time pause; a parry that goes in is a goal, not a save; a stale shot is never credited on target;
+#         a keeper goes for a loose ball near goal that his own side touched last instead of walking to his line.
+ENGINE_VERSION: Final[str] = "5.2.1"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -496,15 +500,10 @@ RECEIVE_STUN_SPEED: Final = 22.0
 RECEIVE_STUN_FRAMES: Final = 12
 RECEIVE_DEFLECT_KEEP: Final = 0.25   # pace kept by a ball that comes off a bad touch
 
-# How long a player who muffed his touch waits before he may try again. Short,
-# because the ball is usually still at his feet: a long one meant an opponent
-# collected his own miscontrol for him.
-CAPTURE_RETRY_FRAMES: Final = 3
-
 # Close enough that the ball has gone THROUGH him, not merely past him.
 BALL_TOUCH_RADIUS: Final = 0.45
 BODY_TOUCH_KEEP: Final = 0.22   # pace left on a ball that hits a man who cannot control it
-CAPTURE_RETRY_FRAMES: Final = 4  # ...and how soon he may try again
+CAPTURE_RETRY_FRAMES: Final = 4  # steps before a man who muffed his touch may try again
 
 # How far down the queue a loose ball is offered before it is left to run.
 LOOSE_BALL_OFFERS: Final = 3
@@ -758,6 +757,7 @@ class game:
         self.active_shot_id = -1
         self._shot_counter = 0
         self._blocked_shot_id = -1    # a shot is credited as blocked once
+        self._parried_by = -1         # the keeper whose parry is loose and untouched since
         self._release_count = 0       # one per ball kicked, so a duel is rolled once per flight
         self._aerial_duel_ball = -1
         self._offside_snap = None     # (passing team, who was offside) for the pass in flight
@@ -977,6 +977,7 @@ class game:
 
     def _register_touch(self, player_index: int):
         self._offside_snap = None   # somebody played it: the pass's offside is settled
+        self._parried_by = -1
         if self.last_touch_player == player_index:
             return
             
@@ -1127,6 +1128,7 @@ class game:
         self._fk_flight = None
         self._punt = None
         self._offside_snap = None
+        self._parried_by = -1
         self._clear_must_pass()   # an unplayed restart's obligation would cancel this one's
         self.restart_type = restart_type
         self.restart_team = team if team is not None else (0 if self.last_touch_team is None else 1 - self.last_touch_team)
@@ -1507,6 +1509,8 @@ class game:
 
     def _attacking_team_now(self) -> int | None:
         """Which side is attacking right now, or None if the ball is dead."""
+        if self.restart_type == "penalty":
+            return self.restart_team   # a penalty is always taken: the whistle waits for it
         if self.out_of_play or self.restart_type is not None:
             return None
         if self.ball_controller != -1:
@@ -2150,6 +2154,8 @@ class game:
         if _norm2(self.ball[2:4]) <= max(2.0, self.all_players[index].attributes.speed * 0.12):
             self._credit_defending(index, won=True)
             self.ball_controller = index
+            self.ball_release_player = -1   # his ball now, not a kick he is locked out of
+            self.ball_release_cooldown = 0
             self.ball_capture_player = index
             self.ball_event = "neutral"
             self._register_touch(index)
@@ -2478,6 +2484,12 @@ class game:
         # Charged to the beaten keeper -- index 0 / 11 by formation contract.
         conceding_keeper = 11 if scoring_team == 0 else 0
         self.match_stats[conceding_keeper]["goals_conceded"] += 1
+        if self._parried_by == conceding_keeper:
+            # His parry went in untouched: a goal, not a save.
+            self.match_stats[conceding_keeper]["saves"] -= 1
+            if self.replay:
+                self.replay.retype_last_save_as_failed(conceding_keeper)
+            self._parried_by = -1
 
         # --- Evaluate Goal & Assist Statistics ---
         scorer_name = "Own Goal"
@@ -2576,6 +2588,7 @@ class game:
             self.active_shot_id = self._shot_counter
         else:
             self.active_shot_id = -1
+            self.last_shot_player = -1   # that shot is over: a later goal is not its doing
 
         self._register_touch(owner_index)
         
@@ -3163,6 +3176,7 @@ class game:
             return
         # Parried: the flight has already sent it back off his hands.
         self.last_touch_team = team
+        self._parried_by = i
         self.ball_capture_player = i
         self.ball_capture_cooldown = 20
         self.ball_release_player = i
@@ -3413,6 +3427,7 @@ class game:
 
             self.ball_controller = -1
             self.last_touch_team = defending_team
+            self._parried_by = index
             self.ball_capture_player = index
             self.ball_capture_cooldown = 20
             self.ball_release_player = index
@@ -3693,6 +3708,10 @@ class game:
         if self.ball_release_player >= 0 and self.ball_release_cooldown > 0 and self.ball_controller == self.ball_release_player:
             self.ball_controller = -1
 
+        # Frozen for a goal or the break: cooldowns run down, nobody decides.
+        if self.goal_pause_timer > 0 or self.halftime_pause_timer > 0:
+            return
+
         # Only ANOTHER player taking the ball clears this, never a loose one.
         # A set piece leaves the ball on the deck with ball_controller == -1, and
         # this ran before the restart guard below -- so must_pass was wiped on
@@ -3735,10 +3754,8 @@ class game:
             if self.ball_release_player >= 0:
                 release_team = 0 if self.ball_release_player < 11 else 1
                 distances[self.ball_release_player] = np.inf
-                if release_team == 0:
-                    distances[:11] = np.inf
-                else:
-                    distances[11:] = np.inf
+                if self.ball_release_team_cooldown > 0:
+                    distances[slice(0, 11) if release_team == 0 else slice(11, 22)] = np.inf
                 if self.ball_release_cooldown > 0:
                     release_pos = self.positions[self.ball_release_player]
                     from_release = self.positions - release_pos

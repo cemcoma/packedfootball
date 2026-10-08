@@ -20,11 +20,6 @@ DIVE_COMMIT_DISTANCE = 6.0
 
 
 class GoalkeeperActionProfile(ActionProfile):
-    role_name = "goalkeeper"
-    allowed_actions = {
-        "stop", "pass", "punt", "hold_defense",
-        "recover", "recover_slow", "contain", "capture", "dive", "save", "sweep"
-    }
     action_biases = {
         "pass": 0.2, "punt": 3.0, "hold_defense": 2.0,
         "recover": 3.0, "contain": 1.2, "capture": 1.5, "dive": 2.0, "sweep": 1.0
@@ -46,7 +41,6 @@ class Goalkeeper(player):
     def __init__(self, fname, lname, tier, position, attributes=None, country=None, hometown=None, appearance=None):
         super().__init__(fname, lname, tier, position, attributes, country, hometown, appearance)
         self.action_profile = GoalkeeperActionProfile()
-        self.allowed_actions = set(self.action_profile.get_allowed_actions())
         self.action_biases = dict(self.action_profile.get_action_biases())
 
     def _own_goal_y(self, state: dict) -> float:
@@ -214,6 +208,9 @@ class Goalkeeper(player):
         return "punt" if state["rng"].random() < (KEEPER_PUNT_SHARE if share is None else share) else "pass"
 
     def _decide_off_ball_attack(self, state: dict) -> str:
+        # A loose ball near goal is his whoever touched it last (a deflection off his own man).
+        if state.get("is_loose", False) and float(_norm2(state["ball_pos"] - state["my_pos"])) <= SWEEP_MAX_DISTANCE:
+            return self._decide_off_ball_defense(state)
         # Own team has the ball upfield: hold the line, stay set.
         return "hold_defense"
 
