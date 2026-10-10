@@ -1,4 +1,4 @@
-"""Owning a card: releasing it for credits, or paying to restyle it.
+"""Owning a card: releasing it for credits, reviving it for bucks, or paying to restyle it.
 
 Both move credits and mutate a players/{id} document, which is exactly the
 pair firestore.rules denies the client outright -- so neither can be a
@@ -16,10 +16,11 @@ from config import (
     RELEASE_BATCH_MAX,
     RELEASE_CREDITS_BY_TIER,
     RELEASE_CREDITS_DEFAULT,
+    REVIVE_COST_BUCKS,
 )
 from admin_firestore_client import AdminFirestoreClient
 from deps import verify_id_token
-from engine import APPEARANCE_OPTION_COUNTS, APPEARANCE_SLOTS, DEFAULT_APPEARANCE, tier_family
+from engine import APPEARANCE_OPTION_COUNTS, APPEARANCE_SLOTS, DEFAULT_APPEARANCE, contracts, tier_family
 
 router = APIRouter(tags=["players"])
 
@@ -184,6 +185,42 @@ async def _release_cards(uid: str, player_ids: list[str]) -> dict:
         "credits_remaining": remaining,
         "inventory_count": len(inventory) - deleted_pointers,
     }
+
+
+class RevivePlayerRequest(BaseModel):
+    player_id: str
+
+
+@router.post("/player/revive")
+async def revive_player(req: RevivePlayerRequest, uid: str = Depends(verify_id_token)):
+    """Gives a card that has signed all its contracts a fresh one -- a new
+    roll of `max`, history wiped, a free first contract -- for
+    REVIVE_COST_BUCKS. Card and charge commit together, as in customize."""
+    client = AdminFirestoreClient(uid)
+    card_path = f"players/{req.player_id}"
+    user_path = f"users/{uid}"
+
+    def _revive(tx):
+        docs = tx.get_all([card_path, user_path])
+        card, profile_doc = docs[card_path], docs[user_path]
+        if card is None or card.get("owner_uid") != uid:
+            raise HTTPException(404, "You don't own that player")
+        if profile_doc is None:
+            raise HTTPException(404, "No profile for this account")
+        tier = card.get("tier", "")
+        if not contracts.needs_revive(contracts.sanitize(card.get("contract"), tier)):
+            raise HTTPException(409, "This player doesn't need reviving yet")
+        bucks = profile_doc.get("bucks", 0)
+        if bucks < REVIVE_COST_BUCKS:
+            raise HTTPException(402, f"Not enough bucks -- {REVIVE_COST_BUCKS} needed, you have {bucks}")
+
+        contract = contracts.fresh(tier)
+        tx.set(card_path, {"contract": contract}, merge=True)
+        tx.set(user_path, {"bucks": bucks - REVIVE_COST_BUCKS}, merge=True)
+        return contract, bucks - REVIVE_COST_BUCKS
+
+    contract, remaining = await client.run_transaction(_revive)
+    return {"player_id": req.player_id, "contract": contract, "bucks_remaining": remaining}
 
 
 class CustomizePlayerRequest(BaseModel):

@@ -97,6 +97,12 @@ theme_override_constants/h_separation = 4
 theme_override_constants/v_separation = 4
 columns = 3
 
+[node name="ContractLabel" type="Label" parent="Margin/RootVBox/Body/CardPanel/CardColumn" unique_id=1970000207]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+horizontal_alignment = 1
+
 [node name="StatsRow" type="HBoxContainer" parent="Margin/RootVBox/Body" unique_id=1970000204]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -224,6 +230,12 @@ text = "Customize"
 unique_name_in_owner = true
 layout_mode = 2
 text = "Release"
+
+[node name="ReviveButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1970000206]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "Revive"
 
 [node name="BackButton" type="Button" parent="Margin/RootVBox/BottomRow" unique_id=1970000029]
 unique_name_in_owner = true

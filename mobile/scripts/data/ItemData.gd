@@ -34,6 +34,8 @@ const ITEM_VALUES := {
 const SLOTS_BASE := 3
 const SLOT_EXTENDER_BONUS := 2
 const SLOT_EXTENDER_STAT := "slots"
+## Mirrors items.py: signed onto a card (contracts.py), never socketed; "v" is matches.
+const CONTRACT_STAT := "contract"
 
 const KIND_OUTFIELD := "outfield"
 const KIND_KEEPER := "keeper"
@@ -97,6 +99,10 @@ static func is_slot_extender(item: Dictionary) -> bool:
 	return stat(item) == SLOT_EXTENDER_STAT
 
 
+static func is_contract(item: Dictionary) -> bool:
+	return stat(item) == CONTRACT_STAT
+
+
 ## Rarity colour, straight from the card table -- items and cards share one
 ## rarity scale on purpose, so a gold item reads as a gold at a glance.
 static func color(item: Dictionary) -> Color:
@@ -110,11 +116,15 @@ static func rarity_rank(item: Dictionary) -> int:
 static func stat_label(item: Dictionary) -> String:
 	if is_slot_extender(item):
 		return TranslationServer.translate("Slot Extender")
+	if is_contract(item):
+		return TranslationServer.translate("Contract")
 	return TranslationServer.translate(STAT_LABELS.get(stat(item), stat(item).capitalize()))
 
 
-## "+4 Shooting", or "+2 Slots" for the extender.
+## "+4 Shooting", "+2 Slots" for the extender, "Contract: 15 matches" for a contract.
 static func label(item: Dictionary) -> String:
+	if is_contract(item):
+		return TranslationServer.translate("Contract: %d matches") % value(item)
 	if is_slot_extender(item):
 		return "+%d %s" % [SLOT_EXTENDER_BONUS, TranslationServer.translate("Slots")]
 	return "+%d %s" % [value(item), stat_label(item)]
@@ -163,9 +173,15 @@ static func capacity(items: Array) -> int:
 
 
 ## Why this item can't go on this card, or "" if it can. Mirrors items.py's
-## can_equip, message for message, so a disabled button and a 409 say the same
-## thing.
-static func equip_blocker(items: Array, item: Dictionary, position: String) -> String:
+## can_equip (and contracts.py's can_sign for a contract), message for message,
+## so a disabled button and a 409 say the same thing.
+static func equip_blocker(items: Array, item: Dictionary, position: String, contract: Dictionary = {}) -> String:
+	if is_contract(item):
+		if int(contract.get("left", 0)) > 0:
+			return TranslationServer.translate("This player's contract hasn't ended yet")
+		if int(contract.get("signed", 0)) >= int(contract.get("max", 0)):
+			return TranslationServer.translate("No contracts left -- revive or release this player")
+		return ""
 	if not fits(item, position):
 		return TranslationServer.translate("That item is not for this position")
 	if is_slot_extender(item):

@@ -97,6 +97,7 @@ var status_text: String = ""
 @onready var _stats_card_view: PlayerCardView = %StatsCard
 @onready var _stats_extra_country: Label = %StatsExtraCountry
 @onready var _stats_items_grid: GridContainer = %StatsItemsGrid
+@onready var _stats_contract: Label = %StatsContract
 @onready var _stats_extra_gam: Label = %StatsExtraGam #goals assists matches
 @onready var _stats_attr_grid: GridContainer = %StatsAttrGrid
 @onready var _stats_page_label: Label = %StatsPageLabel
@@ -362,11 +363,11 @@ func _primary_comparison(card: PlayerCard, current: PlayerCard, role: String) ->
 	return grid
 
 
-## Primary stats as they'd play in this slot: items on, and the engine's 0.9x
-## when the role isn't the card's own position.
+## Primary stats as they'd play in this slot: items on, and the engine's
+## penalty (out of position, or out of contract) applied.
 func _primary_in_role(card: PlayerCard, stats: Array, role: String) -> Dictionary:
 	var effective := card.effective_attributes()
-	var factor := 1.0 if card.position == role else SquadOptimizer.OUT_OF_POSITION_FACTOR
+	var factor := SquadOptimizer.factor(card, role)
 	var values := {}
 	for key in stats:
 		values[key] = int(round(float(effective.get(key, 0)) * factor))
@@ -406,14 +407,20 @@ func _populate_stats_panel() -> void:
 		card.hometown, card.country
 	]
 	_populate_items(card)
+	_stats_contract.text = card.contract_summary()
+	_stats_contract.add_theme_color_override(
+		"font_color", PlayerCardView.contract_color(card, ThemeManager.color("accent"))
+	)
 	# Items buff attributes, so they share that page; the rating belongs to statistics.
 	_stats_items_grid.visible = stats_page == StatsPage.ATTRIBUTES
 	_stats_extra_gam.visible = stats_page == StatsPage.STATISTICS
 
 	if stats_page == StatsPage.STATISTICS:
 		_populate_statistics_page(card)
+		_out_of_position_label.visible = false
 	else:
 		_populate_attributes_page(card)
+		_out_of_position_label.visible = true
 	_update_stats_page_button()
 
 

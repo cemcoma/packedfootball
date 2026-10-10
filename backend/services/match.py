@@ -93,6 +93,16 @@ def validate_formation_positions(profile: dict) -> None:
             raise HTTPException(400, f"Player {i + 1} ({p.position}) cannot play {role} in {profile['formation']}")
 
 
+def use_contracts(profile: dict) -> None:
+    """Takes one match off every starter still under contract, in memory --
+    persist_player_stats saves it with the stats. Runs AFTER the match: the
+    engine reads `left` at kick-off to halve anyone already out of contract
+    (gameEngine.CONTRACT_PENALTY), so a last match must still read 1."""
+    for p in profile["roster"]:
+        if p.contract["left"] > 0:
+            p.contract["left"] -= 1
+
+
 def run_match(caller_profile: dict, opponent_profile: dict, seed: int, replay_format: int = 1) -> dict:
     """Runs one simulated match and returns everything the match endpoints
     need for their HTTP response: the score, the base64
@@ -118,6 +128,7 @@ def run_match(caller_profile: dict, opponent_profile: dict, seed: int, replay_fo
     # 10800 frames is REGULATION (90:00); run_match plays stoppage time on
     # top of that, so a real match finishes a few minutes later.
     match.run_match(max_steps=10800, render=False)
+    use_contracts(caller_profile)  # before the roster below is serialized, so the reply carries it
     my_score, opp_score = match.scores
     replay_bytes = match.replay.encode_v2() if replay_format == 2 else match.replay.encode()
     replay_b64 = base64.b64encode(replay_bytes).decode()

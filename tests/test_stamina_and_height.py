@@ -128,7 +128,7 @@ def test_match_state_never_reaches_the_saved_card(rosters, make_match):
 
 @pytest.mark.slow
 def test_the_out_of_position_penalty_never_reaches_the_saved_card(rosters, make_match):
-    """_apply_out_of_position_penalty's docstring promises the scaling is a
+    """_apply_penalty's docstring promises the scaling is a
     per-match sim detail that never touches what is persisted. It makes a
     SHALLOW copy, so the copy's .attributes are scaled while .base_attributes
     still point at the card -- and player_to_fields writes the latter.

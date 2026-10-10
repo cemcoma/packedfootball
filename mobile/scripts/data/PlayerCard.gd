@@ -106,6 +106,10 @@ const RELEASE_CREDITS := {
 static func release_credits(tier: String) -> int:
 	return RELEASE_CREDITS.get(tier_family(tier), 10)
 
+## Bucks to revive a card that has signed all its contracts -- mirrors
+## backend config.REVIVE_COST_BUCKS, kept in step by hand like RELEASE_CREDITS.
+const REVIVE_BUCKS := 20
+
 
 ## Rarity ordering for anything that needs to know
 ## which of two cards is the bigger pull (bronze = 0, silver= 1, ... special_* = 5, icon=6)-- e.g. PackReveal.gd sorting a
@@ -158,6 +162,9 @@ var appearance: Dictionary = {}
 ## GameProfile.average_overall() all read that raw, and the base card is what
 ## gets written back. Use effective_attributes() to see a card as it plays.
 var items: Array = []
+## {"max", "signed", "left"} -- see packedfootball/contracts.py. {} (no
+## contract sent) reads as playable; the server is the gate either way.
+var contract: Dictionary = {}
 
 
 static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
@@ -178,6 +185,7 @@ static func from_fields(fields: Dictionary, id: String) -> PlayerCard:
 	card.appearance = _dict(fields, "appearance", {})
 	# Absent on every card written before items existed.
 	card.items = ItemData.sanitize(fields.get("items"))
+	card.contract = _dict(fields, "contract", {})
 	return card
 
 
@@ -190,6 +198,32 @@ static func from_response(fields: Dictionary) -> PlayerCard:
 	var card := from_fields(fields, _str(fields, "player_id"))
 	card.doc_id = _str(fields, "doc_id")
 	return card
+
+
+func matches_left() -> int:
+	return int(contract.get("left", 0))
+
+
+func contracts_left() -> int:
+	return int(contract.get("max", 0)) - int(contract.get("signed", 0))
+
+
+## "27 matches left" over "Contract 2/5" -- under the items on Squad and Player Detail.
+## Out of contract it says so, with the -50% it plays at (SquadOptimizer.CONTRACT_FACTOR).
+func contract_summary() -> String:
+	var key := "Out of contract (-50%%)\nContract %d/%d" if contract_ended() else "%d matches left\nContract %d/%d"
+	var counts := [int(contract.get("signed", 0)), int(contract.get("max", 0))]
+	return TranslationServer.translate(key) % (counts if contract_ended() else [matches_left()] + counts)
+
+
+## Out of matches -- a contract item can be signed (unless needs_revive()).
+func contract_ended() -> bool:
+	return contract.has("left") and matches_left() <= 0
+
+
+## Out of matches AND out of contracts: revive or release.
+func needs_revive() -> bool:
+	return contract_ended() and contracts_left() <= 0
 
 
 func display_name() -> String:

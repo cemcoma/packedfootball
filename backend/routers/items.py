@@ -27,7 +27,7 @@ from config import (
 )
 from admin_firestore_client import AdminFirestoreClient
 from deps import verify_id_token
-from engine import item_rules, tier_family
+from engine import contracts, item_rules, tier_family
 
 router = APIRouter(tags=["items"])
 
@@ -88,6 +88,18 @@ async def equip_item(req: EquipItemRequest, uid: str = Depends(verify_id_token))
 
         position = card.get("position", "")
         equipped = item_rules.sanitize(card.get("items"), position)
+        contract = contracts.sanitize(card.get("contract"), card.get("tier", ""))
+        remaining = [i for i in pool if i.get("id") != req.item_id]
+
+        # A contract is signed, not socketed: it extends the card and leaves the bag.
+        if item_rules.is_contract(item):
+            reason = contracts.can_sign(contract)
+            if reason is not None:
+                raise HTTPException(409, reason)
+            contract = contracts.sign(contract, item)
+            tx.set(player_path, {"contract": contract}, merge=True)
+            tx.set(user_path, {"item_pool": remaining}, merge=True)
+            return equipped, None, remaining, contract
 
         destroyed = None
         if req.replaces_item_id:
@@ -103,18 +115,18 @@ async def equip_item(req: EquipItemRequest, uid: str = Depends(verify_id_token))
             raise HTTPException(409, reason)
 
         equipped.append(item)
-        remaining = [i for i in pool if i.get("id") != req.item_id]
 
         tx.set(player_path, {"items": equipped}, merge=True)
         tx.set(user_path, {"item_pool": remaining}, merge=True)
-        return equipped, destroyed, remaining
+        return equipped, destroyed, remaining, contract
 
-    equipped, destroyed, remaining = await client.run_transaction(_equip)
+    equipped, destroyed, remaining, contract = await client.run_transaction(_equip)
     return {
         "player_id": req.player_id,
         "items": equipped,
         "destroyed": destroyed,
         "item_pool": remaining,
+        "contract": contract,
     }
 
 

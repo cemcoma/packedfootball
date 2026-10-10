@@ -29,6 +29,8 @@ extends RefCounted
 ##
 ## Keep in lockstep with packedfootball/gameEngine.py's OUT_OF_POSITION_PENALTY.
 const OUT_OF_POSITION_FACTOR := 0.9
+## gameEngine.py's CONTRACT_PENALTY: out of contract plays at half. Never stacks.
+const CONTRACT_FACTOR := 0.5
 
 ## The cost charged for pairing a slot with a player who can't fill it.
 ## Large enough that the solver will always prefer ANY legal assignment over
@@ -49,9 +51,14 @@ const _INF := 1.0e18
 ## gameEngine.py:186). is_eligible() is the separate question of whether the
 ## UI would let you do it in the first place.
 static func effective_overall(card: PlayerCard, role: String) -> int:
-	if card.position == role:
-		return card.overall()
-	return int(round(float(card.overall()) * OUT_OF_POSITION_FACTOR))
+	var f := factor(card, role)
+	return card.overall() if f == 1.0 else int(round(float(card.overall()) * f))
+
+
+## Mirrors gameEngine._penalty_factor: the worst penalty that applies, never a product.
+static func factor(card: PlayerCard, role: String) -> float:
+	var f := 1.0 if card.position == role else OUT_OF_POSITION_FACTOR
+	return minf(f, CONTRACT_FACTOR) if card.contract_ended() else f
 
 
 ## Whether a card may fill this slot at all -- their exact position, or one

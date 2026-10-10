@@ -9,7 +9,7 @@ Both new features are drawn after the existing loop for exactly that reason --
 from __future__ import annotations
 
 import items as item_rules
-from game_config import TIER_RANGES, tier_family
+from game_config import CONTRACT_MATCHES, TIER_RANGES, tier_family
 from packEngine import PACK_DATABASE, PackManager
 
 # Every pack that predates guarantees and items. If one of these ever gains
@@ -108,11 +108,29 @@ def test_dropped_items_are_well_formed_and_equippable():
         for item in PackManager(PACK_DATABASE, seed=seed).open_pack_items("item_premium"):
             assert item["r"] in PACK_DATABASE["item_premium"]["item_rates"]
             assert item_rules.sanitize_pool([item]) == [item]
+            if item_rules.is_contract(item):
+                continue  # signed, not socketed -- see test_contracts_drop_from_item_packs
             seen_kinds.add(item["k"])
             position = "GK" if item["k"] == item_rules.KIND_KEEPER else "ST"
             assert item_rules.can_equip([], item, position) is None
     assert item_rules.KIND_KEEPER in seen_kinds, "keeper items never drop"
     assert item_rules.KIND_OUTFIELD in seen_kinds
+
+
+def test_contracts_drop_from_item_packs():
+    """Every item pack drops contracts, each rolled inside its rarity's range."""
+    contracts_seen = 0
+    for seed in range(40):
+        for item in PackManager(PACK_DATABASE, seed=seed).open_pack_items("item_standard"):
+            if not item_rules.is_contract(item):
+                continue
+            contracts_seen += 1
+            lo, hi = CONTRACT_MATCHES[tier_family(item["r"])]
+            assert lo <= item["v"] <= hi
+            assert item["k"] == item_rules.KIND_ANY
+            assert item_rules.sanitize_pool([item]) == [item]
+            assert item_rules.can_equip([], item, "ST") is not None
+    assert contracts_seen > 0, "contracts never drop"
 
 
 def test_the_slot_extender_only_drops_from_packs_that_sell_it():

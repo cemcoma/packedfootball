@@ -41,6 +41,7 @@ from typing import Final
 from abc import ABC, abstractmethod
 import numpy as np
 import math
+import contracts
 
 position = ["GK","CD","LB","RB","CDM","CM","CAM","LM","RM","CF","LW","RW"]
 base_speed: Final = PLAYER_BASE_SPEED   # see game_config: shared with gameEngine
@@ -537,6 +538,7 @@ class player(ABC):
         # twice -- game_state.py is the only place that fills either.
         self.items = []
         self.base_attributes = self.attributes
+        self.contract = contracts.fresh(tier)  # game_state.py overwrites it with the stored one
         self.overall = self._calculate_overall()
 
     @property

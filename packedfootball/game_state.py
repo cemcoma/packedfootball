@@ -37,6 +37,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
 
+import contracts
 import items as item_rules
 from tactics import sanitize_tactics
 from player.player import Attributes, DEFAULT_STATISTICS
@@ -70,6 +71,7 @@ def player_to_fields(p) -> dict:
         "statistics": dict(p.statistics),
         "appearance": dict(p.appearance),
         "items": list(getattr(p, "items", []) or []),
+        "contract": dict(p.contract),
     }
 
 
@@ -97,6 +99,7 @@ def fields_to_player(fields: dict, player_class_map: dict, default_class):
     p.items = item_rules.sanitize(fields.get("items"), fields["position"])
     p.base_attributes = attrs
     p.attributes = item_rules.effective_attributes(attrs, p.items)
+    p.contract = contracts.sanitize(fields.get("contract"), fields["tier"])
     p.overall = p._calculate_overall()
     return p
 

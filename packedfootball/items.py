@@ -39,6 +39,9 @@ from player.player import Attributes, PHYSICAL_FIELDS, TENDENCY_FIELDS
 ITEM_SLOTS_BASE = 3
 ITEM_SLOT_EXTENDER_BONUS = 2
 SLOT_EXTENDER_STAT = "slots"
+# A contract item sits in the bag like any other but is signed (contracts.py),
+# never socketed; its "v" is the matches it adds, rolled when it drops.
+CONTRACT_STAT = "contract"
 
 # Rarity -> how many points the item is worth. Reuses TIER_RANGES' family
 # names, which is the project's one rarity ordering -- colour, sort order and
@@ -103,13 +106,13 @@ def new_item_id() -> str:
     return secrets.token_hex(8)
 
 
-def make_item(rarity: str, stat: str, kind: str = KIND_OUTFIELD, item_id: str | None = None) -> dict:
+def make_item(
+    rarity: str, stat: str, kind: str = KIND_OUTFIELD, item_id: str | None = None, value: int | None = None
+) -> dict:
     """One item record. Short keys because these are stored inline on a
     document that is read on every card load."""
-    if stat == SLOT_EXTENDER_STAT:
-        value = ITEM_SLOT_EXTENDER_BONUS
-    else:
-        value = ITEM_VALUES.get(rarity, ITEM_VALUES["bronze"])
+    if value is None:
+        value = ITEM_SLOT_EXTENDER_BONUS if stat == SLOT_EXTENDER_STAT else ITEM_VALUES.get(rarity, ITEM_VALUES["bronze"])
     return {
         "id": item_id or new_item_id(),
         "r": rarity,
@@ -121,6 +124,10 @@ def make_item(rarity: str, stat: str, kind: str = KIND_OUTFIELD, item_id: str | 
 
 def is_slot_extender(item: dict) -> bool:
     return item.get("s") == SLOT_EXTENDER_STAT
+
+
+def is_contract(item: dict) -> bool:
+    return item.get("s") == CONTRACT_STAT
 
 
 def capacity(items: list[dict] | None) -> int:
@@ -144,6 +151,8 @@ def can_equip(items: list[dict] | None, item: dict, position: str) -> str | None
     """Why this item cannot go on this card, or None if it can. One function
     so the backend's rejection and the client's disabled button agree."""
     items = list(items or [])
+    if is_contract(item):
+        return "Contracts are signed, not socketed"
     if not fits(item, position):
         return "That item is not for this position"
     if is_slot_extender(item):
@@ -194,7 +203,7 @@ def sanitize_pool(items) -> list[dict]:
         if not isinstance(entry, dict):
             continue
         stat = entry.get("s")
-        if stat != SLOT_EXTENDER_STAT and stat not in BUFFABLE_STATS:
+        if stat not in (SLOT_EXTENDER_STAT, CONTRACT_STAT) and stat not in BUFFABLE_STATS:
             continue
         clean.append(
             {

@@ -333,7 +333,9 @@ from formations import get_formation, is_similar_position
 #         side is off loose-ball offers only for TEAMMATE_RELEASE_BLOCK_FRAMES; nobody decides during a goal or
 #         half-time pause; a parry that goes in is a goal, not a save; a stale shot is never credited on target;
 #         a keeper goes for a loose ball near goal that his own side touched last instead of walking to his line.
-ENGINE_VERSION: Final[str] = "5.2.1"
+#   5.3.0 a player out of contract (contract.left 0) plays at CONTRACT_PENALTY (0.5x attributes); the worst of that
+#         and out-of-position applies, never both. Rosters with no ended contract play exactly as before.
+ENGINE_VERSION: Final[str] = "5.3.0"
 
 POST_REBOUND_DAMPING: Final = 0.55 # how much goalpost eats the velocity
 THROW_IN_POWER_FACTOR: Final = 2.0 / 3.0 # touch power idk random
@@ -598,12 +600,23 @@ PLAYER_ACCEL: Final = 21.0
 possession_radius: Final = POSSESSION_RADIUS
 final_whistle_delay: Final = 600
 OUT_OF_POSITION_PENALTY: Final = 0.9
+# A player whose contract has run out (contracts.py) plays at half; never stacks with the above.
+CONTRACT_PENALTY: Final = 0.5
 
-def _apply_out_of_position_penalty(p):
+
+def _penalty_factor(p, role: str) -> float:
+    """The one multiplier a player plays at in this slot: the worst penalty that applies, never a product."""
+    factor = 1.0 if p.position == role else OUT_OF_POSITION_PENALTY
+    contract = getattr(p, "contract", None)
+    if contract and contract.get("left", 1) <= 0:
+        factor = min(factor, CONTRACT_PENALTY)
+    return factor
+
+
+def _apply_penalty(p, factor: float):
     """Returns a shallow copy of p with every non-tendency Attributes field
-    scaled by OUT_OF_POSITION_PENALTY (and .overall recomputed to match) --
-    used only for a player playing a formation slot that differs from, but
-    is_similar_position() to, their own card position. The original player
+    scaled by `factor` (and .overall recomputed to match) -- see
+    _penalty_factor for when. The original player
     object -- and its Attributes instance -- is never mutated: this is a
     per-match sim detail only, never touching what's persisted or shown on
     the card (see game.__init__, the only caller).
@@ -620,7 +633,7 @@ def _apply_out_of_position_penalty(p):
     scaled_fields = {
         # height is centimetres, not a skill -- scaling it shrank the player.
         field: (value if field in TENDENCY_FIELDS or field in PHYSICAL_FIELDS
-                else round(value * OUT_OF_POSITION_PENALTY))
+                else round(value * factor))
         for field, value in original_fields.items()
     }
     penalized = copy.copy(p)
@@ -689,10 +702,8 @@ class game:
         # penalizes a legitimate similar-position substitution, never an
         # arbitrary mismatch.
         raw_players = self.teamA.players + self.teamB.players
-        self.all_players = [
-            p if p.position == self.formation[i]["role"] else _apply_out_of_position_penalty(p)
-            for i, p in enumerate(raw_players)
-        ]
+        factors = [_penalty_factor(p, self.formation[i]["role"]) for i, p in enumerate(raw_players)]
+        self.all_players = [p if f == 1.0 else _apply_penalty(p, f) for p, f in zip(raw_players, factors)]
         # The captain and set-piece takers each manager picked, as slot indices.
         self._picked = [self._picked_slots(0, tactics_home), self._picked_slots(1, tactics_away)]
         # Cosmetic for now (the armband); unpicked, the best outfielder (a keeper's overall runs high).

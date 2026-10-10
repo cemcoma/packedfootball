@@ -22,6 +22,19 @@ extends Control
 signal pressed
 
 const OUT_OF_POSITION_COLOR := Color(1.0, 0.7, 0.3)  # same amber Team.gd uses for "unsaved changes"
+## Contract markers, shared with PitchView's rings: red = ended (sign one), green = needs a revive.
+const CONTRACT_ENDED_COLOR := Color(0.9, 0.15, 0.15)
+const CONTRACT_REVIVE_COLOR := Color(0.2, 0.75, 0.3)
+
+
+## Contract text colour: the marker colours once it has ended, else `active`
+## (the screen's accent) -- never the hint grey nationality uses.
+static func contract_color(card: PlayerCard, active: Color) -> Color:
+	if card.needs_revive():
+		return CONTRACT_REVIVE_COLOR
+	if card.contract_ended():
+		return CONTRACT_ENDED_COLOR
+	return active
 
 # -- highlight ----------------------------------------------------------------
 #
@@ -71,6 +84,8 @@ const GLOW_PERIOD := 1.2
 @onready var _badge: Panel = %Badge
 @onready var _badge_label: Label = %BadgeLabel
 @onready var _glow: Panel = %Glow
+@onready var _contract_mark: Panel = %ContractMark
+@onready var _contract_plus: Label = %ContractPlus
 
 var _card: PlayerCard = null
 ## The card type's label colour from the manifest, null for the theme's.
@@ -117,6 +132,7 @@ func set_card(card: PlayerCard) -> void:
 	_model_view.set_card(card)
 	
 	_auto_shrink_name(card.display_name())
+	_show_contract_mark(card)
 
 	# All three are per-CONTEXT, not per-card, and this view gets recycled
 	# (PackReveal reuses instances). Clear them so a card never inherits the
@@ -124,6 +140,21 @@ func set_card(card: PlayerCard) -> void:
 	set_out_of_position(false)
 	set_badge("")
 	set_celebrating(false)
+
+
+## Top-right, under the position: nothing while the card can play, a red dot once its contract has
+## ended, a green + once it has no contracts left to sign.
+func _show_contract_mark(card: PlayerCard) -> void:
+	_contract_mark.visible = card.contract_ended()
+	if not _contract_mark.visible:
+		return
+	_contract_plus.visible = card.needs_revive()
+	var style := StyleBoxFlat.new()
+	style.bg_color = CONTRACT_REVIVE_COLOR if card.needs_revive() else CONTRACT_ENDED_COLOR
+	style.set_corner_radius_all(8)
+	style.set_border_width_all(1)
+	style.border_color = RING_SHADE
+	_contract_mark.add_theme_stylebox_override("panel", style)
 
 
 func _auto_shrink_name(name_str: String) -> void:

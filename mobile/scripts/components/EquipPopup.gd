@@ -155,8 +155,8 @@ func _blocker() -> String:
 	if item.is_empty():
 		return ""
 	var kit: Array = _card.items.filter(func(i): return ItemData.item_id(i) != _replacing_id)
-	var blocker := ItemData.equip_blocker(kit, item, _card.position)
-	if blocker != "" and _replacing_id == "" and _card.free_item_slots() <= 0:
+	var blocker := ItemData.equip_blocker(kit, item, _card.position, _card.contract)
+	if blocker != "" and _replacing_id == "" and _card.free_item_slots() <= 0 and not ItemData.is_contract(item):
 		return tr("Tap a slot to replace")
 	return blocker
 
@@ -207,7 +207,7 @@ func _on_equip_pressed() -> void:
 		return
 
 	GameProfile.apply_equip_result(
-		_card.player_id, res.data.get("items"), res.data.get("item_pool")
+		_card.player_id, res.data.get("items"), res.data.get("item_pool"), res.data.get("contract")
 	)
 	_selected_id = ""
 	_replacing_id = ""

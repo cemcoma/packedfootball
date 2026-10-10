@@ -558,10 +558,12 @@ func add_purchased_items(items: Array) -> void:
 ## Folds an /item/equip reply back in: the SERVER's item list for the card and
 ## the pool it left behind, never a local guess at either. Mirrors how
 ## CustomizePlayer applies its own reply.
-func apply_equip_result(player_id: String, card_items, item_pool) -> void:
+func apply_equip_result(player_id: String, card_items, item_pool, contract = null) -> void:
 	if all_cards.has(player_id):
 		var card: PlayerCard = all_cards[player_id]
 		card.items = ItemData.sanitize(card_items)
+		if contract is Dictionary:
+			card.contract = contract
 	all_items = ItemData.sanitize(item_pool)
 	items_changed.emit()
 

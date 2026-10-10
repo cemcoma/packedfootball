@@ -6,7 +6,7 @@ from player.classes.goalkeeper import Goalkeeper
 from player.classes.defender import CenterBack, Fullback, Wingback
 from player.classes.midfielder import Midfielder, DefensiveMid, AttackingMid
 from player.classes.forward import Forward, Winger
-from game_config import POSITION_CATEGORIES, TIER_RANGES, tier_family  # noqa: F401
+from game_config import CONTRACT_MATCHES, POSITION_CATEGORIES, TIER_RANGES, tier_family  # noqa: F401
 from pack_database import PACK_DATABASE  # noqa: F401
 import items as item_rules
 
@@ -98,6 +98,9 @@ PACK_ITEM_KEEPER_SHARE = 0.18
 # Of the item drops that come up at an extender rarity, how many are the slot
 # extender rather than a stat buff at that rarity.
 PACK_SLOT_EXTENDER_SHARE = 0.25
+
+# Of all item drops, how many are a contract (contracts.py) instead.
+PACK_CONTRACT_SHARE = 0.15
 
 
 def _roll_height(rng: random.Random, position: str) -> int:
@@ -376,6 +379,10 @@ class PackManager:
         rolled = []
         for _ in range(count):
             rarity = self.rng.choices(rarities, weights=weights, k=1)[0]
+            if self.rng.random() < PACK_CONTRACT_SHARE:
+                matches = self.rng.randint(*CONTRACT_MATCHES.get(tier_family(rarity), CONTRACT_MATCHES["bronze"]))
+                rolled.append(item_rules.make_item(rarity, item_rules.CONTRACT_STAT, item_rules.KIND_ANY, value=matches))
+                continue
             kind = (
                 item_rules.KIND_KEEPER
                 if self.rng.random() < PACK_ITEM_KEEPER_SHARE

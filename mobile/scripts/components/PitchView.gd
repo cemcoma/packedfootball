@@ -94,10 +94,15 @@ func _rebuild() -> void:
 		# whether an assignment is allowed in the first place (see Team.gd),
 		# not whether to show this warning.
 		var out_of_position := false
+		var contract_ring := Color(0, 0, 0, 0)  # alpha 0 = no ring
 		if player_id != "":
 			var card: PlayerCard = _all_cards[player_id]
 			bg_color = PlayerCard.tier_color(card.tier)
 			out_of_position = card.position != role
+			if card.needs_revive():
+				contract_ring = PlayerCardView.CONTRACT_REVIVE_COLOR
+			elif card.contract_ended():
+				contract_ring = PlayerCardView.CONTRACT_ENDED_COLOR
 			label_text = "%s\n%s" % [role, card.display_name()]
 
 		var button := Button.new()
@@ -115,6 +120,9 @@ func _rebuild() -> void:
 		if i == _selected_index:
 			style.set_border_width_all(3)
 			style.border_color = Color(1.0, 0.9, 0.2)
+		elif contract_ring.a > 0:
+			style.set_border_width_all(3)
+			style.border_color = contract_ring
 		elif out_of_position:
 			style.set_border_width_all(1)
 			style.border_color = Color(1.0, 0.7, 0.3)  # same amber as Team.gd's "unsaved changes"

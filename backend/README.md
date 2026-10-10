@@ -124,6 +124,7 @@ Credentials automatically -- no key file.
 | `GET /pack/list` | Live pack catalog, filtered by availability, sorted by the pack type's `pack_types/{type}.order`, then the pack's own `order`, then id; returns `packs` and `sections` (the category order the client's dropdown follows). Puts a pack whose `available_at` has passed on sale as a side effect (see Pack availability). |
 | `POST /pack/open` | Charges the pack's currency, rolls cards, writes them. Refuses when the bench can't hold the whole pack (`INVENTORY_CAP`). |
 | `POST /player/release`, `/player/release/batch` | Sells cards back for credits by tier family (`RELEASE_CREDITS_BY_TIER`); a starting-XI card is refused. Batch is one transaction, at most `RELEASE_BATCH_MAX`. |
+| `POST /player/revive` | A card that has signed all its contracts (`contracts.py`) gets a fresh roll for `REVIVE_COST_BUCKS`. Contract items are signed through `/item/equip`. A starter with no matches left still plays, at half attributes (`gameEngine.CONTRACT_PENALTY`). |
 | `POST /player/customize` | Changes appearance slots, `CUSTOMIZE_CREDITS_PER_SLOT` each; indices validated against `APPEARANCE_OPTION_COUNTS`. |
 | `GET /currency/exchange/list` | Bucks -> credits tiers. |
 | `POST /currency/exchange/redeem` | Spends bucks, grants credits. |
@@ -559,6 +560,7 @@ python3 backend/scripts/<script>.py [--dry-run]
 | `sync_deal_definitions.py` | Same for `packedfootball/deal_database.py`'s `DEAL_DATABASE` -> `deals/{id}`. Unlike the pack version it *creates* missing docs, seeded `active: false`; `--activate-new` seeds them `active: true` instead. Never changes an existing doc's `active`. |
 | `seed_bots.py` | Creates `bots/{id}` opponents per league tier (`--per-tier`, default 30) and their `bot_pools/{tier}` id lists. Tops up, never rewrites an existing bot -- except to give one without a play style a random `tactics.style`. |
 | `sync_display_names.py` | Backfills `display_names/{key}` reservations for accounts created before names were unique. Oldest account keeps a duplicated name; conflicts are printed, never renamed. |
+| `sync_contracts.py` | Gives every `players/{id}` doc with no `contract` a fresh roll (`contracts.fresh`), as a new card gets. Bots untouched. Safe to re-run; `--dry-run` reports counts by tier. |
 | `list_packs.py` | Read-only dump of the `pack_types/` order and the live `packs/{slug}` docs. `--pack-id SLUG` for one pack. |
 | `list_deals.py` | Read-only dump of live `deals/{id}` docs. |
 | `list_match_reports.py` | Read-only. Open bug reports newest first, with seed and engine version; `--dump-dir` writes each report's `games/{id}` doc as JSON. `--all` includes reports whose `status` you've changed by hand. To watch one: paste its game id into Play.tscn's TESTING panel (editor only, "Check a reported match"), which runs `packedfootball/scripts/replay_game.py` -- re-simulates the match on your Mac from the game doc and plays it back, showing the report text and flagging an engine-version mismatch. |

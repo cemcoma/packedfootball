@@ -183,9 +183,10 @@ serve-web: web
 deploy-web: web
 	@set -e; \
 	tmp=$$(mktemp -d); \
+	trap 'git -C "$(CURDIR)" worktree remove --force "$$tmp" 2>/dev/null || true' EXIT; \
 	git fetch origin $(BRANCH) >/dev/null 2>&1 || true; \
 	if git show-ref --verify --quiet refs/remotes/origin/$(BRANCH); then \
-		git worktree add --quiet "$$tmp" $(BRANCH) >/dev/null; \
+		git worktree add --quiet -B $(BRANCH) "$$tmp" origin/$(BRANCH) >/dev/null; \
 	else \
 		git worktree add --quiet "$$tmp" main --detach >/dev/null; \
 		(cd "$$tmp" && git checkout --orphan $(BRANCH) >/dev/null); \
@@ -201,8 +202,7 @@ deploy-web: web
 		git push -q origin $(BRANCH); \
 		echo "Deployed: $(PAGES_URL)"; \
 	fi; \
-	cd - >/dev/null; \
-	git worktree remove --force "$$tmp"
+	cd - >/dev/null
 	@$(MAKE) --no-print-directory deploy-ads
 
 ## Publish firebase-hosting/ (just app-ads.txt) to Firebase Hosting. No build.

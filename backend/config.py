@@ -117,6 +117,10 @@ RELEASE_BATCH_MAX = 50
 # CustomizePlayer.gd purely for the running total it shows before saving.
 CUSTOMIZE_CREDITS_PER_SLOT = 100
 
+# Flat bucks to revive a card that has signed all its contracts -- a sink meant
+# to be worth it only for diamond+. Mirrored in PlayerCard.REVIVE_BUCKS.
+REVIVE_COST_BUCKS = 20
+
 # How much a Quick Match pays out, by result.
 QUICK_MATCH_REWARD_CREDITS = {"loss":10,"draw":25,"win":100}
 

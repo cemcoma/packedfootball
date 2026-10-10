@@ -35,6 +35,7 @@ if str(_PACKEDFOOTBALL_DIR) not in sys.path:
 # imports read exactly as they did before the move.
 #
 # ruff: noqa: E402 -- these cannot move above the sys.path lines above.
+import contracts
 import items as item_rules
 from game_config import RATED_MATCHES_FOR_AVERAGE
 from game_state import GameState, fields_to_player, player_to_fields
@@ -49,6 +50,7 @@ from tactics import sanitize_tactics
 from minigames import MINIGAMES_ENGINE_VERSION, PenaltyShootout, best_taker_order, penalty_score, run_shootout
 
 __all__ = [
+    "contracts",
     "APPEARANCE_OPTION_COUNTS",
     "APPEARANCE_SLOTS",
     "DEFAULT_APPEARANCE",

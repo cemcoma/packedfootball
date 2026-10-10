@@ -491,6 +491,34 @@ def tier_family(tier: str) -> str:
 
 
 # =============================================================================
+# Contracts (contracts.py) -- all (lo, hi) inclusive, keyed by tier family
+# =============================================================================
+
+# Matches a contract item adds, by the ITEM's rarity. Any contract fits any card.
+CONTRACT_MATCHES = {
+    "bronze": (10, 15),
+    "silver": (15, 20),
+    "gold": (20, 28),
+    "platinum": (28, 33),
+    "diamond": (34, 40),
+    "special": (40, 50),
+    "icon": (50, 75),
+}
+# The free first contract every new (or revived) card arrives with.
+CONTRACT_FIRST_MATCHES = (20, 35)
+# How many contracts a card may sign in its life, by the CARD's tier; the first counts.
+CONTRACT_MAX_RANGE = {
+    "bronze": (3, 8),
+    "silver": (3, 9),
+    "gold": (4, 10),
+    "platinum": (5, 11),
+    "diamond": (6, 12),
+    "special": (7, 15),
+    "icon": (7, 15),
+}
+
+
+# =============================================================================
 # Appearance
 # =============================================================================
 

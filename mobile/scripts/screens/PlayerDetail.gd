@@ -64,11 +64,13 @@ const KEEPER_STAT_ROWS := [
 
 @onready var _items_heading: Label = %ItemsHeading
 @onready var _items_row: GridContainer = %ItemsRow
+@onready var _contract_label: Label = %ContractLabel
 @onready var _status_label: Label = %StatusLabel
 @onready var _socket_button: Button = %SocketButton
 @onready var _equip_button: Button = %EquipButton
 @onready var _customize_button: Button = %CustomizeButton
 @onready var _release_button: Button = %ReleaseButton
+@onready var _revive_button: Button = %ReviveButton
 @onready var _back_button: Button = %BackButton
 
 @onready var _confirm_overlay: Control = %ConfirmOverlay
@@ -99,6 +101,7 @@ func _ready() -> void:
 	_equip_button.pressed.connect(_on_equip_pressed)
 	_socket_button.pressed.connect(_on_socket_pressed)
 	_release_button.pressed.connect(_on_release_pressed)
+	_revive_button.pressed.connect(_on_revive_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
 	_confirm_button.pressed.connect(_on_confirm_pressed)
 	_cancel_button.pressed.connect(_on_cancel_release_pressed)
@@ -130,6 +133,7 @@ func _refresh() -> void:
 	_origin_label.text = "%s\n%s\n%d cm" % [
 		_card.hometown, _card.country, int(_card.attributes.get("height", 0))
 	]
+	_contract_label.text = _card.contract_summary()
 	_card_view.set_card(_card)
 
 	_refresh_skills()
@@ -276,6 +280,10 @@ func _refresh_buttons() -> void:
 	_equip_button.visible = not ItemSession.is_pending()
 	_equip_button.disabled = _releasing
 	_refresh_socket_button()
+	_revive_button.visible = _card.needs_revive()
+	_revive_button.disabled = _releasing
+	if _revive_button.visible:
+		CurrencyDisplay.set_button_price(_revive_button, tr("Revive"), PlayerCard.REVIVE_BUCKS, "bucks")
 	if _is_starting():
 		_release_button.disabled = true
 		CurrencyDisplay.set_button_price(_release_button, tr("Release (in XI)"), 0)
@@ -299,11 +307,13 @@ func _refresh_socket_button() -> void:
 	var kit: Array = _card.items
 	if _replacing_item_id != "":
 		kit = kit.filter(func(i): return ItemData.item_id(i) != _replacing_item_id)
-	var blocker := ItemData.equip_blocker(kit, pending, _card.position)
+	var blocker := ItemData.equip_blocker(kit, pending, _card.position, _card.contract)
 	if blocker == "" :
 		_socket_button.disabled = _releasing
-		_socket_button.text = tr("Socket %s") % ItemData.label(pending)
-	elif _card.free_item_slots() <= 0 and ItemData.fits(pending, _card.position):
+		_socket_button.text = (
+			tr("Sign %s") if ItemData.is_contract(pending) else tr("Socket %s")
+		) % ItemData.label(pending)
+	elif _card.free_item_slots() <= 0 and ItemData.fits(pending, _card.position) and not ItemData.is_contract(pending):
 		# The one blocker the player can clear from here: tap a slot to say
 		# which item gets destroyed.
 		_socket_button.disabled = true
@@ -324,6 +334,9 @@ func _apply_theme_colors() -> void:
 	_tendencies_heading.add_theme_color_override("font_color", heading)
 	_career_heading.add_theme_color_override("font_color", heading)
 	_origin_label.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+	_contract_label.add_theme_color_override(
+		"font_color", PlayerCardView.contract_color(_card, ThemeManager.color("accent"))
+	)
 	_name_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
 	# The confirm text sits inside a themed PanelContainer -- which has its own
 	# background in both modes -- so it takes the Theme's Label colour and
@@ -373,7 +386,13 @@ func _on_socket_pressed() -> void:
 	_confirm_reward_label.add_theme_color_override("font_color", ItemData.color(pending))
 	_confirm_reward_icon.texture = null
 	_confirm_footnote.text = tr("Items can never be taken back off a card.")
-	if _replacing_item_id != "":
+	if ItemData.is_contract(pending):
+		_confirm_button.text = tr("Sign")
+		_confirm_label.text = tr("Sign %s with %s?") % [ItemData.label(pending), _card.full_name()]
+		_confirm_footnote.text = tr("Contract %d of %d.") % [
+			int(_card.contract.get("signed", 0)) + 1, int(_card.contract.get("max", 0))
+		]
+	elif _replacing_item_id != "":
 		var doomed := _card.items.filter(
 			func(i): return ItemData.item_id(i) == _replacing_item_id
 		)
@@ -409,11 +428,28 @@ func _on_cancel_release_pressed() -> void:
 	_confirm_overlay.visible = false
 
 
-## One overlay, two irreversible actions -- _confirm_action is what keeps
+## Revive is only offered once every contract is used up; it rerolls them for bucks.
+func _on_revive_pressed() -> void:
+	if _releasing or not _card.needs_revive():
+		return
+	_confirm_action = "revive"
+	_confirm_button.text = tr("Revive")
+	_cancel_button.text = tr("Cancel")
+	_confirm_label.text = tr("Revive %s?\n\nNew contract count, history wiped, and a fresh first contract.\n\nCosts") % _card.full_name()
+	_confirm_reward_label.text = "-%s" % CurrencyDisplay.format_amount(PlayerCard.REVIVE_BUCKS)
+	_confirm_reward_label.add_theme_color_override("font_color", CurrencyDisplay.color_for("bucks"))
+	_confirm_reward_icon.texture = CurrencyDisplay.icon_for("bucks")
+	_confirm_footnote.text = ""
+	_confirm_overlay.visible = true
+
+
+## One overlay, three irreversible actions -- _confirm_action is what keeps
 ## them apart.
 func _on_confirm_pressed() -> void:
 	if _confirm_action == "equip":
 		await _do_socket()
+	elif _confirm_action == "revive":
+		await _do_revive()
 	else:
 		await _on_confirm_release_pressed()
 
@@ -455,15 +491,48 @@ func _do_socket() -> void:
 	# The SERVER's item list and pool, not a local guess at either -- the same
 	# fold-back CustomizePlayer does with its reply.
 	GameProfile.apply_equip_result(
-		_card.player_id, res.data.get("items"), res.data.get("item_pool")
+		_card.player_id, res.data.get("items"), res.data.get("item_pool"), res.data.get("contract")
 	)
 	ItemSession.clear()
 	_replacing_item_id = ""
-	_set_status(tr("Socketed."), true)
+	_set_status(tr("Signed.") if ItemData.is_contract(pending) else tr("Socketed."), true)
 	_refresh()
 	# Stay on the card rather than bouncing: the slot row now shows the item
 	# that just went in, which is the confirmation worth seeing. Back goes to
 	# the inventory as usual, whose own Back returns to the Items screen.
+
+
+func _do_revive() -> void:
+	if _releasing:
+		return
+	_releasing = true
+	_confirm_button.disabled = true
+	_cancel_button.disabled = true
+	_set_status(tr("Reviving..."))
+
+	var res: Dictionary = await Backend.call_endpoint(
+		HTTPClient.METHOD_POST, "/player/revive", {"player_id": _card.player_id}
+	)
+
+	_releasing = false
+	_confirm_button.disabled = false
+	_cancel_button.disabled = false
+	_confirm_overlay.visible = false
+
+	if not res.ok:
+		_set_status(
+			tr("Not enough bucks to revive.") if res.status == 402
+			else tr("Could not revive this player -- try again.")
+		)
+		_refresh_buttons()
+		return
+
+	var contract = res.data.get("contract")
+	if contract is Dictionary:
+		_card.contract = contract
+	GameProfile.apply_currency_balances(null, res.data.get("bucks_remaining"))
+	_set_status(tr("Revived."), true)
+	_refresh()
 
 
 func _on_confirm_release_pressed() -> void:
