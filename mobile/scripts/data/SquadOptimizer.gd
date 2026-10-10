@@ -43,8 +43,8 @@ const BLOCKED_COST := 1000000.0
 const _INF := 1.0e18
 
 
-## What a card is actually worth in a given slot -- the card's own overall
-## when it's their position, and the engine's 0.9x otherwise.
+## What a card is actually worth in a given slot -- the card's overall with
+## its items when it's their position, and the engine's 0.9x otherwise.
 ##
 ## Deliberately does NOT check eligibility: it answers "what would this be
 ## worth", and the engine applies its penalty on any mismatch at all (see
@@ -52,7 +52,8 @@ const _INF := 1.0e18
 ## UI would let you do it in the first place.
 static func effective_overall(card: PlayerCard, role: String) -> int:
 	var f := factor(card, role)
-	return card.overall() if f == 1.0 else int(round(float(card.overall()) * f))
+	var ovr := card.effective_overall()
+	return ovr if f == 1.0 else int(round(float(ovr) * f))
 
 
 ## Mirrors gameEngine._penalty_factor: the worst penalty that applies, never a product.
