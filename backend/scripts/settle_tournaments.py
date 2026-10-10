@@ -77,6 +77,19 @@ async def preview_period(client, period_id: str, mode) -> None:
         print(f"{period_id}: no such {mode.label}")
         return
 
+    if mode.global_table:
+        entries = await client.list_collection(
+            tournament_service.entries_path(period_id, tournament_service.GLOBAL_GROUP, mode)
+        )
+        rows = tournament_service.snapshot_rows(entries, mode)
+        print(f"{period_id}: status={period_doc.get('status', 'open')} players={len(rows)} "
+              f"cursor={period_doc.get('settle_cursor', 0)}")
+        if period_doc.get("settle_error"):
+            print(f"  last error: {period_doc['settle_error']}")
+        for row in rows[:20]:  # the paying positions and a little past them
+            print(_format_row(row))
+        return
+
     groups = await client.list_collection(tournament_service.groups_path(period_id, mode))
     print(f"{period_id}: status={period_doc.get('status', 'open')} groups={len(groups)}")
     if period_doc.get("settle_error"):

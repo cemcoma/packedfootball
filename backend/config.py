@@ -531,6 +531,70 @@ WEEKLY_TOURNAMENT_SETTLE_LOOKBACK_WEEKS = 2
 WEEKLY_TOURNAMENT_MAX_GROUPS_PER_REQUEST = 5
 WEEKLY_TOURNAMENT_OPPONENT_MAX_ATTEMPTS = 5
 
+# -- weekend league -----------------------------------------------------------
+#
+# Open entry, ONE global table, 30 matches between Friday and Sunday 18:00
+# Istanbul. Same Mode machine; what's new is the paged standings snapshot and
+# member-by-member settlement (services/tournament.py, "global table").
+
+# One tier, so the gold bots (bot_pools/1) fill the pool and 1st is always a
+# "champion" -- there is nowhere to promote to.
+WEEKEND_LEAGUE_TIERS = {
+    1: {
+        "name": "Weekend League",
+        "bot_card_rates": TOURNAMENT_TIERS[1]["bot_card_rates"],
+        # The bucks are what the Icon Chance Pack (20 bucks) costs.
+        "rewards": {
+            1: {"bucks": 40, "medals": 30, "credits": 10000},
+            2: {"bucks": 20, "medals": 20, "credits": 6000},
+            3: {"bucks": 10, "medals": 15, "credits": 4000},
+            4: {"medals": 10, "credits": 3000},
+            5: {"medals": 10, "credits": 3000},
+            6: {"medals": 5, "credits": 2000},
+            7: {"medals": 5, "credits": 2000},
+            8: {"medals": 5, "credits": 2000},
+            9: {"medals": 5, "credits": 2000},
+            10: {"medals": 5, "credits": 2000},
+        },
+    },
+}
+
+WEEKEND_LEAGUE_MATCHES = 30
+WEEKEND_LEAGUE_POINTS = {"win": 3, "draw": 1, "loss": 0}
+
+# A seven-day grid that ENDS on Sunday 15:00 UTC == 18:00 Istanbul (anchor is
+# a Sunday); play is only allowed in the last OPEN_SECONDS of it, Friday 18:00 on.
+WEEKEND_LEAGUE_PERIOD_DAYS = 7
+WEEKEND_LEAGUE_PERIOD_ANCHOR = "2026-01-04"
+WEEKEND_LEAGUE_OFFSET_HOURS = 15
+WEEKEND_LEAGUE_OPEN_SECONDS = 48 * 60 * 60
+WEEKEND_LEAGUE_JOIN_CUTOFF_SECONDS = 4 * 60 * 60
+
+# Everyone is in one table, so the positional path always applies (capacity 0)
+# and only 1st "promotes" -- which, clamped at the single tier, means winning.
+WEEKEND_LEAGUE_GROUP_CAPACITY = 0
+WEEKEND_LEAGUE_PROMOTE_POSITIONS = (1,)
+WEEKEND_LEAGUE_RELEGATE_POSITIONS = ()
+WEEKEND_LEAGUE_PROMOTION_FLOOR = 30
+WEEKEND_LEAGUE_RELEGATION_FLOOR = 0
+WEEKEND_LEAGUE_MIN_GROUP_FOR_PROMOTION = 3
+WEEKEND_LEAGUE_REWARD_MIN_MATCHES = 1
+
+WEEKEND_LEAGUE_FULL_REWARD = {"bucks": 5}
+WEEKEND_LEAGUE_MATCH_REWARD_CREDITS = {"loss": 50, "draw": 100, "win": 300}
+WEEKEND_LEAGUE_ENERGY_COST_PER_MATCH = ENERGY_COST_PER_MATCH
+
+WEEKEND_LEAGUE_SETTLE_LOOKBACK = 2
+# Members settled per lazy request (each is its own small transaction).
+WEEKEND_LEAGUE_MAX_SETTLES_PER_REQUEST = 50
+WEEKEND_LEAGUE_OPPONENT_MAX_ATTEMPTS = 5
+
+# The table is rebuilt from every entry at most this often, and stored in
+# chunks of STANDINGS_CHUNK rows; a page read is one chunk.
+WEEKEND_LEAGUE_STANDINGS_REFRESH_SECONDS = 5 * 60
+WEEKEND_LEAGUE_STANDINGS_CHUNK = 100
+assert WEEKEND_LEAGUE_STANDINGS_CHUNK % LEADERBOARD_PAGE_SIZE == 0  # a page never spans two chunks
+
 # -- minigames ----------------------------------------------------------------
 
 # One shootout a day, on the tournament clock (12:00 Istanbul, see

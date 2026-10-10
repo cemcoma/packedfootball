@@ -51,6 +51,12 @@ const CURRENCY_AMOUNT := preload("res://scenes/components/CurrencyAmount.tscn")
 @onready var _progress_label: Label = %ProgressLabel
 @onready var _standings: StandingsTable = %Standings
 @onready var _rules_label: Label = %RulesLabel
+## The global table's pager (Weekend League only): Top / My position, Prev / Next.
+@onready var _pager_row: HBoxContainer = %PagerRow
+@onready var _pager_mode: OptionButton = %PagerMode
+@onready var _prev_page_button: Button = %PrevPageButton
+@onready var _page_label: Label = %PageLabel
+@onready var _next_page_button: Button = %NextPageButton
 @onready var _table_panel: PanelContainer = %TablePanel
 @onready var _full_day_panel_frame: PanelContainer = %FullDayPanel
 @onready var _full_day_panel: PanelContainer = %FullDayPanel
@@ -76,6 +82,8 @@ const CURRENCY_AMOUNT := preload("res://scenes/components/CurrencyAmount.tscn")
 var _state: Dictionary = {}
 var _busy: bool = false
 var _seconds_remaining: float = 0.0
+## True while a windowed format hasn't opened yet: the countdown counts to the opening.
+var _counting_to_open: bool = false
 ## The previous period's id/group while the result banner is up with a
 ## claimable reward -- what the banner's Claim sends, since the current
 ## period's entry is a different document.
@@ -90,6 +98,13 @@ func _ready() -> void:
 	_banner_button.pressed.connect(func() -> void: _banner.visible = false)
 	_full_day_claim_button.pressed.connect(_on_claim_full_day_pressed.bind({}))
 	_banner_claim_button.pressed.connect(_on_banner_claim_pressed)
+	_standings.row_pressed.connect(_on_standings_row_pressed)
+	_pager_mode.add_item(tr("Top"))
+	_pager_mode.add_item(tr("My position"))
+	_pager_mode.item_selected.connect(_on_pager_mode_selected)
+	_prev_page_button.pressed.connect(_on_page_step.bind(-1))
+	_next_page_button.pressed.connect(_on_page_step.bind(1))
+	_pager_row.visible = false
 
 	_banner.visible = false
 	_busy_popup.visible = false
@@ -102,7 +117,16 @@ func _process(delta: float) -> void:
 	if _seconds_remaining <= 0.0:
 		return
 	_seconds_remaining -= delta
-	_countdown_label.text = TimeFormat.ends_in(int(ceil(_seconds_remaining)))
+	_countdown_label.text = _countdown_text(int(ceil(_seconds_remaining)))
+	if _counting_to_open and _seconds_remaining <= 0.0:
+		_counting_to_open = false
+		_load(tr("Refreshing..."))
+
+
+func _countdown_text(seconds: int) -> String:
+	if _counting_to_open:
+		return tr("Opens in %s") % TimeFormat.coarse_duration(seconds)
+	return TimeFormat.ends_in(seconds)
 
 
 # -- fetching ------------------------------------------------------------------
@@ -136,32 +160,59 @@ func _load(status: String) -> void:
 
 func _apply_state(data: Dictionary) -> void:
 	_state = data
-	_seconds_remaining = float(_int(data, "seconds_remaining", 0))
+	var opens_in := _int(data, "opens_in_seconds", 0)
+	_counting_to_open = opens_in > 0
+	_seconds_remaining = float(opens_in if _counting_to_open else _int(data, "seconds_remaining", 0))
 
 	var tier_name = data.get("tier_name")
 	_tier_label.text = tier_name if tier_name is String else tr("Tournament")
-	_countdown_label.text = TimeFormat.ends_in(int(_seconds_remaining))
+	_countdown_label.text = _countdown_text(int(_seconds_remaining))
 
 	# Into the shared cache, which is what the HUD strip reads.
 	GameProfile.apply_energy(data.get("energy"))
 
-	# The reward table rides along on the standings -- each row shows what
-	# its position pays, so there is no separate rewards list to keep in step.
-	var standings = data.get("standings")
-	var rewards = data.get("rewards")
-	_standings.set_rows(
-		standings if standings is Array else [],
-		rewards if rewards is Array else [],
-		bool(data.get("is_top_tier", false)),
-		bool(data.get("is_bottom_tier", false)),
-	)
-
+	_apply_standings()
 	_refresh_progress()
 	_refresh_rules()
 	_refresh_full_day()
 	_refresh_buttons()
 	_apply_theme_colors()
 	_show_pending_results(data.get("pending_results"))
+
+
+## The reward table rides along on the standings -- each row shows what
+## its position pays, so there is no separate rewards list to keep in step.
+func _apply_standings() -> void:
+	var standings = _state.get("standings")
+	var rewards = _state.get("rewards")
+	_standings.set_rows(
+		standings if standings is Array else [],
+		rewards if rewards is Array else [],
+		bool(_state.get("is_top_tier", false)),
+		bool(_state.get("is_bottom_tier", false)),
+	)
+	_refresh_pager()
+
+
+## Only a global table sends `standings_total`; a group fits on one screen.
+func _refresh_pager() -> void:
+	_pager_row.visible = _state.has("standings_total")
+	if not _pager_row.visible:
+		return
+	var page := _int(_state, "standings_page", 0)
+	var pages := maxi(1, _int(_state, "standings_pages", 1))
+	var minutes := _int(_state, "standings_age_seconds", 0) / 60
+	_page_label.text = tr("Page %d of %d · updated %d min ago") % [page + 1, pages, minutes]
+	_prev_page_button.disabled = _busy or page <= 0
+	_next_page_button.disabled = _busy or page >= pages - 1
+	var mine := _my_page()
+	_pager_mode.select(1 if mine >= 0 and page == mine else 0 if page == 0 else -1)
+
+
+## The page the caller's row is on, -1 while they aren't ranked yet.
+func _my_page() -> int:
+	var position := _int(_state, "my_position", 0)
+	return (position - 1) / maxi(1, _int(_state, "standings_page_size", 10)) if position > 0 else -1
 
 
 static func _int(data: Dictionary, key: String, default: int) -> int:
@@ -189,6 +240,9 @@ func _refresh_progress() -> void:
 	if not bool(_state.get("joined", false)):
 		_progress_label.text = tr("Not entered yet.")
 		return
+	if capacity <= 0:
+		_progress_label.text = tr("Match %d of %d  ·  %d players") % [mini(played + 1, total), total, size]
+		return
 	_progress_label.text = tr("Match %d of %d  ·  %d of %d players in your group") % [
 		mini(played + 1, total), total, size, capacity
 	]
@@ -202,6 +256,10 @@ func _refresh_rules() -> void:
 
 	var mode := str(_state.get("settlement_mode", ""))
 	var floor_pts := _int(rules, "promotion_floor", 0)
+	var own_rules := TournamentSession.text("rules")
+	if own_rules != "":
+		_rules_label.text = tr(own_rules) % floor_pts
+		return
 	var drop_pts := _int(rules, "relegation_floor", 0)
 	var min_group := _int(rules, "min_group_for_promotion", 0)
 
@@ -289,7 +347,10 @@ func _refresh_buttons() -> void:
 	if not joined:
 		_join_button.disabled = _busy or closed
 		_join_button.text = tr("Entries closed") if closed else tr(TournamentSession.text("join"))
-		if closed:
+		if _counting_to_open:
+			_join_button.text = tr("Not open yet")
+			_set_status(tr(TournamentSession.text("not_open")) % TimeFormat.coarse_duration(int(_seconds_remaining)), false)
+		elif closed:
 			var reopens := TimeFormat.coarse_duration(int(_seconds_remaining))
 			_set_status(tr(TournamentSession.text("closed_window")) % reopens, false)
 		return
@@ -323,7 +384,11 @@ func _show_pending_results(pending) -> void:
 		"promote":
 			# A top-tier winner "promotes" nowhere -- the rule said up, the
 			# ceiling refused. Saying "you stayed" would read as failure.
-			headline = tr("You held the top tier!") if clamped else tr("You were promoted!")
+			var champion := TournamentSession.text("champion")
+			if clamped and champion != "":
+				headline = tr(champion)
+			else:
+				headline = tr("You held the top tier!") if clamped else tr("You were promoted!")
 		"relegate":
 			headline = tr("You stayed up.") if clamped else tr("You were relegated.")
 		_:
@@ -383,6 +448,10 @@ func _apply_theme_colors() -> void:
 	MenuTile.style_button(_play_button, ThemeManager.color("accent"))
 	MenuTile.style_button(_energy_button, ThemeManager.color("accent"))
 	MenuTile.style_button(_back_button, ThemeManager.color("surface_border"))
+	for button in [_pager_mode, _prev_page_button, _next_page_button]:
+		MenuTile.style_button(button, ThemeManager.color("surface_border"), false, Vector2(8, 2))
+	MenuTile.style_popup(_pager_mode, ThemeManager.color("surface_border"))
+	_page_label.add_theme_color_override("font_color", ThemeManager.color("text_hint"))
 	var heading := ThemeManager.color("heading")
 
 	# The table used to sit straight on the background photo, where its header
@@ -462,6 +531,8 @@ func _on_join_pressed() -> void:
 
 func _on_play_pressed() -> void:
 	if _busy:
+		return
+	if not await ContractWarning.confirm(self):
 		return
 	_busy = true
 	_refresh_buttons()
@@ -571,6 +642,44 @@ func _on_banner_claim_pressed() -> void:
 
 func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file(TournamentSession.HUB_SCENE)
+
+
+func _on_standings_row_pressed(uid: String) -> void:
+	ManagerSession.open(uid, TournamentSession.SCREEN_SCENE)
+
+
+func _on_pager_mode_selected(index: int) -> void:
+	if index == 0:
+		await _fetch_page(0)
+		return
+	var mine := _my_page()
+	if mine < 0:
+		_set_status(tr("You'll show up in the table within a few minutes."), false)
+		_refresh_pager()
+		return
+	await _fetch_page(mine)
+
+
+func _on_page_step(delta: int) -> void:
+	await _fetch_page(maxi(0, _int(_state, "standings_page", 0) + delta))
+
+
+## GET {format}/standings?page=n, folded into the state the screen already holds.
+func _fetch_page(page: int) -> void:
+	if _busy:
+		return
+	_busy = true
+	_refresh_pager()
+	var res: Dictionary = await Backend.call_endpoint(
+		HTTPClient.METHOD_GET, TournamentSession.endpoint("/standings?page=%d" % page)
+	)
+	_busy = false
+	if not res.ok or not (res.data is Dictionary):
+		_set_status(tr("Could not load the table -- try again."), true)
+		_refresh_pager()
+		return
+	_state.merge(res.data, true)
+	_apply_standings()
 
 
 func _on_energy_pressed() -> void:

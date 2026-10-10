@@ -1,0 +1,105 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/components/TeamInfoPanel.gd" id="1"]
+[ext_resource type="Script" uid="uid://bf8idjr6c3861" path="res://scripts/components/KitSwatch.gd" id="2"]
+
+[node name="TeamInfoPanel" type="PanelContainer" unique_id=1953000001]
+custom_minimum_size = Vector2(320, 0)
+script = ExtResource("1")
+
+[node name="Box" type="VBoxContainer" parent="." unique_id=1953000002]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="NameKitContainer" type="HBoxContainer" parent="Box" unique_id=1953000003]
+layout_mode = 2
+
+[node name="spacer" type="Control" parent="Box/NameKitContainer" unique_id=1953000004]
+custom_minimum_size = Vector2(40, 46)
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+
+[node name="NameLabel" type="Label" parent="Box/NameKitContainer" unique_id=1953000005]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 22
+text = "Home"
+horizontal_alignment = 1
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="KitSwatch" type="Control" parent="Box/NameKitContainer" unique_id=1953000006]
+custom_minimum_size = Vector2(40, 46)
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+script = ExtResource("2")
+
+[node name="InfoBox" type="VBoxContainer" parent="Box" unique_id=1953000007]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/separation = 6
+
+[node name="RecordRow" type="HBoxContainer" parent="Box/InfoBox" unique_id=1953000008]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Value" type="Label" parent="Box/InfoBox/RecordRow" unique_id=1953000009]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "0 W  0 D  0 L"
+horizontal_alignment = 2
+
+[node name="FormationRow" type="HBoxContainer" parent="Box/InfoBox" unique_id=1953000010]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Caption" type="Label" parent="Box/InfoBox/FormationRow" unique_id=1953000011]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Formation"
+
+[node name="Value" type="Label" parent="Box/InfoBox/FormationRow" unique_id=1953000012]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "4-4-2"
+horizontal_alignment = 2
+
+[node name="TacticRow" type="HBoxContainer" parent="Box/InfoBox" unique_id=1953000013]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Caption" type="Label" parent="Box/InfoBox/TacticRow" unique_id=1953000014]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Tactics"
+
+[node name="Value" type="Label" parent="Box/InfoBox/TacticRow" unique_id=1953000015]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "Balanced"
+horizontal_alignment = 2
+
+[node name="OverallRow" type="HBoxContainer" parent="Box/InfoBox" unique_id=1953000016]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Caption" type="Label" parent="Box/InfoBox/OverallRow" unique_id=1953000017]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Overall"
+
+[node name="Value" type="Label" parent="Box/InfoBox/OverallRow" unique_id=1953000018]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 16
+text = "--"
+horizontal_alignment = 2
+
+[node name="Extra" type="VBoxContainer" parent="Box" unique_id=1953000019]
+layout_mode = 2
+theme_override_constants/separation = 8

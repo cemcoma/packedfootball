@@ -34,7 +34,7 @@ from deps import admin_client, game_state_for, replay_format, verify_id_token
 from engine import ENGINE_VERSION
 from services import energy as energy_service
 from services import tournament as tournament_service
-from services.tournament import DAILY, WEEKLY, Mode
+from services.tournament import DAILY, WEEKEND, WEEKLY, Mode
 from services.match import (
     persist_player_stats,
     pick_opponent_from_candidates,
@@ -62,7 +62,61 @@ async def verify_tournament_admin(authorization: str = Header(default="")) -> No
         raise HTTPException(401, "Invalid tournament admin authorization")
 
 
-async def _period_payload(client, uid: str, profile_doc: dict | None, mode: Mode) -> dict:
+def _standing_row(row: dict, uid: str) -> dict:
+    return {
+        "uid": row["uid"],
+        "display_name": row.get("display_name", ""),
+        "position": row["position"],
+        "points": row.get("points", 0),
+        "played": row.get("played", 0),
+        "wins": row.get("wins", 0),
+        "draws": row.get("draws", 0),
+        "losses": row.get("losses", 0),
+        "goals_for": row.get("goals_for", 0),
+        "goals_against": row.get("goals_against", 0),
+        "goal_diff": row.get("goal_diff", 0),
+        "is_me": row["uid"] == uid,
+        "projected_outcome": row["outcome"],
+    }
+
+
+async def _global_standings(client, uid: str, period_id: str, now, mode: Mode, page: int | None) -> tuple[list, dict]:
+    """One page of a global table's snapshot plus where the caller stands.
+    `page` None means the caller's own page (the top one if unranked)."""
+    meta = await tournament_service.ensure_fresh_standings(client, period_id, now, mode)
+    total = int(meta.get("total") or 0)
+    my_position = (meta.get("positions") or {}).get(uid)
+    page_size = config.LEADERBOARD_PAGE_SIZE
+    pages = max(1, -(-total // page_size))
+    if page is None:
+        page = tournament_service.page_of(my_position, page_size) if my_position else 0
+    page = max(0, min(page, pages - 1))
+    rows = await tournament_service.standings_page(client, period_id, page, mode, page_size)
+    built = tournament_service._iso(meta.get("built_at"))
+    return [_standing_row(r, uid) for r in rows], {
+        "standings_page": page,
+        "standings_pages": pages,
+        "standings_page_size": page_size,
+        "standings_total": total,
+        "my_position": my_position,
+        "standings_age_seconds": int((now - built).total_seconds()) if built else 0,
+    }
+
+
+async def _global_row(client, uid: str, period_id: str, mode: Mode) -> dict | None:
+    """The caller's row in a settled global table's final snapshot."""
+    meta = await client.get_document(tournament_service.standings_meta_path(period_id, mode))
+    position = ((meta or {}).get("positions") or {}).get(uid)
+    if not (meta or {}).get("final") or not position:
+        return None
+    page_size = config.LEADERBOARD_PAGE_SIZE
+    rows = await tournament_service.standings_page(
+        client, period_id, tournament_service.page_of(position, page_size), mode, page_size
+    )
+    return next((r for r in rows if r.get("uid") == uid), None)
+
+
+async def _period_payload(client, uid: str, profile_doc: dict | None, mode: Mode, page: int | None = None) -> dict:
     """Everything a tournament screen needs, in one response.
 
     One call rather than four, because the screen is useless until it has all
@@ -78,7 +132,16 @@ async def _period_payload(client, uid: str, profile_doc: dict | None, mode: Mode
 
     standings, played, group_size = [], 0, 0
     my_entry = None
-    if group_id:
+    page_info = {}
+    if mode.global_table:
+        standings, page_info = await _global_standings(client, uid, period_id, now, mode, page)
+        group_size = page_info["standings_total"]
+        if joined:
+            my_entry = await client.get_document(
+                tournament_service.entry_path(period_id, group_id, uid, mode)
+            )
+            played = int((my_entry or {}).get("played", 0))
+    elif group_id:
         entries = await client.list_collection(
             tournament_service.entries_path(period_id, group_id, mode)
         )
@@ -96,23 +159,7 @@ async def _period_payload(client, uid: str, profile_doc: dict | None, mode: Mode
         for row in rows:
             if row["uid"] == uid:
                 played = row.get("played", 0)
-            standings.append(
-                {
-                    "uid": row["uid"],
-                    "display_name": row.get("display_name", ""),
-                    "position": row["position"],
-                    "points": row.get("points", 0),
-                    "played": row.get("played", 0),
-                    "wins": row.get("wins", 0),
-                    "draws": row.get("draws", 0),
-                    "losses": row.get("losses", 0),
-                    "goals_for": row.get("goals_for", 0),
-                    "goals_against": row.get("goals_against", 0),
-                    "goal_diff": row.get("goal_diff", 0),
-                    "is_me": row["uid"] == uid,
-                    "projected_outcome": row["outcome"],
-                }
-            )
+            standings.append(_standing_row(row, uid))
 
     full_period = tournament_service.full_period_state(my_entry, mode) if joined else None
     current_energy, anchor = energy_service.from_profile(profile_doc, now)
@@ -132,7 +179,10 @@ async def _period_payload(client, uid: str, profile_doc: dict | None, mode: Mode
         "is_top_tier": tier == mode.top_tier,
         "is_bottom_tier": tier == mode.bottom_tier,
         "joined": joined,
-        "join_closed": tournament_service.joining_is_closed(period_id, now, mode),
+        "join_closed": tournament_service.joining_is_closed(period_id, now, mode)
+        or not tournament_service.is_open(period_id, now, mode),
+        # > 0 while a windowed format (the weekend league) hasn't opened yet.
+        "opens_in_seconds": tournament_service.opens_in(period_id, now, mode),
         "join_cutoff_seconds": mode.join_cutoff_seconds,
         "group_id": group_id,
         "group_size": group_size,
@@ -162,12 +212,17 @@ async def _period_payload(client, uid: str, profile_doc: dict | None, mode: Mode
             {"position": pos, **payout}
             for pos, payout in sorted(tournament_service.rewards_table(tier, mode).items())
         ],
+        **page_info,
     }
 
 
 # Which POST /claim type pays this format's play-everything reward. Kept
 # beside the payload that advertises it so the two can't drift.
-_CLAIM_TYPES = {DAILY.key: "tournament_full_day", WEEKLY.key: "tournament_full_week"}
+_CLAIM_TYPES = {
+    DAILY.key: "tournament_full_day",
+    WEEKLY.key: "tournament_full_week",
+    WEEKEND.key: "weekend_league_full",
+}
 
 
 async def _today(uid: str, mode: Mode) -> dict:
@@ -213,11 +268,15 @@ async def _pending_results(
     if (entry or {}).get("is_shown"):
         return None
 
-    group = await client.get_document(
-        tournament_service.group_path(last_period, group_id, mode)
-    )
-    rows = ((group or {}).get("settlement") or {}).get("rows") or []
-    mine = next((r for r in rows if r.get("uid") == uid), None)
+    if mode.global_table:
+        mine = await _global_row(client, uid, last_period, mode)
+        rows = [mine] if mine else []
+    else:
+        group = await client.get_document(
+            tournament_service.group_path(last_period, group_id, mode)
+        )
+        rows = ((group or {}).get("settlement") or {}).get("rows") or []
+        mine = next((r for r in rows if r.get("uid") == uid), None)
     if mine is None:
         return None
 
@@ -256,6 +315,12 @@ async def _join(uid: str, mode: Mode) -> dict:
 
     profile_doc = await client.get_document(f"users/{uid}")
     already = tournament_service.is_entered(profile_doc, period_id, mode)
+    if not already and not tournament_service.is_open(period_id, now, mode):
+        raise HTTPException(
+            409,
+            f"The {mode.name} opens in "
+            f"{tournament_service.opens_in(period_id, now, mode) // 60} minutes",
+        )
     if not already and tournament_service.joining_is_closed(period_id, now, mode):
         raise HTTPException(
             409,
@@ -264,9 +329,12 @@ async def _join(uid: str, mode: Mode) -> dict:
         )
 
     tier = tournament_service.tier_of(profile_doc, mode)
-    await tournament_service.join_period(
-        client, uid, profile["display_name"], tier, period_id, now, mode
-    )
+    if mode.global_table:
+        await tournament_service.join_global(client, uid, profile["display_name"], period_id, now, mode)
+    else:
+        await tournament_service.join_period(
+            client, uid, profile["display_name"], tier, period_id, now, mode
+        )
 
     profile_doc = await client.get_document(f"users/{uid}")
     payload = await _period_payload(client, uid, profile_doc, mode)
@@ -384,7 +452,9 @@ async def _match(uid: str, mode: Mode, fmt: int) -> dict:
 
     profile_doc = await client.get_document(f"users/{uid}")
     payload = await _period_payload(client, uid, profile_doc, mode)
-    position = next((s["position"] for s in payload["standings"] if s["is_me"]), None)
+    position = payload.get("my_position") or next(
+        (s["position"] for s in payload["standings"] if s["is_me"]), None
+    )
 
     return {
         "seed": seed,
@@ -496,10 +566,17 @@ async def _results(uid: str, period_id: str, mode: Mode) -> dict:
     if not group_id:
         raise HTTPException(404, f"You didn't play that {mode.label}")
 
-    group = await client.get_document(tournament_service.group_path(target, group_id, mode))
-    settlement = (group or {}).get("settlement") or {}
-    if settlement.get("status") != "settled":
-        raise HTTPException(409, f"That {mode.label} hasn't been settled yet")
+    if mode.global_table:
+        mine = await _global_row(client, uid, target, mode)
+        if mine is None:
+            raise HTTPException(409, f"That {mode.label} hasn't been settled yet")
+        top = await tournament_service.standings_page(client, target, 0, mode, config.LEADERBOARD_PAGE_SIZE)
+        settlement = {"mode": "global", "rows": top + ([] if mine in top else [mine])}
+    else:
+        group = await client.get_document(tournament_service.group_path(target, group_id, mode))
+        settlement = (group or {}).get("settlement") or {}
+        if settlement.get("status") != "settled":
+            raise HTTPException(409, f"That {mode.label} hasn't been settled yet")
 
     rows = settlement.get("rows") or []
     entry = await client.get_document(
@@ -565,6 +642,39 @@ async def weekly_tournament_results(
     period_id: str = "", day_id: str = "", uid: str = Depends(verify_id_token)
 ):
     return await _results(uid, period_id or day_id, WEEKLY)
+
+
+# -- routes: the weekend league -----------------------------------------------
+
+
+@router.get("/tournament/weekend/today")
+async def weekend_league_today(uid: str = Depends(verify_id_token)):
+    return await _today(uid, WEEKEND)
+
+
+@router.post("/tournament/weekend/join")
+async def join_weekend_league(uid: str = Depends(verify_id_token)):
+    return await _join(uid, WEEKEND)
+
+
+@router.post("/tournament/weekend/match")
+async def weekend_league_match(uid: str = Depends(verify_id_token), fmt: int = Depends(replay_format)):
+    return await _match(uid, WEEKEND, fmt)
+
+
+@router.get("/tournament/weekend/results")
+async def weekend_league_results(period_id: str = "", uid: str = Depends(verify_id_token)):
+    return await _results(uid, period_id, WEEKEND)
+
+
+@router.get("/tournament/weekend/standings")
+async def weekend_league_standings(page: int = 0, uid: str = Depends(verify_id_token)):
+    """One page of the global table -- the Top / My position / Prev / Next pager."""
+    client = admin_client(uid)
+    now = energy_service.now_utc()
+    period_id = tournament_service.period_id_for(now, WEEKEND)
+    standings, info = await _global_standings(client, uid, period_id, now, WEEKEND, max(0, page))
+    return {"standings": standings, **info}
 
 
 # -- settlement ---------------------------------------------------------------

@@ -45,6 +45,9 @@ const REWARD_CURRENCY_ORDER := ["medals", "bucks", "credits"]
 const REWARD_ICON_SIZE := 14
 const CURRENCY_AMOUNT := preload("res://scenes/components/CurrencyAmount.tscn")
 
+## Someone else's row was tapped -- the screen opens their manager view.
+signal row_pressed(uid: String)
+
 const ROW_HEIGHT := 30
 const HEADER_FONT_SIZE := 11
 const ROW_FONT_SIZE := 13
@@ -176,6 +179,15 @@ func _build_row(row: Dictionary) -> PanelContainer:
 	if _has_rewards():
 		line.add_child(_reward_cell(int(row.get("position", 0))))
 
+	var uid := str(row.get("uid", ""))
+	if not is_me and uid != "":
+		# Transparent tap-anywhere button, PASS so the table still scrolls (Leaderboard's pattern).
+		var button := Button.new()
+		button.flat = true
+		button.mouse_filter = Control.MOUSE_FILTER_PASS
+		button.pressed.connect(func() -> void: row_pressed.emit(uid))
+		panel.add_child(button)
+
 	return panel
 
 
@@ -198,6 +210,9 @@ func _outcome_cell(outcome: String) -> Label:
 func _outcome_text(outcome: String) -> String:
 	match outcome:
 		"promote":
+			# A one-tier table (the Weekend League) has nothing to hold, only a winner.
+			if _top_tier and _bottom_tier:
+				return tr("Winner")
 			return tr("Holds top") if _top_tier else tr("Promotion")
 		"relegate":
 			return tr("Stays up") if _bottom_tier else tr("Relegation")

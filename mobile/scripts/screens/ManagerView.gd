@@ -1,15 +1,18 @@
 extends Control
 
-## Another manager: name, win/draw/loss record, league, and the XI they
-## field laid out on the pitch, with each player's overall and career
-## statistics. Two ways in, decided by ManagerSession:
+## Another manager -- or yourself, from TeamHub's Profile tile: the
+## pre-match card (name, kit, record, formation, tactic, overall) plus their
+## leagues and trophy count, the XI they field on the pitch with each player's
+## overall and career statistics, and their trophy cabinet. Two ways in,
+## decided by ManagerSession:
 ##
 ##   - a leaderboard row (ManagerSession.uid set): the squad comes from
 ##     GET /manager/{uid};
 ##   - "View Team" on PreMatch.tscn (uid ""): either side is read straight
 ##     out of MatchSession, which already holds both rosters, names and
-##     records from the match response -- no request, and a bot opponent
-##     (which has no profile) works too.
+##     records from the match response -- and a bot opponent (which has no
+##     profile) works too. A real manager's leagues and trophies still come
+##     from /manager/{uid} in the background; the squad stays the one played.
 ##
 ## Back goes to ManagerSession.return_scene. PreMatch.tscn re-reads the same
 ## MatchSession on the way back, so it is exactly where it was left.
@@ -26,6 +29,7 @@ extends Control
 ## both take a card, not roster fields.
 
 const PLAYER_CARD_SCENE := preload("res://scenes/components/PlayerCardView.tscn")
+const Leaderboard := preload("res://scripts/screens/Leaderboard.gd")
 
 ## Career totals, same rows Team.gd's statistics page shows. Keys are the
 ## ones player.py's DEFAULT_STATISTICS defines; "_pass_accuracy" is
@@ -55,17 +59,24 @@ var _slot_ids: Array = []  # slot-indexed, "" where the roster had no entry
 var selected_slot: int = -1  # -1 = nothing focused
 var _manager_name: String = ""
 var _record: Dictionary = {}  # wins/draws/losses, {} when unknown (a bot)
-var _league_name: String = ""
 var _kit: String = ""
+var _tactic_style: String = ""
+## From /manager/{uid}; empty for a bot or until it has loaded.
+var _profile: Dictionary = {}
 
-@onready var _title_label: Label = %TitleLabel
-@onready var _record_label: Label = %RecordLabel
-@onready var _league_label: Label = %LeagueLabel
-@onready var _formation_label: Label = %FormationLabel
-@onready var _overall_label: Label = %OverallLabel
+@onready var _info_panel: TeamInfoPanel = %InfoPanel
+@onready var _trophy_button: Button = %TrophyButton
 @onready var _back_button: Button = %BackButton
+@onready var _daily_value: Label = _info_panel.add_row(tr("Daily"), "--")
+@onready var _weekly_value: Label = _info_panel.add_row(tr("Weekly"), "--")
+@onready var _trophies_value: Label = _info_panel.add_row(tr("Trophies"), "--")
 
-@onready var _header_panel: PanelContainer = %HeaderPanel
+@onready var _cabinet_popup: Control = %CabinetPopup
+@onready var _cabinet_panel: PanelContainer = %CabinetPanel
+@onready var _cabinet_title: Label = %CabinetTitle
+@onready var _cabinet_list: VBoxContainer = %CabinetList
+@onready var _cabinet_close_button: Button = %CabinetCloseButton
+
 @onready var _squad_backdrop: PanelContainer = %SquadBackdrop
 @onready var _stats_backdrop: PanelContainer = %StatsBackdrop
 
@@ -86,6 +97,8 @@ func _ready() -> void:
 	_pitch_view.slot_pressed.connect(_on_slot_tapped)
 	_close_button.pressed.connect(_on_close_stats_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
+	_trophy_button.pressed.connect(_open_cabinet)
+	_cabinet_close_button.pressed.connect(func() -> void: _cabinet_popup.visible = false)
 
 	ThemeManager.theme_changed.connect(_apply_theme_colors)
 	_apply_theme_colors()
@@ -93,8 +106,15 @@ func _ready() -> void:
 	if ManagerSession.uid == "":
 		_load_match_team(ManagerSession.match_team)
 		_refresh_all()
+		var team_uid := FirebaseAuth.uid if ManagerSession.match_team == MatchSession.TEAM_HOME else MatchSession.opponent_uid
+		if team_uid != "":
+			var res: Dictionary = await Backend.call_endpoint(HTTPClient.METHOD_GET, "/manager/" + team_uid.uri_encode())
+			if res.ok and res.data is Dictionary:
+				_profile = res.data
+				_refresh_header()
 	else:
-		_title_label.text = tr("Loading...")
+		_manager_name = tr("Loading...")
+		_refresh_header()
 		await _load_manager(ManagerSession.uid)
 		_refresh_all()
 
@@ -106,7 +126,7 @@ func _load_match_team(team: int) -> void:
 	_manager_name = MatchSession.team_name(team)
 	_record = MatchSession.record(team)
 	_kit = MatchSession.team_kit(team)
-	_league_name = ""
+	_tactic_style = MatchSession.tactic_style(team)
 	var fields_list: Array = []
 	for index in MatchSession.team_indices(team):
 		fields_list.append(MatchSession.player_fields(index))
@@ -123,13 +143,13 @@ func _load_manager(uid: String) -> void:
 		_panel_header.text = tr("Could not load this manager -- try again later.")
 		return
 	var data: Dictionary = res.data
+	_profile = data
+	_tactic_style = Tactics.sanitize(data.get("tactics"))["style"]
 	var name_raw = data.get("display_name")
 	_manager_name = name_raw if name_raw is String and name_raw != "" else tr("Manager")
 	_record = {"wins": data.get("wins", 0), "draws": data.get("draws", 0), "losses": data.get("losses", 0)}
 	var kit_raw = data.get("kit")
 	_kit = kit_raw if kit_raw is String else ""
-	var league_raw = data.get("tier_name")
-	_league_name = league_raw if league_raw is String else ""
 	var formation_raw = data.get("formation")
 	var roster_raw = data.get("roster")
 	_set_squad(
@@ -168,26 +188,29 @@ func _set_squad(formation: String, fields_list: Array) -> void:
 func _apply_theme_colors() -> void:
 	_style_panels()
 	var heading := ThemeManager.color("heading")
-	_title_label.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
-	_overall_label.add_theme_color_override("font_color", heading)
 	_stats_page_label.add_theme_color_override("font_color", heading)
 	_out_of_position_label.add_theme_color_override("font_color", ThemeManager.color("warning"))
-	# These sit on the frames now, not on the background photo, so they take
-	# the tiles' subtitle colour rather than the palette's hint.
-	for label in [_formation_label, _league_label, _record_label, _stats_extra_country]:
-		label.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+	_cabinet_title.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
+	# Sits on the frame, not on the background photo, so it takes the tiles'
+	# subtitle colour rather than the palette's hint.
+	_stats_extra_country.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
 
 
 ## The header, the squad list and the stats sheet all wear the tiles' frame,
 ## matching Team.tscn -- this screen is the same layout for someone else's XI.
 func _style_panels() -> void:
 	var muted := ThemeManager.color("surface_border")
-	for panel in [_header_panel, _squad_backdrop, _stats_backdrop]:
+	for panel in [_squad_backdrop, _stats_backdrop]:
 		panel.add_theme_stylebox_override(
 			"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, muted, 3, true, Vector2(10, 6))
 		)
+	_cabinet_panel.add_theme_stylebox_override(
+		"panel", MenuTile.pixel_frame(MenuTile.BASE_FILL, ThemeManager.color("medals"), 3, true)
+	)
 	MenuTile.style_button(_back_button, muted)
 	MenuTile.style_button(_close_button, muted)
+	MenuTile.style_button(_trophy_button, ThemeManager.color("medals"), true)
+	MenuTile.style_button(_cabinet_close_button, muted)
 
 
 # -- state -> UI --------------------------------------------------------------
@@ -202,21 +225,19 @@ func _refresh_all() -> void:
 ## The same penalty-aware number Team.gd shows for your own squad (see
 ## SquadOptimizer.squad_overall), so the two are directly comparable.
 func _refresh_header() -> void:
-	_title_label.text = _manager_name
-	# A bot has no record; the label stays out of the way rather than
-	# claiming 0-0-0.
-	_record_label.visible = not _record.is_empty()
-	if not _record.is_empty():
-		_record_label.text = tr("%d W  %d D  %d L") % [
-			int(_record.get("wins", 0)), int(_record.get("draws", 0)), int(_record.get("losses", 0))
-		]
-	_league_label.visible = _league_name != ""
-	_league_label.text = _league_name
-	_formation_label.text = _formation
-	if _cards.is_empty():
-		_overall_label.text = tr("Overall --")
-	else:
-		_overall_label.text = tr("Overall %d") % SquadOptimizer.squad_overall(_formation, _slot_ids, _cards)
+	var overall := 0 if _cards.is_empty() else SquadOptimizer.squad_overall(_formation, _slot_ids, _cards)
+	_info_panel.set_team(_manager_name, _kit, _record, _formation, _tactic_style, overall)
+	# Tier names are composed by the backend, so they show as sent.
+	_daily_value.text = str(_profile.get("tier_name", "--"))
+	_weekly_value.text = str(_profile.get("weekly_tier_name", "--"))
+	var trophies = _profile.get("trophies")
+	var total := 0
+	if trophies is Array:
+		for trophy in trophies:
+			total += int(trophy.get("count", 0)) if trophy is Dictionary else 0
+	_trophies_value.text = str(total) if trophies is Array else "--"
+	# A bot has no profile and so no cabinet.
+	_trophy_button.disabled = not (trophies is Array)
 
 
 func _refresh_pitch() -> void:
@@ -324,6 +345,80 @@ func _add_stat_row(label_text: String, value_text: String) -> void:
 	var value_label := Label.new()
 	value_label.text = value_text
 	_stats_attr_grid.add_child(value_label)
+
+
+# -- trophy cabinet -----------------------------------------------------------
+
+
+## The server sends the cabinet already ordered (weekend, weekly, daily; top
+## tier first), so a section header goes in wherever the format changes.
+func _open_cabinet() -> void:
+	for child in _cabinet_list.get_children():
+		_cabinet_list.remove_child(child)
+		child.queue_free()
+	var trophies = _profile.get("trophies")
+	if not (trophies is Array) or trophies.is_empty():
+		var empty := Label.new()
+		empty.text = tr("No trophies yet -- win a league to start the cabinet.")
+		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+		_cabinet_list.add_child(empty)
+	else:
+		var section := ""
+		for trophy in trophies:
+			if not (trophy is Dictionary):
+				continue
+			var mode_name := str(trophy.get("mode_name", ""))
+			if mode_name != section:
+				section = mode_name
+				var header := Label.new()
+				header.text = mode_name
+				header.add_theme_font_size_override("font_size", 16)
+				header.add_theme_color_override("font_color", ThemeManager.color("medals"))
+				_cabinet_list.add_child(header)
+			_cabinet_list.add_child(_trophy_row(trophy))
+	_cabinet_popup.visible = true
+
+
+func _trophy_row(trophy: Dictionary) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	# PASS so a drag on a row still scrolls the cabinet.
+	row.mouse_filter = Control.MOUSE_FILTER_PASS
+
+	var icon := TextureRect.new()
+	icon.texture = CurrencyDisplay.icon_for("medals")
+	icon.custom_minimum_size = Vector2(28, 28)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	# Gold / silver / bronze by tier, the leaderboard's podium colours.
+	icon.modulate = Leaderboard.PODIUM_BACKDROPS.get(int(trophy.get("tier", 1)), Color.WHITE)
+	row.add_child(icon)
+
+	var title := Label.new()
+	var kind := tr("Champion") if str(trophy.get("kind", "")) == "champion" else tr("Promotion")
+	title.text = "%s · %s" % [str(trophy.get("tier_name", "")), kind]
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	title.add_theme_color_override("font_color", MenuTile.TITLE_COLOR)
+	row.add_child(title)
+
+	var count := Label.new()
+	count.text = "×%d" % int(trophy.get("count", 0))
+	count.add_theme_font_size_override("font_size", 18)
+	count.add_theme_color_override("font_color", ThemeManager.color("medals"))
+	row.add_child(count)
+
+	var last := Label.new()
+	last.text = tr("last %s") % TimeFormat.local_date(str(trophy.get("last", "")))
+	last.custom_minimum_size = Vector2(150, 0)
+	last.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	last.add_theme_font_size_override("font_size", 12)
+	last.add_theme_color_override("font_color", MenuTile.SUBTITLE_COLOR)
+	row.add_child(last)
+	return row
 
 
 # -- input handlers -----------------------------------------------------------

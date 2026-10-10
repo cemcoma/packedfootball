@@ -76,9 +76,14 @@ async def _claim_tournament_full_week(client, uid: str, req: ClaimRequest) -> di
     return await _claim_tournament_full_period(client, uid, req, tournament_service.WEEKLY)
 
 
+async def _claim_weekend_league_full(client, uid: str, req: ClaimRequest) -> dict:
+    return await _claim_tournament_full_period(client, uid, req, tournament_service.WEEKEND)
+
+
 CLAIM_HANDLERS: dict[str, Callable[..., Awaitable[dict]]] = {
     "tournament_full_day": _claim_tournament_full_day,
     "tournament_full_week": _claim_tournament_full_week,
+    "weekend_league_full": _claim_weekend_league_full,
 }
 
 

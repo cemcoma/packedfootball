@@ -1,10 +1,10 @@
 extends Control
 
-## Tournament hub: pick a format. Daily and Weekly are real; the rest are
+## Tournament hub: pick a format. Daily, Weekly and Weekend are real; the rest are
 ## declared but disabled, so the shape of what's coming is visible without
 ## pretending it exists.
 ##
-## Both live tiles open the SAME screen -- TournamentSession.open() leaves
+## All live tiles open the SAME screen -- TournamentSession.open() leaves
 ## the format there and the screen reads it, because a scene can't take
 ## arguments and two copies of a 500-line screen would drift apart.
 
@@ -16,11 +16,11 @@ const MENU_TILE_SCENE := preload("res://scenes/components/MenuTile.tscn")
 ## label reads as a roadmap.
 const COMING_SOON := [
 	{"name": "Monthly Cup", "hint": "A knockout bracket across the whole month."},
-	{"name": "Seasonal", "hint": "Long-form competition with its own ranking."},
 ]
 
 @onready var _daily_button: MenuTile = %DailyTile
 @onready var _weekly_button: MenuTile = %WeeklyTile
+@onready var _weekend_button: MenuTile = %WeekendTile
 @onready var _coming_soon_box: VBoxContainer = %ComingSoonBox
 @onready var _back_button: Button = %BackButton
 
@@ -28,6 +28,7 @@ const COMING_SOON := [
 func _ready() -> void:
 	_daily_button.pressed.connect(_on_daily_pressed)
 	_weekly_button.pressed.connect(_on_weekly_pressed)
+	_weekend_button.pressed.connect(func() -> void: TournamentSession.open(TournamentSession.WEEKEND))
 	_back_button.pressed.connect(_on_back_pressed)
 
 	_build_coming_soon()

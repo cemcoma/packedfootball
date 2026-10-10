@@ -72,6 +72,13 @@ async def bootstrap_account(uid: str = Depends(verify_id_token)):
     """
     state = game_state_for(uid)
     user_path = f"users/{uid}"
+    # Lazy weekend payout: a winner opening the app after Sunday 18:00 is paid
+    # here, before the balances below are read. Two reads once it's settled.
+    await tournament_service.ensure_settled_through(
+        admin_client(uid),
+        tournament_service.period_id_for(energy_service.now_utc(), tournament_service.WEEKEND),
+        tournament_service.WEEKEND,
+    )
     existing = await state.client.get_document(user_path)
     if existing is not None:
         roster, inventory, _ = await asyncio.gather(

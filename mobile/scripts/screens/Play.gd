@@ -142,6 +142,8 @@ func _hide_matchmaking_popup() -> void:
 
 
 func _on_quick_match_pressed() -> void:
+	if not await ContractWarning.confirm(self):
+		return
 	_quick_match_button.set_tile_disabled(true)
 	_tournament_button.set_tile_disabled(true)
 	_status_label.text = ""

@@ -57,5 +57,7 @@ async def manager_profile(manager_uid: str, uid: str = Depends(verify_id_token))
         ),
         # In formation slot order, same as a match response's roster halves.
         "roster": [player_to_fields(p) for p in profile["roster"]],
+        # The cabinet, already ordered weekend -> weekly -> daily, top tier first.
+        "trophies": tournament_service.trophy_list(doc),
         "is_me": manager_uid == uid,
     }

@@ -96,7 +96,7 @@ This is a gameplay test build, not a shipping target.
 | `PackReveal.tscn` | `PackReveal.gd` | Pack-opening reveal animation. |
 | `Leaderboard.tscn` | `Leaderboard.gd` | Users (by wins) and Players (by goals) tabs, each lazy-loaded once and cached. |
 | `Settings.tscn` | `Settings.gd` | Rename, color theme, language, log out. |
-| `Tournament.tscn` | `TournamentHub.gd` | Tournament hub: pick a format. Daily and Weekly are live; Monthly and Seasonal are disabled roadmap tiles. |
+| `Tournament.tscn` | `TournamentHub.gd` | Tournament hub: pick a format. Daily, Weekly and Weekend are live; Monthly is a disabled roadmap tile. |
 | `TournamentScreen.tscn` | `TournamentScreen.gd` | **Both** leagues -- tier, group table, the play button, the play-everything reward. Which one it shows comes from `TournamentSession`. |
 
 ### Tournaments
@@ -108,8 +108,12 @@ hand-off pattern as `ManagerSession` and `PlayerSession`, and it survives
 the trip out to a match and back, which is what makes Continue return to
 the league the player was actually playing.
 
-The daily and weekly leagues return the **same payload shape** from the
-backend, so one screen renders both. Only three things differ, and all
+The daily, weekly and weekend leagues return the **same payload shape** from the
+backend, so one screen renders all three. The Weekend League adds two things the
+screen shows only when present: `opens_in_seconds` (countdown to Friday 18:00,
+Join disabled) and the pager fields of its one global table (Top / My position,
+Prev / Next, `GET /tournament/weekend/standings?page=n`). Tapping anyone else's
+standings row opens their manager view. Only three things differ, and all
 three live in `TournamentSession.FORMATS`: the URL prefix
 (`/tournament` vs `/tournament/weekly`), the `POST /claim` type, and the
 handful of sentences that say "today" where the other says "this week".
@@ -494,6 +498,7 @@ both the unsaved-changes indicator and what `discard_changes()` reverts to.
 | `PlayerCardView` | The reusable card visual. Used by the bench grid, the Team stats header, and the pack reveal. Change card art here once and every screen follows. |
 | `PlayerModelView` | Layered placeholder character portrait inside `PlayerCardView`. |
 | `PitchView` | The Team screen pitch: drawn grass/lines plus real `Button` slot markers. |
+| `TeamInfoPanel` | One side's card -- name, kit swatch, record, formation, tactic, overall -- with `add_row()` and an `extra` box for callers. PreMatch shows two, ManagerView one (plus leagues, trophy count, and the Trophy Cabinet overlay; TeamHub's "My Profile & Trophies" opens your own). |
 | `PackView` | The pack tile. |
 | `PackInfoPopup` | Paginated odds disclosure. |
 | `CurrencyPanel` | The Currency tab's five sub-tabs. |
@@ -503,6 +508,7 @@ both the unsaved-changes indicator and what `discard_changes()` reverts to.
 | `CurrencyAmount` | Icon + number, for inline prices. |
 | `LoadingSpinner` | Hand-drawn rotating arc; Godot has no built-in indeterminate spinner. |
 | `LoadingPopup` | Shared "working on it" modal: scrim + spinner + `set_status(text)`. |
+| `ContractWarning` | Pre-match check: `await ContractWarning.confirm(self)` shows a warning when saved starters are out of contract (-50%); "Go to Squad" opens Team.tscn, "Play anyway" continues. Used by Quick Match and every league's Play. |
 | `BackgroundLayer` | Theme-following backdrop, instanced first on every screen except Match. |
 
 ### Data models

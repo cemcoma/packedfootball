@@ -10,6 +10,7 @@ extends Control
 @onready var _inventory_button: MenuTile = %InventoryTile
 @onready var _items_button: MenuTile = %ItemsTile
 @onready var _back_button: Button = %BackButton
+@onready var _profile_button: Button = %ProfileButton
 
 
 func _ready() -> void:
@@ -19,6 +20,8 @@ func _ready() -> void:
 	_inventory_button.pressed.connect(_on_inventory_pressed)
 	_items_button.pressed.connect(_on_items_pressed)
 	_back_button.pressed.connect(_on_back_pressed)
+	# Your own manager view: what everyone else sees, trophy cabinet included.
+	_profile_button.pressed.connect(func() -> void: ManagerSession.open(FirebaseAuth.uid, scene_file_path))
 
 	# The shirt and the XI's shape on their tiles; IGNORE so taps still land on the tile.
 	var swatch := KitSwatch.new()
@@ -48,6 +51,7 @@ func _apply_theme_colors() -> void:
 	# It used to carry MenuTile's SCRIPT without MenuTile's scene, which left
 	# it with no title label to fill and no styling at all -- see MenuTile.
 	MenuTile.style_button(_back_button, ThemeManager.color("surface_border"))
+	MenuTile.style_button(_profile_button, ThemeManager.color("medals"))
 	var full: bool = GameProfile.inventory_space() <= 0
 	if full:
 		_inventory_button.set_subtitle_color(ThemeManager.color("warning"))

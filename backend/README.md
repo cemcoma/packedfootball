@@ -119,7 +119,7 @@ Credentials automatically -- no key file.
 | `POST /account/bootstrap` | The one call a sign-in makes. Idempotent: creates the profile plus an 11-card bronze starter roster on a uid's first ever call, then always answers with `profile`, `roster` (cards in lineup order), `inventory` (bench cards with their `doc_id`), `inventory_cap` and `energy`, so the client never fetches cards one by one. |
 | `GET /account/name_available` | Unauthenticated. Whether `?display_name=` passes the rules and is free -- no current client calls it (guests start as `uid[:8]` and rename in Settings). Advisory only. |
 | `POST /account/display_name` | Renames the manager, uniquely: reserves `display_names/{key}` in the same transaction as the name. 400 with a reason code, 409 when taken. |
-| `POST /claim` | One door for every reward that is earned silently and paid on a tap. Body `{"type": ...}` plus what the type needs; today `tournament_full_day` and `tournament_full_week` (optional `period_id` + `group_id`, default the caller's current entry in that format). Pays once, returns `rewards` and every `*_remaining` balance. |
+| `POST /claim` | One door for every reward that is earned silently and paid on a tap. Body `{"type": ...}` plus what the type needs; today `tournament_full_day`, `tournament_full_week` and `weekend_league_full` (optional `period_id` + `group_id`, default the caller's current entry in that format). Pays once, returns `rewards` and every `*_remaining` balance. |
 | `DELETE /account` | Deletes the account: profile, inventory, every owned card, games it started, its name reservation, its seat in an unsettled tournament group, then the Firebase Auth user (last, so a failed attempt can be retried). Keeps `iap_transactions` and games it only played in as the opponent. Backfill old accounts' name reservations with `scripts/sync_display_names.py`. |
 | `GET /pack/list` | Live pack catalog, filtered by availability, sorted by the pack type's `pack_types/{type}.order`, then the pack's own `order`, then id; returns `packs` and `sections` (the category order the client's dropdown follows). Puts a pack whose `available_at` has passed on sale as a side effect (see Pack availability). |
 | `POST /pack/open` | Charges the pack's currency, rolls cards, writes them. Refuses when the bench can't hold the whole pack (`INVENTORY_CAP`). |
@@ -137,7 +137,7 @@ Credentials automatically -- no key file.
 | `POST /deals/redeem` | Spends a deal's cost currency, grants its rewards. |
 | `GET /leaderboard/players` | Ranks `players/{id}` by `goals` / `assists` / `avg_rating` / `clean_sheets` / `matches_played`, `LEADERBOARD_PAGE_SIZE` a page (`?page=N`, zero-based), optionally narrowed with `?position=ST` or a family (`attacker`); entries carry their absolute `rank` and the card's `owner_uid`. |
 | `GET /leaderboard/users` | Ranks `users/{uid}` by `wins`, same paging; entries carry `wins`/`draws`/`losses` and `is_me`. |
-| `GET /manager/{uid}` | Another manager as everyone may see them: name, record, tournament tier, kit, and their XI in formation order. What a leaderboard row opens. 404 for an unknown uid, never creates a profile. |
+| `GET /manager/{uid}` | Another manager as everyone may see them: name, record, both tournament tiers, kit, tactics, their XI in formation order, and their `trophies` (the cabinet, ordered weekend → weekly → daily, top tier first). What a leaderboard or standings row opens. 404 for an unknown uid, never creates a profile. |
 | `POST /match/quick` | Finds an opponent (real account or bot), spends energy, simulates, rewards, persists. |
 | `POST /match/report` | Files a bug report against a match the caller played: `game_id`, a `category` from `MATCH_REPORT_CATEGORIES`, optional text. One `match_reports/{game_id}_{uid}` doc per player per match, carrying the game's seed and engine version; the rosters as played are already on `games/{id}.teams`, so the match can be re-run exactly. Triage with `scripts/list_match_reports.py`. |
 | `GET /tournament/today` | Everything the tournament screen needs in one response; settles any overdue day first and carries yesterday's result in `pending_results`. |
@@ -148,6 +148,11 @@ Credentials automatically -- no key file.
 | `POST /tournament/weekly/join` | Joins this week's group in the caller's **weekly** tier. Refused in the last `WEEKLY_TOURNAMENT_JOIN_CUTOFF_SECONDS` of the week. |
 | `POST /tournament/weekly/match` | One of the week's `WEEKLY_TOURNAMENT_MATCHES_PER_WEEK` matches, from the same bot pools as the daily league. |
 | `GET /tournament/weekly/results` | A settled week's final table for the caller's group. |
+| `GET /tournament/weekend/today` | The Weekend League: same payload shape plus `opens_in_seconds` and the pager fields (`standings_page`, `standings_pages`, `standings_page_size`, `standings_total`, `my_position`, `standings_age_seconds`). Standings are the caller's page of the global table. |
+| `POST /tournament/weekend/join` | Joins this weekend's one global table. Refused until Friday 18:00 Istanbul and in the last `WEEKEND_LEAGUE_JOIN_CUTOFF_SECONDS`. |
+| `POST /tournament/weekend/match` | One of the weekend's `WEEKEND_LEAGUE_MATCHES`, against anyone entered (plus the gold bots). |
+| `GET /tournament/weekend/standings?page=n` | One page (10 rows) of the global table's snapshot. |
+| `GET /tournament/weekend/results` | A settled weekend's top page plus the caller's own row. |
 | `POST /tournament/settle` | Scheduler/admin: settles every format's lookback window. Optional `mode` (`daily`/`weekly`) and `period_id` to narrow it. |
 
 Both leaderboard endpoints return `{"stat", "page", "page_size",
@@ -308,6 +313,33 @@ ten-row table, `tests/test_weekly_tournament_rules.py`):
 `POST /claim` is the one door for anything earned-then-tapped;
 `routers/claims.py`'s `CLAIM_HANDLERS` is where the next claimable type
 goes.
+
+**Weekend League** (`WEEKEND`, collection `weekend_leagues`) is a third Mode
+with two differences, both because everyone shares ONE table:
+
+- **Window.** The seven-day grid ends Sunday 18:00 Istanbul; play is only
+  open for its last `WEEKEND_LEAGUE_OPEN_SECONDS` (from Friday 18:00).
+  `Mode.open_seconds` / `is_open` / `opens_in`.
+- **Snapshot standings.** Listing every entry per screen load would be N
+  reads a view, so `standings/meta` (uid → position) plus `standings/c{n}`
+  chunks of 100 ranked rows are rebuilt from the entries at most every
+  `WEEKEND_LEAGUE_STANDINGS_REFRESH_SECONDS`; one request claims the rebuild.
+- **Member-by-member settlement.** After the end (+2 min grace) the snapshot
+  is rebuilt as final, then `settle_member` pays each row in its own small
+  transaction (the entry's `settled` flag is the pay-once token), podium
+  first, up to `WEEKEND_LEAGUE_MAX_SETTLES_PER_REQUEST` per request, with a
+  60 s period-doc claim so only one request works at a time. **No
+  scheduler**: besides the weekend routes, `POST /account/bootstrap` (sign-in
+  and after every match) triggers it, so a winner who opens the app after
+  Sunday 18:00 is paid before their balances are read.
+
+**Trophies.** `users/{uid}.trophies = {mode: {tier: {count, last}}}`,
+written by `member_settlement` -- the one per-member write both group and
+global settlement use -- so it sits under the same pay-once guards. 1st
+place with a `promote` verdict earns one: a promotion below the top tier, a
+champion trophy at the top (and in the one-tier Weekend League).
+`trophy_list` orders the cabinet for `/manager/{uid}`. Server-only: the
+client can't write it (`firestore.rules`).
 
 ### Accounts
 

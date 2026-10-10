@@ -25,6 +25,7 @@ project has none and no firestore.indexes.json to put one in.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
@@ -79,6 +80,13 @@ class Mode:
     max_groups_per_request: int
     opponent_max_attempts: int
 
+    # What the trophy cabinet calls this format. Composed here, so not translated.
+    name: str = ""
+    # Play is only allowed in the last `open_seconds` of a period; None = always.
+    open_seconds: int | None = None
+    # One table for everyone: paged standings snapshot, member-by-member settlement.
+    global_table: bool = False
+
 
 DAILY = Mode(
     key="daily",
@@ -109,6 +117,7 @@ DAILY = Mode(
     settle_lookback_periods=config.TOURNAMENT_SETTLE_LOOKBACK_DAYS,
     max_groups_per_request=config.TOURNAMENT_MAX_GROUPS_PER_REQUEST,
     opponent_max_attempts=config.TOURNAMENT_OPPONENT_MAX_ATTEMPTS,
+    name="Daily League",
 )
 
 WEEKLY = Mode(
@@ -138,9 +147,42 @@ WEEKLY = Mode(
     settle_lookback_periods=config.WEEKLY_TOURNAMENT_SETTLE_LOOKBACK_WEEKS,
     max_groups_per_request=config.WEEKLY_TOURNAMENT_MAX_GROUPS_PER_REQUEST,
     opponent_max_attempts=config.WEEKLY_TOURNAMENT_OPPONENT_MAX_ATTEMPTS,
+    name="Weekly League",
 )
 
-MODES = {DAILY.key: DAILY, WEEKLY.key: WEEKLY}
+WEEKEND = Mode(
+    key="weekend",
+    label="weekend",
+    collection="weekend_leagues",
+    period_days=config.WEEKEND_LEAGUE_PERIOD_DAYS,
+    period_anchor=config.WEEKEND_LEAGUE_PERIOD_ANCHOR,
+    offset_hours=config.WEEKEND_LEAGUE_OFFSET_HOURS,
+    top_tier=min(config.WEEKEND_LEAGUE_TIERS),
+    bottom_tier=max(config.WEEKEND_LEAGUE_TIERS),
+    default_tier=min(config.WEEKEND_LEAGUE_TIERS),
+    tiers=config.WEEKEND_LEAGUE_TIERS,
+    group_capacity=config.WEEKEND_LEAGUE_GROUP_CAPACITY,
+    matches_per_period=config.WEEKEND_LEAGUE_MATCHES,
+    points=config.WEEKEND_LEAGUE_POINTS,
+    join_cutoff_seconds=config.WEEKEND_LEAGUE_JOIN_CUTOFF_SECONDS,
+    promote_positions=config.WEEKEND_LEAGUE_PROMOTE_POSITIONS,
+    relegate_positions=config.WEEKEND_LEAGUE_RELEGATE_POSITIONS,
+    promotion_floor=config.WEEKEND_LEAGUE_PROMOTION_FLOOR,
+    relegation_floor=config.WEEKEND_LEAGUE_RELEGATION_FLOOR,
+    min_group_for_promotion=config.WEEKEND_LEAGUE_MIN_GROUP_FOR_PROMOTION,
+    reward_min_matches=config.WEEKEND_LEAGUE_REWARD_MIN_MATCHES,
+    full_period_reward=config.WEEKEND_LEAGUE_FULL_REWARD,
+    match_reward_credits=config.WEEKEND_LEAGUE_MATCH_REWARD_CREDITS,
+    energy_cost_per_match=config.WEEKEND_LEAGUE_ENERGY_COST_PER_MATCH,
+    settle_lookback_periods=config.WEEKEND_LEAGUE_SETTLE_LOOKBACK,
+    max_groups_per_request=config.WEEKEND_LEAGUE_MAX_SETTLES_PER_REQUEST,
+    opponent_max_attempts=config.WEEKEND_LEAGUE_OPPONENT_MAX_ATTEMPTS,
+    name="Weekend League",
+    open_seconds=config.WEEKEND_LEAGUE_OPEN_SECONDS,
+    global_table=True,
+)
+
+MODES = {DAILY.key: DAILY, WEEKLY.key: WEEKLY, WEEKEND.key: WEEKEND}
 
 
 def mode_for(key: str) -> Mode:
@@ -207,11 +249,26 @@ def joining_is_closed(period_id: str, now: datetime, mode: Mode = DAILY) -> bool
     return seconds_remaining(period_id, now, mode) < mode.join_cutoff_seconds
 
 
+def opens_in(period_id: str, now: datetime, mode: Mode = DAILY) -> int:
+    """Seconds until play opens in this period; 0 once it is open."""
+    if mode.open_seconds is None:
+        return 0
+    return max(0, seconds_remaining(period_id, now, mode) - mode.open_seconds)
+
+
+def is_open(period_id: str, now: datetime, mode: Mode = DAILY) -> bool:
+    return opens_in(period_id, now, mode) == 0
+
+
 def group_id_for(tier: int, index: int) -> str:
     """Zero-padded so lexical order equals numeric order, which is what makes
     a plain list_collection over a period's groups come back in a sane
     sequence."""
     return f"t{tier}-g{index:04d}"
+
+
+# A global-table format has exactly one group; every per-group path keeps working.
+GLOBAL_GROUP = group_id_for(1, 0)
 
 
 # -- paths --------------------------------------------------------------------
@@ -243,6 +300,14 @@ def entry_path(period_id: str, group_id: str, uid: str, mode: Mode = DAILY) -> s
 
 def pool_path(period_id: str, tier: int, mode: Mode = DAILY) -> str:
     return f"{mode.collection}/{period_id}/pools/{tier}"
+
+
+def standings_meta_path(period_id: str, mode: Mode) -> str:
+    return f"{mode.collection}/{period_id}/standings/meta"
+
+
+def standings_chunk_path(period_id: str, chunk: int, mode: Mode) -> str:
+    return f"{mode.collection}/{period_id}/standings/c{chunk:05d}"
 
 
 def bot_pool_path(tier: int) -> str:
@@ -610,7 +675,81 @@ def apply_rules(rows: list[dict], tier: int, group_size: int | None = None, mode
 
 
 def settlement_mode(group_size: int, mode: Mode = DAILY) -> str:
+    if mode.global_table:
+        return "global"
     return "positional" if group_size >= mode.group_capacity else "threshold"
+
+
+# -- trophies -----------------------------------------------------------------
+#
+# users/{uid}.trophies = {mode: {tier: {"count": n, "last": iso}}}. Server-only
+# (firestore.rules lets the client write four other fields), written in the
+# same settlement write as the payout, so it is paid exactly once too.
+
+TROPHIES_FIELD = "trophies"
+
+
+def wins_trophy(row: dict) -> bool:
+    """1st AND the rule said promote -- below the top tier that is a
+    promotion, at the top (or in a one-tier format) it is the title."""
+    return row.get("position") == 1 and row.get("outcome") == "promote"
+
+
+def trophy_fields(row: dict, period_id: str, mode: Mode, increment) -> dict:
+    """The users/{uid} merge for a trophy, {} for none. `increment` is
+    firestore.Increment, passed in so this stays importable without the SDK."""
+    if not wins_trophy(row):
+        return {}
+    won_at = period_end(period_id, mode).isoformat()
+    return {TROPHIES_FIELD: {mode.key: {str(row["from_tier"]): {"count": increment(1), "last": won_at}}}}
+
+
+def trophy_list(profile_doc: dict | None) -> list[dict]:
+    """The cabinet, best first: weekend, then weekly, then daily; top tier
+    first inside each. Formats or tiers that no longer exist are skipped."""
+    stored = (profile_doc or {}).get(TROPHIES_FIELD)
+    if not isinstance(stored, dict):
+        return []
+    out = []
+    for mode in (WEEKEND, WEEKLY, DAILY):
+        by_tier = stored.get(mode.key)
+        if not isinstance(by_tier, dict):
+            continue
+        for tier in sorted(mode.tiers):
+            slot = by_tier.get(str(tier))
+            count = slot.get("count") if isinstance(slot, dict) else None
+            if not isinstance(count, int) or isinstance(count, bool) or count <= 0:
+                continue
+            out.append({
+                "mode": mode.key,
+                "mode_name": mode.name,
+                "tier": tier,
+                "tier_name": tier_name(tier, mode),
+                "kind": "champion" if tier == mode.top_tier else "promotion",
+                "count": count,
+                "last": str(slot.get("last") or ""),
+            })
+    return out
+
+
+def member_settlement(row: dict, period_id: str, group_id: str, mode: Mode, increment) -> tuple[dict, dict]:
+    """What settling one decorated row writes: (users/{uid} merge, entry merge).
+    The one implementation behind both group and global settlement."""
+    rewards = row.get("rewards") or {}
+    user_fields = settle_fields(row["to_tier"], period_id, group_id, mode)
+    for currency, amount in rewards.items():
+        if amount:
+            user_fields[currency] = increment(amount)
+    user_fields.update(trophy_fields(row, period_id, mode, increment))
+    entry_fields = {
+        "settled": True,
+        "final_position": row["position"],
+        "outcome": row["outcome"],
+        "to_tier": row["to_tier"],
+        "rewards": rewards,
+        "is_shown": False,
+    }
+    return user_fields, entry_fields
 
 
 # -- settlement (writes) ------------------------------------------------------
@@ -672,25 +811,9 @@ async def settle_group(client, period_id: str, group_id: str, mode: Mode = DAILY
             if last_period(user_doc, mode) >= period_id:
                 continue
 
-            rewards = row.get("rewards") or {}
-            fields = settle_fields(row["to_tier"], period_id, group_id, mode)
-            for currency, amount in rewards.items():
-                if amount:
-                    fields[currency] = firestore.Increment(amount)
-            tx.set(f"users/{uid}", fields, merge=True)
-
-            tx.set(
-                entry_path(period_id, group_id, uid, mode),
-                {
-                    "settled": True,
-                    "final_position": row["position"],
-                    "outcome": row["outcome"],
-                    "to_tier": row["to_tier"],
-                    "rewards": rewards,
-                    "is_shown": False,
-                },
-                merge=True,
-            )
+            user_fields, entry_fields = member_settlement(row, period_id, group_id, mode, firestore.Increment)
+            tx.set(f"users/{uid}", user_fields, merge=True)
+            tx.set(entry_path(period_id, group_id, uid, mode), entry_fields, merge=True)
 
         tx.set(
             g_path,
@@ -740,6 +863,8 @@ async def settle_period(client, period_id: str, max_groups: int | None = None, m
         return {"period_id": period_id, "settled": 0, "status": "already"}
 
     limit = mode.max_groups_per_request if max_groups is None else max_groups
+    if mode.global_table:
+        return await settle_global_period(client, period_id, limit, mode)
     groups = await client.list_collection(groups_path(period_id, mode))
     pending = [g for g in groups if (g.get("settlement") or {}).get("status") != "settled"]
 
@@ -902,3 +1027,231 @@ async def ensure_settled_through(client, current_period: str, mode: Mode = DAILY
         if outcome["status"] not in ("no-such-period", "already"):
             results.append(outcome)
     return results
+
+
+# -- global table -------------------------------------------------------------
+#
+# One table for everyone (WEEKEND). Reading every entry on every screen load
+# would cost N reads per view, so the ranked table is stored as a snapshot --
+# chunk docs of STANDINGS_CHUNK rows plus a meta doc with each uid's position --
+# rebuilt from the entries at most every STANDINGS_REFRESH_SECONDS. Settlement
+# walks the final snapshot one member per transaction, podium first.
+
+
+SETTLE_GRACE_SECONDS = 120
+
+
+def _iso(value) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def snapshot_rows(entries: list[dict], mode: Mode) -> list[dict]:
+    """The whole table, ranked and decorated by the same rules settlement uses."""
+    rows = apply_rules(rank_rows(entries), mode.top_tier, group_size=len(entries), mode=mode)
+    return [_row_summary(r) for r in rows]
+
+
+def page_slice(chunk_rows: list[dict], page: int, page_size: int, chunk_size: int) -> list[dict]:
+    """Page `page` (0-based) out of the chunk that holds it."""
+    start = (page * page_size) % chunk_size
+    return chunk_rows[start:start + page_size]
+
+
+def page_of(position: int, page_size: int) -> int:
+    return max(0, (position - 1) // page_size)
+
+
+async def join_global(client, uid: str, display_name: str, period_id: str, now: datetime, mode: Mode) -> str:
+    """join_period for a global table. Touches no shared doc it READS, so a
+    Friday-18:00 rush doesn't serialise on one group document: the pool is an
+    idempotent ArrayUnion (bots included every time, no read needed) and the
+    period doc is a blind merge."""
+    from firebase_admin import firestore  # local: keeps the pure half import-free
+
+    user_path = f"users/{uid}"
+    bp_path = bot_pool_path(mode.top_tier)
+
+    def _join(tx):
+        docs = tx.get_all([user_path, bp_path])
+        if is_entered(docs[user_path], period_id, mode):
+            return
+        bot_ids = list((docs[bp_path] or {}).get("uids") or [])
+        tx.set(
+            entry_path(period_id, GLOBAL_GROUP, uid, mode),
+            blank_entry(uid, display_name, mode.top_tier, GLOBAL_GROUP, now),
+            merge=True,
+        )
+        tx.set(
+            pool_path(period_id, mode.top_tier, mode),
+            {"tier": mode.top_tier, "uids": firestore.ArrayUnion([uid] + bot_ids)},
+            merge=True,
+        )
+        tx.set(period_path(period_id, mode), {"period_id": period_id, "mode": mode.key}, merge=True)
+        tx.set(user_path, enter_fields(period_id, GLOBAL_GROUP, mode), merge=True)
+
+    await client.run_transaction(_join)
+    return GLOBAL_GROUP
+
+
+async def rebuild_standings(client, period_id: str, now: datetime, mode: Mode, final: bool = False) -> dict:
+    """Reads every entry once and rewrites the snapshot. Returns the meta doc.
+    shortcut: `positions` is one map in one doc (~20k entrants before the 1 MiB
+    limit); shard it by uid hash if the league outgrows that."""
+    entries = await client.list_collection(entries_path(period_id, GLOBAL_GROUP, mode))
+    rows = snapshot_rows(entries, mode)
+    size = config.WEEKEND_LEAGUE_STANDINGS_CHUNK
+    for chunk in range(0, max(1, -(-len(rows) // size))):
+        await client.set_document(
+            standings_chunk_path(period_id, chunk, mode),
+            {"rows": rows[chunk * size:(chunk + 1) * size]},
+            merge=False,
+        )
+    meta = {
+        "built_at": now.isoformat(),
+        "total": len(rows),
+        "positions": {r["uid"]: r["position"] for r in rows},
+        "final": final,
+        "claimed_at": None,
+    }
+    await client.set_document(standings_meta_path(period_id, mode), meta, merge=False)
+    return meta
+
+
+async def ensure_fresh_standings(client, period_id: str, now: datetime, mode: Mode) -> dict:
+    """The meta doc, rebuilt first if it is older than the refresh interval.
+    A transaction claims the rebuild so one request does it and the rest serve
+    the slightly stale snapshot."""
+    refresh = timedelta(seconds=config.WEEKEND_LEAGUE_STANDINGS_REFRESH_SECONDS)
+    m_path = standings_meta_path(period_id, mode)
+
+    def _fresh(meta) -> bool:
+        built = _iso((meta or {}).get("built_at"))
+        claimed = _iso((meta or {}).get("claimed_at"))
+        return bool(
+            (meta or {}).get("final")
+            or (built and now - built < refresh)
+            or (claimed and now - claimed < timedelta(seconds=60))
+        )
+
+    meta = await client.get_document(m_path)
+    if _fresh(meta):
+        return meta
+
+    def _claim(tx):
+        current = tx.get(m_path)
+        if _fresh(current):
+            return current, False
+        tx.set(m_path, {"claimed_at": now.isoformat()}, merge=True)
+        return current, True
+
+    meta, mine = await client.run_transaction(_claim)
+    if mine:
+        return await rebuild_standings(client, period_id, now, mode)
+    return meta or {"built_at": None, "total": 0, "positions": {}, "final": False}
+
+
+async def standings_page(client, period_id: str, page: int, mode: Mode, page_size: int) -> list[dict]:
+    chunk_size = config.WEEKEND_LEAGUE_STANDINGS_CHUNK
+    chunk = (page * page_size) // chunk_size
+    doc = await client.get_document(standings_chunk_path(period_id, chunk, mode))
+    return page_slice(list((doc or {}).get("rows") or []), page, page_size, chunk_size)
+
+
+async def settle_member(client, period_id: str, row: dict, mode: Mode) -> bool:
+    """Settles one row in its own transaction; False if it was already done.
+    The entry's `settled` flag is the pay-once token."""
+    from firebase_admin import firestore  # local: keeps the pure half import-free
+
+    uid = row["uid"]
+    e_path = entry_path(period_id, GLOBAL_GROUP, uid, mode)
+    user_path = f"users/{uid}"
+
+    def _settle(tx):
+        docs = tx.get_all([e_path, user_path])
+        entry, user_doc = docs[e_path], docs[user_path]
+        if entry is None or entry.get("settled") or user_doc is None:
+            return False
+        if last_period(user_doc, mode) >= period_id:
+            return False
+        user_fields, entry_fields = member_settlement(row, period_id, GLOBAL_GROUP, mode, firestore.Increment)
+        tx.set(user_path, user_fields, merge=True)
+        tx.set(e_path, entry_fields, merge=True)
+        return True
+
+    return await client.run_transaction(_settle)
+
+
+async def settle_global_period(client, period_id: str, max_members: int, mode: Mode) -> dict:
+    """Settles up to `max_members` rows of a finished global table, podium first.
+
+    A period-doc claim (60 s) means one request works at a time while the rest
+    return at once -- this runs inside /account/bootstrap, so a crowd opening
+    the app at 18:00 must not all settle the same rows. The cursor only moves
+    over a contiguous run of successes, so a failed member is retried.
+    """
+    now = datetime.now(timezone.utc)
+    # A match claimed at 17:59:59 lands its result a few seconds later.
+    if now < period_end(period_id, mode) + timedelta(seconds=SETTLE_GRACE_SECONDS):
+        return {"period_id": period_id, "settled": 0, "status": "grace"}
+    p_path = period_path(period_id, mode)
+
+    def _claim(tx):
+        doc = tx.get(p_path) or {}
+        if doc.get("status") == "settled":
+            return None
+        until = _iso(doc.get("settling_until"))
+        if until and until > now:
+            return None
+        tx.set(p_path, {"settling_until": (now + timedelta(seconds=60)).isoformat()}, merge=True)
+        return doc
+
+    period_doc = await client.run_transaction(_claim)
+    if period_doc is None:
+        return {"period_id": period_id, "settled": 0, "status": "busy"}
+
+    meta = await client.get_document(standings_meta_path(period_id, mode))
+    if not (meta or {}).get("final"):
+        meta = await rebuild_standings(client, period_id, now, mode, final=True)
+    total = int(meta.get("total", 0))
+    cursor = int(period_doc.get("settle_cursor", 0))
+    end = min(total, cursor + max_members)
+
+    size = config.WEEKEND_LEAGUE_STANDINGS_CHUNK
+    rows = []
+    for chunk in range(cursor // size, -(-end // size)):
+        doc = await client.get_document(standings_chunk_path(period_id, chunk, mode))
+        rows.extend((doc or {}).get("rows") or [])
+    rows = rows[cursor - (cursor // size) * size:][:end - cursor]
+
+    settled, errors, advanced = 0, [], cursor
+    for i in range(0, len(rows), 20):
+        batch = rows[i:i + 20]
+        results = await asyncio.gather(*(settle_member(client, period_id, r, mode) for r in batch), return_exceptions=True)
+        for row, result in zip(batch, results):
+            if isinstance(result, Exception):
+                errors.append(f"{row['uid']}: {result}")
+            else:
+                settled += bool(result)
+                if not errors:
+                    advanced += 1
+
+    complete = advanced >= total and not errors
+    fields = {
+        "settle_cursor": advanced,
+        "settling_until": None,
+        "settle_attempts": int(period_doc.get("settle_attempts", 0)) + 1,
+        "settle_error": " | ".join(errors)[:1000] if errors else None,
+    }
+    if complete:
+        fields["status"] = "settled"
+    await client.set_document(p_path, fields, merge=True)
+    return {
+        "period_id": period_id,
+        "settled": settled,
+        "remaining": max(0, total - advanced),
+        "errors": errors,
+        "status": "settled" if complete else "partial",
+    }

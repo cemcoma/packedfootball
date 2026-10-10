@@ -95,6 +95,35 @@ layout_mode = 2
 size_flags_horizontal = 3
 script = ExtResource("6")
 
+[node name="PagerRow" type="HBoxContainer" parent="Margin/RootVBox/Body/TableColumn/TablePanel/TableMargin/Inner" unique_id=1999000070]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PagerMode" type="OptionButton" parent="Margin/RootVBox/Body/TableColumn/TablePanel/TableMargin/Inner/PagerRow" unique_id=1999000071]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+
+[node name="PrevPageButton" type="Button" parent="Margin/RootVBox/Body/TableColumn/TablePanel/TableMargin/Inner/PagerRow" unique_id=1999000072]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Prev"
+
+[node name="PageLabel" type="Label" parent="Margin/RootVBox/Body/TableColumn/TablePanel/TableMargin/Inner/PagerRow" unique_id=1999000073]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 11
+horizontal_alignment = 1
+
+[node name="NextPageButton" type="Button" parent="Margin/RootVBox/Body/TableColumn/TablePanel/TableMargin/Inner/PagerRow" unique_id=1999000074]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Next"
+
 [node name="RulesLabel" type="Label" parent="Margin/RootVBox/Body/TableColumn/TablePanel/TableMargin/Inner" unique_id=1999000015]
 unique_name_in_owner = true
 layout_mode = 2

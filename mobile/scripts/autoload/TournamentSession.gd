@@ -28,6 +28,7 @@ const HUB_SCENE := "res://scenes/Tournament.tscn"
 
 const DAILY := "daily"
 const WEEKLY := "weekly"
+const WEEKEND := "weekend"
 
 const FORMATS := {
 	DAILY: {
@@ -55,6 +56,25 @@ const FORMATS := {
 		"all_played_short": "You've played all your matches for this week.",
 		"last_result": "Last week: finished %d%s\n\n%s%s",
 		"claim_last": "Claim last week's full-week bonus",
+	},
+	# One global table, open Friday 18:00 to Sunday 18:00 (Istanbul). The two
+	# extra keys: `rules` replaces the group rules sentence, `not_open` is the
+	# status while the window is shut.
+	WEEKEND: {
+		"endpoint": "/tournament/weekend",
+		"claim_type": "weekend_league_full",
+		"loading": "Loading the Weekend League...",
+		"joining": "Entering the Weekend League...",
+		"join": "Enter the Weekend League",
+		"closed_window": "Entries are closed for the final hours -- the Weekend League ends in %s.",
+		"closed_now": "The Weekend League isn't taking entries right now -- it opens Friday 18:00 (Istanbul).",
+		"not_open": "The Weekend League opens Friday 18:00 (Istanbul) -- in %s.",
+		"all_played": "You're done for this weekend. Results land Sunday 18:00 (Istanbul).",
+		"all_played_short": "You've played all your matches this weekend.",
+		"last_result": "Last weekend: finished %d%s\n\n%s%s",
+		"claim_last": "Claim last weekend's full-weekend bonus",
+		"rules": "Everyone plays in one table -- finish 1st with at least %d points to win the Weekend League.",
+		"champion": "You won the Weekend League!",
 	},
 }
 
