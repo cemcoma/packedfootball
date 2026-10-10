@@ -134,7 +134,8 @@ def test_the_weekend_league_has_its_own_collection_and_slot():
     assert t.mode_for("weekend") is WE
 
 
-def test_the_weekend_draws_the_gold_bots():
+def test_the_fallback_bot_is_gold():
+    """Stored bots of every tier fill the pool; only the throwaway one rolls gold."""
     assert WE.top_tier == WE.bottom_tier == 1
     assert t.bot_card_rates(1, WE) is config.TOURNAMENT_TIERS[1]["bot_card_rates"]
 

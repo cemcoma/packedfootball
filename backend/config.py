@@ -537,8 +537,9 @@ WEEKLY_TOURNAMENT_OPPONENT_MAX_ATTEMPTS = 5
 # Istanbul. Same Mode machine; what's new is the paged standings snapshot and
 # member-by-member settlement (services/tournament.py, "global table").
 
-# One tier, so the gold bots (bot_pools/1) fill the pool and 1st is always a
-# "champion" -- there is nowhere to promote to.
+# One tier, so 1st is always a "champion" -- there is nowhere to promote to.
+# Every tier's stored bots join the pool (join_global); the gold rates below
+# only shape the throwaway bot rolled when the pool has nobody playable.
 WEEKEND_LEAGUE_TIERS = {
     1: {
         "name": "Weekend League",

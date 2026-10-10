@@ -150,7 +150,7 @@ Credentials automatically -- no key file.
 | `GET /tournament/weekly/results` | A settled week's final table for the caller's group. |
 | `GET /tournament/weekend/today` | The Weekend League: same payload shape plus `opens_in_seconds` and the pager fields (`standings_page`, `standings_pages`, `standings_page_size`, `standings_total`, `my_position`, `standings_age_seconds`). Standings are the caller's page of the global table. |
 | `POST /tournament/weekend/join` | Joins this weekend's one global table. Refused until Friday 18:00 Istanbul and in the last `WEEKEND_LEAGUE_JOIN_CUTOFF_SECONDS`. |
-| `POST /tournament/weekend/match` | One of the weekend's `WEEKEND_LEAGUE_MATCHES`, against anyone entered (plus the gold bots). |
+| `POST /tournament/weekend/match` | One of the weekend's `WEEKEND_LEAGUE_MATCHES`, against anyone entered, plus every tier's stored bots. |
 | `GET /tournament/weekend/standings?page=n` | One page (10 rows) of the global table's snapshot. |
 | `GET /tournament/weekend/results` | A settled weekend's top page plus the caller's own row. |
 | `POST /tournament/settle` | Scheduler/admin: settles every format's lookback window. Optional `mode` (`daily`/`weekly`) and `period_id` to narrow it. |

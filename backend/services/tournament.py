@@ -1068,17 +1068,18 @@ async def join_global(client, uid: str, display_name: str, period_id: str, now: 
     """join_period for a global table. Touches no shared doc it READS, so a
     Friday-18:00 rush doesn't serialise on one group document: the pool is an
     idempotent ArrayUnion (bots included every time, no read needed) and the
-    period doc is a blind merge."""
+    period doc is a blind merge. A global table is everyone's, so every
+    tier's stored bots go in -- each bot carries its own squad."""
     from firebase_admin import firestore  # local: keeps the pure half import-free
 
     user_path = f"users/{uid}"
-    bp_path = bot_pool_path(mode.top_tier)
+    bot_paths = [bot_pool_path(tier) for tier in sorted(config.TOURNAMENT_TIERS)]
 
     def _join(tx):
-        docs = tx.get_all([user_path, bp_path])
+        docs = tx.get_all([user_path] + bot_paths)
         if is_entered(docs[user_path], period_id, mode):
             return
-        bot_ids = list((docs[bp_path] or {}).get("uids") or [])
+        bot_ids = [b for p in bot_paths for b in ((docs[p] or {}).get("uids") or [])]
         tx.set(
             entry_path(period_id, GLOBAL_GROUP, uid, mode),
             blank_entry(uid, display_name, mode.top_tier, GLOBAL_GROUP, now),
