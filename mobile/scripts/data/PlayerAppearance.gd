@@ -3,9 +3,9 @@ extends RefCounted
 
 ## Every option a player's look can be built from. THE place to add one.
 ##
-## Six independent slots -- skin tone, hair style, hair colour, face, boot
-## colour, goal celebration -- each stored on players/{id} as a plain INDEX
-## into one of the lists below. 5x5x5x5x5x9 = 28125 combinations today.
+## Seven independent slots -- skin tone, hair style, hair colour, face, pants
+## colour, boot colour, goal celebration -- each stored on players/{id} as a
+## plain INDEX into one of the lists below.
 ##
 ## Colours are a list of Colors; SHAPES (hair, face) are a list of
 ## rectangles; CELEBRATIONS are recipes of named poses. All data:
@@ -49,6 +49,15 @@ const SHOE_COLORS := [
 	Color(0.75, 0.1, 0.1),
 	Color(0.15, 0.3, 0.75),
 	Color(0.944, 0.489, 0.878, 1.0),
+]
+
+## Index 0 is what a card from before this slot existed draws.
+const PANTS_COLORS := [
+	Color(0.06, 0.06, 0.06),
+	Color(0.9, 0.9, 0.9),
+	Color(0.12, 0.18, 0.45),
+	Color(0.7, 0.1, 0.1),
+	Color(0.45, 0.45, 0.45),
 ]
 
 # ---------------------------------------------------------------- shapes
@@ -202,17 +211,18 @@ const TEAMMATE_CELEBRATION := 0
 
 # ------------------------------------------------------------ slot index
 #
-# The six slots, in the order a customization screen should present them:
+# The seven slots, in the order a customization screen should present them:
 # top of the body down. Mirrors player.py's APPEARANCE_SLOTS (which is the
 # order the SERVER rolls them in, and irrelevant to display).
 
-const SLOTS := ["skin_tone", "hair_style", "hair_color", "face", "shoe_color", "celebration"]
+const SLOTS := ["skin_tone", "hair_style", "hair_color", "face", "pants_color", "shoe_color", "celebration"]
 
 const SLOT_LABELS := {
 	"skin_tone": "Skin tone",
 	"hair_style": "Hair",
 	"hair_color": "Hair colour",
 	"face": "Face",
+	"pants_color": "Pants",
 	"shoe_color": "Boots",
 	"celebration": "Celebration",
 }
@@ -228,6 +238,8 @@ static func colors_for(slot: String) -> Array:
 			return SKIN_TONES
 		"hair_color":
 			return HAIR_COLORS
+		"pants_color":
+			return PANTS_COLORS
 		"shoe_color":
 			return SHOE_COLORS
 	return []
@@ -268,6 +280,8 @@ static func option_count(slot: String) -> int:
 			return SKIN_TONES.size()
 		"hair_color":
 			return HAIR_COLORS.size()
+		"pants_color":
+			return PANTS_COLORS.size()
 		"shoe_color":
 			return SHOE_COLORS.size()
 		"hair_style":

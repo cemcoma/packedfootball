@@ -522,7 +522,7 @@ CONTRACT_MAX_RANGE = {
 # Appearance
 # =============================================================================
 
-# Layered character appearance: 6 independent slots, each an INDEX into an
+# Layered character appearance: 7 independent slots, each an INDEX into an
 # option list that lives client-side in mobile/scripts/data/
 # PlayerAppearance.gd. This end only rolls the indices -- it has no idea what
 # a hairstyle looks like, and doesn't need to. "celebration" is the goal
@@ -542,7 +542,7 @@ CONTRACT_MAX_RANGE = {
 # Real players always get one rolled by packEngine.PackManager;
 # DEFAULT_APPEARANCE only backstops a player object built without going
 # through that (e.g. reconstructing a doc saved before this field existed).
-APPEARANCE_SLOTS = ("skin_tone", "hair_style", "hair_color", "face", "shoe_color", "celebration")
+APPEARANCE_SLOTS = ("skin_tone", "hair_style", "hair_color", "face", "shoe_color", "celebration", "pants_color")
 APPEARANCE_OPTION_COUNTS = {
     "skin_tone": 5,   # PlayerAppearance.SKIN_TONES
     "hair_style": 5,  # PlayerAppearance.HAIR_STYLES
@@ -550,6 +550,7 @@ APPEARANCE_OPTION_COUNTS = {
     "face": 5,        # PlayerAppearance.FACE_STYLES
     "shoe_color": 5,  # PlayerAppearance.SHOE_COLORS
     "celebration": 9, # PlayerAppearance.CELEBRATIONS
+    "pants_color": 5, # PlayerAppearance.PANTS_COLORS
 }
 DEFAULT_APPEARANCE = {slot: 0 for slot in APPEARANCE_SLOTS}
 

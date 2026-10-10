@@ -278,7 +278,7 @@ const LEGS_WIDE := "wide"
 const LEGS_KNEEL := "kneel"
 const LEGS_STEP := "step"
 
-const SOCK_DARKEN := 0.55         # how much darker the sock is than the boot
+const SOCK_DARKEN := 0.2          # legs a shade under their palette colour, so same-colour boots still show a seam
 
 # -- captain's armband --------------------------------------------------------
 # Round the LEFT upper arm, just under the shoulder: screen-right facing the
@@ -591,6 +591,7 @@ static func draw_into(
 	var skin := _slot_color(appearance, "skin_tone", PlayerAppearance.SKIN_TONES, Color(0.87, 0.65, 0.45))
 	var hair := _slot_color(appearance, "hair_color", PlayerAppearance.HAIR_COLORS, Color(0.09, 0.07, 0.06))
 	var boots := _slot_color(appearance, "shoe_color", PlayerAppearance.SHOE_COLORS, Color(0.1, 0.1, 0.1))
+	var pants := _slot_color(appearance, "pants_color", PlayerAppearance.PANTS_COLORS, PlayerAppearance.PANTS_COLORS[0]).lerp(Color.BLACK, SOCK_DARKEN)
 	var shirt := kit.primary_color() if kit != null else Color(0.2, 0.5, 1.0)
 	var trim := kit.secondary_color() if kit != null else Color.WHITE
 	var pattern: String = kit.pattern if kit != null else KitDesign.PATTERN_SOLID
@@ -697,7 +698,7 @@ static func draw_into(
 	if side != 0.0 and pose != POSE_REACH:
 		_draw_profile(
 			canvas, body + Vector2(rock, 0.0), w, h, side, pose, swing, arms, legs, phase,
-			skin, hair, boots, shirt, trim, pattern, appearance, detail, is_keeper,
+			skin, hair, boots, pants, shirt, trim, pattern, appearance, detail, is_keeper,
 			kick, lunge, drop, motion, band
 		)
 		return
@@ -710,7 +711,7 @@ static func draw_into(
 	var lunge_lift := lunge * float(motion.get("leg", LIFT_LUNGE_FRONT))
 	# Shorts and sleeves are the primary too: the secondary is only the
 	# details (stripes, quarters, collar, number).
-	_draw_legs(canvas, body, w, h, boots, shirt, pose, swing, lean, legs, kick_lift, lunge_lift, drop)
+	_draw_legs(canvas, body, w, h, boots, pants, shirt, pose, swing, lean, legs, kick_lift, lunge_lift, drop)
 	# Kneeling folds the legs under, so everything above them sits lower.
 	if legs == LEGS_KNEEL:
 		body.y += h * CELEBRATE_KNEEL_DROP
@@ -740,7 +741,7 @@ static func draw_into(
 ## or a kick. Lifts are fractions of height, like every other Y here.
 static func _draw_legs(
 	canvas: CanvasItem, feet: Vector2, w: float, h: float,
-	boots: Color, shorts: Color, pose: String, swing: float, lean: float,
+	boots: Color, pants: Color, shorts: Color, pose: String, swing: float, lean: float,
 	legs: String = LEGS_STAND, kick_lift: float = 0.0, lunge_lift: float = 0.0, drop: float = 0.0
 ) -> void:
 	var leg_w := w * LEG_W
@@ -772,7 +773,7 @@ static func _draw_legs(
 		var x: float = side[0] + lean * LEG_LEAN
 		var lift: float = side[1]
 		_rect(canvas, feet, w, h, x, BOOT_Y + lift, leg_w, h * BOOT_H, boots)
-		_rect(canvas, feet, w, h, x, LEG_Y + lift, leg_w, h * leg_h, boots.lerp(Color.BLACK, SOCK_DARKEN))
+		_rect(canvas, feet, w, h, x, LEG_Y + lift, leg_w, h * leg_h, pants)
 
 	# Shorts last: they overlap the top of both legs, which is what hides
 	# the seam when one leg is lifted.
@@ -1062,13 +1063,12 @@ static func armband_color(sleeve: Color) -> Color:
 static func _draw_profile(
 	canvas: CanvasItem, body: Vector2, w: float, h: float, side: float,
 	pose: String, swing: float, arms: String, legs: String, phase: float,
-	skin: Color, hair: Color, boots: Color, shirt: Color, trim: Color, pattern: String,
+	skin: Color, hair: Color, boots: Color, sock: Color, shirt: Color, trim: Color, pattern: String,
 	appearance: Dictionary, detail: int, is_keeper: bool,
 	kick: float = 0.0, lunge: float = 0.0, drop: float = 0.0, motion: Dictionary = {},
 	band: Color = Color(0, 0, 0, 0)
 ) -> void:
 	var hand := GLOVE_COLOR if is_keeper else skin
-	var sock := boots.lerp(Color.BLACK, SOCK_DARKEN)
 	var far := Color.BLACK
 	var sleeve := sleeve_color(pattern, shirt, trim)
 
