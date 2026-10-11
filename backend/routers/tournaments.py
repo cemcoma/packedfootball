@@ -77,6 +77,8 @@ def _standing_row(row: dict, uid: str) -> dict:
         "goal_diff": row.get("goal_diff", 0),
         "is_me": row["uid"] == uid,
         "projected_outcome": row["outcome"],
+        # Percentile brackets aren't in the per-position table, so the row carries its own.
+        "rewards": row.get("rewards") or {},
     }
 
 

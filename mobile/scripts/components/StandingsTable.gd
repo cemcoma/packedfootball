@@ -177,7 +177,7 @@ func _build_row(row: Dictionary) -> PanelContainer:
 		line.add_child(label)
 	line.add_child(_outcome_cell(str(row.get("projected_outcome", "stay"))))
 	if _has_rewards():
-		line.add_child(_reward_cell(int(row.get("position", 0))))
+		line.add_child(_reward_cell(row))
 
 	var uid := str(row.get("uid", ""))
 	if not is_me and uid != "":
@@ -232,13 +232,16 @@ func _outcome_color(outcome: String) -> Color:
 ## CurrencyAmount colours the number in the currency's own colour, which is
 ## what makes three of them readable side by side without naming any. A
 ## position that pays nothing keeps an empty cell so the columns line up.
-func _reward_cell(position: int) -> HBoxContainer:
+## The row's own rewards win (percentile brackets aren't in the position table).
+func _reward_cell(row: Dictionary) -> HBoxContainer:
 	var cell := HBoxContainer.new()
 	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cell.size_flags_stretch_ratio = REWARD_COLUMN["ratio"]
 	cell.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	cell.add_theme_constant_override("separation", 8)
-	var entry: Dictionary = _rewards_by_position.get(position, {})
+	var entry = row.get("rewards")
+	if not (entry is Dictionary) or entry.is_empty():
+		entry = _rewards_by_position.get(int(row.get("position", 0)), {})
 	for currency in REWARD_CURRENCY_ORDER:
 		var amount := int(entry.get(currency, 0))
 		if amount <= 0:

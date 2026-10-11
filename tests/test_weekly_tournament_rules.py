@@ -391,7 +391,7 @@ def test_every_tier_block_is_complete():
     for mode in t.MODES.values():
         assert mode.tiers, mode.key
         for tier, block in mode.tiers.items():
-            assert set(block) == {"name", "bot_card_rates", "rewards"}, (mode.key, tier)
+            assert set(block) - {"percentile_rewards"} == {"name", "bot_card_rates", "rewards"}, (mode.key, tier)
             assert block["name"], (mode.key, tier)
             assert block["bot_card_rates"], (mode.key, tier)
             assert block["rewards"], (mode.key, tier)

@@ -266,8 +266,8 @@ TOURNAMENT_TIERS = {
         "name": "Gold League",
         "bot_card_rates": {"gold": 0.2, "platinum": 0.45, "diamond": 0.35},
         "rewards": {
-            1: {"medals": 5, "bucks": 5, "credits": 3000},
-            2: {"medals": 3, "bucks": 3, "credits": 2000},
+            1: {"medals": 5, "bucks": 10, "credits": 3000},
+            2: {"medals": 3, "bucks": 5, "credits": 2000},
             3: {"medals": 3, "credits": 1500},
             4: {"medals": 1, "credits": 1000},
             5: {"credits": 750},
@@ -278,8 +278,8 @@ TOURNAMENT_TIERS = {
         "name": "Silver League",
         "bot_card_rates": {"silver": 0.15, "gold": 0.5, "platinum": 0.3, "diamond": 0.05},
         "rewards": {
-            1: {"medals": 3, "credits": 2000},
-            2: {"medals": 2, "credits": 1500},
+            1: {"medals": 3,"bucks": 5, "credits": 2000},
+            2: {"medals": 2,"bucks": 3, "credits": 1500},
             3: {"medals": 1, "credits": 1000},
             4: {"credits": 750},
             5: {"credits": 500},
@@ -290,8 +290,8 @@ TOURNAMENT_TIERS = {
         "name": "Bronze League",
         "bot_card_rates": {"bronze": 0.45, "silver": 0.45, "gold": 0.10},
         "rewards": {
-            1: {"medals": 2, "credits": 1500},
-            2: {"medals": 1, "credits": 1000},
+            1: {"medals": 2, "bucks": 3, "credits": 1500},
+            2: {"medals": 1, "bucks": 2, "credits": 1000},
             3: {"credits": 500},
             4: {"credits": 400},
             5: {"credits": 300},
@@ -416,11 +416,11 @@ WEEKLY_TOURNAMENT_TIERS = {
         "name": "Gold League",
         "bot_card_rates": TOURNAMENT_TIERS[1]["bot_card_rates"],
         "rewards": {
-            1: {"medals": 30, "bucks": 10, "credits": 5000},
-            2: {"medals": 15, "bucks": 5, "credits": 3000},
-            3: {"medals": 10, "bucks": 3, "credits": 2000},
-            4: {"medals": 5, "credits": 2000},
-            5: {"medals": 3, "credits": 1000},
+            1: {"medals": 30, "bucks": 30, "credits": 5000},
+            2: {"medals": 20, "bucks": 20, "credits": 3000},
+            3: {"medals": 10, "bucks": 10, "credits": 2000},
+            4: {"medals": 5, "bucks": 5, "credits": 2000},
+            5: {"medals": 3, "bucks": 3, "credits": 1000},
             6: {"credits": 750},
             7: {"credits": 500},
             8: {"credits": 400},
@@ -432,9 +432,9 @@ WEEKLY_TOURNAMENT_TIERS = {
         "name": "Silver League",
         "bot_card_rates": TOURNAMENT_TIERS[2]["bot_card_rates"],
         "rewards": {
-            1: {"medals": 20, "credits": 4000},
-            2: {"medals": 10, "credits": 2000},
-            3: {"medals": 5, "credits": 1500},
+            1: {"medals": 20,"bucks": 20, "credits": 4000,},
+            2: {"medals": 10,"bucks": 10, "credits": 2000},
+            3: {"medals": 5,"bucks": 5, "credits": 1500},
             4: {"credits": 750},
             5: {"credits": 500},
             6: {"credits": 300},
@@ -448,9 +448,9 @@ WEEKLY_TOURNAMENT_TIERS = {
         "name": "Bronze League",
         "bot_card_rates": TOURNAMENT_TIERS[3]["bot_card_rates"],
         "rewards": {
-            1: {"medals": 10, "credits": 3000},
-            2: {"medals": 5, "credits": 1500},
-            3: {"medals": 3, "credits": 1000},
+            1: {"medals": 10,"bucks": 10, "credits": 3000},
+            2: {"medals": 5,"bucks": 5, "credits": 1500},
+            3: {"medals": 3,"bucks": 3, "credits": 1000},
             4: {"credits": 750},
             5: {"credits": 500},
             6: {"credits": 300},
@@ -513,7 +513,7 @@ WEEKLY_TOURNAMENT_REWARD_MIN_MATCHES = 1
 
 # Playing all fifty pays this, on CLAIM (POST /claim, type
 # "tournament_full_week"), the same way the daily league's full-day reward works.
-WEEKLY_TOURNAMENT_FULL_WEEK_REWARD = {"bucks": 5}
+WEEKLY_TOURNAMENT_FULL_WEEK_REWARD = {"bucks": 10}
 
 # What one weekly match pays regardless of placement. Same numbers as the
 # daily league for now, separate so the two can be priced apart.
@@ -546,17 +546,20 @@ WEEKEND_LEAGUE_TIERS = {
         "bot_card_rates": TOURNAMENT_TIERS[1]["bot_card_rates"],
         # The bucks are what the Icon Chance Pack (20 bucks) costs.
         "rewards": {
-            1: {"bucks": 40, "medals": 30, "credits": 10000},
-            2: {"bucks": 20, "medals": 20, "credits": 6000},
-            3: {"bucks": 10, "medals": 15, "credits": 4000},
-            4: {"medals": 10, "credits": 3000},
-            5: {"medals": 10, "credits": 3000},
-            6: {"medals": 5, "credits": 2000},
-            7: {"medals": 5, "credits": 2000},
-            8: {"medals": 5, "credits": 2000},
-            9: {"medals": 5, "credits": 2000},
-            10: {"medals": 5, "credits": 2000},
+            1: {"bucks": 100, "medals": 100, "credits": 20000},
+            2: {"bucks": 75, "medals": 75, "credits": 10000},
+            3: {"bucks": 50, "medals": 50, "credits": 8000},
+            4: {"bucks": 30, "medals": 30, "credits": 5000},
+            5: {"bucks": 30, "medals": 30, "credits": 5000},
         },
+        # Past the named places: first bracket whose top fraction of the field
+        # (entrants who played) holds your position; the last row is everyone else.
+        "percentile_rewards": [
+            (0.10, {"bucks": 15, "medals": 15, "credits": 3000}),
+            (0.25, {"bucks": 10, "medals": 10, "credits": 2000}),
+            (0.50, {"bucks": 5, "medals": 5, "credits": 1000}),
+            (1.00, {"credits": 500}),
+        ],
     },
 }
 

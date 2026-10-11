@@ -544,10 +544,11 @@ def _verdict(row: dict, tier: int, group_size: int, mode: Mode) -> str:
     return "stay"
 
 
-def rewards_for(tier: int, row: dict, verdict: str, mode: Mode = DAILY) -> dict:
+def rewards_for(tier: int, row: dict, verdict: str, mode: Mode = DAILY, field: int = 0) -> dict:
     """What a finishing position pays: the tier's table row for that
-    position, whatever the verdict. Promotion is a separate question from
-    prize money -- 2nd on 15 points still finished 2nd.
+    position, whatever the verdict, else its percentile bracket of `field`
+    (how many played). Promotion is a separate question from prize money --
+    2nd on 15 points still finished 2nd.
 
     The one gate: playing nothing pays nothing. Medals for tapping Join is
     an exploit, not a rule anyone wrote down. (`verdict` is kept in the
@@ -556,7 +557,15 @@ def rewards_for(tier: int, row: dict, verdict: str, mode: Mode = DAILY) -> dict:
     """
     if row.get("played", 0) < mode.reward_min_matches:
         return {}
-    return dict(rewards_table(tier, mode).get(row["position"], {}))
+    table = rewards_table(tier, mode)
+    if row["position"] in table:
+        return dict(table[row["position"]])
+    brackets = tier_config(tier, mode).get("percentile_rewards") or []
+    for cut, payout in brackets:
+        if row["position"] <= cut * field:
+            return dict(payout)
+    # Non-players can rank above a pointless player, pushing them past the field.
+    return dict(brackets[-1][1]) if brackets else {}
 
 
 # -- the play-everything reward -----------------------------------------------
@@ -657,6 +666,8 @@ def apply_rules(rows: list[dict], tier: int, group_size: int | None = None, mode
     the verdict.
     """
     size = len(rows) if group_size is None else group_size
+    # Joining without playing must not stretch everyone else's percentile.
+    field = sum(1 for r in rows if r.get("played", 0) >= mode.reward_min_matches)
     out = []
     for row in rows:
         decorated = dict(row)
@@ -669,7 +680,7 @@ def apply_rules(rows: list[dict], tier: int, group_size: int | None = None, mode
         # True when the rule said move but the edge refused -- the results
         # screen says "you hold the top tier" rather than a confusing "stay".
         decorated["tier_clamped"] = verdict != "stay" and to_tier == tier
-        decorated["rewards"] = rewards_for(tier, decorated, verdict, mode)
+        decorated["rewards"] = rewards_for(tier, decorated, verdict, mode, field)
         out.append(decorated)
     return out
 

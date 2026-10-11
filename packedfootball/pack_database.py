@@ -320,8 +320,23 @@ PACK_DATABASE = {
         "cards_per_pack": 0,
         "rates": {},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "item_rates": {"bronze": 0.45, "silver": 0.30, "gold": 0.20, "platinum": 0.05},
+        "item_rates": {"bronze": 0.40, "silver": 0.30, "gold": 0.20, "platinum": 0.10},
         "items_per_pack": 3,
+        "price_currency":"credits",
+        "sprite_key":"StandardPack1"
+    },
+    "item_jumbo": {
+        "active": True,
+        "order": 20,
+        "name": "Jumbo Equipment Pack",
+        "type": "equipment",
+        "description": "Three high-grade items, with a shot at the slot extender -- the only way past three slots.",
+        "price": 600,
+        "cards_per_pack": 0,
+        "rates": {},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "item_rates": {"bronze": 0.40, "silver": 0.30, "gold": 0.20, "platinum": 0.10},
+        "items_per_pack": 8,
         "price_currency":"credits",
         "sprite_key":"StandardPack1"
     },
@@ -335,8 +350,23 @@ PACK_DATABASE = {
         "cards_per_pack": 0,
         "rates": {},
         "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
-        "item_rates": {"silver": 0.20, "gold": 0.40, "platinum": 0.25, "diamond": 0.13, "icon": 0.02},
-        "items_per_pack": 3,
+        "item_rates": {"silver": 0.10, "gold": 0.40, "platinum": 0.35, "diamond": 0.14, "icon": 0.01},
+        "items_per_pack": 4,
+        "price_currency":"credits",
+        "sprite_key":"StandardPack1"
+    },
+    "item_jumbo_premium": {
+        "active": True,
+        "order": 30,
+        "name": "Jumbo Premium Equipment Pack",
+        "type": "equipment",
+        "description": "Three high-grade items, with a shot at the slot extender -- the only way past three slots.",
+        "price": 2500,
+        "cards_per_pack": 0,
+        "rates": {},
+        "pos_rates": {"goalkeeper":0.1,"defender":0.3,"midfielder":0.3,"attacker":0.3},
+        "item_rates": {"silver": 0.10, "gold": 0.40, "platinum": 0.35, "diamond": 0.14, "icon": 0.01},
+        "items_per_pack": 10,
         "price_currency":"credits",
         "sprite_key":"StandardPack1"
     },
@@ -353,20 +383,6 @@ PACK_DATABASE = {
         "price_currency":"credits",
         "sprite_key":"CHAMPPack",
     },
-    # THE ONLY ROUTE TO AN ICON, and it is a 1% chance on one slot rather than
-    # a guarantee. Bucks-priced and windowed, so a player can save toward a
-    # known date; the window itself is available_at/expires_at on the Firestore
-    # doc, never here, so it opens and closes without a redeploy.
-    #
-    # Priced at 20 so a free player (~12 bucks a week) can reach one every
-    # couple of weeks: ~30 openings a year at 1% is roughly a one-in-three
-    # chance of an icon in a year, with specials and diamonds off slot 0 in the
-    # meantime. Copy this entry per drop, with its own name and sprite.
-    #
-    # BEFORE SETTING active: True -- routers/packs._pack_unavailable_reason
-    # checks `active`, max_opens and expires_at, but NOT available_at, so
-    # `active: True` plus a future available_at is purchasable immediately. Set
-    # active only when the window is actually open, or fix that gate first.
     "icon_chance_1": {
         "active": False,
         "order": 5,

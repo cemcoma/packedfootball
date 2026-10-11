@@ -101,11 +101,30 @@ def test_nobody_is_relegated_and_the_winner_is_clamped():
     assert winner["to_tier"] == winner["from_tier"] == WE.top_tier and winner["tier_clamped"]
 
 
-def test_placement_rewards_follow_position_across_a_big_table():
-    rows = t.snapshot_rows([entry(f"p{i:03d}", 300 - i) for i in range(150)], WE)
-    assert rows[0]["rewards"] == config.WEEKEND_LEAGUE_TIERS[1]["rewards"][1]
-    assert rows[9]["rewards"] == config.WEEKEND_LEAGUE_TIERS[1]["rewards"][10]
-    assert rows[10]["rewards"] == {}
+def test_placement_rewards_follow_position_then_percentile():
+    tier = config.WEEKEND_LEAGUE_TIERS[1]
+    pct = [payout for _, payout in tier["percentile_rewards"]]
+    rows = t.snapshot_rows([entry(f"p{i:03d}", 300 - i) for i in range(200)], WE)
+    got = lambda pos: rows[pos - 1]["rewards"]
+    assert got(1) == tier["rewards"][1] and got(5) == tier["rewards"][5]
+    assert got(6) == got(20) == pct[0]     # top 10% of 200
+    assert got(21) == got(50) == pct[1]    # top 25%
+    assert got(51) == got(100) == pct[2]   # top 50%
+    assert got(101) == got(200) == pct[3]  # the rest
+
+
+def test_joining_without_playing_doesnt_stretch_the_field():
+    players = [entry(f"p{i:02d}", 90 - i) for i in range(20)]
+    idle = [entry(f"z{i:03d}", 0, played=0) for i in range(180)]
+    rows = {r["uid"]: r["rewards"] for r in t.snapshot_rows(players + idle, WE)}
+    pct = [payout for _, payout in config.WEEKEND_LEAGUE_TIERS[1]["percentile_rewards"]]
+    assert rows["p05"] == pct[2]  # 6th of 20 players is top 30%, not top 3% of 200
+    assert rows["z000"] == {}
+
+
+def test_daily_has_no_percentile_rewards():
+    rows = t.apply_rules(t.rank_rows([entry(f"p{i:02d}", 30 - i) for i in range(30)]), 3, mode=D)
+    assert rows[-1]["rewards"] == {}
 
 
 def test_the_weekend_league_settles_as_global():

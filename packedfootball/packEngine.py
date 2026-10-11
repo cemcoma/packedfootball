@@ -100,7 +100,7 @@ PACK_ITEM_KEEPER_SHARE = 0.18
 PACK_SLOT_EXTENDER_SHARE = 0.25
 
 # Of all item drops, how many are a contract (contracts.py) instead.
-PACK_CONTRACT_SHARE = 0.15
+PACK_CONTRACT_SHARE = 0.35
 
 
 def _roll_height(rng: random.Random, position: str) -> int:
