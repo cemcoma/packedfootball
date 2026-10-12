@@ -198,8 +198,10 @@ func _start_ads() -> void:
 		var request_config := RequestConfiguration.new()
 		request_config.test_device_ids = _test_device_ids()
 		MobileAds.set_request_configuration(request_config)
-	MobileAds.initialize()
-	_create_and_load_ad()
+	# Init is async on Android; loading before it completes throws and kills the app.
+	var on_init := OnInitializationCompleteListener.new()
+	on_init.on_initialization_complete = func(_status) -> void: _create_and_load_ad()
+	MobileAds.initialize(on_init)
 
 
 func _create_and_load_ad() -> void:

@@ -417,10 +417,8 @@ func _populate_stats_panel() -> void:
 
 	if stats_page == StatsPage.STATISTICS:
 		_populate_statistics_page(card)
-		_out_of_position_label.visible = false
 	else:
 		_populate_attributes_page(card)
-		_out_of_position_label.visible = true
 	_update_stats_page_button()
 
 
